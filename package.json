@@ -79,9 +79,9 @@
     "prettier": "npx prettier --list-different '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "eslint": "npx eslint '**/*.{js,md}' --max-warnings 0",
-    "test": "NODE_ENV=test STREAM_LOCAL_TEST_RUN=yes mocha --exit --bail --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
-    "testall": "NODE_ENV=test STREAM_LOCAL_TEST_RUN=yes mocha --exit --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
-    "testwatch": "NODE_ENV=test STREAM_LOCAL_TEST_RUN=yes nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",
+    "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
+    "testall": "NODE_ENV=test mocha --exit --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
+    "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",
     "lint": "npx prettier --list-different '**/*.{js,ts,css,scss,json}' .eslintrc.json .prettierrc .babelrc && npx eslint 'src/*.js' --max-warnings 0",
     "lint-fix": "npx prettier --write '**/*.{js,ts,css,scss,json}' .eslintrc.json .prettierrc .babelrc && npx eslint --fix 'src/*.js' --max-warnings 0",
     "prepare": "rm -rf dist && yarn run build"
