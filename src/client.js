@@ -823,27 +823,27 @@ export class StreamChat {
 
 	/** muteUser - mutes a user
 	 *
-	 * @param targetUserID
-	 * @param createdByUserID Only used with serverside auth
+	 * @param targetID
+	 * @param userID Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async muteUser(targetUserID, createdByUserID) {
+	async muteUser(targetID, userID) {
 		return await this.post(this.baseURL + '/moderation/mute', {
-			target_user_id: targetUserID,
-			created_by: createdByUserID ? createdByUserID : '',
+			target_id: targetID,
+			user_id: userID ? userID : '',
 		});
 	}
 
 	/** unmuteUser - mutes a user
 	 *
-	 * @param targetUserID
-	 * @param createdByUserID Only used with serverside auth
+	 * @param targetID
+	 * @param userID Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetUserID, createdByUserID) {
+	async unmuteUser(targetID, userID) {
 		return await this.post(this.baseURL + '/moderation/unmute', {
-			target_user_id: targetUserID,
-			created_by: createdByUserID ? createdByUserID : '',
+			target_id: targetID,
+			user_id: userID ? userID : '',
 		});
 	}
 
