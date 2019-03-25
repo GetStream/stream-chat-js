@@ -155,9 +155,15 @@ export class Channel {
 				'Deleting a reaction requires specifying both the message and reaction type',
 			);
 		}
+
+		//injects the current user
+		//used in server side requests
+		const payload = {
+			user_details: this._user,
+		};
 		const url =
 			this.client.baseURL + `/messages/${messageID}/reaction/${reactionType}`;
-		return this.client.delete(url);
+		return this.client.delete(url, payload);
 	}
 
 	/**

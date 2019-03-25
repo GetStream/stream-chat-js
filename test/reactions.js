@@ -38,9 +38,23 @@ async function getTestMessage(text, channel) {
 
 describe('Reactions', function() {
 	let reactionClient;
+	let reactionClientServerSide;
 	let channel;
+	let serverSideUser;
 
 	before(async () => {
+		reactionClientServerSide = getTestClient(true);
+
+		serverSideUser = {
+			id: 'server-side-delete-reaction-user',
+			name: 'tommy',
+			status: 'busy',
+			image: 'myimageurl',
+			role: 'user',
+		};
+
+		reactionClientServerSide.updateUser(serverSideUser);
+		reactionClientServerSide.setUser(serverSideUser);
 		reactionClient = await getTestClientForUser('userR', 'reacting to stuff yeah');
 		channel = reactionClient.channel('livestream', 'reactions');
 		await channel.watch();
@@ -97,6 +111,36 @@ describe('Reactions', function() {
 	it('Remove a reaction', async function() {
 		// setup the test message
 		const message = await getTestMessage('Remove a reaction', channel);
+		// add a reaction
+		const reply = await channel.sendReaction(message.id, {
+			type: 'love',
+		});
+		// remove the reaction...
+		const removeResponse = await channel.deleteReaction(message.id, 'love');
+		// query state
+		const state = await channel.query();
+		const lastMessage = state.messages[state.messages.length - 1];
+		expect(lastMessage.id).to.equal(message.id);
+		// check the counts should be {love: 1}
+		expect(lastMessage.reaction_counts).to.deep.equal({});
+		// check the reactions, should contain the new reaction
+		expect(lastMessage.latest_reactions).to.deep.equal([]);
+		// check the own reactions
+		expect(lastMessage.own_reactions.length).to.equal(0);
+		expect(lastMessage.own_reactions).to.deep.equal([]);
+	});
+
+	it('Remove a Reaction server side', async function() {
+		const channel = reactionClientServerSide.channel('livestream', 'reactions', {
+			created_by: serverSideUser,
+		});
+		await channel.watch();
+		// setup the test message
+		const data = await channel.sendMessage({
+			text: 'server side message',
+			user: serverSideUser,
+		});
+		const message = data.message;
 		// add a reaction
 		const reply = await channel.sendReaction(message.id, {
 			type: 'love',
