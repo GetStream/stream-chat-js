@@ -10,7 +10,6 @@ import {
 	getTestClient,
 	getTestClientForUser,
 	getTestClientForUser2,
-	sleep,
 	createUsers,
 	runAndLogPromise,
 } from './utils';
@@ -97,77 +96,71 @@ describe('Presence', function() {
 	});
 
 	describe('Channel online counts', function() {
-		it('stopWatching and online count', function(done) {
+		it('stopWatching and online count', async function() {
 			// user1 is watching this channel
 			const id = 'christmas' + uuidv4();
 			const b = user1Client.channel('messaging', id, {
 				members: ['doug', 'claire', 'user1', 'james'],
 			});
 			const results = [];
-			b.on('all', e => {
-				results.push([e.online, e.user.id]);
-				// expect to see thierry join, james join and james leave
-				if (results.length === 3) {
-					const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
-					expect(results).to.deep.equal(expected);
-					done();
-				}
+			const eventPromise = new Promise(resolve => {
+				b.on('all', e => {
+					results.push([e.online, e.user.id]);
+					// expect to see thierry join, james join and james leave
+					if (results.length === 3) {
+						const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
+						expect(results).to.deep.equal(expected);
+						resolve();
+					}
+				});
 			});
 
-			async function runTest() {
-				// user1 starts watching
-				await b.watch();
-				// james start watching it
-				const james = await getTestClientForUser('james');
-				const channel = james.channel('messaging', id);
-				await channel.watch();
-				await channel.stopWatching();
-				await sleep(2000);
-			}
-			runAndLogPromise(runTest);
+			// user1 starts watching
+			await b.watch();
+			// james start watching it
+			const james = await getTestClientForUser('james');
+			const channel = james.channel('messaging', id);
+			await channel.watch();
+			await channel.stopWatching();
+			await eventPromise;
 		});
 	});
 
-	describe('Presence', function() {
-		it('connect should mark online and update status', function(done) {
+	describe('Presence - connections', function() {
+		it('connect should mark online and update status', async function() {
 			const userID = `john-${uuidv4()}`;
 			const testClientP = getTestClientForUser2(userID, 'busy');
 
-			async function verifyRead() {
-				const response = await testClientP.queryUsers({ id: { $in: [userID] } });
-				const john = response.users[0];
-				expect(john.id).to.equal(userID);
-				expect(john.status).to.equal('busy');
-				expect(john.invisible).to.equal(undefined);
-				expect(john.online).to.equal(true);
-				const last_active = new Date(john.last_active);
-				const now = new Date();
-				const diffInMinutes = (now - last_active) / 1000 / 60;
-				expect(diffInMinutes).to.be.below(1);
-				done();
-			}
-
-			testClientP.on('health.check', event => {
-				expect(event.own_user.id).to.equal(userID);
-				expect(event.own_user.status).to.equal('busy');
-				expect(event.own_user.invisible).to.equal(false);
-				expect(event.own_user.online).to.equal(true);
-				const last_active = new Date(event.own_user.last_active);
-				const now = new Date();
-				const diffInMinutes = (now - last_active) / 1000 / 60;
-				expect(diffInMinutes).to.be.below(1);
-
-				runAndLogPromise(verifyRead);
+			await new Promise(resolve => {
+				testClientP.on('health.check', event => {
+					expect(event.own_user.id).to.equal(userID);
+					expect(event.own_user.status).to.equal('busy');
+					expect(event.own_user.invisible).to.equal(false);
+					expect(event.own_user.online).to.equal(true);
+					const last_active = new Date(event.own_user.last_active);
+					const now = new Date();
+					const diffInMinutes = (now - last_active) / 1000 / 60;
+					expect(diffInMinutes).to.be.below(1);
+					resolve();
+				});
 			});
+
+			const response = await testClientP.queryUsers({ id: { $in: [userID] } });
+			const john = response.users[0];
+			expect(john.id).to.equal(userID);
+			expect(john.status).to.equal('busy');
+			expect(john.invisible).to.equal(undefined);
+			expect(john.online).to.equal(true);
+			const last_active = new Date(john.last_active);
+			const now = new Date();
+			const diffInMinutes = (now - last_active) / 1000 / 60;
+			expect(diffInMinutes).to.be.below(1);
 		});
 
 		it('should be offline after disconnect', async function() {
 			const userID = `timmy-${uuidv4()}`;
 			const testClientP = await getTestClientForUser(userID, 'mystatus');
-			testClientP.disconnect();
-			// TODO: add support to await the disconnect
-			// easier than trying to await the disconnect event system
-			await sleep(2001);
+			await testClientP.disconnect();
 			const response = await user1Client.queryUsers({ id: { $in: [userID] } });
 			const timmy = response.users[0];
 			expect(timmy.id).to.equal(userID);

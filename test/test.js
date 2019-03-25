@@ -1281,6 +1281,7 @@ describe('Chat', function() {
 				watchers: { limit: 2, offset: 0 },
 			});
 			expect(results.members.length).to.equal(0);
+			expect(results.watchers).to.exist;
 			expect(results.watchers[0]).not.to.be.null;
 			expect(results.watchers[0].role).to.eql('user');
 			expect(results.watchers[0].id).to.eql(userID);

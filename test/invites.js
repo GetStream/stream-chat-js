@@ -109,11 +109,9 @@ describe('Member style channel init', () => {
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
 		const messageReceived = new Promise(resolve => {
-			nickChannel.on(e => {
-				if (e.type === 'message.new') {
-					expect(e.message.text).to.equal('Nick accepted the chat invite.');
-					resolve();
-				}
+			nickChannel.on('message.new', e => {
+				expect(e.message.text).to.equal('Nick accepted the chat invite.');
+				resolve();
 			});
 		});
 		const notificationReceived = new Promise(resolve => {

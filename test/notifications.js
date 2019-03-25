@@ -285,7 +285,15 @@ describe('Unread on connect', function() {
 	it('thierry marks messaging:chatty as read', async function() {
 		const chan = thierryClient.channel('messaging', cids[2]);
 		await chan.watch();
+		const receivedEvent = new Promise(resolve => {
+			const subscription = thierryClient.on('notification.mark_read', e => {
+				expect(e.unread_count).to.eq(3);
+				subscription.unsubscribe();
+				resolve();
+			});
+		});
 		await chan.markRead();
+		await receivedEvent;
 	});
 
 	it('thierry re-connects and receives unread=3', async function() {
@@ -299,8 +307,9 @@ describe('Unread on connect', function() {
 
 	it('thierry is removed from the channel and gets notified about it', async function() {
 		const readChangeReceived = new Promise(resolve => {
-			thierryClient.on('notification.mark_read', e => {
+			const subscription = thierryClient.on('notification.mark_read', e => {
 				expect(e.unread_count).to.eq(2);
+				subscription.unsubscribe();
 				resolve();
 			});
 		});

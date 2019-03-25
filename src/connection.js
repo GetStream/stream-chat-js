@@ -114,15 +114,22 @@ export class StableWSConnection {
 			this.ws.removeAllListeners();
 		}
 
+		let isClosedPromise;
 		// and finally close...
 		if (this.ws && this.ws.close) {
-			this.ws.close(
-				1000,
-				'Manually closed connection by calling client.disconnect()',
-			);
+			// Assigning to local here because we will remove it from this before the
+			// promise resolves.
+			const { ws } = this;
+			isClosedPromise = new Promise(resolve => {
+				ws.onclose = () => {
+					resolve();
+				};
+			});
+			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
 		}
 
 		delete this.ws;
+		return isClosedPromise;
 	}
 
 	/**

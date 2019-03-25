@@ -219,7 +219,7 @@ export class StreamChat {
 		this.connectionEstablishedCount = 0;
 		// close the WS connection
 		if (this.wsConnection) {
-			this.wsConnection.disconnect();
+			return this.wsConnection.disconnect();
 		}
 	}
 
@@ -300,6 +300,11 @@ export class StreamChat {
 			this.listeners[key] = [];
 		}
 		this.listeners[key].push(callback);
+		return {
+			unsubscribe: () => {
+				this.listeners[key] = this.listeners[key].filter(el => el !== callback);
+			},
+		};
 	}
 
 	/**
