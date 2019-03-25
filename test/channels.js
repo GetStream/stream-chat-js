@@ -176,67 +176,6 @@ describe('Channels - members', function() {
 			.catch(() => done());
 	});
 
-	it('thierry mutes tommaso', async function() {
-		const response = await thierryChannel.sendMessage({
-			text: `/mute @${tommasoID}`,
-		});
-		expect(response.message.type).to.eql('system');
-	});
-
-	it('tommaso sends a message again', async function() {
-		const response = await tommasoChannel.sendMessage({
-			text: 'something you should not see...',
-		});
-		expect(response.message.type).to.eql('regular');
-	});
-
-	it('thierry still gets the new message from tommaso', function(done) {
-		setTimeout(() => {
-			const event = thierryChannelEventQueue.pop();
-			expect(event.type).to.eql('message.new');
-			tommasoMessageID = event.message.id;
-			done();
-		}, 1000);
-	});
-
-	it('mutes should be returned for thierry on connect', async function() {
-		const client = getTestClient();
-		const hello = await client.setUser({ id: thierryID }, thierryToken);
-		expect(hello.own_user.mutes).to.have.length(1);
-		expect(hello.own_user.mutes[0].user.id).to.eql(thierryID);
-		expect(hello.own_user.mutes[0].target.id).to.eql(tommasoID);
-	});
-
-	it('thierry un-mutes tommaso', async function() {
-		const response = await thierryChannel.sendMessage({
-			text: `/unmute @${tommasoID}`,
-		});
-		expect(response.message.type).to.eql('system');
-	});
-
-	it('mutes should be gone from connect reply', async function() {
-		const client = getTestClient();
-		const hello = await client.setUser({ id: thierryID }, thierryToken);
-		expect(hello.own_user.mutes).to.have.length(0);
-	});
-
-	it('thierry un-mutes tommaso again', async function() {
-		const response = await thierryChannel.sendMessage({
-			text: `/unmute @${tommasoID}`,
-		});
-		expect(response.message.type).to.eql('error');
-	});
-
-	it('thierry un-mutes a missing user', async function() {
-		const response = await thierryChannel.sendMessage({ text: `/unmute @jackie` });
-		expect(response.message.type).to.eql('error');
-	});
-
-	it('thierry mutes a missing user', async function() {
-		const response = await thierryChannel.sendMessage({ text: `/mute @jacko` });
-		expect(response.message.type).to.eql('error');
-	});
-
 	it('thierry mutes himself', async function() {
 		const response = await thierryChannel.sendMessage({
 			text: `/mute @${thierryID}`,
@@ -246,31 +185,5 @@ describe('Channels - members', function() {
 
 	it('thierry gets promoted', async function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
-	});
-
-	it('thierry bans tommaso without a reason', async function() {
-		const response = await thierryChannel.sendMessage({ text: `/ban @${tommasoID}` });
-		expect(response.message.type).to.eql('error');
-	});
-
-	it('thierry bans tommaso with a reason', async function() {
-		const response = await thierryChannel.sendMessage({
-			text: `/ban @${tommasoID} genoeg!`,
-		});
-		expect(response.message.type).to.eql('system');
-	});
-
-	it('tommaso sends a message again', async function() {
-		const response = await tommasoChannel.sendMessage(message);
-		expect(response.message.type).to.eql('error');
-	});
-
-	it('thierry unbans tommaso', async function() {
-		await thierryChannel.unbanUser(tommasoID);
-	});
-
-	it('tommaso sends a message after the unban', async function() {
-		const response = await tommasoChannel.sendMessage(message);
-		expect(response.message.type).to.eql('regular');
 	});
 });
