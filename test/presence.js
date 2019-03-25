@@ -168,33 +168,35 @@ describe('Presence', function() {
 			expect(timmy.online).to.equal(false);
 		});
 
-		it('Query Channel and Presence', function(done) {
+		it('Query Channel and Presence', async function() {
 			const channel = uuidv4();
 			const userID = `sarah123-${channel}`;
 
-			user1Client.on('user.status.changed', event => {
-				console.log('event');
-
-				if (event.user.id === userID) {
-					expect(event.user.status).to.equal('going to watch a movie');
-					expect(event.user.online).to.equal(true);
-					done();
-				}
+			console.log('start2');
+			// create a channel where channel.members contains wendy
+			await getTestClient(true).updateUser({ id: userID });
+			const b = user1Client.channel('messaging', channel, {
+				members: ['sandra', userID, 'user1'],
 			});
-			async function runTest() {
-				console.log('start2');
-				// create a channel where channel.members contains wendy
-				await getTestClient(true).updateUser({ id: userID });
-				const b = user1Client.channel('messaging', channel, {
-					members: ['sandra', userID, 'user1'],
-				});
-				console.log('created a channel with user', userID);
-				await b.watch({ presence: true });
-				// sandra goes online should trigger an event
-				console.log('marking user online', userID);
-				await getTestClientForUser(userID, 'going to watch a movie');
-			}
-			runAndLogPromise(runTest);
+			console.log('created a channel with user', userID);
+			await b.watch({ presence: true });
+			// sandra goes online should trigger an event
+			console.log('marking user online', userID);
+
+			const eventReceived = new Promise(resolve =>
+				user1Client.on('user.status.changed', event => {
+					console.log('event');
+					console.log(event);
+
+					if (event.user.id === userID) {
+						expect(event.user.status).to.equal('going to watch a movie');
+						expect(event.user.online).to.equal(true);
+						resolve();
+					}
+				}),
+			);
+			await getTestClientForUser(userID, 'going to watch a movie');
+			await eventReceived;
 		});
 
 		it('Query Channels and Presence', function(done) {
