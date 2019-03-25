@@ -39,7 +39,7 @@ describe('Channels - Create', function() {
 	});
 });
 
-describe.only('Channels - members', function() {
+describe('Channels - members', function() {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 
