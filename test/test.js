@@ -81,6 +81,39 @@ describe('Chat', function() {
 		await conversation.watch();
 	});
 
+	describe('User Update Events', function() {
+		it('should trigger user update event', async () => {
+			const userID = uuidv4();
+			await serverAuthClient.updateUser({
+				id: userID,
+				name: 'jack',
+				song: 'purple rain',
+			});
+
+			// subscribe to user presence
+			const response = await authClient.queryUsers(
+				{ id: { $in: [userID] } },
+				{},
+				{ presence: true },
+			);
+
+			expect(response.users.length).to.equal(1);
+
+			// this update should trigger the user.updated event..
+			await new Promise(resolve => {
+				authClient.on('user.updated', event => {
+					expect(event.user.id).to.equal(userID);
+					resolve();
+				});
+				serverAuthClient.updateUser({
+					id: userID,
+					name: 'jack',
+					song: 'welcome to the jungle',
+				});
+			});
+		});
+	});
+
 	describe('Failures', function() {
 		it.skip('channel query wrong order', async function() {
 			const client = getTestClient(false);

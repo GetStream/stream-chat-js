@@ -39,7 +39,7 @@ describe('Channels - Create', function() {
 	});
 });
 
-describe.skip('Channels - members', function() {
+describe.only('Channels - members', function() {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 
@@ -199,7 +199,7 @@ describe.skip('Channels - members', function() {
 		}, 1000);
 	});
 
-	it.skip('mutes should be returned for thierry on connect', async function() {
+	it('mutes should be returned for thierry on connect', async function() {
 		const client = getTestClient();
 		const hello = await client.setUser({ id: thierryID }, thierryToken);
 		expect(hello.own_user.mutes).to.have.length(1);

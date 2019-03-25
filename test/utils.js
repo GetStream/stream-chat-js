@@ -51,7 +51,7 @@ export function runAndLogPromise(promiseCallable) {
 export async function createUsers(userIDs) {
 	const serverClient = getServerTestClient();
 	const users = [];
-	for (let userID of userIDs) {
+	for (const userID of userIDs) {
 		users.push({ id: userID });
 	}
 	const response = await serverClient.updateUsers(users);
