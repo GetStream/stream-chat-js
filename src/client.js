@@ -824,22 +824,26 @@ export class StreamChat {
 	/** muteUser - mutes a user
 	 *
 	 * @param targetUserID
+	 * @param createdByUserID Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async muteUser(targetUserID) {
+	async muteUser(targetUserID, createdByUserID) {
 		return await this.post(this.baseURL + '/moderation/mute', {
 			target_user_id: targetUserID,
+			created_by: createdByUserID ? createdByUserID : '',
 		});
 	}
 
 	/** unmuteUser - mutes a user
 	 *
 	 * @param targetUserID
+	 * @param createdByUserID Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetUserID) {
+	async unmuteUser(targetUserID, createdByUserID) {
 		return await this.post(this.baseURL + '/moderation/unmute', {
 			target_user_id: targetUserID,
+			created_by: createdByUserID ? createdByUserID : '',
 		});
 	}
 
