@@ -164,6 +164,47 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Connect', function() {
+		it('Insert and update should work', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.color).to.equal('green');
+			// connect without a user id shouldnt remove anything...
+			const client2 = await getTestClientForUser(userID);
+			expect(client2.health.own_user.color).to.equal('green');
+			// changing the status shouldnt remove the color
+			const client3 = await getTestClientForUser(userID, 'helloworld');
+			expect(client3.health.own_user.color).to.equal('green');
+			expect(client3.health.own_user.status).to.equal('helloworld');
+		});
+
+		it('Verify that we dont do unneeded updates', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			const updatedAt = client.health.own_user.updated_at;
+			// none of these should trigger an update...
+			const client2 = await getTestClientForUser(userID);
+			const client3 = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+			});
+			expect(client3.health.own_user.updated_at).to.equal(updatedAt);
+		});
+
+		it('Update/sync before calling setUser', async function() {
+			const userID = uuidv4();
+			const serverClient = getServerTestClient();
+
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, book: 'dune', role: 'admin' },
+			]);
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.role).to.equal('admin');
+			expect(client.health.own_user.book).to.equal('dune');
+			expect(client.health.own_user.status).to.equal('test');
+			expect(client.health.own_user.color).to.equal('green');
+		});
+	});
+
 	describe('Devices', function() {
 		const deviceId = uuidv4();
 		const wontBeRemoved = uuidv4();

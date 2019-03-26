@@ -8,7 +8,6 @@ stream-chat-js is the official JavaScript client for Stream Chat, a service for 
 
 You can sign up for a Stream account at https://getstream.io/chat/get_started/.
 
-
 ### Installation
 
 #### Install with NPM
