@@ -7,11 +7,13 @@ import chai from 'chai';
 const expect = chai.expect;
 import sinon from 'sinon';
 
-const validURL =
-	'ws://localhost:3030/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%7D&api_key=qk4nn7rpcn75&authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0&stream-auth-type=jwt';
+const wsBaseURL = process.env.STREAM_LOCAL_TEST_RUN
+	? 'ws://localhost:3030'
+	: 'wss://chat-us-east-1.stream-io-api.com';
 
-const emptyAuthURL =
-	'ws://localhost:3030/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%7D&api_key=qk4nn7rpcn75&authorization=&stream-auth-type=';
+const validURL = `${wsBaseURL}/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%7D&api_key=qk4nn7rpcn75&authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0&stream-auth-type=jwt`;
+
+const emptyAuthURL = `${wsBaseURL}/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%7D&api_key=qk4nn7rpcn75&authorization=&stream-auth-type=`;
 
 function createTestWSConnection(wsURL) {
 	const conn = new StableWSConnection({

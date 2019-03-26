@@ -397,20 +397,6 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, banUser(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Ban command', function() {
-		roleAllowed(ctx.adminUser.role, banUserCommand(ctx, ctx.adminUser, allowed));
-		roleAllowed(ctx.moderator.role, banUserCommand(ctx, ctx.moderator, allowed));
-		roleNotAllowed(
-			'Channel member',
-			banUserCommand(ctx, ctx.channelMember, notAllowed),
-		);
-		roleNotAllowed(ctx.user.role, banUserCommand(ctx, ctx.user, notAllowed));
-		roleNotAllowed(
-			ctx.guestUser.role,
-			banUserCommand(ctx, ctx.guestUser, notAllowed),
-		);
-	});
-
 	describe('Edit user role', function() {
 		roleNotAllowed(ctx.adminUser.role, changeRole(ctx, ctx.adminUser, notAllowed));
 		roleNotAllowed(ctx.moderator.role, changeRole(ctx, ctx.moderator, notAllowed));
