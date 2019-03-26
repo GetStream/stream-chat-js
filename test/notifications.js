@@ -212,27 +212,19 @@ describe('Unread on connect', function() {
 	});
 
 	it('add 1 message to 5 messaging channels', async function() {
-		const p = [];
 		for (let i = 0; i < 5; i++) {
-			p.push(
-				serverSideClient
-					.channel('messaging', cids[i])
-					.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
-			);
+			await serverSideClient
+				.channel('messaging', cids[i])
+				.sendMessage({ text: uuidv4(), user: { id: tommasoID } });
 		}
-		await Promise.all(p);
 	});
 
 	it('add 1 message to 5 livestream channels', async function() {
-		const p = [];
 		for (let i = 0; i < 5; i++) {
-			p.push(
-				serverSideClient
-					.channel('livestream', cids[i])
-					.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
-			);
+			await serverSideClient
+				.channel('livestream', cids[i])
+				.sendMessage({ text: uuidv4(), user: { id: tommasoID } });
 		}
-		await Promise.all(p);
 	});
 
 	it('thierry connects and receives unread=5', async function() {
