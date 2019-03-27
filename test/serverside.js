@@ -1,6 +1,6 @@
 import { getTestClient } from './utils';
 import { assertHTTPErrorCode } from './utils';
-import { getTestClientForUser } from './utils';
+import { getTestClientForUser, sleep } from './utils';
 import { AllowAll, DenyAll } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
@@ -116,66 +116,38 @@ describe('App configs', function() {
 		await client.updateAppSettings({});
 	});
 
-	it('Using a tampered token fails because of auth enabled', function(done) {
-		client2
-			.setUser(bfadf, bfadfToken)
-			.then(() => {
-				client2.disconnect();
-				done('should have failed!');
-			})
-			.catch(() => {
-				client2.disconnect();
-				done();
-			});
+	it('Using a tampered token fails because of auth enabled', async function() {
+		await expect(client2.setUser(bfadf, bfadfToken)).to.be.rejected;
+		client2.disconnect();
 	});
 
-	it('Using dev token fails because of auth enabled', function(done) {
-		client2
-			.setUser(bfadf, client2.devToken(bfadf.id))
-			.then(() => {
-				client2.disconnect();
-				done('should have failed!');
-			})
-			.catch(e => {
-				client2.disconnect();
-				done();
-			});
+	it('Using dev token fails because of auth enabled', async function() {
+		await expect(client2.setUser(bfadf, client2.devToken(bfadf.id))).to.be.rejected;
+		client2.disconnect();
 	});
 
 	it('Disable auth checks', async function() {
 		await client.updateAppSettings({
 			disable_auth_checks: true,
 		});
+		await sleep(1000);
 	});
 
-	it('Using a tampered token does not fail because auth is disabled', function(done) {
-		client2
-			.setUser(bfadf, bfadfToken)
-			.then(() => {
-				done();
-				client2.disconnect();
-			})
-			.catch(() => {
-				done('should not have failed!');
-			});
+	it('Using a tampered token does not fail because auth is disabled', async function() {
+		await client2.setUser(bfadf, bfadfToken);
+		client2.disconnect();
 	});
 
-	it('Using dev token does not fail because auth is disabled', function(done) {
-		client2
-			.setUser(bfadf, client2.devToken(bfadf.id))
-			.then(() => {
-				done();
-				client2.disconnect();
-			})
-			.catch(() => {
-				done('should not have failed!');
-			});
+	it('Using dev token does not fail because auth is disabled', async function() {
+		await client2.setUser(bfadf, client2.devToken(bfadf.id));
+		client2.disconnect();
 	});
 
 	it('Disable permission checks', async function() {
 		await client.updateAppSettings({
 			disable_permissions_checks: true,
 		});
+		await sleep(1000);
 	});
 
 	it('A user can do super stuff because permission checks are off', async function() {
@@ -204,6 +176,7 @@ describe('App configs', function() {
 		await client.updateAppSettings({
 			disable_auth_checks: false,
 		});
+		await sleep(1000);
 	});
 
 	describe('Push notifications', function() {
@@ -314,17 +287,9 @@ describe('App configs', function() {
 		});
 	});
 
-	it('Using a tampered token fails because auth is back on', function(done) {
-		client2
-			.setUser(bfadf, bfadfToken)
-			.then(() => {
-				client2.disconnect();
-				done('should have failed!');
-			})
-			.catch(() => {
-				client2.disconnect();
-				done();
-			});
+	it('Using a tampered token fails because auth is back on', async function() {
+		await expect(client2.setUser(bfadf, bfadfToken)).to.be.rejected;
+		client2.disconnect();
 	});
 });
 
@@ -378,17 +343,15 @@ describe('Channel types', function() {
 	describe('Creating channel types', function() {
 		let newChannelType;
 
-		it('should work fine', function(done) {
-			client
-				.createChannelType({ name: newType, commands: ['all'] })
-				.then(response => {
-					newChannelType = response;
-					done();
-				})
-				.catch(done);
+		it('should work fine', async function() {
+			newChannelType = await client.createChannelType({
+				name: newType,
+				commands: ['all'],
+			});
+			await sleep(1000);
 		});
 
-		it('should have the right defaults and name', function(done) {
+		it('should have the right defaults and name', function() {
 			const expectedData = {
 				automod: 'AI',
 				commands: ['giphy', 'imgur', 'flag', 'ban', 'unban', 'mute', 'unmute'],
@@ -404,12 +367,10 @@ describe('Channel types', function() {
 				typing_events: true,
 			};
 			expect(newChannelType).like(expectedData);
-			done();
 		});
 
-		it('should have the default permissions', function(done) {
+		it('should have the default permissions', function() {
 			expect(newChannelType.permissions).to.have.length(7);
-			done();
 		});
 
 		it('should fail to create an already existing type', function(done) {
@@ -427,17 +388,15 @@ describe('Channel types', function() {
 			assertHTTPErrorCode(p, done, 404);
 		});
 
-		it('create a new one with defaults', function(done) {
+		it('create a new one with defaults', async function() {
 			channelTypeName = uuidv4();
-			client
-				.createChannelType({ name: channelTypeName, commands: ['ban'] })
-				.then(response => {
-					channelType = response;
-					channelPermissions = response.permissions;
-					expect(channelPermissions).to.have.length(7);
-					done();
-				})
-				.catch(done);
+			channelType = await client.createChannelType({
+				name: channelTypeName,
+				commands: ['ban'],
+			});
+			channelPermissions = channelType.permissions;
+			expect(channelPermissions).to.have.length(7);
+			await sleep(1000);
 		});
 
 		it('defaults should be there via channel.watch', function(done) {
@@ -588,16 +547,11 @@ describe('Channel types', function() {
 			assertHTTPErrorCode(p, done, 404);
 		});
 
-		it('should work fine', function(done) {
-			client
-				.createChannelType({ name })
-				.then(() => {
-					client
-						.deleteChannelType(name)
-						.then(() => done())
-						.catch(done);
-				})
-				.catch(done);
+		it('should work fine', async function() {
+			await client.createChannelType({ name });
+			await sleep(1000);
+			await client.deleteChannelType(name);
+			await sleep(1000);
 		});
 
 		it('should fail to delete a deleted type', function(done) {
@@ -608,25 +562,14 @@ describe('Channel types', function() {
 		describe('deleting a channel type with active channels should fail', function() {
 			const typeName = uuidv4();
 
-			it('create a new type', function(done) {
-				client
-					.createChannelType({ name: typeName })
-					.then(() => done())
-					.catch(done);
+			it('create a new type', async function() {
+				await client.createChannelType({ name: typeName });
+				await sleep(1000);
 			});
 
-			it('create a channel of the new type', function(done) {
-				getTestClientForUser('tommaso')
-					.then(client => {
-						client
-							.channel(typeName, 'general')
-							.watch()
-							.then(() => {
-								done();
-							})
-							.catch(done);
-					})
-					.catch(done);
+			it('create a channel of the new type', async function() {
+				const tClient = await getTestClientForUser('tommaso');
+				await tClient.channel(typeName, 'general').watch();
 			});
 
 			it('create a channel of the new type', function(done) {
