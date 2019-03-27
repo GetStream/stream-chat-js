@@ -160,6 +160,7 @@ describe('App configs', function() {
 		await client.updateAppSettings({
 			disable_permissions_checks: false,
 		});
+		await sleep(1000);
 	});
 
 	it('A user cannot do super stuff because permission checks are back on', function(done) {

@@ -4,6 +4,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import Immutable from 'seamless-immutable';
 import { StreamChat } from '../src';
+import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 
 import {
@@ -161,6 +162,47 @@ describe('Chat', function() {
 			runtest().catch(exc => {
 				done(exc);
 			});
+		});
+	});
+
+	describe('Connect', function() {
+		it('Insert and update should work', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.color).to.equal('green');
+			// connect without a user id shouldnt remove anything...
+			const client2 = await getTestClientForUser(userID);
+			expect(client2.health.own_user.color).to.equal('green');
+			// changing the status shouldnt remove the color
+			const client3 = await getTestClientForUser(userID, 'helloworld');
+			expect(client3.health.own_user.color).to.equal('green');
+			expect(client3.health.own_user.status).to.equal('helloworld');
+		});
+
+		it('Verify that we dont do unneeded updates', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			const updatedAt = client.health.own_user.updated_at;
+			// none of these should trigger an update...
+			const client2 = await getTestClientForUser(userID);
+			const client3 = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+			});
+			expect(client3.health.own_user.updated_at).to.equal(updatedAt);
+		});
+
+		it('Update/sync before calling setUser', async function() {
+			const userID = uuidv4();
+			const serverClient = getServerTestClient();
+
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, book: 'dune', role: 'admin' },
+			]);
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.role).to.equal('admin');
+			expect(client.health.own_user.book).to.equal('dune');
+			expect(client.health.own_user.status).to.equal('test');
+			expect(client.health.own_user.color).to.equal('green');
 		});
 	});
 
@@ -390,48 +432,36 @@ describe('Chat', function() {
 			done();
 		});
 
-		it('Invalid secret should fail setUser', function(done) {
+		it('Invalid secret should fail setUser', function() {
 			const client3 = new StreamChat('892s22ypvt6m', 'invalidsecret');
 			const connectPromise = client3.setUser({
 				id: 'daenerys',
 				name: 'Mother of dragons',
 			});
-			connectPromise
-				.then(() => done('should have failed'))
-				.catch(() => {
-					done();
-				});
+			expect(connectPromise).to.be.rejected;
 		});
 	});
 
 	describe('Permissions', function() {
-		it('Editing someone else message should not be allowed client-side', function(done) {
-			(async function() {
-				// thierry adds a message
-				const response = await channel.sendMessage({
-					text: 'testing permissions is fun',
-				});
-				const message = response.message;
+		it('Editing someone else message should not be allowed client-side', async function() {
+			// thierry adds a message
+			const response = await channel.sendMessage({
+				text: 'testing permissions is fun',
+			});
+			const message = response.message;
 
-				// this should succeed since the secret is set
-				const token = authClient.createToken('johny');
+			// this should succeed since the secret is set
+			const token = authClient.createToken('johny');
 
-				const client3 = getTestClient();
-				await client3.setUser(
-					{
-						id: 'johny',
-						name: 'some random guy',
-					},
-					token,
-				);
-				try {
-					await client3.updateMessage(message);
-					done('should fail');
-				} catch (e) {
-					expect(e.status).to.eql(403);
-					done();
-				}
-			})();
+			const client3 = getTestClient();
+			await client3.setUser(
+				{
+					id: 'johny',
+					name: 'some random guy',
+				},
+				token,
+			);
+			await expectHTTPErrorCode(403, client3.updateMessage(message));
 		});
 	});
 

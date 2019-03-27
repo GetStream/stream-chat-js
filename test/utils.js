@@ -19,7 +19,11 @@ export function getTestClientForUser2(userID, status, options) {
 
 export async function getTestClientForUser(userID, status, options) {
 	const client = getTestClient(false);
-	await client.setUser({ id: userID, status, ...options }, createUserToken(userID));
+	const health = await client.setUser(
+		{ id: userID, status, ...options },
+		createUserToken(userID),
+	);
+	client.health = health;
 	return client;
 }
 
@@ -38,6 +42,24 @@ export function assertHTTPErrorCode(r, done, code) {
 	r.then(() => done('should fail')).catch(e => {
 		e.status === code ? done() : done(`status code is not ${code} but ${e.status}`);
 	});
+}
+
+export async function expectHTTPErrorCode(code, request) {
+	let failed = false;
+	let response;
+	try {
+		response = await request;
+	} catch (e) {
+		failed = true;
+		if (e.status !== code) {
+			console.log(e);
+			throw new Error(`status code is not ${code} but ${e.status}`);
+		}
+	}
+	if (!failed) {
+		console.log(response);
+		throw new Error('request should have failed');
+	}
 }
 
 export function runAndLogPromise(promiseCallable) {
