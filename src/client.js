@@ -753,7 +753,7 @@ export class StreamChat {
 			const cid = `${channelType}:${channelID}`;
 			if (cid in this.activeChannels) {
 				channel = this.activeChannels[cid];
-				if (Object.keys(custom).length > 0 ) {
+				if (Object.keys(custom).length > 0) {
 					channel.data = custom;
 					channel._data = custom;
 				}
