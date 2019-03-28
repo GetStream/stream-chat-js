@@ -75,6 +75,7 @@ export class StableWSConnection {
 		try {
 			this.isConnecting = true;
 			healthCheck = await this._connect();
+			this.connectionID = healthCheck.connection_id;
 			this.isConnecting = false;
 			this.consecutiveFailures = 0;
 			this._startMonitor();

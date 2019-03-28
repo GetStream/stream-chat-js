@@ -102,15 +102,16 @@ export class StreamChat {
 		this.wsBaseURL = this.baseURL.replace('http', 'ws');
 	}
 
-	_setupConnection() {
+	async _setupConnection() {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
-		this.connect();
+		await this.connect();
+		this.connectionID = this.wsConnection.connectionID;
 		return this.wsPromise;
 	}
 
-	_hasClientID = () => {
-		const hasClient = !!this.clientID;
+	_hasConnectionID = () => {
+		const hasClient = !!this.connectionID;
 		return hasClient;
 	};
 
@@ -522,7 +523,7 @@ export class StreamChat {
 			);
 		}
 		const params = {
-			client_id: client.clientID,
+			connection_id: client.connectionID,
 			user_id: client.userID,
 			user_details: client._user,
 			user_token: client.userToken,
@@ -584,7 +585,7 @@ export class StreamChat {
 			presence: true,
 		};
 
-		if (!this._hasClientID()) {
+		if (!this._hasConnectionID()) {
 			defaultOptions.presence = false;
 		}
 
@@ -617,7 +618,7 @@ export class StreamChat {
 			presence: false,
 		};
 
-		if (!this._hasClientID()) {
+		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
 
@@ -977,7 +978,7 @@ export class StreamChat {
 				user_id: this.userID,
 				...params,
 				api_key: this.key,
-				client_id: this.clientID,
+				connection_id: this.connectionID,
 			},
 			headers: { Authorization: token, 'stream-auth-type': this.getAuthType() },
 		};

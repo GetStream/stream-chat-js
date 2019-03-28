@@ -364,7 +364,7 @@ export class Channel {
 			presence: false,
 		};
 
-		if (!this.client._hasClientID()) {
+		if (!this.client._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
 
