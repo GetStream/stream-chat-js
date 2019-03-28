@@ -204,7 +204,7 @@ describe('Chat', function() {
 			expect(client.health.own_user.color).to.equal('green');
 		});
 
-		it('Chat disabled', async function() {
+		it.skip('Chat disabled', async function() {
 			const disabledKey = 'm1113jrsw6e';
 			const disabledSecret =
 				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
