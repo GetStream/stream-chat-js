@@ -1,5 +1,5 @@
 import { getTestClient } from './utils';
-import { assertHTTPErrorCode } from './utils';
+import { expectHTTPErrorCode, assertHTTPErrorCode } from './utils';
 import { getTestClientForUser, sleep } from './utils';
 import { AllowAll, DenyAll } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
@@ -436,107 +436,81 @@ describe('Channel types', function() {
 				.catch(e => done(e));
 		});
 
-		it('flip replies config to false', function(done) {
-			client
-				.updateChannelType(channelTypeName, { replies: false })
-				.then(response => {
-					expect(response.replies).to.be.false;
-					done();
-				})
-				.catch(done);
+		it('flip replies config to false', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				replies: false,
+			});
+			expect(response.replies).to.be.false;
+			await sleep(1000);
 		});
 
-		it('new configs should be returned from channel.query', function(done) {
-			getTestClientForUser('tommaso')
-				.then(client => {
-					client
-						.channel(channelTypeName, 'test')
-						.watch()
-						.then(data => {
-							const expectedData = {
-								automod: 'AI',
-								commands: [
-									{
-										args: '[@username] [text]',
-										description: 'Ban a user',
-										name: 'ban',
-										set: 'moderation_set',
-									},
-								],
-								connect_events: true,
-								max_message_length: 5000,
-								message_retention: 'infinite',
-								mutes: true,
-								name: `${channelTypeName}`,
-								reactions: true,
-								replies: false,
-								search: false,
-								read_events: true,
-								typing_events: true,
-							};
-							expect(data.channel.config).like(expectedData);
-							done();
-						})
-						.catch(e => done(e));
-				})
-				.catch(e => done(e));
+		it('new configs should be returned from channel.query', async function() {
+			const client = await getTestClientForUser('tommaso');
+			const data = await client.channel(channelTypeName, 'test').watch();
+			const expectedData = {
+				automod: 'AI',
+				commands: [
+					{
+						args: '[@username] [text]',
+						description: 'Ban a user',
+						name: 'ban',
+						set: 'moderation_set',
+					},
+				],
+				connect_events: true,
+				max_message_length: 5000,
+				message_retention: 'infinite',
+				mutes: true,
+				name: `${channelTypeName}`,
+				reactions: true,
+				replies: false,
+				search: false,
+				read_events: true,
+				typing_events: true,
+			};
+			expect(data.channel.config).like(expectedData);
 		});
 
-		it('changing permissions', function(done) {
-			client
-				.updateChannelType(channelTypeName, {
-					permissions: [AllowAll, DenyAll],
-				})
-				.then(response => {
-					expect(response.permissions).to.have.length(2);
-					done();
-				})
-				.catch(done);
+		it('changing permissions', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				permissions: [AllowAll, DenyAll],
+			});
+			expect(response.permissions).to.have.length(2);
 		});
 
-		it('changing commands to a bad one', function(done) {
+		it('changing commands to a bad one', async function() {
 			const p = client.updateChannelType(channelTypeName, {
 				commands: ['bogus'],
 			});
-			assertHTTPErrorCode(p, done, 400);
+			await expectHTTPErrorCode(400, p);
 		});
 
-		it('changing commands to all', function(done) {
-			client
-				.updateChannelType(channelTypeName, {
-					commands: ['all'],
-				})
-				.then(response => {
-					expect(response.commands).to.have.length(7);
-					done();
-				})
-				.catch(done);
+		it('changing commands to all', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				commands: ['all'],
+			});
+			expect(response.commands).to.have.length(7);
 		});
 
-		it('changing commands to fun_set', function(done) {
-			client
-				.updateChannelType(channelTypeName, {
-					commands: ['fun_set'],
-				})
-				.then(response => {
-					expect(response.commands).to.have.length(2);
-					done();
-				})
-				.catch(done);
+		it('changing commands to fun_set', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				commands: ['fun_set'],
+			});
+			expect(response.commands).to.have.length(2);
 		});
 
-		it('changing the name should fail', function(done) {
+		it('changing the name should fail', async function() {
 			const p = client.updateChannelType(channelTypeName, {
 				name: 'something-else',
 			});
-			assertHTTPErrorCode(p, done, 400);
+			await expectHTTPErrorCode(400, p);
 		});
 
-		it('changing the updated_at field should fail', function(done) {
+		it('changing the updated_at field should fail', async function() {
 			const p = client.updateChannelType(channelTypeName, {
 				updated_at: 'something-else',
 			});
-			assertHTTPErrorCode(p, done, 400);
+			await expectHTTPErrorCode(400, p);
 		});
 	});
 
