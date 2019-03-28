@@ -352,7 +352,7 @@ describe('Devices', function() {
 				await client.addDevice({
 					id: devices[i],
 					provider: 'apn',
-					user: { id: users[i] },
+					userID: users[i],
 				});
 			}
 		});
@@ -364,7 +364,7 @@ describe('Devices', function() {
 			}
 		});
 		it('can delete any device', async function() {
-			await client.removeDevice(devices[1]);
+			await client.removeDevice(devices[1], users[1]);
 			const result = await client.getDevices(users[1]);
 			expect(result.devices.length).to.equal(0);
 		});

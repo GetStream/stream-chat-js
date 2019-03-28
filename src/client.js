@@ -669,23 +669,23 @@ export class StreamChat {
 
 	/**
 	 * addDevice - Adds a device to the current user. When clientside it will error if `setUser` was not called.
-	 * When serverside, the user must be specified in the device payload
+	 * When serverside, the user_id must be specified in the device payload
 	 *
-	 * @param {object} device The device object. E.g.: {id:"deviceToken", provider:"apn|firebase", user:{id:"someGuy"}}
+	 * @param {object} device The device object. E.g.: {id:"deviceToken", provider:"apn|firebase", userID: "someGuy"}.
 	 *
 	 */
 	async addDevice(device = {}) {
 		return await this.post(this.baseURL + '/devices', {
 			id: device.id,
 			push_provider: device.provider,
-			user: device.user,
+			...(device.userID ? { user_id: device.userID } : {}),
 		});
 	}
 
 	/**
 	 * getDevices - Returns the devices associated with the current user
 	 *
-	 * @param {string} userId User ID. Only works on serversidex
+	 * @param {string} userId User ID. Only works on serverside
 	 *
 	 * @return {devices} Array of devices
 	 */
@@ -700,11 +700,13 @@ export class StreamChat {
 	 * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
 	 *
 	 * @param {string} deviceId The device id
+	 * @param {string} [userID] The user id. Only specify this for serverside requests
 	 *
 	 */
-	async removeDevice(deviceId) {
+	async removeDevice(deviceId, userID = null) {
 		return await this.delete(this.baseURL + '/devices', {
 			id: deviceId,
+			...(userID ? { user_id: userID } : {}),
 		});
 	}
 
@@ -973,7 +975,6 @@ export class StreamChat {
 		return {
 			...this.options,
 			params: {
-				user_id: this.userID,
 				...params,
 				api_key: this.key,
 				client_id: this.clientID,
