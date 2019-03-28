@@ -12,6 +12,7 @@ import {
 	getTestClientForUser2,
 	createUsers,
 	runAndLogPromise,
+	sleep,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -132,7 +133,7 @@ describe('Presence', function() {
 			const testClientP = getTestClientForUser2(userID, 'busy');
 
 			await new Promise(resolve => {
-				testClientP.on('health.check', event => {
+				const subscription = testClientP.on('health.check', event => {
 					expect(event.own_user.id).to.equal(userID);
 					expect(event.own_user.status).to.equal('busy');
 					expect(event.own_user.invisible).to.equal(false);
@@ -141,6 +142,7 @@ describe('Presence', function() {
 					const now = new Date();
 					const diffInMinutes = (now - last_active) / 1000 / 60;
 					expect(diffInMinutes).to.be.below(1);
+					subscription.unsubscribe();
 					resolve();
 				});
 			});

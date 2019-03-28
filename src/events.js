@@ -21,6 +21,7 @@ export const EVENT_MAP = {
 	'notification.invite_accepted': true,
 	'notification.added_to_channel': true,
 	'notification.removed_from_channel': true,
+	'notification.mutes_updated': true,
 	// local events
 	'connection.changed': true,
 	'connection.recovered': true,
