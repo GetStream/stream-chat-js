@@ -726,7 +726,7 @@ export class StreamChat {
 	 *
 	 * @return {channel} The channel object, initialize it using channel.watch()
 	 */
-	channel(channelType, channelID, custom) {
+	channel(channelType, channelID, custom = {}) {
 		if (!this.userID && !this._isUsingServerAuth()) {
 			throw Error('Call setUser or setAnonymousUser before creating a channel');
 		}
@@ -745,7 +745,7 @@ export class StreamChat {
 			}
 		} else {
 			// support the 2 param init method
-			custom = channelID;
+			custom = channelID || {};
 			channelID = undefined;
 		}
 
@@ -758,6 +758,10 @@ export class StreamChat {
 			const cid = `${channelType}:${channelID}`;
 			if (cid in this.activeChannels) {
 				channel = this.activeChannels[cid];
+				if (Object.keys(custom).length > 0) {
+					channel.data = custom;
+					channel._data = custom;
+				}
 			} else {
 				channel = new Channel(this, channelType, channelID, custom);
 				this.activeChannels[channel.cid] = channel;
