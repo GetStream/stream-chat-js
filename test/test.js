@@ -203,6 +203,21 @@ describe('Chat', function() {
 			expect(client.health.own_user.status).to.equal('test');
 			expect(client.health.own_user.color).to.equal('green');
 		});
+
+		it('Chat disabled', async function() {
+			const disabledKey = 'm1113jrsw6e';
+			const disabledSecret =
+				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
+			const serverClient = new StreamChat(disabledKey, disabledSecret);
+			const userClient = new StreamChat(disabledKey);
+			const responsePromise = userClient.setUser(
+				{ id: 'batman' },
+				serverClient.createToken('batman'),
+			);
+			await expect(responsePromise).to.be.rejectedWith(
+				'Chat is not enabled for organization with id 5001 and name admin',
+			);
+		});
 	});
 
 	describe('Devices', function() {
