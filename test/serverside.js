@@ -5,8 +5,10 @@ import { AllowAll, DenyAll } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
+import chaiAsPromised from 'chai-as-promised';
 
 chai.use(require('chai-like'));
+chai.use(chaiAsPromised);
 
 const expect = chai.expect;
 
@@ -221,63 +223,26 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
+						auth_key: '',
 						p12_cert: fs.readFileSync(
 							'./test/push_test/stream-push-test.p12',
 						),
-						pem_cert: '',
-						topic: 'com.apple.test',
-						auth_key: '',
-						key_id: '',
-						team_id: '',
 					},
 				})
 				.then(() => done())
-				.catch(() => done('should not have failed'));
+				.catch(e => done(`should not have failed ${e}`));
 		});
-		it('Adding bad apn pem config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						topic: 'com.apple.test',
-						pem_cert: 'boogus',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding good apn pem config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						pem_cert: fs.readFileSync(
-							'./test/push_test/push-test.pem',
-							'utf-8',
-						),
-						auth_key: '',
-						topic: 'com.apple.test',
-						key_id: '',
-						team_id: '',
-					},
-				})
-				.then(() => done())
-				.catch(() => done('should not have failed'));
-		});
-		it('Adding incomplete apn jwt data', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						pem_cert: '',
-						topic: 'com.apple.test',
-						auth_key: '',
-						key_id: 'keykey',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
+		it('Describe app settings', async function() {
+			const response = await client.getAppSettings();
+			expect(response.app).to.be.an('object');
+			expect(response.app.push_notifications).to.be.an('object');
+			delete response.app.push_notifications.apn.notification_template;
+			expect(response.app.push_notifications.apn).to.eql({
+				enabled: true,
+				auth_type: 'p12',
+				bundle_id: 'stream-test',
+				host: 'https://api.development.push.apple.com',
+			});
 		});
 		it('Adding bad apn auth key', function(done) {
 			client
@@ -285,10 +250,57 @@ describe('App configs', function() {
 					apn_config: {
 						p12_cert: '',
 						topic: 'com.apple.test',
-						pem_cert: '',
 						auth_key: 'supersecret',
 						key_id: 'keykey',
 						team_id: 'sfd',
+					},
+				})
+				.then(() => done('should have failed'))
+				.catch(() => done());
+		});
+		it('Adding incomplete auth key data: no bundle_id', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: 'keykey',
+						team_id: 'sfd',
+						bundle_id: '',
+					},
+				})
+				.then(() => done('should have failed'))
+				.catch(() => done());
+		});
+		it('Adding incomplete auth key data: no key_id', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: '',
+						bundle_id: 'bundly',
+						team_id: 'sfd',
+					},
+				})
+				.then(() => done('should have failed'))
+				.catch(() => done());
+		});
+		it('Adding incomplete auth key data: no team', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: 'keykey',
+						bundle_id: 'sfd',
+						team_id: '',
 					},
 				})
 				.then(() => done('should have failed'))
@@ -299,18 +311,84 @@ describe('App configs', function() {
 				.updateAppSettings({
 					apn_config: {
 						p12_cert: '',
-						pem_cert: '',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
 						),
 						key_id: 'keykey',
-						topic: 'com.apple.test',
+						bundle_id: 'com.apple.test',
 						team_id: 'sfd',
 					},
 				})
 				.then(() => done())
 				.catch(() => done('should not have failed'));
+		});
+		it('Describe app settings', async function() {
+			const response = await client.getAppSettings();
+			expect(response.app).to.be.an('object');
+			expect(response.app.push_notifications).to.be.an('object');
+			delete response.app.push_notifications.apn.notification_template;
+			expect(response.app.push_notifications.apn).to.eql({
+				enabled: true,
+				auth_type: 'jwt',
+				bundle_id: 'com.apple.test',
+				host: 'https://api.push.apple.com',
+				team_id: 'sfd',
+				key_id: 'keykey',
+			});
+		});
+		it('Adding good apn auth key in dev mode', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						p12_cert: '',
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: 'keykey',
+						bundle_id: 'com.apple.test',
+						team_id: 'sfd',
+						development: true,
+					},
+				})
+				.then(() => done())
+				.catch(() => done('should not have failed'));
+		});
+		it('Describe app settings', async function() {
+			const response = await client.getAppSettings();
+			expect(response.app).to.be.an('object');
+			expect(response.app.push_notifications).to.be.an('object');
+			delete response.app.push_notifications.apn.notification_template;
+			expect(response.app.push_notifications.apn).to.eql({
+				enabled: true,
+				auth_type: 'jwt',
+				bundle_id: 'com.apple.test',
+				team_id: 'sfd',
+				key_id: 'keykey',
+				host: 'https://api.development.push.apple.com',
+			});
+		});
+		it('Disable APN', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						p12_cert: '',
+						auth_key: '',
+					},
+				})
+				.then(() => done())
+				.catch(e => done(`should not have failed ${e}`));
+		});
+		it('Describe app settings', async function() {
+			const response = await client.getAppSettings();
+			expect(response.app).to.be.an('object');
+			expect(response.app.push_notifications).to.be.an('object');
+			delete response.app.push_notifications.apn.notification_template;
+			expect(response.app.push_notifications.apn).to.eql({
+				enabled: false,
+				host: 'https://api.push.apple.com',
+			});
 		});
 	});
 
@@ -334,7 +412,7 @@ describe('Devices', function() {
 
 	describe('No user id provided', function() {
 		it(`can't add devices`, async function() {
-			const p = client.addDevice({ id: deviceId, provider: 'apn' });
+			const p = client.addDevice(deviceId, 'apn');
 			await expect(p).to.be.rejected;
 		});
 		it(`cant't list devices`, async function() {
@@ -349,11 +427,7 @@ describe('Devices', function() {
 
 		it('can add devices to any user', async function() {
 			for (const i of Array(2).keys()) {
-				await client.addDevice({
-					id: devices[i],
-					provider: 'apn',
-					user: { id: users[i] },
-				});
+				await client.addDevice(devices[i], 'apn', users[i]);
 			}
 		});
 		it('can fetch devices from any user', async function() {
@@ -364,8 +438,8 @@ describe('Devices', function() {
 			}
 		});
 		it('can delete any device', async function() {
-			await client.removeDevice(devices[1]);
-			const result = await client.getDevices(users[1]);
+			await client.removeDevice(devices[1], users[1]);
+			const result = await client.getDevices(devices[1], users[1]);
 			expect(result.devices.length).to.equal(0);
 		});
 	});

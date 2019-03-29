@@ -23,7 +23,7 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
-describe('Moderation', function() {
+describe.skip('Moderation', function() {
 	it('Mute', async function() {
 		const user1 = uuidv4();
 		const user2 = uuidv4();

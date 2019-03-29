@@ -170,12 +170,12 @@ describe('Chat', function() {
 		const client = getTestClient(false);
 
 		before(async function() {
-			await authClient.addDevice({ id: wontBeRemoved, provider: 'apn' });
+			await authClient.addDevice(wontBeRemoved, 'apn');
 		});
 
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				let p = client.addDevice({ id: deviceId, provider: 'apn' });
+				let p = client.addDevice(deviceId, 'apn');
 				await expect(p).to.be.rejected;
 
 				p = client.getDevices();
@@ -195,7 +195,7 @@ describe('Chat', function() {
 
 			describe('Adding', function() {
 				it('simple add', async function() {
-					await client.addDevice({ id: deviceId, provider: 'apn' });
+					await client.addDevice(deviceId, 'apn');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
@@ -203,7 +203,7 @@ describe('Chat', function() {
 				it('re-add deleted device', async function() {
 					await client.removeDevice(deviceId);
 
-					await client.addDevice({ id: deviceId, provider: 'firebase' });
+					await client.addDevice(deviceId, 'firebase');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
