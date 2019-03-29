@@ -724,7 +724,7 @@ export class StreamChat {
 	 *
 	 * @return {channel} The channel object, initialize it using channel.watch()
 	 */
-	channel(channelType, channelID, custom) {
+	channel(channelType, channelID, custom = {}) {
 		if (!this.userID && !this._isUsingServerAuth()) {
 			throw Error('Call setUser or setAnonymousUser before creating a channel');
 		}
@@ -743,7 +743,7 @@ export class StreamChat {
 			}
 		} else {
 			// support the 2 param init method
-			custom = channelID;
+			custom = channelID || {};
 			channelID = undefined;
 		}
 
@@ -756,6 +756,10 @@ export class StreamChat {
 			const cid = `${channelType}:${channelID}`;
 			if (cid in this.activeChannels) {
 				channel = this.activeChannels[cid];
+				if (Object.keys(custom).length > 0) {
+					channel.data = custom;
+					channel._data = custom;
+				}
 			} else {
 				channel = new Channel(this, channelType, channelID, custom);
 				this.activeChannels[channel.cid] = channel;
@@ -826,23 +830,27 @@ export class StreamChat {
 
 	/** muteUser - mutes a user
 	 *
-	 * @param targetUserID
+	 * @param targetID
+	 * @param [userID] Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async muteUser(targetUserID) {
+	async muteUser(targetID, userID = null) {
 		return await this.post(this.baseURL + '/moderation/mute', {
-			target_user_id: targetUserID,
+			target_id: targetID,
+			...(userID ? { user_id: userID } : {}),
 		});
 	}
 
-	/** unmuteUser - mutes a user
+	/** unmuteUser - unmutes a user
 	 *
-	 * @param targetUserID
+	 * @param targetID
+	 * @param [userID] Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetUserID) {
+	async unmuteUser(targetID, userID = null) {
 		return await this.post(this.baseURL + '/moderation/unmute', {
-			target_user_id: targetUserID,
+			target_id: targetID,
+			...(userID ? { user_id: userID } : {}),
 		});
 	}
 

@@ -80,7 +80,6 @@ describe('Webhooks', function() {
 		expect(lastMessage.members[0]).to.be.an('object');
 		expect(lastMessage.members[0].user).to.be.an('object');
 		expect(lastMessage.members[0].user.unread_count).to.eq(1);
-		expect(lastMessage.members[0].is_moderator).to.eq(false);
 		expect(lastMessage.members[0].user.id).to.eq(tommasoID);
 		expect(lastMessage.members[0].user.online).to.eq(false);
 	});

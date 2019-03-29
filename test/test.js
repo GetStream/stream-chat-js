@@ -164,6 +164,62 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Connect', function() {
+		it('Insert and update should work', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.color).to.equal('green');
+			// connect without a user id shouldnt remove anything...
+			const client2 = await getTestClientForUser(userID);
+			expect(client2.health.own_user.color).to.equal('green');
+			// changing the status shouldnt remove the color
+			const client3 = await getTestClientForUser(userID, 'helloworld');
+			expect(client3.health.own_user.color).to.equal('green');
+			expect(client3.health.own_user.status).to.equal('helloworld');
+		});
+
+		it('Verify that we dont do unneeded updates', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			const updatedAt = client.health.own_user.updated_at;
+			// none of these should trigger an update...
+			const client2 = await getTestClientForUser(userID);
+			const client3 = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+			});
+			expect(client3.health.own_user.updated_at).to.equal(updatedAt);
+		});
+
+		it('Update/sync before calling setUser', async function() {
+			const userID = uuidv4();
+			const serverClient = getServerTestClient();
+
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, book: 'dune', role: 'admin' },
+			]);
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.role).to.equal('admin');
+			expect(client.health.own_user.book).to.equal('dune');
+			expect(client.health.own_user.status).to.equal('test');
+			expect(client.health.own_user.color).to.equal('green');
+		});
+
+		it.skip('Chat disabled', async function() {
+			const disabledKey = 'm1113jrsw6e';
+			const disabledSecret =
+				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
+			const serverClient = new StreamChat(disabledKey, disabledSecret);
+			const userClient = new StreamChat(disabledKey);
+			const responsePromise = userClient.setUser(
+				{ id: 'batman' },
+				serverClient.createToken('batman'),
+			);
+			await expect(responsePromise).to.be.rejectedWith(
+				'Chat is not enabled for organization with id 5001 and name admin',
+			);
+		});
+	});
+
 	describe('Devices', function() {
 		const deviceId = uuidv4();
 		const wontBeRemoved = uuidv4();
@@ -186,7 +242,7 @@ describe('Chat', function() {
 			});
 		});
 
-		describe('User is set', function() {
+		describe.skip('User is set', function() {
 			const userId = uuidv4();
 
 			before(async function() {
@@ -1207,8 +1263,8 @@ describe('Chat', function() {
 	describe('Channel State', function() {
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
@@ -1216,7 +1272,7 @@ describe('Chat', function() {
 
 		it('Remove Ephemeral Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my regular message', type: 'regular' };
+			const message = { id: 1, text: 'my regular message', type: 'regular' };
 			const message2 = {
 				tmp_id: 2,
 				text: 'my ephemeral message',
@@ -1235,8 +1291,8 @@ describe('Chat', function() {
 
 		it('Update Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			message2.text = 'hello world';
 			c.state.addMessageSorted(message2);
@@ -1246,8 +1302,8 @@ describe('Chat', function() {
 
 		it('Add A Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message]);
 			// this should append
 			c.state.addMessageSorted(message2, true);

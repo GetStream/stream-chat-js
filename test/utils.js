@@ -19,7 +19,11 @@ export function getTestClientForUser2(userID, status, options) {
 
 export async function getTestClientForUser(userID, status, options) {
 	const client = getTestClient(false);
-	await client.setUser({ id: userID, status, ...options }, createUserToken(userID));
+	const health = await client.setUser(
+		{ id: userID, status, ...options },
+		createUserToken(userID),
+	);
+	client.health = health;
 	return client;
 }
 
