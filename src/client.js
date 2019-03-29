@@ -527,6 +527,7 @@ export class StreamChat {
 			user_id: client.userID,
 			user_details: client._user,
 			user_token: client.userToken,
+			server_determines_connection_id: true,
 		};
 		const qs = encodeURIComponent(JSON.stringify(params));
 		if (qs.length > 1900) {
