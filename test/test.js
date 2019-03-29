@@ -1263,8 +1263,8 @@ describe('Chat', function() {
 	describe('Channel State', function() {
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
@@ -1272,7 +1272,7 @@ describe('Chat', function() {
 
 		it('Remove Ephemeral Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my regular message', type: 'regular' };
+			const message = { id: 1, text: 'my regular message', type: 'regular' };
 			const message2 = {
 				tmp_id: 2,
 				text: 'my ephemeral message',
@@ -1291,8 +1291,8 @@ describe('Chat', function() {
 
 		it('Update Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			message2.text = 'hello world';
 			c.state.addMessageSorted(message2);
@@ -1302,8 +1302,8 @@ describe('Chat', function() {
 
 		it('Add A Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message]);
 			// this should append
 			c.state.addMessageSorted(message2, true);
