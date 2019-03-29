@@ -96,9 +96,11 @@ describe('Member style channel init', () => {
 			invites: ['nick'],
 		});
 		const state = await c.create();
+		expect(state.channel.created_by.id).to.equal(randomID);
+
 		expect(state.members[1].invited).to.equal(true);
-		expect(state.members[1].invite_accepted_at).to.equal(null);
-		expect(state.members[1].invite_rejected_at).to.equal(null);
+		expect(state.members[1].invite_accepted_at).to.equal(undefined);
+		expect(state.members[1].invite_rejected_at).to.equal(undefined);
 
 		await messageReceived;
 	});
