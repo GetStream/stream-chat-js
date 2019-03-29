@@ -345,7 +345,6 @@ describe.skip('Devices', function() {
 	});
 
 	describe('User id provided', function() {
-
 		const users = [uuidv4(), uuidv4()];
 		const devices = [uuidv4(), uuidv4()];
 
