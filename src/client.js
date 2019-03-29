@@ -523,7 +523,7 @@ export class StreamChat {
 			);
 		}
 		const params = {
-			connection_id: client.connectionID,
+			client_id: client.client_id,
 			user_id: client.userID,
 			user_details: client._user,
 			user_token: client.userToken,

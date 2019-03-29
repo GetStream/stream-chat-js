@@ -392,8 +392,8 @@ export class StableWSConnection {
 			const data = [
 				{
 					type: 'health.check',
-					clientID: that.clientID,
-					userID: that.userID,
+					client_id: that.clientID,
+					user_id: that.userID,
 				},
 			];
 			// try to send on the connection
