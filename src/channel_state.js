@@ -107,11 +107,8 @@ export class ChannelState {
 		for (let i = 0; i < messages.length; i++) {
 			const message = messages[i];
 			const idMatch = message.id && newMessage.id && message.id === newMessage.id;
-			const tmpIDMatch =
-				message.tmp_id &&
-				newMessage.tmp_id &&
-				message.tmp_id === newMessage.tmp_id;
-			if (idMatch || tmpIDMatch) {
+
+			if (idMatch) {
 				messages = messages.set(i, newMessage);
 				updated = true;
 			}
@@ -127,7 +124,7 @@ export class ChannelState {
 	/**
 	 * removeMessage - Description
 	 *
-	 * @param {type} messageToRemove Object of the message to remove. Needs to have at least tmp_id or id specified.
+	 * @param {type} messageToRemove Object of the message to remove. Needs to have at id specified.
 	 *
 	 * @return {boolean} Returns if the message was removed
 	 */
@@ -136,11 +133,8 @@ export class ChannelState {
 		const messages = this.messages.flatMap(message => {
 			const idMatch =
 				message.id && messageToRemove.id && message.id === messageToRemove.id;
-			const tmpIDMatch =
-				message.tmp_id &&
-				messageToRemove.tmp_id &&
-				message.tmp_id === messageToRemove.tmp_id;
-			if (idMatch || tmpIDMatch) {
+
+			if (idMatch) {
 				return [];
 			} else {
 				removed = true;
