@@ -242,7 +242,7 @@ describe('Chat', function() {
 			});
 		});
 
-		describe('User is set', function() {
+		describe.skip('User is set', function() {
 			const userId = uuidv4();
 
 			before(async function() {
