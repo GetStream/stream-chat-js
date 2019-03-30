@@ -213,6 +213,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
+						auth_type: 'p12',
 						p12_cert: 'boogus',
 					},
 				})
@@ -223,7 +224,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_key: '',
+						auth_type: 'p12',
 						p12_cert: fs.readFileSync(
 							'./test/push_test/stream-push-test.p12',
 						),
@@ -248,7 +249,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
-						p12_cert: '',
+						auth_type: 'jwt',
 						topic: 'com.apple.test',
 						auth_key: 'supersecret',
 						key_id: 'keykey',
@@ -262,6 +263,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
+						auth_type: 'jwt',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -278,6 +280,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
+						auth_type: 'jwt',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -294,6 +297,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
+						auth_type: 'jwt',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -310,7 +314,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
-						p12_cert: '',
+						auth_type: 'jwt',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -373,8 +377,7 @@ describe('App configs', function() {
 			client
 				.updateAppSettings({
 					apn_config: {
-						p12_cert: '',
-						auth_key: '',
+						disabled: true,
 					},
 				})
 				.then(() => done())

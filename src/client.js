@@ -176,7 +176,6 @@ export class StreamChat {
 					"auth_key": "-----begin private key-------\n ........",
 					"key_id": "keyid",
 					"team_id": "teamid", //either ALL these 3
-					"pem_cert": "-----begin rsa private key-------\n ........", //or ONLY this
 					"p12_cert": "<content of p12 certificate>", //or ONLY this
 					"notification_template": "some sort of templated json",
 					"topic": "com.apple.your.app",
