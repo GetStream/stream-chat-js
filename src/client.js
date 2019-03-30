@@ -173,19 +173,22 @@ export class StreamChat {
 	 * @param {object} options App settings.
 	 * 		IE: {
 	  			"apn_config": {
-					"auth_key": "-----begin private key-------\n ........",
+					"auth_type": "token",
+					"auth_key": fs.readFileSync(
+						'./apn-push-auth-key.p8',
+						'utf-8',
+					),
 					"key_id": "keyid",
 					"team_id": "teamid", //either ALL these 3
-					"p12_cert": "<content of p12 certificate>", //or ONLY this
-					"notification_template": "some sort of templated json",
-					"topic": "com.apple.your.app",
-					"host": "https://api.development.push.apple.com" //optional. defaults to "https://api.push.apple.com"
+					"notification_template": "notification handlebars template",
+					"bundle_id": "com.apple.your.app",
+					"development": true
 				},
 				"firebase_config": {
 					"api_key": "apiapiapi",
-					"notification_template": "some sort of templated json"
+					"notification_template": "notification handlebars template"
 				},
-				"webhook_url": "http://webhooks.com/"
+				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
 	 */
 	async updateAppSettings(options = {}) {

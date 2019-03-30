@@ -209,22 +209,22 @@ describe('App configs', function() {
 	});
 
 	describe('Push notifications', function() {
-		it('Adding bad apn p12 config', function(done) {
+		it('Adding bad apn certificate config', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'p12',
+						auth_type: 'certificate',
 						p12_cert: 'boogus',
 					},
 				})
 				.then(() => done('should have failed'))
 				.catch(() => done());
 		});
-		it('Adding good apn p12 config', function(done) {
+		it('Adding good apn certificate config', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'p12',
+						auth_type: 'certificate',
 						p12_cert: fs.readFileSync(
 							'./test/push_test/stream-push-test.p12',
 						),
@@ -240,17 +240,17 @@ describe('App configs', function() {
 			delete response.app.push_notifications.apn.notification_template;
 			expect(response.app.push_notifications.apn).to.eql({
 				enabled: true,
-				auth_type: 'p12',
+				auth_type: 'certificate',
 				bundle_id: 'stream-test',
 				host: 'https://api.development.push.apple.com',
 			});
 		});
-		it('Adding bad apn auth key', function(done) {
+		it('Adding bad apn token', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'jwt',
-						topic: 'com.apple.test',
+						auth_type: 'token',
+						bundle_id: 'com.apple.test',
 						auth_key: 'supersecret',
 						key_id: 'keykey',
 						team_id: 'sfd',
@@ -259,11 +259,11 @@ describe('App configs', function() {
 				.then(() => done('should have failed'))
 				.catch(() => done());
 		});
-		it('Adding incomplete auth key data: no bundle_id', function(done) {
+		it('Adding incomplete token data: no bundle_id', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'jwt',
+						auth_type: 'token',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -276,11 +276,11 @@ describe('App configs', function() {
 				.then(() => done('should have failed'))
 				.catch(() => done());
 		});
-		it('Adding incomplete auth key data: no key_id', function(done) {
+		it('Adding incomplete token data: no key_id', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'jwt',
+						auth_type: 'token',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -293,11 +293,11 @@ describe('App configs', function() {
 				.then(() => done('should have failed'))
 				.catch(() => done());
 		});
-		it('Adding incomplete auth key data: no team', function(done) {
+		it('Adding incomplete token data: no team', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'jwt',
+						auth_type: 'token',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -310,11 +310,11 @@ describe('App configs', function() {
 				.then(() => done('should have failed'))
 				.catch(() => done());
 		});
-		it('Adding good apn auth key', function(done) {
+		it('Adding good apn token', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						auth_type: 'jwt',
+						auth_type: 'token',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -334,18 +334,18 @@ describe('App configs', function() {
 			delete response.app.push_notifications.apn.notification_template;
 			expect(response.app.push_notifications.apn).to.eql({
 				enabled: true,
-				auth_type: 'jwt',
+				auth_type: 'token',
 				bundle_id: 'com.apple.test',
 				host: 'https://api.push.apple.com',
 				team_id: 'sfd',
 				key_id: 'keykey',
 			});
 		});
-		it('Adding good apn auth key in dev mode', function(done) {
+		it('Adding good apn token in dev mode', function(done) {
 			client
 				.updateAppSettings({
 					apn_config: {
-						p12_cert: '',
+						auth_type: 'token',
 						auth_key: fs.readFileSync(
 							'./test/push_test/push-test-auth-key.p8',
 							'utf-8',
@@ -366,7 +366,7 @@ describe('App configs', function() {
 			delete response.app.push_notifications.apn.notification_template;
 			expect(response.app.push_notifications.apn).to.eql({
 				enabled: true,
-				auth_type: 'jwt',
+				auth_type: 'token',
 				bundle_id: 'com.apple.test',
 				team_id: 'sfd',
 				key_id: 'keykey',
@@ -409,8 +409,7 @@ describe('App configs', function() {
 	});
 });
 
-describe.skip('Devices', function() {
-	// TODO: reenable this, no clue why this fails...
+describe('Devices', function() {
 	const client = getTestClient(true);
 	const deviceId = uuidv4();
 

@@ -225,10 +225,6 @@ describe('Chat', function() {
 		const wontBeRemoved = uuidv4();
 		const client = getTestClient(false);
 
-		before(async function() {
-			await authClient.addDevice(wontBeRemoved, 'apn');
-		});
-
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
 				let p = client.addDevice(deviceId, 'apn');
@@ -242,7 +238,7 @@ describe('Chat', function() {
 			});
 		});
 
-		describe.skip('User is set', function() {
+		describe('User is set', function() {
 			const userId = uuidv4();
 
 			before(async function() {
@@ -250,20 +246,40 @@ describe('Chat', function() {
 			});
 
 			describe('Adding', function() {
+				it('there must be no devices', async function() {
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(0);
+				});
+
 				it('simple add', async function() {
 					await client.addDevice(deviceId, 'apn');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 				});
+
+				it('add same device again', async function() {
+					await client.addDevice(deviceId, 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(1);
+					expect(response.devices[0].id).to.equal(deviceId);
+				});
+
 				it('re-add deleted device', async function() {
 					await client.removeDevice(deviceId);
-
 					await client.addDevice(deviceId, 'firebase');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 					expect(response.devices[0].push_provider).to.equal('firebase');
+				});
+
+				it('add another device', async function() {
+					await client.addDevice(uuidv4(), 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(2);
+					expect(response.devices[1].id).to.equal(deviceId);
+					await client.removeDevice(response.devices[0].id);
 				});
 			});
 			describe('Removing', function() {
@@ -687,9 +703,8 @@ describe('Chat', function() {
 			});
 
 			it('Add a Chat message with a URL and edit it', async function() {
-				const url =
-					'https://www.reddit.com/r/KidsAreFuckingStupid/comments/9xmd8g/kids_think_costco_clerk_is_maui/';
-				const text = `check this reddit :) ${url}`;
+				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
+				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
 				const message = response.message;
 				expect(message.attachments.length).to.equal(1);
@@ -929,21 +944,6 @@ describe('Chat', function() {
 					image_action: 'cancel',
 				});
 				expect(actionResponse.message).to.equal(null);
-			});
-		});
-
-		// TODO: implement after proper error system is in place
-		describe.skip('Error', () => {
-			it('Invalid Command', async function() {
-				const text = '/missing wave';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
-			});
-
-			it('Empty Command', async function() {
-				const text = '/giphy';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
 			});
 		});
 	});
