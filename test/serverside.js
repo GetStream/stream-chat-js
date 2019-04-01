@@ -418,6 +418,47 @@ describe('Moderation', function() {
 	});
 });
 
+describe('User management', function() {
+	const srvClient = getTestClient(true);
+	const userClient = getTestClient(false);
+	it('Admin with extra fields', async function() {
+		// verify we correctly store user information
+		const userID = uuidv4();
+		const user = {
+			id: userID,
+			name: 'jelte',
+			role: 'admin',
+		};
+		const response = await srvClient.updateUser(user);
+		const compareUser = (userResponse, online) => {
+			const expectedData = { role: 'user', ...user };
+			expect(userResponse).to.contains(expectedData);
+			expect(userResponse.online).to.equal(online);
+			expect(userResponse.created_at).to.be.ok;
+			expect(userResponse.updated_at).to.be.ok;
+			expect(userResponse.created_at).to.not.equal('0001-01-01T00:00:00Z');
+			expect(userResponse.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+			expect(userResponse.created_at.substr(-1)).to.equal('Z');
+			expect(userResponse.updated_at.substr(-1)).to.equal('Z');
+		};
+		compareUser(response.users[userID], false);
+
+		const channelID = uuidv4();
+
+		userClient.setUser(user, createUserToken(userID));
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+
+		// make an API call so the data is sent over
+		const text = 'Jelte says hi!';
+		const data = await channel.sendMessage({ text });
+
+		// verify the user information is correct
+		compareUser(data.message.user, true);
+		expect(data.message.text).to.equal(text);
+	});
+});
+
 describe('Channel types', function() {
 	const client = getTestClient(true);
 	const newType = uuidv4();

@@ -491,10 +491,10 @@ describe('Chat', function() {
 		});
 	});
 
-	describe('User', function() {
+	describe('User management', function() {
 		it('Regular Users with extra fields', async function() {
 			// verify we correctly store user information
-			const userID = 'uthred';
+			const userID = 'uthred-' + uuidv4();
 			const client = getTestClient();
 			const token = createUserToken(userID);
 
@@ -504,7 +504,23 @@ describe('Chat', function() {
 				first: 'Uhtred',
 			};
 
-			await client.setUser(user, token);
+			const response = await client.setUser(user, token);
+
+			const compareUser = userResponse => {
+				const expectedData = { role: 'user', ...user };
+				expect(userResponse).to.contains(expectedData);
+				expect(userResponse.online).to.equal(true);
+				expect(userResponse.created_at).to.be.ok;
+				expect(userResponse.updated_at).to.be.ok;
+				expect(userResponse.last_active).to.be.ok;
+				expect(userResponse.created_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.last_active).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.created_at.substr(-1)).to.equal('Z');
+				expect(userResponse.updated_at.substr(-1)).to.equal('Z');
+				expect(userResponse.last_active.substr(-1)).to.equal('Z');
+			};
+			compareUser(response.own_user);
 
 			const magicChannel = client.channel('livestream', 'harrypotter');
 			await magicChannel.watch();
@@ -513,14 +529,8 @@ describe('Chat', function() {
 			const text = 'Tommaso says hi!';
 			const data = await magicChannel.sendMessage({ text });
 
-			const expectedData = Object.assign(
-				{},
-				{ role: 'user' /* status: 'offline'*/ },
-				user,
-			);
 			// verify the user information is correct
-			delete data.message.user.last_active;
-			expect(data.message.user).to.contains(expectedData);
+			compareUser(data.message.user);
 			expect(data.message.text).to.equal(text);
 		});
 
