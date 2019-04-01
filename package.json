@@ -7,6 +7,7 @@
   "main": "./dist/index.js",
   "module": "./dist/index.es.js",
   "jsnext:main": "./dist/index.es.js",
+  "types": "./types/stream-chat/index.d.ts",
   "browser": {
     "./dist/index.es.js": "./dist/browser.es.js",
     "./dist/index.js": "./dist/browser.js"
@@ -22,10 +23,7 @@
     "getstream",
     "getstream.io"
   ],
-  "files": [
-    "/dist",
-    "readme.md"
-  ],
+  "files": ["/dist", "readme.md"],
   "dependencies": {
     "axios": "^0.18.0",
     "cross-fetch": "^3.0.0",
@@ -79,6 +77,7 @@
     "prettier": "npx prettier --list-different '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "eslint": "npx eslint '**/*.{js,md}' --max-warnings 0",
+    "dtslint": "dtslint types/stream-chat",
     "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
     "testall": "NODE_ENV=test mocha --exit --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
     "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",
