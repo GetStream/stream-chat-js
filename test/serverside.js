@@ -5,8 +5,10 @@ import { AllowAll, DenyAll } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
+import chaiAsPromised from 'chai-as-promised';
 
 chai.use(require('chai-like'));
+chai.use(chaiAsPromised);
 
 const expect = chai.expect;
 
@@ -479,7 +481,7 @@ describe('Channel types', function() {
 		it('should have the right defaults and name', function(done) {
 			const expectedData = {
 				automod: 'AI',
-				commands: ['giphy', 'imgur', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -635,7 +637,7 @@ describe('Channel types', function() {
 					commands: ['all'],
 				})
 				.then(response => {
-					expect(response.commands).to.have.length(7);
+					expect(response.commands).to.have.length(6);
 					done();
 				})
 				.catch(done);
@@ -647,7 +649,7 @@ describe('Channel types', function() {
 					commands: ['fun_set'],
 				})
 				.then(response => {
-					expect(response.commands).to.have.length(2);
+					expect(response.commands).to.have.length(1);
 					done();
 				})
 				.catch(done);
@@ -760,12 +762,6 @@ describe('Channel types', function() {
 						set: 'fun_set',
 					},
 					{
-						args: '[text]',
-						description: 'Post a random meme to the channel',
-						name: 'imgur',
-						set: 'fun_set',
-					},
-					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
@@ -839,12 +835,6 @@ describe('Channel types', function() {
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
-					},
-					{
-						args: '[text]',
-						description: 'Post a random meme to the channel',
-						name: 'imgur',
 						set: 'fun_set',
 					},
 					{

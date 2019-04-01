@@ -23,7 +23,10 @@
     "getstream",
     "getstream.io"
   ],
-  "files": ["/dist", "readme.md"],
+  "files": [
+    "/dist",
+    "readme.md"
+  ],
   "dependencies": {
     "axios": "^0.18.0",
     "cross-fetch": "^3.0.0",
