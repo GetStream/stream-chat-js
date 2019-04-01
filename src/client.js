@@ -197,7 +197,7 @@ export class StreamChat {
 				options.apn_config.p12_cert,
 			).toString('base64');
 		}
-		return await this.post(this.baseURL + '/app', options);
+		return await this.patch(this.baseURL + '/app', options);
 	}
 
 	/**
@@ -353,6 +353,20 @@ export class StreamChat {
 		let response;
 		try {
 			response = await axios.post(url, data, this._addClientParams());
+			return this.handleResponse(response);
+		} catch (e) {
+			if (e.response) {
+				return this.handleResponse(e.response);
+			} else {
+				throw e;
+			}
+		}
+	}
+
+	async patch(url, data) {
+		let response;
+		try {
+			response = await axios.patch(url, data, this._addClientParams());
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
