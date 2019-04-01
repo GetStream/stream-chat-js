@@ -666,7 +666,7 @@ describe('Channel types', function() {
 				name: `${newType}`,
 				reactions: true,
 				replies: true,
-				search: false,
+				search: true,
 				read_events: true,
 				typing_events: true,
 			};
@@ -731,7 +731,7 @@ describe('Channel types', function() {
 								name: `${channelTypeName}`,
 								reactions: true,
 								replies: true,
-								search: false,
+								search: true,
 								read_events: true,
 								typing_events: true,
 							};
@@ -777,7 +777,7 @@ describe('Channel types', function() {
 								name: `${channelTypeName}`,
 								reactions: true,
 								replies: false,
-								search: false,
+								search: true,
 								read_events: true,
 								typing_events: true,
 							};
