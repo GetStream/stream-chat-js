@@ -480,10 +480,10 @@ describe('Chat', function() {
 		});
 	});
 
-	describe('User', function() {
+	describe('User management', function() {
 		it('Regular Users with extra fields', async function() {
 			// verify we correctly store user information
-			const userID = 'uthred';
+			const userID = 'uthred-' + uuidv4();
 			const client = getTestClient();
 			const token = createUserToken(userID);
 
@@ -493,7 +493,23 @@ describe('Chat', function() {
 				first: 'Uhtred',
 			};
 
-			await client.setUser(user, token);
+			const response = await client.setUser(user, token);
+
+			const compareUser = userResponse => {
+				const expectedData = { role: 'user', ...user };
+				expect(userResponse).to.contains(expectedData);
+				expect(userResponse.online).to.equal(true);
+				expect(userResponse.created_at).to.be.ok;
+				expect(userResponse.updated_at).to.be.ok;
+				expect(userResponse.last_active).to.be.ok;
+				expect(userResponse.created_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.last_active).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.created_at.substr(-1)).to.equal('Z');
+				expect(userResponse.updated_at.substr(-1)).to.equal('Z');
+				expect(userResponse.last_active.substr(-1)).to.equal('Z');
+			};
+			compareUser(response.own_user);
 
 			const magicChannel = client.channel('livestream', 'harrypotter');
 			await magicChannel.watch();
@@ -502,14 +518,8 @@ describe('Chat', function() {
 			const text = 'Tommaso says hi!';
 			const data = await magicChannel.sendMessage({ text });
 
-			const expectedData = Object.assign(
-				{},
-				{ role: 'user' /* status: 'offline'*/ },
-				user,
-			);
 			// verify the user information is correct
-			delete data.message.user.last_active;
-			expect(data.message.user).to.contains(expectedData);
+			compareUser(data.message.user);
 			expect(data.message.text).to.equal(text);
 		});
 
@@ -1252,8 +1262,8 @@ describe('Chat', function() {
 	describe('Channel State', function() {
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
@@ -1261,7 +1271,7 @@ describe('Chat', function() {
 
 		it('Remove Ephemeral Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my regular message', type: 'regular' };
+			const message = { id: 1, text: 'my regular message', type: 'regular' };
 			const message2 = {
 				tmp_id: 2,
 				text: 'my ephemeral message',
@@ -1280,8 +1290,8 @@ describe('Chat', function() {
 
 		it('Update Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			message2.text = 'hello world';
 			c.state.addMessageSorted(message2);
@@ -1291,8 +1301,8 @@ describe('Chat', function() {
 
 		it('Add A Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message]);
 			// this should append
 			c.state.addMessageSorted(message2, true);

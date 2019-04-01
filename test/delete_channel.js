@@ -33,6 +33,21 @@ async function setupDeletedChannel() {
 	return [client, channel, message, deleteResponse];
 }
 
+describe('Channels - Truncate', function() {
+	it('Truncated messages shouldnt show up', async function() {
+		const kerryID = `kerry-${uuidv4()}`;
+		const client = await getTestClientForUser(kerryID);
+		const c = client.channel('messaging', uuidv4());
+		await c.create();
+		const messageResponse = await c.sendMessage({ text: 'hi hi, hello' });
+		const state = await c.query();
+		expect(state.messages.length).to.equal(1);
+		const response = await c.truncate();
+		const state2 = await c.query();
+		expect(state2.messages.length).to.equal(0);
+	});
+});
+
 describe('Channels - Delete', function() {
 	/*
 
