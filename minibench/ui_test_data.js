@@ -161,6 +161,51 @@ async function setupData() {
 	//response = await batChannel.sendMessage(message);
 }
 
+async function videoDemo(channel) {
+	const response = await channel.sendMessage({
+		text: 'Anyone else excited about GOT? link',
+	});
+	await channel.sendReaction(response.message.id, { type: 'like' });
+}
+
+async function giphyDemo(channel) {
+	await channel.sendMessage({ text: 'nah I prefer' });
+	const response = await channel.sendMessage({ text: '/giphy the expanse' });
+	await channel.sendReaction(response.message.id, { type: 'haha' });
+	await channel.sendMessage({
+		parent_id: response.message.id,
+		text: 'Did you see that the new book just came out?',
+	});
+}
+
+async function commerceDemo(channel) {
+	await channel.sendMessage({
+		text: "I'd like to buy a huge house in Hawai, what do you have available.?",
+	});
+	await channel.sendMessage({ text: '10 or 12 bedrooms?' });
+	await channel.sendMessage({ text: '12' });
+	// TODO attachment types for houses in hawaii..
+	await channel.sendMessage({
+		text: 'I found these options',
+		attachments: [{ type: 'listing', image: '' }],
+	});
+	// TODO: schedule a meeting date widget would be cool..
+}
+
+async function liveStream(channel) {
+	const response = await channel.sendMessage({
+		text: 'Anyone else think Uno is better than Fortnite?',
+	});
+	await channel.sendReaction(response.message.id, { type: 'haha' });
+	await channel.sendReaction(response.message.id, { type: 'crying' });
+
+	// poll would be nice..., ie vote on the next map
+	const response2 = await channel.sendMessage({
+		text: 'Shall we drop tilted or loot lake?',
+		attachments: [{ type: 'poll', action: [] }],
+	});
+}
+
 setupData()
 	.then()
 	.catch(e => {

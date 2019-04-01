@@ -178,6 +178,16 @@ describe('Chat', function() {
 			expect(client3.health.own_user.status).to.equal('helloworld');
 		});
 
+		it('Role isnt editable', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+				role: 'admin',
+			});
+			expect(client.health.own_user.color).to.equal('green');
+			expect(client.health.own_user.role).to.equal('user');
+		});
+
 		it('Verify that we dont do unneeded updates', async function() {
 			const userID = uuidv4();
 			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
@@ -217,6 +227,31 @@ describe('Chat', function() {
 			await expect(responsePromise).to.be.rejectedWith(
 				'Chat is not enabled for organization with id 5001 and name admin',
 			);
+		});
+
+		it('setUser and updateUsers flow', async function() {
+			const userID = uuidv4();
+			const client = getTestClient(false);
+			const token = createUserToken(userID);
+			const serverClient = getServerTestClient();
+			// example for docs
+			const response = await client.setUser(
+				{ id: userID, role: 'admin', favorite_color: 'green' },
+				token,
+			);
+			// user object is now {id: userID, role: 'user', favorite_color: 'green'}
+			// note how you are not allowed to make the user admin via this endpoint
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, role: 'admin', book: 'dune' },
+			]);
+			// user object is now {id: userID, role: 'admin', book: 'dune'}
+			// note how the user became admin and how the favorite_color field was removed
+			expect(response.own_user.role).to.equal('user');
+			expect(response.own_user.favorite_color).to.equal('green');
+			const updatedUser = updateResponse.users[userID];
+			expect(updatedUser.role).to.equal('admin');
+			expect(updatedUser.favorite_color).to.equal(undefined);
+			expect(updatedUser.book).to.equal('dune');
 		});
 	});
 
