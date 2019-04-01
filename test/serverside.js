@@ -208,217 +208,292 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Push notifications - APN', function() {
-		it('Adding bad apn certificate config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: 'boogus',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding good apn certificate config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-					},
-				})
-				.then(() => done())
-				.catch(e => done(`should not have failed ${e}`));
-		});
-		it('Describe app settings', async function() {
-			const response = await client.getAppSettings();
-			expect(response.app).to.be.an('object');
-			expect(response.app.push_notifications).to.be.an('object');
-			delete response.app.push_notifications.apn.notification_template;
-			expect(response.app.push_notifications.apn).to.eql({
-				enabled: true,
-				auth_type: 'certificate',
-				bundle_id: 'stream-test',
-				host: 'https://api.development.push.apple.com',
+	describe('Push notifications', function() {
+		describe('APN', function() {
+			it('Adding bad apn certificate config', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: 'boogus',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good apn certificate config', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'certificate',
+					bundle_id: 'stream-test',
+					host: 'https://api.development.push.apple.com',
+				});
+			});
+			it('Adding bad apn invalid template', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+							notification_template: '{ {{ } }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding bad apn message is not a valid JSON', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+							notification_template: '{{ message.id }}',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding bad apn token', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							bundle_id: 'com.apple.test',
+							auth_key: 'supersecret',
+							key_id: 'keykey',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no bundle_id', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							team_id: 'sfd',
+							bundle_id: '',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no key_id', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: '',
+							bundle_id: 'bundly',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no team', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'sfd',
+							team_id: '',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good apn token', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'com.apple.test',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'token',
+					bundle_id: 'com.apple.test',
+					host: 'https://api.push.apple.com',
+					team_id: 'sfd',
+					key_id: 'keykey',
+				});
+			});
+			it('Adding good apn token in dev mode', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'com.apple.test',
+							team_id: 'sfd',
+							development: true,
+						},
+					})
+					.then(() => done())
+					.catch(() => done('should not have failed'));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'token',
+					bundle_id: 'com.apple.test',
+					team_id: 'sfd',
+					key_id: 'keykey',
+					host: 'https://api.development.push.apple.com',
+				});
+			});
+			it('Disable APN', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							disabled: true,
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: false,
+					host: 'https://api.push.apple.com',
+				});
 			});
 		});
-		it('Adding bad apn invalid template', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-						notification_template: '{ {{ } }',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding bad apn message is not a valid JSON', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-						notification_template: '{{ message.id }}',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding bad apn token', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						bundle_id: 'com.apple.test',
-						auth_key: 'supersecret',
-						key_id: 'keykey',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding incomplete token data: no bundle_id', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						team_id: 'sfd',
-						bundle_id: '',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding incomplete token data: no key_id', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: '',
-						bundle_id: 'bundly',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding incomplete token data: no team', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'sfd',
-						team_id: '',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding good apn token', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done())
-				.catch(e => done(`should not have failed ${e}`));
-		});
-		it('Describe app settings', async function() {
-			const response = await client.getAppSettings();
-			expect(response.app).to.be.an('object');
-			expect(response.app.push_notifications).to.be.an('object');
-			delete response.app.push_notifications.apn.notification_template;
-			expect(response.app.push_notifications.apn).to.eql({
-				enabled: true,
-				auth_type: 'token',
-				bundle_id: 'com.apple.test',
-				host: 'https://api.push.apple.com',
-				team_id: 'sfd',
-				key_id: 'keykey',
+		describe('Firebase', function() {
+			it('Adding bad template', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							notification_template: '{ {{ } }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
 			});
-		});
-		it('Adding good apn token in dev mode', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-						development: true,
-					},
-				})
-				.then(() => done())
-				.catch(() => done('should not have failed'));
-		});
-		it('Describe app settings', async function() {
-			const response = await client.getAppSettings();
-			expect(response.app).to.be.an('object');
-			expect(response.app.push_notifications).to.be.an('object');
-			delete response.app.push_notifications.apn.notification_template;
-			expect(response.app.push_notifications.apn).to.eql({
-				enabled: true,
-				auth_type: 'token',
-				bundle_id: 'com.apple.test',
-				team_id: 'sfd',
-				key_id: 'keykey',
-				host: 'https://api.development.push.apple.com',
+			it('Adding invalid json template', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							notification_template: '{{ message.id }}',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
 			});
-		});
-		it('Disable APN', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						disabled: true,
-					},
-				})
-				.then(() => done())
-				.catch(e => done(`should not have failed ${e}`));
-		});
-		it('Describe app settings', async function() {
-			const response = await client.getAppSettings();
-			expect(response.app).to.be.an('object');
-			expect(response.app.push_notifications).to.be.an('object');
-			delete response.app.push_notifications.apn.notification_template;
-			expect(response.app.push_notifications.apn).to.eql({
-				enabled: false,
-				host: 'https://api.push.apple.com',
+			it('Adding invalid server key', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							api_key: 'asdasd',
+							notification_template: '{ }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good server key', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							api_key:
+								'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+							notification_template: '{ }',
+						},
+					})
+					.then(() => done())
+					.catch(() => done('should not have failed'));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.firebase.notification_template;
+				expect(response.app.push_notifications.firebase).to.eql({
+					enabled: true,
+				});
+			});
+			it('Disable firebase', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							disabled: true,
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.firebase.notification_template;
+				expect(response.app.push_notifications.firebase).to.eql({
+					enabled: false,
+				});
 			});
 		});
 	});
