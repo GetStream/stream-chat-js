@@ -208,7 +208,7 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Push notifications', function() {
+	describe('Push notifications - APN', function() {
 		it('Adding bad apn certificate config', function(done) {
 			client
 				.updateAppSettings({
@@ -244,6 +244,34 @@ describe('App configs', function() {
 				bundle_id: 'stream-test',
 				host: 'https://api.development.push.apple.com',
 			});
+		});
+		it('Adding bad apn invalid template', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						auth_type: 'certificate',
+						p12_cert: fs.readFileSync(
+							'./test/push_test/stream-push-test.p12',
+						),
+						notification_template: '{ {{ } }',
+					},
+				})
+				.then(() => done('should have failed'))
+				.catch(() => done());
+		});
+		it('Adding bad apn message is not a valid JSON', function(done) {
+			client
+				.updateAppSettings({
+					apn_config: {
+						auth_type: 'certificate',
+						p12_cert: fs.readFileSync(
+							'./test/push_test/stream-push-test.p12',
+						),
+						notification_template: '{{ message.id }}',
+					},
+				})
+				.then(() => done('should have failed'))
+				.catch(() => done());
 		});
 		it('Adding bad apn token', function(done) {
 			client
@@ -325,7 +353,7 @@ describe('App configs', function() {
 					},
 				})
 				.then(() => done())
-				.catch(() => done('should not have failed'));
+				.catch(e => done(`should not have failed ${e}`));
 		});
 		it('Describe app settings', async function() {
 			const response = await client.getAppSettings();

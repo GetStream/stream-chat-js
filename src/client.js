@@ -191,7 +191,7 @@ export class StreamChat {
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
 	 */
-	async updateAppSettings(options = {}) {
+	async updateAppSettings(options) {
 		if (options.apn_config && options.apn_config.p12_cert) {
 			options.apn_config.p12_cert = Buffer.from(
 				options.apn_config.p12_cert,
