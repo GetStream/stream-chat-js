@@ -299,14 +299,22 @@ export class StableWSConnection {
 	 *
 	 */
 	_listenForConnectionChanges = () => {
-		if (window != null && window.addEventListener != null) {
+		if (
+			typeof window !== 'undefined' &&
+			window != null &&
+			window.addEventListener != null
+		) {
 			window.addEventListener('offline', this.onlineStatusChanged);
 			window.addEventListener('online', this.onlineStatusChanged);
 		}
 	};
 
 	_removeConnectionListeners = () => {
-		if (window != null && window.addEventListener != null) {
+		if (
+			typeof window !== 'undefined' &&
+			window != null &&
+			window.addEventListener != null
+		) {
 			window.removeEventListener('offline', this.onlineStatusChanged);
 			window.removeEventListener('online', this.onlineStatusChanged);
 		}

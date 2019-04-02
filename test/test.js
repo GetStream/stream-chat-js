@@ -135,7 +135,9 @@ describe('Chat', function() {
 				.then(() => {
 					done(new Error('should have failed'));
 				})
-				.catch(e => {
+				.catch(err => {
+					expect(err).to.be.an('error');
+					expect(JSON.parse(err.message).StatusCode).to.eq(400);
 					done();
 				});
 		});
