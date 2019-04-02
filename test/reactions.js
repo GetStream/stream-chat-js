@@ -89,7 +89,7 @@ describe('Reactions', function() {
 		const message = await getTestMessage('Whatever bro', channel);
 		const p = channel.sendReaction(message.id, {
 			type: 'love',
-			extra: 'x'.repeat(5 * 1024),
+			extra: 'x'.repeat(256),
 		});
 		await expect(p).to.be.rejected;
 	});
