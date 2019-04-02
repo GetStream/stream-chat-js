@@ -12,6 +12,10 @@
     "./dist/index.es.js": "./dist/browser.es.js",
     "./dist/index.js": "./dist/browser.js"
   },
+  "react-native": {
+    "./dist/index.es.js": "./dist/browser.es.js",
+    "./dist/index.js": "./dist/browser.js"
+  },
   "jsdelivr": "./dist/browser.full-bundle.min.js",
   "license": "Other/Commercial",
   "keywords": [
