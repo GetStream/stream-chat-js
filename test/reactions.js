@@ -146,7 +146,11 @@ describe('Reactions', function() {
 			type: 'love',
 		});
 		// remove the reaction...
-		const removeResponse = await channel.deleteReaction(message.id, 'love');
+		const removeResponse = await channel.deleteReaction(
+			message.id,
+			'love',
+			serverSideUser.id,
+		);
 		// query state
 		const state = await channel.query();
 		const lastMessage = state.messages[state.messages.length - 1];
