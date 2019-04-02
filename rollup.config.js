@@ -43,9 +43,11 @@ const externalPackages = [
 const browserIgnore = {
 	name: 'browser-remapper',
 	resolveId: importee =>
-		['jsonwebtoken', 'http', 'https'].includes(importee) ? importee : null,
+		['jsonwebtoken', 'http', 'https', 'crypto'].includes(importee) ? importee : null,
 	load: id =>
-		['jsonwebtoken', 'http', 'https'].includes(id) ? 'export default null;' : null,
+		['jsonwebtoken', 'http', 'https', 'crypto'].includes(id)
+			? 'export default null;'
+			: null,
 };
 
 const baseConfig = {
