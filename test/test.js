@@ -179,6 +179,16 @@ describe('Chat', function() {
 			expect(client3.health.own_user.status).to.equal('helloworld');
 		});
 
+		it('Role isnt editable', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+				role: 'admin',
+			});
+			expect(client.health.own_user.color).to.equal('green');
+			expect(client.health.own_user.role).to.equal('user');
+		});
+
 		it('Verify that we dont do unneeded updates', async function() {
 			const userID = uuidv4();
 			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
@@ -219,6 +229,31 @@ describe('Chat', function() {
 				'Chat is not enabled for organization with id 5001 and name admin',
 			);
 		});
+
+		it('setUser and updateUsers flow', async function() {
+			const userID = uuidv4();
+			const client = getTestClient(false);
+			const token = createUserToken(userID);
+			const serverClient = getServerTestClient();
+			// example for docs
+			const response = await client.setUser(
+				{ id: userID, role: 'admin', favorite_color: 'green' },
+				token,
+			);
+			// user object is now {id: userID, role: 'user', favorite_color: 'green'}
+			// note how you are not allowed to make the user admin via this endpoint
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, role: 'admin', book: 'dune' },
+			]);
+			// user object is now {id: userID, role: 'admin', book: 'dune'}
+			// note how the user became admin and how the favorite_color field was removed
+			expect(response.own_user.role).to.equal('user');
+			expect(response.own_user.favorite_color).to.equal('green');
+			const updatedUser = updateResponse.users[userID];
+			expect(updatedUser.role).to.equal('admin');
+			expect(updatedUser.favorite_color).to.equal(undefined);
+			expect(updatedUser.book).to.equal('dune');
+		});
 	});
 
 	describe('Devices', function() {
@@ -226,13 +261,9 @@ describe('Chat', function() {
 		const wontBeRemoved = uuidv4();
 		const client = getTestClient(false);
 
-		before(async function() {
-			await authClient.addDevice({ id: wontBeRemoved, provider: 'apn' });
-		});
-
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				let p = client.addDevice({ id: deviceId, provider: 'apn' });
+				let p = client.addDevice(deviceId, 'apn');
 				await expect(p).to.be.rejected;
 
 				p = client.getDevices();
@@ -243,7 +274,7 @@ describe('Chat', function() {
 			});
 		});
 
-		describe.skip('User is set', function() {
+		describe('User is set', function() {
 			const userId = uuidv4();
 
 			before(async function() {
@@ -251,20 +282,40 @@ describe('Chat', function() {
 			});
 
 			describe('Adding', function() {
+				it('there must be no devices', async function() {
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(0);
+				});
+
 				it('simple add', async function() {
-					await client.addDevice({ id: deviceId, provider: 'apn' });
+					await client.addDevice(deviceId, 'apn');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 				});
+
+				it('add same device again', async function() {
+					await client.addDevice(deviceId, 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(1);
+					expect(response.devices[0].id).to.equal(deviceId);
+				});
+
 				it('re-add deleted device', async function() {
 					await client.removeDevice(deviceId);
-
-					await client.addDevice({ id: deviceId, provider: 'firebase' });
+					await client.addDevice(deviceId, 'firebase');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 					expect(response.devices[0].push_provider).to.equal('firebase');
+				});
+
+				it('add another device', async function() {
+					await client.addDevice(uuidv4(), 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(2);
+					expect(response.devices[1].id).to.equal(deviceId);
+					await client.removeDevice(response.devices[0].id);
 				});
 			});
 			describe('Removing', function() {
@@ -686,9 +737,8 @@ describe('Chat', function() {
 			});
 
 			it('Add a Chat message with a URL and edit it', async function() {
-				const url =
-					'https://www.reddit.com/r/KidsAreFuckingStupid/comments/9xmd8g/kids_think_costco_clerk_is_maui/';
-				const text = `check this reddit :) ${url}`;
+				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
+				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
 				const message = response.message;
 				expect(message.attachments.length).to.equal(1);
@@ -846,6 +896,20 @@ describe('Chat', function() {
 				expect(resp.message.type).to.equal('error');
 			});
 
+			it('Add a chat message with same ID twice', async function() {
+				const id = uuidv4();
+				const message = {
+					id,
+					text: 'yo',
+				};
+				await channel.sendMessage(message);
+				const p = channel.sendMessage(message);
+				p.catch(e => {
+					expect(e.status).to.eq(400);
+				});
+				expect(p).to.rejected;
+			});
+
 			it('Edit a chat message with text that is too long', async function() {
 				const disabledChannel = authClient.channel(
 					'everythingDisabled',
@@ -928,21 +992,6 @@ describe('Chat', function() {
 					image_action: 'cancel',
 				});
 				expect(actionResponse.message).to.equal(null);
-			});
-		});
-
-		// TODO: implement after proper error system is in place
-		describe.skip('Error', () => {
-			it('Invalid Command', async function() {
-				const text = '/missing wave';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
-			});
-
-			it('Empty Command', async function() {
-				const text = '/giphy';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
 			});
 		});
 	});

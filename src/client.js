@@ -174,29 +174,31 @@ export class StreamChat {
 	 * @param {object} options App settings.
 	 * 		IE: {
 	  			"apn_config": {
-					"auth_key": "-----begin private key-------\n ........",
+					"auth_type": "token",
+					"auth_key": fs.readFileSync(
+						'./apn-push-auth-key.p8',
+						'utf-8',
+					),
 					"key_id": "keyid",
 					"team_id": "teamid", //either ALL these 3
-					"pem_cert": "-----begin rsa private key-------\n ........", //or ONLY this
-					"p12_cert": "<content of p12 certificate>", //or ONLY this
-					"notification_template": "some sort of templated json",
-					"topic": "com.apple.your.app",
-					"host": "https://api.development.push.apple.com" //optional. defaults to "https://api.push.apple.com"
+					"notification_template": "notification handlebars template",
+					"bundle_id": "com.apple.your.app",
+					"development": true
 				},
 				"firebase_config": {
 					"api_key": "apiapiapi",
-					"notification_template": "some sort of templated json"
+					"notification_template": "notification handlebars template"
 				},
-				"webhook_url": "http://webhooks.com/"
+				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
 	 */
-	async updateAppSettings(options = {}) {
+	async updateAppSettings(options) {
 		if (options.apn_config && options.apn_config.p12_cert) {
 			options.apn_config.p12_cert = Buffer.from(
 				options.apn_config.p12_cert,
 			).toString('base64');
 		}
-		return await this.post(this.baseURL + '/app', options);
+		return await this.patch(this.baseURL + '/app', options);
 	}
 
 	/**
@@ -357,6 +359,20 @@ export class StreamChat {
 		let response;
 		try {
 			response = await axios.post(url, data, this._addClientParams());
+			return this.handleResponse(response);
+		} catch (e) {
+			if (e.response) {
+				return this.handleResponse(e.response);
+			} else {
+				throw e;
+			}
+		}
+	}
+
+	async patch(url, data) {
+		let response;
+		try {
+			response = await axios.patch(url, data, this._addClientParams());
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -675,43 +691,46 @@ export class StreamChat {
 	}
 
 	/**
-	 * addDevice - Adds a device to the current user. When clientside it will error if `setUser` was not called.
-	 * When serverside, the user must be specified in the device payload
+	 * addDevice - Adds a push device for a user.
 	 *
-	 * @param {object} device The device object. E.g.: {id:"deviceToken", provider:"apn|firebase", user:{id:"someGuy"}}
+	 * @param {string} id the device id
+	 * @param {string} push_provider the push provider (apn or firebase)
+	 * @param {string} [userID] the user id (defaults to current user)
 	 *
 	 */
-	async addDevice(device = {}) {
+	async addDevice(id, push_provider, userID = null) {
 		return await this.post(this.baseURL + '/devices', {
-			id: device.id,
-			push_provider: device.provider,
-			user: device.user,
+			id,
+			push_provider,
+			...(userID != null ? { user_id: userID } : {}),
 		});
 	}
 
 	/**
-	 * getDevices - Returns the devices associated with the current user
+	 * getDevices - Returns the devices associated with a current user
 	 *
-	 * @param {string} userId User ID. Only works on serversidex
+	 * @param {string} [userID] User ID. Only works on serversidex
 	 *
 	 * @return {devices} Array of devices
 	 */
-	async getDevices(userId) {
+	async getDevices(userID) {
 		return await this.get(
 			this.baseURL + '/devices',
-			userId ? { user_id: userId } : {},
+			userID ? { user_id: userID } : {},
 		);
 	}
 
 	/**
 	 * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
 	 *
-	 * @param {string} deviceId The device id
+	 * @param {string} id The device id
+	 * @param {string} [userID] The user id. Only specify this for serverside requests
 	 *
 	 */
-	async removeDevice(deviceId) {
+	async removeDevice(id, userID = null) {
 		return await this.delete(this.baseURL + '/devices', {
-			id: deviceId,
+			id,
+			...(userID ? { user_id: userID } : {}),
 		});
 	}
 

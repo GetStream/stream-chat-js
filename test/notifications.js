@@ -227,13 +227,13 @@ describe('Unread on connect', function() {
 		}
 	});
 
-	it('thierry connects and receives unread=5', async function() {
+	it('thierry connects and receives unread_count=5', async function() {
 		thierryClient = getTestClient(false);
 		const response = await thierryClient.setUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread).to.eq(5);
+		expect(response.own_user.unread_count).to.eq(5);
 	});
 
 	it('thierry marks one messaging channel as read', async function() {
@@ -242,13 +242,13 @@ describe('Unread on connect', function() {
 		await chan.markRead();
 	});
 
-	it('thierry re-connects and receive unread=4', async function() {
+	it('thierry re-connects and receive unread_count=4', async function() {
 		thierryClient = getTestClient(false);
 		const response = await thierryClient.setUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread).to.eq(4);
+		expect(response.own_user.unread_count).to.eq(4);
 	});
 
 	it('insert 100 messages to messaging:chatty', async function() {
@@ -265,13 +265,13 @@ describe('Unread on connect', function() {
 		}
 	});
 
-	it('thierry re-connects and receives unread=100', async function() {
+	it('thierry re-connects and receives unread_count=100', async function() {
 		thierryClient = getTestClient(false);
 		const response = await thierryClient.setUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread).to.eq(100);
+		expect(response.own_user.unread_count).to.eq(100);
 	});
 
 	it('thierry marks messaging:chatty as read', async function() {
@@ -288,13 +288,13 @@ describe('Unread on connect', function() {
 		await receivedEvent;
 	});
 
-	it('thierry re-connects and receives unread=3', async function() {
+	it('thierry re-connects and receives unread_count=3', async function() {
 		thierryClient = getTestClient(false);
 		const response = await thierryClient.setUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread).to.eq(3);
+		expect(response.own_user.unread_count).to.eq(3);
 	});
 
 	it('thierry is removed from the channel and gets notified about it', async function() {

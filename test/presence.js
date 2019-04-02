@@ -245,9 +245,9 @@ describe('Presence', function() {
 				});
 				await b.create();
 				// monitor presence of jessica
-				await user1Client.queryUsers(
+				const resp = await user1Client.queryUsers(
 					{ id: { $in: ['jessica'] } },
-					{},
+					{ last_active2: -1 },
 					{ presence: true },
 				);
 				// jessica goes online should trigger an event
