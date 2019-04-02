@@ -1,5 +1,4 @@
 import { StreamChat } from '../src';
-import { createUserToken } from '../test/utils';
 import faker from 'faker';
 
 var userClients = {};
@@ -7,6 +6,11 @@ var userClients = {};
 const apiKey = process.env.CHAT_API_KEY;
 const apiSecret = process.env.CHAT_API_SECRET;
 var serverClient;
+
+export function createUserToken(userID) {
+	const c = new StreamChat(apiKey, apiSecret);
+	return c.createToken(userID);
+}
 
 export function chunkArray(myArray, chunk_size) {
 	let index = 0;

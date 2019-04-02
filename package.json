@@ -1,13 +1,18 @@
 {
   "name": "stream-chat",
-  "version": "0.4.5",
+  "version": "0.4.9",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
   "main": "./dist/index.js",
   "module": "./dist/index.es.js",
   "jsnext:main": "./dist/index.es.js",
+  "types": "./types/stream-chat/index.d.ts",
   "browser": {
+    "./dist/index.es.js": "./dist/browser.es.js",
+    "./dist/index.js": "./dist/browser.js"
+  },
+  "react-native": {
     "./dist/index.es.js": "./dist/browser.es.js",
     "./dist/index.js": "./dist/browser.js"
   },
@@ -79,6 +84,7 @@
     "prettier": "npx prettier --list-different '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "eslint": "npx eslint '**/*.{js,md}' --max-warnings 0",
+    "dtslint": "dtslint types/stream-chat",
     "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
     "testall": "NODE_ENV=test mocha --exit --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
     "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",

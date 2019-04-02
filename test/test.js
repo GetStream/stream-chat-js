@@ -135,7 +135,9 @@ describe('Chat', function() {
 				.then(() => {
 					done(new Error('should have failed'));
 				})
-				.catch(e => {
+				.catch(err => {
+					expect(err).to.be.an('error');
+					expect(JSON.parse(err.message).StatusCode).to.eq(400);
 					done();
 				});
 		});
@@ -164,18 +166,105 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Connect', function() {
+		it('Insert and update should work', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.color).to.equal('green');
+			// connect without a user id shouldnt remove anything...
+			const client2 = await getTestClientForUser(userID);
+			expect(client2.health.own_user.color).to.equal('green');
+			// changing the status shouldnt remove the color
+			const client3 = await getTestClientForUser(userID, 'helloworld');
+			expect(client3.health.own_user.color).to.equal('green');
+			expect(client3.health.own_user.status).to.equal('helloworld');
+		});
+
+		it('Role isnt editable', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+				role: 'admin',
+			});
+			expect(client.health.own_user.color).to.equal('green');
+			expect(client.health.own_user.role).to.equal('user');
+		});
+
+		it('Verify that we dont do unneeded updates', async function() {
+			const userID = uuidv4();
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			const updatedAt = client.health.own_user.updated_at;
+			// none of these should trigger an update...
+			const client2 = await getTestClientForUser(userID);
+			const client3 = await getTestClientForUser(userID, 'test', {
+				color: 'green',
+			});
+			expect(client3.health.own_user.updated_at).to.equal(updatedAt);
+		});
+
+		it('Update/sync before calling setUser', async function() {
+			const userID = uuidv4();
+			const serverClient = getServerTestClient();
+
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, book: 'dune', role: 'admin' },
+			]);
+			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			expect(client.health.own_user.role).to.equal('admin');
+			expect(client.health.own_user.book).to.equal('dune');
+			expect(client.health.own_user.status).to.equal('test');
+			expect(client.health.own_user.color).to.equal('green');
+		});
+
+		it.skip('Chat disabled', async function() {
+			const disabledKey = 'm1113jrsw6e';
+			const disabledSecret =
+				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
+			const serverClient = new StreamChat(disabledKey, disabledSecret);
+			const userClient = new StreamChat(disabledKey);
+			const responsePromise = userClient.setUser(
+				{ id: 'batman' },
+				serverClient.createToken('batman'),
+			);
+			await expect(responsePromise).to.be.rejectedWith(
+				'Chat is not enabled for organization with id 5001 and name admin',
+			);
+		});
+
+		it('setUser and updateUsers flow', async function() {
+			const userID = uuidv4();
+			const client = getTestClient(false);
+			const token = createUserToken(userID);
+			const serverClient = getServerTestClient();
+			// example for docs
+			const response = await client.setUser(
+				{ id: userID, role: 'admin', favorite_color: 'green' },
+				token,
+			);
+			// user object is now {id: userID, role: 'user', favorite_color: 'green'}
+			// note how you are not allowed to make the user admin via this endpoint
+			const updateResponse = await serverClient.updateUsers([
+				{ id: userID, role: 'admin', book: 'dune' },
+			]);
+			// user object is now {id: userID, role: 'admin', book: 'dune'}
+			// note how the user became admin and how the favorite_color field was removed
+			expect(response.own_user.role).to.equal('user');
+			expect(response.own_user.favorite_color).to.equal('green');
+			const updatedUser = updateResponse.users[userID];
+			expect(updatedUser.role).to.equal('admin');
+			expect(updatedUser.favorite_color).to.equal(undefined);
+			expect(updatedUser.book).to.equal('dune');
+		});
+	});
+
 	describe('Devices', function() {
 		const deviceId = uuidv4();
 		const wontBeRemoved = uuidv4();
 		const client = getTestClient(false);
 
-		before(async function() {
-			await authClient.addDevice({ id: wontBeRemoved, provider: 'apn' });
-		});
-
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				let p = client.addDevice({ id: deviceId, provider: 'apn' });
+				let p = client.addDevice(deviceId, 'apn');
 				await expect(p).to.be.rejected;
 
 				p = client.getDevices();
@@ -194,20 +283,40 @@ describe('Chat', function() {
 			});
 
 			describe('Adding', function() {
+				it('there must be no devices', async function() {
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(0);
+				});
+
 				it('simple add', async function() {
-					await client.addDevice({ id: deviceId, provider: 'apn' });
+					await client.addDevice(deviceId, 'apn');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 				});
+
+				it('add same device again', async function() {
+					await client.addDevice(deviceId, 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(1);
+					expect(response.devices[0].id).to.equal(deviceId);
+				});
+
 				it('re-add deleted device', async function() {
 					await client.removeDevice(deviceId);
-
-					await client.addDevice({ id: deviceId, provider: 'firebase' });
+					await client.addDevice(deviceId, 'firebase');
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(1);
 					expect(response.devices[0].id).to.equal(deviceId);
 					expect(response.devices[0].push_provider).to.equal('firebase');
+				});
+
+				it('add another device', async function() {
+					await client.addDevice(uuidv4(), 'apn');
+					const response = await client.getDevices();
+					expect(response.devices.length).to.equal(2);
+					expect(response.devices[1].id).to.equal(deviceId);
+					await client.removeDevice(response.devices[0].id);
 				});
 			});
 			describe('Removing', function() {
@@ -435,10 +544,10 @@ describe('Chat', function() {
 		});
 	});
 
-	describe('User', function() {
+	describe('User management', function() {
 		it('Regular Users with extra fields', async function() {
 			// verify we correctly store user information
-			const userID = 'uthred';
+			const userID = 'uthred-' + uuidv4();
 			const client = getTestClient();
 			const token = createUserToken(userID);
 
@@ -448,7 +557,23 @@ describe('Chat', function() {
 				first: 'Uhtred',
 			};
 
-			await client.setUser(user, token);
+			const response = await client.setUser(user, token);
+
+			const compareUser = userResponse => {
+				const expectedData = { role: 'user', ...user };
+				expect(userResponse).to.contains(expectedData);
+				expect(userResponse.online).to.equal(true);
+				expect(userResponse.created_at).to.be.ok;
+				expect(userResponse.updated_at).to.be.ok;
+				expect(userResponse.last_active).to.be.ok;
+				expect(userResponse.created_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.last_active).to.not.equal('0001-01-01T00:00:00Z');
+				expect(userResponse.created_at.substr(-1)).to.equal('Z');
+				expect(userResponse.updated_at.substr(-1)).to.equal('Z');
+				expect(userResponse.last_active.substr(-1)).to.equal('Z');
+			};
+			compareUser(response.own_user);
 
 			const magicChannel = client.channel('livestream', 'harrypotter');
 			await magicChannel.watch();
@@ -457,14 +582,8 @@ describe('Chat', function() {
 			const text = 'Tommaso says hi!';
 			const data = await magicChannel.sendMessage({ text });
 
-			const expectedData = Object.assign(
-				{},
-				{ role: 'user' /* status: 'offline'*/ },
-				user,
-			);
 			// verify the user information is correct
-			delete data.message.user.last_active;
-			expect(data.message.user).to.contains(expectedData);
+			compareUser(data.message.user);
 			expect(data.message.text).to.equal(text);
 		});
 
@@ -631,9 +750,8 @@ describe('Chat', function() {
 			});
 
 			it('Add a Chat message with a URL and edit it', async function() {
-				const url =
-					'https://www.reddit.com/r/KidsAreFuckingStupid/comments/9xmd8g/kids_think_costco_clerk_is_maui/';
-				const text = `check this reddit :) ${url}`;
+				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
+				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
 				const message = response.message;
 				expect(message.attachments.length).to.equal(1);
@@ -791,6 +909,20 @@ describe('Chat', function() {
 				expect(resp.message.type).to.equal('error');
 			});
 
+			it('Add a chat message with same ID twice', async function() {
+				const id = uuidv4();
+				const message = {
+					id,
+					text: 'yo',
+				};
+				await channel.sendMessage(message);
+				const p = channel.sendMessage(message);
+				p.catch(e => {
+					expect(e.status).to.eq(400);
+				});
+				expect(p).to.rejected;
+			});
+
 			it('Edit a chat message with text that is too long', async function() {
 				const disabledChannel = authClient.channel(
 					'everythingDisabled',
@@ -873,21 +1005,6 @@ describe('Chat', function() {
 					image_action: 'cancel',
 				});
 				expect(actionResponse.message).to.equal(null);
-			});
-		});
-
-		// TODO: implement after proper error system is in place
-		describe.skip('Error', () => {
-			it('Invalid Command', async function() {
-				const text = '/missing wave';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
-			});
-
-			it('Empty Command', async function() {
-				const text = '/giphy';
-				const response = channel.sendMessage({ text });
-				await expect(response).to.be.rejectedWith(Error());
 			});
 		});
 	});
@@ -1207,8 +1324,8 @@ describe('Chat', function() {
 	describe('Channel State', function() {
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
@@ -1216,7 +1333,7 @@ describe('Chat', function() {
 
 		it('Remove Ephemeral Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my regular message', type: 'regular' };
+			const message = { id: 1, text: 'my regular message', type: 'regular' };
 			const message2 = {
 				tmp_id: 2,
 				text: 'my ephemeral message',
@@ -1235,8 +1352,8 @@ describe('Chat', function() {
 
 		it('Update Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message, message2]);
 			message2.text = 'hello world';
 			c.state.addMessageSorted(message2);
@@ -1246,8 +1363,8 @@ describe('Chat', function() {
 
 		it('Add A Message', function() {
 			const c = authClient.channel('twitch', 'state');
-			const message = { tmp_id: 1, text: 'my message' };
-			const message2 = { tmp_id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message' };
+			const message2 = { id: 2, text: 'my message 2' };
 			c.state.messages = Immutable([message]);
 			// this should append
 			c.state.addMessageSorted(message2, true);

@@ -1,12 +1,14 @@
-import { getTestClient } from './utils';
+import { getTestClient, createUsers, createUserToken } from './utils';
 import { assertHTTPErrorCode } from './utils';
 import { getTestClientForUser } from './utils';
 import { AllowAll, DenyAll } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
+import chaiAsPromised from 'chai-as-promised';
 
 chai.use(require('chai-like'));
+chai.use(chaiAsPromised);
 
 const expect = chai.expect;
 
@@ -207,110 +209,292 @@ describe('App configs', function() {
 	});
 
 	describe('Push notifications', function() {
-		it('Adding bad apn p12 config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: 'boogus',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
+		describe('APN', function() {
+			it('Adding bad apn certificate config', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: 'boogus',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good apn certificate config', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'certificate',
+					bundle_id: 'stream-test',
+					host: 'https://api.development.push.apple.com',
+				});
+			});
+			it('Adding bad apn invalid template', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+							notification_template: '{ {{ } }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding bad apn message is not a valid JSON', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'certificate',
+							p12_cert: fs.readFileSync(
+								'./test/push_test/stream-push-test.p12',
+							),
+							notification_template: '{{ message.id }}',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding bad apn token', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							bundle_id: 'com.apple.test',
+							auth_key: 'supersecret',
+							key_id: 'keykey',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no bundle_id', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							team_id: 'sfd',
+							bundle_id: '',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no key_id', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: '',
+							bundle_id: 'bundly',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding incomplete token data: no team', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'sfd',
+							team_id: '',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good apn token', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'com.apple.test',
+							team_id: 'sfd',
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'token',
+					bundle_id: 'com.apple.test',
+					host: 'https://api.push.apple.com',
+					team_id: 'sfd',
+					key_id: 'keykey',
+				});
+			});
+			it('Adding good apn token in dev mode', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							auth_type: 'token',
+							auth_key: fs.readFileSync(
+								'./test/push_test/push-test-auth-key.p8',
+								'utf-8',
+							),
+							key_id: 'keykey',
+							bundle_id: 'com.apple.test',
+							team_id: 'sfd',
+							development: true,
+						},
+					})
+					.then(() => done())
+					.catch(() => done('should not have failed'));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: true,
+					auth_type: 'token',
+					bundle_id: 'com.apple.test',
+					team_id: 'sfd',
+					key_id: 'keykey',
+					host: 'https://api.development.push.apple.com',
+				});
+			});
+			it('Disable APN', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							disabled: true,
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.apn.notification_template;
+				expect(response.app.push_notifications.apn).to.eql({
+					enabled: false,
+					host: 'https://api.push.apple.com',
+				});
+			});
 		});
-		it('Adding good apn p12 config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-						pem_cert: '',
-						topic: 'com.apple.test',
-						auth_key: '',
-						key_id: '',
-						team_id: '',
-					},
-				})
-				.then(() => done())
-				.catch(() => done('should not have failed'));
-		});
-		it('Adding bad apn pem config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						topic: 'com.apple.test',
-						pem_cert: 'boogus',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding good apn pem config', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						pem_cert: fs.readFileSync(
-							'./test/push_test/push-test.pem',
-							'utf-8',
-						),
-						auth_key: '',
-						topic: 'com.apple.test',
-						key_id: '',
-						team_id: '',
-					},
-				})
-				.then(() => done())
-				.catch(() => done('should not have failed'));
-		});
-		it('Adding incomplete apn jwt data', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						pem_cert: '',
-						topic: 'com.apple.test',
-						auth_key: '',
-						key_id: 'keykey',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding bad apn auth key', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						topic: 'com.apple.test',
-						pem_cert: '',
-						auth_key: 'supersecret',
-						key_id: 'keykey',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
-		it('Adding good apn auth key', function(done) {
-			client
-				.updateAppSettings({
-					apn_config: {
-						p12_cert: '',
-						pem_cert: '',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						topic: 'com.apple.test',
-						team_id: 'sfd',
-					},
-				})
-				.then(() => done())
-				.catch(() => done('should not have failed'));
+		describe('Firebase', function() {
+			it('Adding bad template', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							notification_template: '{ {{ } }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding invalid json template', function(done) {
+				client
+					.updateAppSettings({
+						apn_config: {
+							notification_template: '{{ message.id }}',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding invalid server key', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							api_key: 'asdasd',
+							notification_template: '{ }',
+						},
+					})
+					.then(() => done('should have failed'))
+					.catch(() => done());
+			});
+			it('Adding good server key', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							api_key:
+								'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+							notification_template: '{ }',
+						},
+					})
+					.then(() => done())
+					.catch(() => done('should not have failed'));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.firebase.notification_template;
+				expect(response.app.push_notifications.firebase).to.eql({
+					enabled: true,
+				});
+			});
+			it('Disable firebase', function(done) {
+				client
+					.updateAppSettings({
+						firebase_config: {
+							disabled: true,
+						},
+					})
+					.then(() => done())
+					.catch(e => done(`should not have failed ${e}`));
+			});
+			it('Describe app settings', async function() {
+				const response = await client.getAppSettings();
+				expect(response.app).to.be.an('object');
+				expect(response.app.push_notifications).to.be.an('object');
+				delete response.app.push_notifications.firebase.notification_template;
+				expect(response.app.push_notifications.firebase).to.eql({
+					enabled: false,
+				});
+			});
 		});
 	});
 
@@ -334,7 +518,7 @@ describe('Devices', function() {
 
 	describe('No user id provided', function() {
 		it(`can't add devices`, async function() {
-			const p = client.addDevice({ id: deviceId, provider: 'apn' });
+			const p = client.addDevice(deviceId, 'apn');
 			await expect(p).to.be.rejected;
 		});
 		it(`cant't list devices`, async function() {
@@ -349,11 +533,7 @@ describe('Devices', function() {
 
 		it('can add devices to any user', async function() {
 			for (const i of Array(2).keys()) {
-				await client.addDevice({
-					id: devices[i],
-					provider: 'apn',
-					user: { id: users[i] },
-				});
+				await client.addDevice(devices[i], 'apn', users[i]);
 			}
 		});
 		it('can fetch devices from any user', async function() {
@@ -364,10 +544,97 @@ describe('Devices', function() {
 			}
 		});
 		it('can delete any device', async function() {
-			await client.removeDevice(devices[1]);
-			const result = await client.getDevices(users[1]);
+			await client.removeDevice(devices[1], users[1]);
+			const result = await client.getDevices(devices[1], users[1]);
 			expect(result.devices.length).to.equal(0);
 		});
+	});
+});
+
+describe('Moderation', function() {
+	const srvClient = getTestClient(true);
+	const [srcUser, targetUser] = [uuidv4(), uuidv4()];
+
+	before(async function() {
+		await createUsers([srcUser, targetUser]);
+	});
+
+	describe('Mutes', function() {
+		it('source user not set', async function() {
+			const p = srvClient.muteUser(targetUser);
+			await expect(p).to.be.rejected;
+		});
+		it('source user set', async function() {
+			const data = await srvClient.muteUser(targetUser, srcUser);
+			expect(data.mute.user.id).to.equal(srcUser);
+			expect(data.mute.target.id).to.equal(targetUser);
+
+			const client = getTestClient(false);
+			const connectResponse = await client.setUser(
+				{ id: srcUser },
+				createUserToken(srcUser),
+			);
+			expect(connectResponse.own_user.mutes.length).to.equal(1);
+			expect(connectResponse.own_user.mutes[0].target.id).to.equal(targetUser);
+		});
+	});
+
+	describe('Unmutes', function() {
+		it('source user not set', async function() {
+			const p = srvClient.unmuteUser(targetUser);
+			await expect(p).to.be.rejected;
+		});
+		it('source user set', async function() {
+			await srvClient.unmuteUser(targetUser, srcUser);
+
+			const client = getTestClient(false);
+			const connectResponse = await client.setUser(
+				{ id: srcUser },
+				createUserToken(srcUser),
+			);
+			expect(connectResponse.own_user.mutes.length).to.equal(0);
+		});
+	});
+});
+
+describe('User management', function() {
+	const srvClient = getTestClient(true);
+	const userClient = getTestClient(false);
+	it('Admin with extra fields', async function() {
+		// verify we correctly store user information
+		const userID = uuidv4();
+		const user = {
+			id: userID,
+			name: 'jelte',
+			role: 'admin',
+		};
+		const response = await srvClient.updateUser(user);
+		const compareUser = (userResponse, online) => {
+			const expectedData = { role: 'user', ...user };
+			expect(userResponse).to.contains(expectedData);
+			expect(userResponse.online).to.equal(online);
+			expect(userResponse.created_at).to.be.ok;
+			expect(userResponse.updated_at).to.be.ok;
+			expect(userResponse.created_at).to.not.equal('0001-01-01T00:00:00Z');
+			expect(userResponse.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+			expect(userResponse.created_at.substr(-1)).to.equal('Z');
+			expect(userResponse.updated_at.substr(-1)).to.equal('Z');
+		};
+		compareUser(response.users[userID], false);
+
+		const channelID = uuidv4();
+
+		userClient.setUser(user, createUserToken(userID));
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+
+		// make an API call so the data is sent over
+		const text = 'Jelte says hi!';
+		const data = await channel.sendMessage({ text });
+
+		// verify the user information is correct
+		compareUser(data.message.user, true);
+		expect(data.message.text).to.equal(text);
 	});
 });
 
@@ -391,7 +658,7 @@ describe('Channel types', function() {
 		it('should have the right defaults and name', function(done) {
 			const expectedData = {
 				automod: 'AI',
-				commands: ['giphy', 'imgur', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -399,7 +666,7 @@ describe('Channel types', function() {
 				name: `${newType}`,
 				reactions: true,
 				replies: true,
-				search: false,
+				search: true,
 				read_events: true,
 				typing_events: true,
 			};
@@ -464,7 +731,7 @@ describe('Channel types', function() {
 								name: `${channelTypeName}`,
 								reactions: true,
 								replies: true,
-								search: false,
+								search: true,
 								read_events: true,
 								typing_events: true,
 							};
@@ -510,7 +777,7 @@ describe('Channel types', function() {
 								name: `${channelTypeName}`,
 								reactions: true,
 								replies: false,
-								search: false,
+								search: true,
 								read_events: true,
 								typing_events: true,
 							};
@@ -547,7 +814,7 @@ describe('Channel types', function() {
 					commands: ['all'],
 				})
 				.then(response => {
-					expect(response.commands).to.have.length(7);
+					expect(response.commands).to.have.length(6);
 					done();
 				})
 				.catch(done);
@@ -559,7 +826,7 @@ describe('Channel types', function() {
 					commands: ['fun_set'],
 				})
 				.then(response => {
-					expect(response.commands).to.have.length(2);
+					expect(response.commands).to.have.length(1);
 					done();
 				})
 				.catch(done);
@@ -672,12 +939,6 @@ describe('Channel types', function() {
 						set: 'fun_set',
 					},
 					{
-						args: '[text]',
-						description: 'Post a random meme to the channel',
-						name: 'imgur',
-						set: 'fun_set',
-					},
-					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
@@ -751,12 +1012,6 @@ describe('Channel types', function() {
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
-					},
-					{
-						args: '[text]',
-						description: 'Post a random meme to the channel',
-						name: 'imgur',
 						set: 'fun_set',
 					},
 					{

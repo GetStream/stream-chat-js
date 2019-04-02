@@ -185,10 +185,20 @@ export class Channel {
 	/**
 	 * delete - Delete the channel.. Messages are permanently removed.
 	 *
-	 * @return {type} The server response
+	 * @return {object} The server response
 	 */
 	async delete() {
 		const data = await this.client.delete(this._channelURL());
+		return data;
+	}
+
+	/**
+	 * truncate - Removes all messages from the channel
+	 *
+	 * @return {object} The server response
+	 */
+	async truncate() {
+		const data = await this.client.post(this._channelURL() + '/truncate');
 		return data;
 	}
 
