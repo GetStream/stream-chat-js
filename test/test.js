@@ -653,6 +653,64 @@ describe('Chat', function() {
 				expect(channels2[0].cid).to.equal(cid);
 			});
 
+			it('Channel order by created_at', async function() {
+				// create the list of channels
+				const special = uuidv4();
+				for (let x = 0; x < 5; x++) {
+					await authClient
+						.channel('livestream', `${special}-${x}`, {
+							order: x,
+							special,
+						})
+						.create();
+				}
+				const filter = { order: { $gte: 0 }, special };
+				const sort = { updated_at: -1 };
+				const options = { state: false, subscribe: false };
+
+				let channels = await authClient.queryChannels(filter, sort, options);
+				expect(channels.length).to.equal(5);
+				expect(channels.length).to.equal(5);
+				expect(channels.map(c => c.data.order)).to.eql([4, 3, 2, 1, 0]);
+
+				channels = await authClient.queryChannels(
+					filter,
+					{ updated_at: 1 },
+					options,
+				);
+				expect(channels.length).to.equal(5);
+				expect(channels.map(c => c.data.order)).to.eql([0, 1, 2, 3, 4]);
+			});
+
+			it('Channel order by updated_at', async function() {
+				// create the list of channels
+				const special = uuidv4();
+				for (let x = 0; x < 5; x++) {
+					await authClient
+						.channel('livestream', `${special}-${x}`, {
+							order: x,
+							special,
+						})
+						.create();
+				}
+				const filter = { order: { $gte: 0 }, special };
+				const sort = { created_at: -1 };
+				const options = { state: false, subscribe: false };
+
+				let channels = await authClient.queryChannels(filter, sort, options);
+				expect(channels.length).to.equal(5);
+				expect(channels.length).to.equal(5);
+				expect(channels.map(c => c.data.order)).to.eql([4, 3, 2, 1, 0]);
+
+				channels = await authClient.queryChannels(
+					filter,
+					{ created_at: 1 },
+					options,
+				);
+				expect(channels.length).to.equal(5);
+				expect(channels.map(c => c.data.order)).to.eql([0, 1, 2, 3, 4]);
+			});
+
 			it('Channel pagination', async function() {
 				// create the list of channels
 				const special = uuidv4();
