@@ -623,8 +623,8 @@ export class Channel {
 		}
 
 		// any event can send over the online count
-		if (event.online !== undefined) {
-			channel.state.online = event.online;
+		if (event.watcher_count !== undefined) {
+			channel.state.watcher_count = event.watcher_count;
 		}
 
 		// gather and call the listeners
@@ -672,7 +672,7 @@ export class Channel {
 			this.state.messages = Immutable([]);
 		}
 		this.state.addMessagesSorted(messages);
-		this.state.online = state.online;
+		this.state.watcher_count = state.watcher_count;
 		// convert the arrays into objects for easier syncing...
 		if (state.watchers) {
 			for (const watcher of state.watchers) {

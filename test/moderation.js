@@ -41,14 +41,14 @@ describe('Moderation', function() {
 				{ id: user1 },
 				createUserToken(user1),
 			);
-			expect(connectResponse.own_user.mutes.length).to.equal(1);
-			expect(connectResponse.own_user.mutes[0].target.id).to.equal(user2);
+			expect(connectResponse.me.mutes.length).to.equal(1);
+			expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
 		}
 
 		await new Promise(resolve => {
 			// verify that the healthcheck is called
 			client1.on('health.check', e => {
-				expect(e.own_user.mutes.length).to.equal(1);
+				expect(e.me.mutes.length).to.equal(1);
 				resolve();
 			});
 			runTest();
@@ -75,7 +75,7 @@ describe('Moderation', function() {
 			{ id: user1 },
 			createUserToken(user1),
 		);
-		expect(connectResponse.own_user.mutes.length).to.equal(1);
-		expect(connectResponse.own_user.mutes[0].target.id).to.equal(user2);
+		expect(connectResponse.me.mutes.length).to.equal(1);
+		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
 	});
 });

@@ -11,7 +11,7 @@ function byDate(a, b) {
 export class ChannelState {
 	constructor(channel) {
 		this._channel = channel;
-		this.online = 0;
+		this.watcher_count = 0;
 		this.typing = Immutable({});
 		this.read = Immutable({});
 		this.messages = Immutable([]);
