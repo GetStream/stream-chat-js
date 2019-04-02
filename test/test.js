@@ -907,6 +907,20 @@ describe('Chat', function() {
 				expect(resp.message.type).to.equal('error');
 			});
 
+			it('Add a chat message with same ID twice', async function() {
+				const id = uuidv4();
+				const message = {
+					id,
+					text: 'yo',
+				};
+				await channel.sendMessage(message);
+				const p = channel.sendMessage(message);
+				p.catch(e => {
+					expect(e.status).to.eq(400);
+				});
+				expect(p).to.rejected;
+			});
+
 			it('Edit a chat message with text that is too long', async function() {
 				const disabledChannel = authClient.channel(
 					'everythingDisabled',
