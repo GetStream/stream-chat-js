@@ -574,8 +574,8 @@ describe('Moderation', function() {
 				{ id: srcUser },
 				createUserToken(srcUser),
 			);
-			expect(connectResponse.own_user.mutes.length).to.equal(1);
-			expect(connectResponse.own_user.mutes[0].target.id).to.equal(targetUser);
+			expect(connectResponse.me.mutes.length).to.equal(1);
+			expect(connectResponse.me.mutes[0].target.id).to.equal(targetUser);
 		});
 	});
 
@@ -592,7 +592,7 @@ describe('Moderation', function() {
 				{ id: srcUser },
 				createUserToken(srcUser),
 			);
-			expect(connectResponse.own_user.mutes.length).to.equal(0);
+			expect(connectResponse.me.mutes.length).to.equal(0);
 		});
 	});
 });

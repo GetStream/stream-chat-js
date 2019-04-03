@@ -233,7 +233,7 @@ describe('Unread on connect', function() {
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread_count).to.eq(5);
+		expect(response.me.unread_count).to.eq(5);
 	});
 
 	it('thierry marks one messaging channel as read', async function() {
@@ -248,7 +248,7 @@ describe('Unread on connect', function() {
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread_count).to.eq(4);
+		expect(response.me.unread_count).to.eq(4);
 	});
 
 	it('insert 100 messages to messaging:chatty', async function() {
@@ -271,7 +271,7 @@ describe('Unread on connect', function() {
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread_count).to.eq(100);
+		expect(response.me.unread_count).to.eq(100);
 	});
 
 	it('thierry marks messaging:chatty as read', async function() {
@@ -286,7 +286,7 @@ describe('Unread on connect', function() {
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.own_user.unread_count).to.eq(3);
+		expect(response.me.unread_count).to.eq(3);
 	});
 
 	it('thierry is removed from the channel and gets notified about it', async function() {

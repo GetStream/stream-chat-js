@@ -32,7 +32,7 @@ const event = {
   reaction: { type: 'like' },
   member: { id: 'john' },
   user: { id: 'john' },
-  own_user: { id: 'john' },
+  me: { id: 'john' },
   unread_count: 3,
   online: 10,
 };
