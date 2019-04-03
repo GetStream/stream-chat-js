@@ -185,7 +185,7 @@ export class StreamChat {
 					"development": true
 				},
 				"firebase_config": {
-					"api_key": "apiapiapi",
+					"server_key": "server key from fcm",
 					"notification_template": "notification handlebars template"
 				},
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
