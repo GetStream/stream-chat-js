@@ -155,7 +155,11 @@ export class Channel {
   sendEvent(chatEvent: Event): Promise<APIResponse>;
   sendReaction(messageID: string, reaction: Reaction): Promise<APIResponse>;
 
-  deleteReaction(messageID: string, reactionType: string): Promise<APIResponse>;
+  deleteReaction(
+    messageID: string,
+    reactionType: string,
+    user_id?: string,
+  ): Promise<APIResponse>;
 
   update(channelData: object, updateMessage: Message): Promise<APIResponse>;
   delete(): Promise<APIResponse>;
