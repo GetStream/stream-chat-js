@@ -476,13 +476,13 @@ export class StreamChat {
 		const client = this;
 
 		// update the client.state with any changes to users
-		if (event.type === 'user.status.changed' || event.type === 'user.updated') {
+		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
 			client.state.updateUser(event.user);
 		}
 		if (event.type === 'health.check') {
-			if (event.own_user) {
-				client.user = event.own_user;
-				client.state.updateUser(event.own_user);
+			if (event.me) {
+				client.user = event.me;
+				client.state.updateUser(event.me);
 			}
 		}
 

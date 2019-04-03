@@ -1,5 +1,5 @@
 export const EVENT_MAP = {
-	'user.status.changed': true,
+	'user.presence.changed': true,
 	'user.watching.start': true,
 	'user.watching.stop': true,
 	'user.updated': true,

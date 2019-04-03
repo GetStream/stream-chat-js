@@ -32,14 +32,6 @@ Promise.config({
 	},
 });
 
-/*
-user.online = true/false
-user.status = a description of your status
-user.invisible =
-- a boolean that's only returned for the own user object..
-- user.online returns false when user.invisible = true
-*/
-
 describe('Presence', function() {
 	let user1Client;
 	let sarahID;
@@ -106,7 +98,7 @@ describe('Presence', function() {
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
-					results.push([e.online, e.user.id]);
+					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
 					if (results.length === 3) {
 						const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
@@ -134,11 +126,11 @@ describe('Presence', function() {
 
 			await new Promise(resolve => {
 				const subscription = testClientP.on('health.check', event => {
-					expect(event.own_user.id).to.equal(userID);
-					expect(event.own_user.status).to.equal('busy');
-					expect(event.own_user.invisible).to.equal(false);
-					expect(event.own_user.online).to.equal(true);
-					const last_active = new Date(event.own_user.last_active);
+					expect(event.me.id).to.equal(userID);
+					expect(event.me.status).to.equal('busy');
+					expect(event.me.invisible).to.equal(false);
+					expect(event.me.online).to.equal(true);
+					const last_active = new Date(event.me.last_active);
 					const now = new Date();
 					const diffInMinutes = (now - last_active) / 1000 / 60;
 					expect(diffInMinutes).to.be.below(1);
@@ -186,10 +178,7 @@ describe('Presence', function() {
 			console.log('marking user online', userID);
 
 			const eventReceived = new Promise(resolve =>
-				user1Client.on('user.status.changed', event => {
-					console.log('event');
-					console.log(event);
-
+				user1Client.on('user.presence.changed', event => {
 					if (event.user.id === userID) {
 						expect(event.user.status).to.equal('going to watch a movie');
 						expect(event.user.online).to.equal(true);
@@ -205,7 +194,7 @@ describe('Presence', function() {
 			const channelName = uuidv4();
 			const director = `Denis Villeneuve - ${uuidv4()}`;
 			// same as above, but with the query channels endpoint
-			user1Client.on('user.status.changed', event => {
+			user1Client.on('user.presence.changed', event => {
 				console.log(event.type);
 				if (event.user.id === paulID) {
 					expect(event.user.status).to.equal('rallying fremen');
@@ -232,7 +221,7 @@ describe('Presence', function() {
 
 		it('Query Users and Presence the other one', function(done) {
 			// Same as above but with the query users endpoint
-			user1Client.on('user.status.changed', event => {
+			user1Client.on('user.presence.changed', event => {
 				if (event.user.id === 'jessica') {
 					expect(event.user.status).to.equal('sayhi');
 					expect(event.user.online).to.equal(true);
@@ -258,7 +247,7 @@ describe('Presence', function() {
 
 		// Invisible user support
 		it.skip('Invisible', function(done) {
-			user1Client.on('user.status.changed', event => {
+			user1Client.on('user.presence.changed', event => {
 				expect(event.user.id).to.equal('sandra');
 				expect(event.user.status).to.equal('going to be invisible');
 				expect(event.user.online).to.equal(false);

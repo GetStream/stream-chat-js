@@ -39,7 +39,7 @@ export interface Event {
   reaction: Reaction;
   member: User;
   user: User;
-  own_user: User;
+  me: User;
   unread_count: number;
   online: number;
 }

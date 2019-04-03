@@ -78,7 +78,7 @@ describe('Connection and reconnect behaviour', function() {
 		const healthCheck = await conn.connect();
 		const result = healthCheck;
 		expect(result.type).to.equal('health.check');
-		expect(result.own_user.id).to.equal('thierry');
+		expect(result.me.id).to.equal('thierry');
 		expect(conn.isHealthy).to.equal(true);
 		expect(conn.isConnecting).to.equal(false);
 	});
