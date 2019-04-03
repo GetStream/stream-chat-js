@@ -29,6 +29,7 @@
   ],
   "files": [
     "/dist",
+    "/types",
     "readme.md"
   ],
   "dependencies": {
