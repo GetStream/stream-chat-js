@@ -45,6 +45,33 @@ async function createTestInviteChannel() {
 	return c;
 }
 
+describe('Member style server side', () => {
+	it('member based id server side', async () => {
+		const client = await getServerTestClient();
+		const c = client.channel('messaging', {
+			name: 'Founder Chat',
+			image: 'http://bit.ly/2O35mws',
+			members: ['thierry', 'tommaso'],
+			created_by: { id: 'thierry', name: 'Thierry' },
+		});
+		expect(!!c.id).to.be.false;
+		const state = await c.create();
+		expect(!!c.id).to.be.true;
+		expect(state.members[0].user.id).to.equal('thierry');
+		expect(state.members[1].user.id).to.equal('tommaso');
+		// doing this a second time should generate the same id...
+		const c2 = client.channel('messaging', {
+			name: 'Founder Chat',
+			image: 'http://bit.ly/2O35mws',
+			members: ['thierry', 'tommaso'],
+			created_by: { id: 'thierry', name: 'Thierry' },
+		});
+		const state2 = await c2.create();
+		expect(c2.id).to.equal(c.id);
+		expect(c2.id.indexOf('!members-')).to.equal(0);
+	});
+});
+
 describe('Member style channel init', () => {
 	before(async () => {
 		await createUsers(['thierry', 'tommaso', 'josh', 'scott', 'nick']);
