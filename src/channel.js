@@ -162,7 +162,7 @@ export class Channel {
 			this.client.baseURL + `/messages/${messageID}/reaction/${reactionType}`;
 		//provided when server side request
 		if (user_id) {
-			return this.client.delete(url, { user_details: { id: user_id } });
+			return this.client.delete(url, { user_id });
 		}
 
 		return this.client.delete(url);
