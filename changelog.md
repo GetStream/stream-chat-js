@@ -1,6 +1,4 @@
-
-
-## April 2nd 2019 ##
+## April 2nd 2019
 
 - event.own_user renamed to event.me
 - user.status.changed renamed to user.presence.changed

@@ -2,6 +2,7 @@ import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution } from './utils';
+
 /**
  * Channel - The Channel class manages it's own state.
  */
@@ -145,18 +146,25 @@ export class Channel {
 	 *
 	 * @param {string} messageID the id of the message from which te remove the reaction
 	 * @param {string} reactionType the type of reaction that should be removed
+	 * @param {string} user_id the id of the user (used only for server side request) default null
 	 *
 	 * @return {object} The Server Response
 	 */
-	deleteReaction(messageID, reactionType) {
+	deleteReaction(messageID, reactionType, user_id) {
 		this._checkInitialized();
 		if (!reactionType || !messageID) {
 			throw Error(
 				'Deleting a reaction requires specifying both the message and reaction type',
 			);
 		}
+
 		const url =
 			this.client.baseURL + `/messages/${messageID}/reaction/${reactionType}`;
+		//provided when server side request
+		if (user_id) {
+			return this.client.delete(url, { user_id });
+		}
+
 		return this.client.delete(url);
 	}
 

@@ -428,7 +428,7 @@ describe('App configs', function() {
 				client
 					.updateAppSettings({
 						firebase_config: {
-							api_key: 'asdasd',
+							server_key: 'asdasd',
 							notification_template: '{ }',
 						},
 					})
@@ -439,7 +439,7 @@ describe('App configs', function() {
 				client
 					.updateAppSettings({
 						firebase_config: {
-							api_key:
+							server_key:
 								'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 							notification_template: '{ }',
 						},
