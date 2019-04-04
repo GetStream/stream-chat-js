@@ -46,6 +46,9 @@ async function createTestInviteChannel() {
 }
 
 describe('Member style server side', () => {
+	before(async () => {
+		await createUsers(['thierry', 'tommaso']);
+	});
 	it('member based id server side', async () => {
 		const client = await getServerTestClient();
 		const c = client.channel('messaging', {
