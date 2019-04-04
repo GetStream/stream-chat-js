@@ -82,10 +82,9 @@ export class StableWSConnection {
 			this._startHealthCheck();
 			return healthCheck;
 		} catch (e) {
-			// This is a permanent failure, throw the error...
-
 			this.isConnecting = false;
 			if (!e.isWSFailure) {
+				// This is a permanent failure, throw the error...
 				throw e;
 			}
 		}

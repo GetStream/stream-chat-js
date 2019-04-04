@@ -124,23 +124,17 @@ describe('Chat', function() {
 			// watch a new channel before setUser completes
 			const state = await client.channel('messaging', uuidv4()).watch();
 		});
-		it('reserved fields in user', function(done) {
+		it('reserved fields in user', async function() {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			client
-				.setUser(
+			await expectHTTPErrorCode(
+				400,
+				client.setUser(
 					{ id: userID, created_at: 'helloworld' },
 					createUserToken(userID),
-				)
-				.then(() => {
-					done(new Error('should have failed'));
-				})
-				.catch(err => {
-					expect(err).to.be.an('error');
-					expect(JSON.parse(err.message).StatusCode).to.eq(400);
-					done();
-				});
+				),
+			);
 		});
 	});
 
