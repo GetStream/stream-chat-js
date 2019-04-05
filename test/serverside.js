@@ -6,7 +6,6 @@ import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
 import chaiAsPromised from 'chai-as-promised';
-import { async } from '../../../Library/Caches/typescript/3.3/node_modules/rxjs/internal/scheduler/async';
 
 chai.use(require('chai-like'));
 chai.use(chaiAsPromised);
