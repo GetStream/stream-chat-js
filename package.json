@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -91,7 +91,10 @@
     "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",
     "lint": "npx prettier --list-different '**/*.{js,ts,css,scss,json}' .eslintrc.json .prettierrc .babelrc && npx eslint 'src/*.js' --max-warnings 0",
     "lint-fix": "npx prettier --write '**/*.{js,ts,css,scss,json}' .eslintrc.json .prettierrc .babelrc && npx eslint --fix 'src/*.js' --max-warnings 0",
-    "prepare": "rm -rf dist && yarn run build"
+    "prepare": "rm -rf dist && yarn run build",
+    "preversion": "yarn && yarn lint",
+    "version": "git add yarn.lock",
+    "postversion": "git push && git push --tags && npm publish"
   },
   "husky": {
     "hooks": {
