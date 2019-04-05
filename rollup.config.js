@@ -18,6 +18,7 @@ process.env.NODE_ENV = 'production';
 const externalPackages = [
 	'axios',
 	'cross-fetch',
+	'crypto',
 	'form-data',
 	'isomorphic-ws',
 	'lodash',
