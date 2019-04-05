@@ -276,10 +276,16 @@ export class StableWSConnection {
 		if (!healthy && this.isHealthy) {
 			// bummer we are offline
 			this.isHealthy = false;
-			this.eventCallback({
-				type: 'connection.changed',
-				online: false,
-			});
+			const that = this;
+			setTimeout(() => {
+				// fire the we are offline event if the connection is gone for more than 5 seconds
+				if (!that.isHealthy) {
+					that.eventCallback({
+						type: 'connection.changed',
+						online: false,
+					});
+				}
+			}, 5000);
 		}
 	};
 
