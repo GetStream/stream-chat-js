@@ -102,18 +102,14 @@ export class StreamChat {
 		this.wsBaseURL = this.baseURL.replace('http', 'ws');
 	}
 
-	async _setupConnection() {
+	_setupConnection() {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
-		await this.connect();
-		this.connectionID = this.wsConnection.connectionID;
+		this.wsPromise = this.connect();
 		return this.wsPromise;
 	}
 
-	_hasConnectionID = () => {
-		const hasClient = !!this.connectionID;
-		return hasClient;
-	};
+	_hasConnectionID = () => Boolean(this.connectionID);
 
 	/**
 	 * setUser - Set the current user, this triggers a connection to the API
@@ -528,7 +524,7 @@ export class StreamChat {
 		}
 	};
 
-	connect() {
+	async connect() {
 		this.connecting = true;
 		const client = this;
 		this.failures = 0;
@@ -572,9 +568,8 @@ export class StreamChat {
 			eventCallback: this.dispatchEvent,
 		});
 
-		this.wsPromise = this.wsConnection.connect();
-
-		return this.wsPromise;
+		await this.wsConnection.connect();
+		this.connectionID = this.wsConnection.connectionID;
 	}
 
 	/**
@@ -602,12 +597,12 @@ export class StreamChat {
 			presence: true,
 		};
 
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.wsPromise;
+
 		if (!this._hasConnectionID()) {
 			defaultOptions.presence = false;
 		}
-
-		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
 
 		// Return a list of users
 		const data = await this.get(this.baseURL + '/users', {
@@ -635,6 +630,9 @@ export class StreamChat {
 			presence: false,
 		};
 
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.wsPromise;
+
 		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
@@ -647,9 +645,6 @@ export class StreamChat {
 			...defaultOptions,
 			...options,
 		};
-
-		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
 
 		const data = await this.get(this.baseURL + '/channels', {
 			payload,
@@ -681,7 +676,7 @@ export class StreamChat {
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
+		await this.wsPromise;
 
 		const data = await this.get(this.baseURL + '/search', {
 			payload,

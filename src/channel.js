@@ -382,6 +382,9 @@ export class Channel {
 			presence: false,
 		};
 
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.client.wsPromise;
+
 		if (!this.client._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
@@ -490,7 +493,7 @@ export class Channel {
 	 */
 	async query(options) {
 		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.client.wsPromise);
+		await this.client.wsPromise;
 
 		let queryURL = `${this.client.baseURL}/channels/${this.type}`;
 		if (this.id) {
