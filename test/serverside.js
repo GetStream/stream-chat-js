@@ -1,4 +1,4 @@
-import { getTestClient, createUsers, createUserToken } from './utils';
+import { getTestClient, createUsers, createUserToken, sleep } from './utils';
 import { assertHTTPErrorCode } from './utils';
 import { getTestClientForUser } from './utils';
 import { AllowAll, DenyAll } from '../src/permissions';
@@ -6,6 +6,7 @@ import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
 import chaiAsPromised from 'chai-as-promised';
+import { async } from '../../../Library/Caches/typescript/3.3/node_modules/rxjs/internal/scheduler/async';
 
 chai.use(require('chai-like'));
 chai.use(chaiAsPromised);
@@ -102,8 +103,8 @@ describe('App configs', function() {
 	const client = getTestClient(true);
 	const client2 = getTestClient(false);
 
-	const bfadf = { id: 'guyon' };
-	const bfadfToken =
+	const user = { id: 'guyon' };
+	const userToken =
 		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZ3V5b24ifQ.c8ofzBnAuW1yVaznCDv0iGeoJQ-csme7kPpIMOjtkso';
 
 	let secretChannel;
@@ -120,7 +121,7 @@ describe('App configs', function() {
 
 	it('Using a tampered token fails because of auth enabled', function(done) {
 		client2
-			.setUser(bfadf, bfadfToken)
+			.setUser(user, userToken)
 			.then(() => {
 				client2.disconnect();
 				done('should have failed!');
@@ -133,12 +134,12 @@ describe('App configs', function() {
 
 	it('Using dev token fails because of auth enabled', function(done) {
 		client2
-			.setUser(bfadf, client2.devToken(bfadf.id))
+			.setUser(user, client2.devToken(user.id))
 			.then(() => {
 				client2.disconnect();
 				done('should have failed!');
 			})
-			.catch(e => {
+			.catch(() => {
 				client2.disconnect();
 				done();
 			});
@@ -152,7 +153,7 @@ describe('App configs', function() {
 
 	it('Using a tampered token does not fail because auth is disabled', function(done) {
 		client2
-			.setUser(bfadf, bfadfToken)
+			.setUser(user, userToken)
 			.then(() => {
 				done();
 				client2.disconnect();
@@ -164,7 +165,7 @@ describe('App configs', function() {
 
 	it('Using dev token does not fail because auth is disabled', function(done) {
 		client2
-			.setUser(bfadf, client2.devToken(bfadf.id))
+			.setUser(user, client2.devToken(user.id))
 			.then(() => {
 				done();
 				client2.disconnect();
@@ -181,7 +182,7 @@ describe('App configs', function() {
 	});
 
 	it('A user can do super stuff because permission checks are off', async function() {
-		await client2.setUser(bfadf, bfadfToken);
+		await client2.setUser(user, userToken);
 		await client2.channel('messaging', 'secret-place').watch();
 		client2.disconnect();
 	});
@@ -498,9 +499,131 @@ describe('App configs', function() {
 		});
 	});
 
+	describe('Push notifications test endpoint', function() {
+		const deviceID = uuidv4();
+		const userID = uuidv4();
+		const apnConfig = {
+			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
+			key_id: 'whatever',
+			team_id: 'stream',
+			bundle_id: 'bundle',
+			auth_type: 'token',
+		};
+		const firebaseConfig = {
+			server_key:
+				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+		};
+
+		before(async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+		});
+
+		after(async function() {
+			await client.removeDevice(deviceID, userID);
+		});
+
+		beforeEach(async function() {
+			await client.updateAppSettings({
+				apn_config: {
+					disabled: true,
+				},
+				firebase_config: {
+					disabled: true,
+				},
+			});
+			await sleep(200);
+		});
+
+		it('User has no devices', async function() {
+			await client.removeDevice(deviceID, userID);
+			const p = client.testPushSettings(userID);
+			await expect(p).to.be.rejectedWith(`User has no devices associated`);
+			await client.addDevice(deviceID, 'apn', userID);
+		});
+
+		it('App has push disabled', async function() {
+			const p = client.testPushSettings(userID);
+			await expect(p).to.be.rejectedWith(
+				`Your app doesn't have push notifications enabled`,
+			);
+		});
+
+		it('No APN + APN template', async function() {
+			await client.updateAppSettings({
+				firebase_config: firebaseConfig,
+			});
+
+			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
+			await expect(p).to.be.rejectedWith(
+				`APN template provided, but app doesn't have APN push notifcations configured`,
+			);
+		});
+
+		it('No Firebase + firebase template', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
+			await expect(p).to.be.rejectedWith(
+				`Firebase template provided, but app doesn't have firebase push notifcations configured`,
+			);
+		});
+
+		it('Bad message id', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+			const msgID = uuidv4();
+			const p = client.testPushSettings(userID, { messageID: msgID });
+			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
+		});
+
+		it('Bad apn template error gets returned in response', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: '{{}',
+			});
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response.general_errors).to.have.length(1);
+			expect(response.general_errors).to.have.members([
+				'APN template is invalid: notification_template is not a valid handlebars template',
+			]);
+		});
+
+		it('Bad firebase template error gets returned in response', async function() {
+			await client.updateAppSettings({
+				firebase_config: firebaseConfig,
+			});
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{{}',
+			});
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response.general_errors).to.have.length(1);
+			expect(response.general_errors).to.have.members([
+				'Firebase template is invalid: notification_template is not a valid handlebars template',
+			]);
+		});
+
+		it('All good', async function() {
+			await client.updateAppSettings({
+				firebase_config: firebaseConfig,
+			});
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{}',
+			});
+			expect(response.rendered_firebase_template).to.eq('{}');
+		});
+	});
+
 	it('Using a tampered token fails because auth is back on', function(done) {
 		client2
-			.setUser(bfadf, bfadfToken)
+			.setUser(user, userToken)
 			.then(() => {
 				client2.disconnect();
 				done('should have failed!');

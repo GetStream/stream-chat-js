@@ -208,6 +208,28 @@ export class StreamChat {
 	}
 
 	/**
+	 * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+	 *
+	 * @param {string} userID User ID. If user has no devices, it will error
+	 * @param {object} [data] Overrides for push templates/message used
+	 * 		IE: {
+				  messageID: 'id-of-message',//will error if message does not exist
+				  apnTemplate: '{}', //if app doesn't have apn configured it will error
+				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+			}
+	 */
+	async testPushSettings(userID, data = {}) {
+		return await this.post(this.baseURL + '/check_push', {
+			user_id: userID,
+			...(data.messageID ? { message_id: data.messageID } : {}),
+			...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
+			...(data.firebaseTemplate
+				? { firebase_template: data.firebaseTemplate }
+				: {}),
+		});
+	}
+
+	/**
 	 * disconnect - closes the WS connection
 	 */
 	disconnect() {
