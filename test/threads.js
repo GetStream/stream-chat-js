@@ -71,6 +71,7 @@ describe('Threads and Replies', function() {
 			const parentID = event.message.parent_id;
 			const replyID = event.message.id;
 			if (parentID) {
+				expect(channel.state.threads[parentID]).to.be.ok;
 				expect(channel.state.threads[parentID].length).to.equal(1);
 				expect(channel.state.threads[parentID][0].id).to.equal(replyID);
 				done();

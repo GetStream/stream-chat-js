@@ -609,16 +609,20 @@ export class Channel {
 			case 'message.read':
 				s.read = s.read.set(event.user.id, Immutable(event));
 				break;
-			case ('user.watching.start', 'user.updated'):
+			case 'user.watching.start':
+			case 'user.updated':
 				s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
 				break;
 			case 'user.watching.stop':
 				s.watchers = s.watchers.without(event.user.id);
 				break;
-			case ('message.new', 'message.updated', 'message.deleted'):
+			case 'message.new':
+			case 'message.updated':
+			case 'message.deleted':
 				s.addMessageSorted(event.message);
 				break;
-			case ('member.added', 'member.updated'):
+			case 'member.added':
+			case 'member.updated':
 				s.members = s.members.set(event.member.id, Immutable(event.member));
 				break;
 			case 'member.removed':
