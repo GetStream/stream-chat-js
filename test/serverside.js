@@ -29,18 +29,18 @@ describe('Query Channels', function() {
 		}
 	});
 
-	it('watch should error', function(done) {
-		client
-			.queryChannels({}, {}, { watch: true, presence: false })
-			.then(done)
-			.catch(() => done());
+	it('watch should error', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.queryChannels({}, {}, { watch: true, presence: false }),
+		);
 	});
 
-	it('presence should error', function(done) {
-		client
-			.queryChannels({}, {}, { watch: false, presence: true })
-			.then(done)
-			.catch(() => done());
+	it('presence should error', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.queryChannels({}, {}, { watch: false, presence: true }),
+		);
 	});
 
 	it('state should work fine', async function() {
