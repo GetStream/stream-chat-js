@@ -139,7 +139,7 @@ describe('Webhooks', function() {
 		expect(lastMessage.message.text).to.eq('new stuff');
 	});
 
-	it('message.reaction when reaction is added', async function() {
+	it('reaction.new when reaction is added', async function() {
 		await Promise.all([
 			chan.sendReaction(messageResponse.message.id, {
 				type: 'lol',
@@ -149,11 +149,11 @@ describe('Webhooks', function() {
 		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.user).to.be.an('object');
-		expect(lastMessage.type).to.eq('message.reaction');
+		expect(lastMessage.type).to.eq('reaction.new');
 		expect(lastMessage.message.reaction_counts).to.eql({ lol: 1 });
 	});
 
-	it('message.reaction when reaction is removed', async function() {
+	it('reaction.deleted when reaction is removed', async function() {
 		const tommasoClient = await getTestClientForUser(tommasoID);
 		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
@@ -163,7 +163,7 @@ describe('Webhooks', function() {
 		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.user).to.be.an('object');
-		expect(lastMessage.type).to.eq('message.reaction');
+		expect(lastMessage.type).to.eq('reaction.deleted');
 		expect(lastMessage.message.reaction_counts).to.eql({});
 	});
 
