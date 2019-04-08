@@ -590,8 +590,9 @@ export class StreamChat {
 			eventCallback: this.dispatchEvent,
 		});
 
-		await this.wsConnection.connect();
+		const handshake = await this.wsConnection.connect();
 		this.connectionID = this.wsConnection.connectionID;
+		return handshake;
 	}
 
 	/**
