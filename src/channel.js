@@ -598,36 +598,42 @@ export class Channel {
 	_handleChannelEvent(event) {
 		const channel = this;
 
-		const messageUpdateEvent = {
-			'message.updated': true,
-			'message.deleted': true,
-			'message.reaction': true,
-		};
-
 		const s = channel.state;
-		if (event.type === 'typing.start') {
-			s.typing = s.typing.set(event.user.id, Immutable(event));
-		} else if (event.type === 'typing.stop') {
-			s.typing = s.typing.without(event.user.id);
-		} else if (event.type === 'message.read') {
-			s.read = s.read.set(event.user.id, Immutable(event));
-		} else if (
-			event.type === 'user.watching.start' ||
-			event.types === 'user.updated'
-		) {
-			s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
-		} else if (event.type === 'user.watching.stop') {
-			s.watchers = s.watchers.without(event.user.id);
-		} else if (event.type === 'message.new') {
-			s.addMessageSorted(event.message);
-		} else if (event.type in messageUpdateEvent) {
-			s.addMessageSorted(event.message);
-		} else if (event.type === 'member.added' || event.type === 'member.updated') {
-			s.members = s.members.set(event.member.id, Immutable(event.member));
-		} else if (event.type === 'member.removed') {
-			s.members = s.members.without(event.user.id);
-		} else if (event.type === 'channel.updated') {
-			channel.data = Immutable(event.channel);
+		switch (event.type) {
+			case 'typing.start':
+				s.typing = s.typing.set(event.user.id, Immutable(event));
+				break;
+			case 'typing.stop':
+				s.typing = s.typing.without(event.user.id);
+				break;
+			case 'message.read':
+				s.read = s.read.set(event.user.id, Immutable(event));
+				break;
+			case ('user.watching.start', 'user.updated'):
+				s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
+				break;
+			case 'user.watching.stop':
+				s.watchers = s.watchers.without(event.user.id);
+				break;
+			case ('message.new', 'message.updated', 'message.deleted'):
+				s.addMessageSorted(event.message);
+				break;
+			case ('member.added', 'member.updated'):
+				s.members = s.members.set(event.member.id, Immutable(event.member));
+				break;
+			case 'member.removed':
+				s.members = s.members.without(event.user.id);
+				break;
+			case 'channel.updated':
+				channel.data = Immutable(event.channel);
+				break;
+			case 'reaction.new':
+				s.addReaction(event.reaction, event.message.reaction_counts);
+				break;
+			case 'reaction.deleted':
+				s.removeReaction(event.reaction, event.message.reaction_counts);
+				break;
+			default:
 		}
 
 		// any event can send over the online count
