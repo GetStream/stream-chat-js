@@ -95,7 +95,6 @@ export class ChannelState {
 	}
 
 	addReaction(reaction, reaction_counts) {
-		console.log(reaction);
 		const { messages } = this;
 		for (let i = 0; i < messages.length; i++) {
 			let message = messages[i];
@@ -111,7 +110,6 @@ export class ChannelState {
 			message = message.update('latest_reactions', (old = []) =>
 				old.concat([reaction]),
 			);
-			console.log(message.reaction_counts[reaction.type]);
 			if (reaction_counts) {
 				message = message.set('reaction_counts', reaction_counts);
 			} else {
@@ -119,9 +117,7 @@ export class ChannelState {
 					old ? old + 1 : 1,
 				);
 			}
-			console.log(message.reaction_counts[reaction.type]);
 			this.messages = messages.set(i, message);
-			console.log(this.messages[i].reaction_counts[reaction.type]);
 			break;
 		}
 	}
