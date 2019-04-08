@@ -12,7 +12,6 @@ import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
 import chaiAsPromised from 'chai-as-promised';
-import { async } from '../../../Library/Caches/typescript/3.3/node_modules/rxjs/internal/scheduler/async';
 
 chai.use(require('chai-like'));
 chai.use(chaiAsPromised);
@@ -105,20 +104,40 @@ describe('Managing users', function() {
 	});
 });
 
+describe('CreatedBy storage', function() {
+	const createdById = uuidv4();
+	const channelId = uuidv4();
+	const client = getTestClient(true);
+
+	it('Created by should be stored', async () => {
+		const channel = client.channel('messaging', channelId, {
+			created_by: { id: createdById },
+		});
+		const createResponse = await channel.create();
+
+		expect(createResponse.channel.created_by.id).to.equal(createdById);
+		expect(channel._data.created_by.id).to.equal(createdById);
+		expect(channel.data.created_by.id).to.equal(createdById);
+	});
+});
+
 describe('App configs', function() {
 	const client = getTestClient(true);
 	const client2 = getTestClient(false);
 
 	const user = { id: 'guyon' };
+	const createdById = uuidv4();
 	const userToken =
 		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZ3V5b24ifQ.c8ofzBnAuW1yVaznCDv0iGeoJQ-csme7kPpIMOjtkso';
 
 	let secretChannel;
+	let channel;
 
 	before(async function() {
-		secretChannel = await client
-			.channel('messaging', 'secret-place', { created_by: { id: `${uuidv4()}` } })
-			.create();
+		channel = client.channel('messaging', 'secret-place', {
+			created_by: { id: `${createdById}` },
+		});
+		secretChannel = await channel.create();
 	});
 
 	it('Empty request should not break', async function() {

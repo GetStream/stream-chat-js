@@ -172,12 +172,12 @@ async function cleanCommerce() {
 			'Stream supports custom chat bots, slash command automation and custom message types.',
 		user: marvin,
 	});
-	/*
-	const jane = {id: "jane", name: "Jane"};
-	const john = {id: "john", name: "John"}
+
+	const jane = { id: 'jane', name: 'Jane' };
+	const john = { id: 'john', name: 'John' };
 	await channel.sendMessage({
 		text: "I'd like to buy a huge house in Aspen, what do you have available.?",
-		user: jane
+		user: jane,
 	});
 	await channel.sendMessage({ text: '5 or 7 bedrooms?', user: john });
 	await channel.sendMessage({ text: '7', user: jane });
@@ -186,10 +186,28 @@ async function cleanCommerce() {
 		text: 'No problem, I found these options',
 		user: john,
 		attachments: [
-			{ image: 'image', thumb_url: 'https://d2787ndpv5cwhz.cloudfront.net/bb43e766fdc55058abb7d1fd6cd107d3d560123b/640x480.jpg', asset_url: 'https://d2787ndpv5cwhz.cloudfront.net/bb43e766fdc55058abb7d1fd6cd107d3d560123b/640x480.jpg', title: "220 Buttermilk Lane", title_link: "https://www.compass.com/listing/220-buttermilk-lane-aspen-co-81611/205873945944084353/" },
-			{ image: 'image', thumb_url: 'https://d2787ndpv5cwhz.cloudfront.net/fd7268189937992b2fd6068118fb0a831bcb6c97/640x480.jpg', asset_url: 'https://d2787ndpv5cwhz.cloudfront.net/fd7268189937992b2fd6068118fb0a831bcb6c97/640x480.jpg', title: "34 Placer Lane", title_link: "https://www.compass.com/listing/34-placer-lane-aspen-co-81611/60840391921993345/" }
+			{
+				image: 'image',
+				thumb_url:
+					'https://d2787ndpv5cwhz.cloudfront.net/bb43e766fdc55058abb7d1fd6cd107d3d560123b/640x480.jpg',
+				asset_url:
+					'https://d2787ndpv5cwhz.cloudfront.net/bb43e766fdc55058abb7d1fd6cd107d3d560123b/640x480.jpg',
+				title: '220 Buttermilk Lane',
+				title_link:
+					'https://www.compass.com/listing/220-buttermilk-lane-aspen-co-81611/205873945944084353/',
+			},
+			{
+				image: 'image',
+				thumb_url:
+					'https://d2787ndpv5cwhz.cloudfront.net/fd7268189937992b2fd6068118fb0a831bcb6c97/640x480.jpg',
+				asset_url:
+					'https://d2787ndpv5cwhz.cloudfront.net/fd7268189937992b2fd6068118fb0a831bcb6c97/640x480.jpg',
+				title: '34 Placer Lane',
+				title_link:
+					'https://www.compass.com/listing/34-placer-lane-aspen-co-81611/60840391921993345/',
+			},
 		],
-	});*/
+	});
 }
 
 async function getAllPublicChannels() {
@@ -341,7 +359,7 @@ async function setupData() {
 	//response = await batChannel.sendMessage(message);
 }
 
-cleanTeams()
+cleanCommerce()
 	.then()
 	.catch(e => {
 		console.log('e', e);
