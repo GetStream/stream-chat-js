@@ -710,7 +710,7 @@ export class Channel {
 		}
 		if (state.members) {
 			for (const m of state.members) {
-				this.state.members = this.state.members.set(m.id, m);
+				this.state.members = this.state.members.set(m.user.id, m);
 			}
 		}
 	}
