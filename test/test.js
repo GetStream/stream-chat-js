@@ -4,6 +4,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import Immutable from 'seamless-immutable';
 import { StreamChat } from '../src';
+import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 
 import {
@@ -123,23 +124,17 @@ describe('Chat', function() {
 			// watch a new channel before setUser completes
 			const state = await client.channel('messaging', uuidv4()).watch();
 		});
-		it('reserved fields in user', function(done) {
+		it('reserved fields in user', async function() {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			client
-				.setUser(
+			await expectHTTPErrorCode(
+				400,
+				client.setUser(
 					{ id: userID, created_at: 'helloworld' },
 					createUserToken(userID),
-				)
-				.then(() => {
-					done(new Error('should have failed'));
-				})
-				.catch(err => {
-					expect(err).to.be.an('error');
-					expect(JSON.parse(err.message).StatusCode).to.eq(400);
-					done();
-				});
+				),
+			);
 		});
 	});
 
@@ -499,48 +494,36 @@ describe('Chat', function() {
 			done();
 		});
 
-		it('Invalid secret should fail setUser', function(done) {
+		it('Invalid secret should fail setUser', function() {
 			const client3 = new StreamChat('892s22ypvt6m', 'invalidsecret');
 			const connectPromise = client3.setUser({
 				id: 'daenerys',
 				name: 'Mother of dragons',
 			});
-			connectPromise
-				.then(() => done('should have failed'))
-				.catch(() => {
-					done();
-				});
+			expect(connectPromise).to.be.rejected;
 		});
 	});
 
 	describe('Permissions', function() {
-		it('Editing someone else message should not be allowed client-side', function(done) {
-			(async function() {
-				// thierry adds a message
-				const response = await channel.sendMessage({
-					text: 'testing permissions is fun',
-				});
-				const message = response.message;
+		it('Editing someone else message should not be allowed client-side', async function() {
+			// thierry adds a message
+			const response = await channel.sendMessage({
+				text: 'testing permissions is fun',
+			});
+			const message = response.message;
 
-				// this should succeed since the secret is set
-				const token = authClient.createToken('johny');
+			// this should succeed since the secret is set
+			const token = authClient.createToken('johny');
 
-				const client3 = getTestClient();
-				await client3.setUser(
-					{
-						id: 'johny',
-						name: 'some random guy',
-					},
-					token,
-				);
-				try {
-					await client3.updateMessage(message);
-					done('should fail');
-				} catch (e) {
-					expect(e.status).to.eql(403);
-					done();
-				}
-			})();
+			const client3 = getTestClient();
+			await client3.setUser(
+				{
+					id: 'johny',
+					name: 'some random guy',
+				},
+				token,
+			);
+			await expectHTTPErrorCode(403, client3.updateMessage(message));
 		});
 	});
 
@@ -1456,6 +1439,7 @@ describe('Chat', function() {
 				watchers: { limit: 2, offset: 0 },
 			});
 			expect(results.members.length).to.equal(0);
+			expect(results.watchers).to.exist;
 			expect(results.watchers[0]).not.to.be.null;
 			expect(results.watchers[0].role).to.eql('user');
 			expect(results.watchers[0].id).to.eql(userID);

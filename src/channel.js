@@ -104,15 +104,16 @@ export class Channel {
 	/**
 	 * sendEvent - Send an event on this channel
 	 *
-	 * @param {object} chatEvent for example {type: 'message.read'}
+	 * @param {object} event for example {type: 'message.read'}
 	 *
 	 * @return {object} The Server Response
 	 */
-	async sendEvent(chatEvent) {
+	async sendEvent(event) {
 		this._checkInitialized();
 		const data = await this.client.post(this._channelURL() + '/event', {
-			event: chatEvent,
+			event,
 		});
+
 		return data;
 	}
 
@@ -332,7 +333,7 @@ export class Channel {
 	 *
 	 * @return {Promise} Description
 	 */
-	markRead() {
+	markRead(data = {}) {
 		this._checkInitialized();
 
 		if (!this.getConfig().read_events) {
@@ -345,12 +346,14 @@ export class Channel {
 			lastMessageCreatedAt = lastMessage.created_at;
 			lastMessageID = lastMessage.id;
 		}
-
-		return this.sendEvent({
+		const eventData = {
 			type: 'message.read',
-			lastMessageID,
-			lastMessageCreatedAt,
-		});
+			last_message_id: lastMessageID,
+			last_message_at: lastMessageCreatedAt,
+			...data,
+		};
+
+		return this.sendEvent(eventData);
 	}
 
 	/**
@@ -382,7 +385,10 @@ export class Channel {
 			presence: false,
 		};
 
-		if (!this.client._hasClientID()) {
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.client.wsPromise;
+
+		if (!this.client._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
 
@@ -490,7 +496,7 @@ export class Channel {
 	 */
 	async query(options) {
 		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.client.wsPromise);
+		await this.client.wsPromise;
 
 		let queryURL = `${this.client.baseURL}/channels/${this.type}`;
 		if (this.id) {
@@ -598,36 +604,46 @@ export class Channel {
 	_handleChannelEvent(event) {
 		const channel = this;
 
-		const messageUpdateEvent = {
-			'message.updated': true,
-			'message.deleted': true,
-			'message.reaction': true,
-		};
-
 		const s = channel.state;
-		if (event.type === 'typing.start') {
-			s.typing = s.typing.set(event.user.id, Immutable(event));
-		} else if (event.type === 'typing.stop') {
-			s.typing = s.typing.without(event.user.id);
-		} else if (event.type === 'message.read') {
-			s.read = s.read.set(event.user.id, Immutable(event));
-		} else if (
-			event.type === 'user.watching.start' ||
-			event.types === 'user.updated'
-		) {
-			s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
-		} else if (event.type === 'user.watching.stop') {
-			s.watchers = s.watchers.without(event.user.id);
-		} else if (event.type === 'message.new') {
-			s.addMessageSorted(event.message);
-		} else if (event.type in messageUpdateEvent) {
-			s.addMessageSorted(event.message);
-		} else if (event.type === 'member.added' || event.type === 'member.updated') {
-			s.members = s.members.set(event.member.id, Immutable(event.member));
-		} else if (event.type === 'member.removed') {
-			s.members = s.members.without(event.user.id);
-		} else if (event.type === 'channel.updated') {
-			channel.data = Immutable(event.channel);
+		switch (event.type) {
+			case 'typing.start':
+				s.typing = s.typing.set(event.user.id, Immutable(event));
+				break;
+			case 'typing.stop':
+				s.typing = s.typing.without(event.user.id);
+				break;
+			case 'message.read':
+				s.read = s.read.set(event.user.id, Immutable(event));
+				break;
+			case 'user.watching.start':
+			case 'user.updated':
+				s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
+				break;
+			case 'user.watching.stop':
+				s.watchers = s.watchers.without(event.user.id);
+				break;
+			case 'message.new':
+			case 'message.updated':
+			case 'message.deleted':
+				s.addMessageSorted(event.message);
+				break;
+			case 'member.added':
+			case 'member.updated':
+				s.members = s.members.set(event.member.id, Immutable(event.member));
+				break;
+			case 'member.removed':
+				s.members = s.members.without(event.user.id);
+				break;
+			case 'channel.updated':
+				channel.data = Immutable(event.channel);
+				break;
+			case 'reaction.new':
+				s.addReaction(event.reaction, event.message.reaction_counts);
+				break;
+			case 'reaction.deleted':
+				s.removeReaction(event.reaction, event.message.reaction_counts);
+				break;
+			default:
 		}
 
 		// any event can send over the online count

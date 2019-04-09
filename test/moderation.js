@@ -4,6 +4,7 @@ import {
 	createUsers,
 	getTestClient,
 	createUserToken,
+	sleep,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -29,30 +30,28 @@ describe('Moderation', function() {
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
-		async function runTest() {
-			const response = await client1.muteUser(user2);
-			expect(response.mute.created_at).to.not.be.undefined;
-			expect(response.mute.updated_at).to.not.be.undefined;
-			expect(response.mute.user.id).to.equal(user1);
-			expect(response.mute.target.id).to.equal(user2);
-			// verify we return the right user mute upon connect
-			const client = getTestClient(false);
-			const connectResponse = await client.setUser(
-				{ id: user1 },
-				createUserToken(user1),
-			);
-			expect(connectResponse.me.mutes.length).to.equal(1);
-			expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
-		}
 
-		await new Promise(resolve => {
-			// verify that the healthcheck is called
-			client1.on('health.check', e => {
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('notification.mutes_updated', e => {
 				expect(e.me.mutes.length).to.equal(1);
 				resolve();
 			});
-			runTest();
 		});
+		const response = await client1.muteUser(user2);
+		expect(response.mute.created_at).to.not.be.undefined;
+		expect(response.mute.updated_at).to.not.be.undefined;
+		expect(response.mute.user.id).to.equal(user1);
+		expect(response.mute.target.id).to.equal(user2);
+		// verify we return the right user mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(1);
+		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
+		await eventPromise;
 	});
 
 	it('Mute after sendMessage', async function() {

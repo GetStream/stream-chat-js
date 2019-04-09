@@ -75,16 +75,16 @@ export class StableWSConnection {
 		try {
 			this.isConnecting = true;
 			healthCheck = await this._connect();
+			this.connectionID = healthCheck.connection_id;
 			this.isConnecting = false;
 			this.consecutiveFailures = 0;
 			this._startMonitor();
 			this._startHealthCheck();
 			return healthCheck;
 		} catch (e) {
-			// This is a permanent failure, throw the error...
-
 			this.isConnecting = false;
 			if (!e.isWSFailure) {
+				// This is a permanent failure, throw the error...
 				throw e;
 			}
 		}
@@ -114,15 +114,22 @@ export class StableWSConnection {
 			this.ws.removeAllListeners();
 		}
 
+		let isClosedPromise;
 		// and finally close...
 		if (this.ws && this.ws.close) {
-			this.ws.close(
-				1000,
-				'Manually closed connection by calling client.disconnect()',
-			);
+			// Assigning to local here because we will remove it from this before the
+			// promise resolves.
+			const { ws } = this;
+			isClosedPromise = new Promise(resolve => {
+				ws.onclose = () => {
+					resolve();
+				};
+			});
+			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
 		}
 
 		delete this.ws;
+		return isClosedPromise;
 	}
 
 	/**
@@ -392,8 +399,8 @@ export class StableWSConnection {
 			const data = [
 				{
 					type: 'health.check',
-					clientID: that.clientID,
-					userID: that.userID,
+					client_id: that.clientID,
+					user_id: that.userID,
 				},
 			];
 			// try to send on the connection

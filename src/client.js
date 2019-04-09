@@ -105,14 +105,11 @@ export class StreamChat {
 	_setupConnection() {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
-		this.connect();
+		this.wsPromise = this.connect();
 		return this.wsPromise;
 	}
 
-	_hasClientID = () => {
-		const hasClient = !!this.clientID;
-		return hasClient;
-	};
+	_hasConnectionID = () => Boolean(this.connectionID);
 
 	/**
 	 * setUser - Set the current user, this triggers a connection to the API
@@ -243,7 +240,7 @@ export class StreamChat {
 		this.connectionEstablishedCount = 0;
 		// close the WS connection
 		if (this.wsConnection) {
-			this.wsConnection.disconnect();
+			return this.wsConnection.disconnect();
 		}
 	}
 
@@ -324,6 +321,11 @@ export class StreamChat {
 			this.listeners[key] = [];
 		}
 		this.listeners[key].push(callback);
+		return {
+			unsubscribe: () => {
+				this.listeners[key] = this.listeners[key].filter(el => el !== callback);
+			},
+		};
 	}
 
 	/**
@@ -544,7 +546,7 @@ export class StreamChat {
 		}
 	};
 
-	connect() {
+	async connect() {
 		this.connecting = true;
 		const client = this;
 		this.failures = 0;
@@ -555,10 +557,11 @@ export class StreamChat {
 			);
 		}
 		const params = {
-			client_id: client.clientID,
+			client_id: client.client_id,
 			user_id: client.userID,
 			user_details: client._user,
 			user_token: client.userToken,
+			server_determines_connection_id: true,
 		};
 		const qs = encodeURIComponent(JSON.stringify(params));
 		if (qs.length > 1900) {
@@ -587,9 +590,9 @@ export class StreamChat {
 			eventCallback: this.dispatchEvent,
 		});
 
-		this.wsPromise = this.wsConnection.connect();
-
-		return this.wsPromise;
+		const handshake = await this.wsConnection.connect();
+		this.connectionID = this.wsConnection.connectionID;
+		return handshake;
 	}
 
 	/**
@@ -617,12 +620,12 @@ export class StreamChat {
 			presence: true,
 		};
 
-		if (!this._hasClientID()) {
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.wsPromise;
+
+		if (!this._hasConnectionID()) {
 			defaultOptions.presence = false;
 		}
-
-		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
 
 		// Return a list of users
 		const data = await this.get(this.baseURL + '/users', {
@@ -650,7 +653,10 @@ export class StreamChat {
 			presence: false,
 		};
 
-		if (!this._hasClientID()) {
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.wsPromise;
+
+		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
 
@@ -662,9 +668,6 @@ export class StreamChat {
 			...defaultOptions,
 			...options,
 		};
-
-		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
 
 		const data = await this.get(this.baseURL + '/channels', {
 			payload,
@@ -696,7 +699,7 @@ export class StreamChat {
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await Promise.resolve(this.wsPromise);
+		await this.wsPromise;
 
 		const data = await this.get(this.baseURL + '/search', {
 			payload,
@@ -1017,7 +1020,7 @@ export class StreamChat {
 				user_id: this.userID,
 				...params,
 				api_key: this.key,
-				client_id: this.clientID,
+				connection_id: this.connectionID,
 			},
 			headers: { Authorization: token, 'stream-auth-type': this.getAuthType() },
 		};

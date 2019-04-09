@@ -1,5 +1,5 @@
 import uuidv4 from 'uuid/v4';
-import { getTestClient, getTestClientForUser, createUserToken } from './utils';
+import { getTestClient, getTestClientForUser, createUserToken, sleep } from './utils';
 import chai from 'chai';
 const expect = chai.expect;
 
@@ -56,6 +56,9 @@ describe('Channels - members', function() {
 
 	const tommasoChannelEventQueue = [];
 	const thierryChannelEventQueue = [];
+	let tommasoPromise;
+	let thierryPromise1;
+	let thierryPromise2;
 
 	let tommasoMessageID;
 
@@ -66,10 +69,15 @@ describe('Channels - members', function() {
 
 	it('tommaso creates a new channel', async function() {
 		tommasoChannel = tommasoClient.channel(channelGroup, channelId);
-		await tommasoChannel.watch();
-		tommasoChannel.on(event => {
-			tommasoChannelEventQueue.push(event);
+		tommasoPromise = new Promise(resolve => {
+			tommasoChannel.on(event => {
+				tommasoChannelEventQueue.push(event);
+				if (tommasoChannelEventQueue.length === 4) {
+					resolve();
+				}
+			});
 		});
+		await tommasoChannel.watch();
 	});
 
 	it(`tommaso tries to create a channel that's too large`, function(done) {
@@ -99,16 +107,10 @@ describe('Channels - members', function() {
 		}
 	});
 
-	it('thierry tries to join the channel', function(done) {
+	it('thierry tries to join the channel', async function() {
 		thierryChannel = thierryClient.channel(channelGroup, channelId);
-		thierryChannel
-			.watch()
-			.then(function() {
-				done('should fail');
-			})
-			.catch(function() {
-				done();
-			});
+		const p = thierryChannel.watch();
+		await expect(p).to.be.rejected;
 	});
 
 	it('tommaso adds thierry as channel member', async function() {
@@ -117,38 +119,44 @@ describe('Channels - members', function() {
 
 	it('thierry tries to join the channel', async function() {
 		thierryChannel = thierryClient.channel(channelGroup, channelId);
-		await thierryChannel.watch();
-		thierryChannel.on(event => {
-			thierryChannelEventQueue.push(event);
+		thierryPromise2 = new Promise(resolve2 => {
+			thierryPromise1 = new Promise(resolve1 => {
+				thierryChannel.on(event => {
+					thierryChannelEventQueue.push(event);
+					if (thierryChannelEventQueue.length === 2) {
+						resolve1();
+					}
+					if (thierryChannelEventQueue.length === 4) {
+						resolve2();
+					}
+				});
+			});
 		});
+		await thierryChannel.watch();
 	});
 
-	it('tommaso gets an event about Thierry joining', function(done) {
-		setTimeout(() => {
-			let event = tommasoChannelEventQueue.pop();
-			expect(event.type).to.eql('user.watching.start');
-			expect(event.user.id).to.eql(thierryID);
+	it('tommaso gets an event about Thierry joining', async function() {
+		await tommasoPromise;
+		let event = tommasoChannelEventQueue.pop();
+		expect(event.type).to.eql('user.watching.start');
+		expect(event.user.id).to.eql(thierryID);
 
-			event = tommasoChannelEventQueue.pop();
+		event = tommasoChannelEventQueue.pop();
 
-			expect(event.type).to.eql('channel.updated');
-			event = tommasoChannelEventQueue.pop();
-			expect(event.type).to.eql('member.added');
-			done();
-		}, 1000);
+		expect(event.type).to.eql('channel.updated');
+		event = tommasoChannelEventQueue.pop();
+		expect(event.type).to.eql('member.added');
 	});
 
 	it('tommaso posts a message', async function() {
 		await tommasoChannel.sendMessage(message);
 	});
 
-	it('thierry gets the new message from tommaso', function(done) {
-		setTimeout(() => {
-			const event = thierryChannelEventQueue.pop();
-			expect(event.type).to.eql('message.new');
-			tommasoMessageID = event.message.id;
-			done();
-		}, 1000);
+	it('thierry gets the new message from tommaso', async function() {
+		await thierryPromise1;
+		const event = thierryChannelEventQueue.pop();
+		expect(event.type).to.eql('message.new');
+		tommasoMessageID = event.message.id;
 	});
 
 	it('thierry tries to update the channel description', function(done) {

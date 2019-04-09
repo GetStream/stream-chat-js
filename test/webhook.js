@@ -9,15 +9,24 @@ const expect = chai.expect;
 describe('Webhooks', function() {
 	let server;
 	let lastMessage;
+	let lastMessagePromise;
 	let messages;
-	let tommasoID = `tommaso-${uuidv4()}`;
-	let thierryID = `thierry-${uuidv4()}`;
-	let channelID = `fun-${uuidv4()}`;
+	const tommasoID = `tommaso-${uuidv4()}`;
+	const thierryID = `thierry-${uuidv4()}`;
+	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 	let chan;
 
-	before(() => {
+	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
+
+		let resolver;
+		const createNewPromise = () => {
+			lastMessagePromise = new Promise(resolve => {
+				resolver = resolve;
+			});
+		};
+		createNewPromise();
 
 		server = http.createServer(function(req, res) {
 			let body = '';
@@ -34,18 +43,21 @@ describe('Webhooks', function() {
 				signature = req.headers['x-signature'];
 				// make sure the request signature is correct
 				expect(client.verifyWebhook(body, signature)).to.eq(true);
+				const oldResolver = resolver;
+				createNewPromise();
+				oldResolver();
 			});
 
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 		});
 
-		server.listen(43210);
-		client.updateUser({ id: thierryID });
-		return client.updateUser({ id: tommasoID }).then(() => {
-			client.updateAppSettings({
-				webhook_url: 'http://localhost:43210/',
-			});
+		server.listen(43210, '127.0.0.1');
+		await client.updateUser({ id: thierryID });
+		await client.updateUser({ id: tommasoID });
+		await client.updateAppSettings({
+			webhook_url: 'http://127.0.0.1:43210/',
 		});
+		await sleep(1000);
 	});
 
 	beforeEach(function() {
@@ -62,16 +74,20 @@ describe('Webhooks', function() {
 
 	it('should receive new message event', async function() {
 		await chan.create();
-		await chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } });
-		await sleep(200);
+		await Promise.all([
+			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('message.new');
 	});
 
 	it('should receive new message event with members included', async function() {
-		await chan.addMembers([tommasoID]);
-		await chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } });
-		await sleep(200);
+		await Promise.all([chan.addMembers([tommasoID]), lastMessagePromise]);
+		await Promise.all([
+			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('message.new');
 		expect(lastMessage.members).to.not.be.null;
@@ -87,15 +103,17 @@ describe('Webhooks', function() {
 	let messageResponse;
 
 	it('online status and unread_count should update', async function() {
-		let tommasoClient = await getTestClientForUser(tommasoID);
-		let tommasoChannel = tommasoClient.channel(chan.type, chan.id);
+		const tommasoClient = await getTestClientForUser(tommasoID);
+		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
 		await tommasoChannel.markRead();
-		messageResponse = await chan.sendMessage({
-			text: uuidv4(),
-			user: { id: tommasoID },
-		});
-		await sleep(200);
+		messageResponse = (await Promise.all([
+			chan.sendMessage({
+				text: uuidv4(),
+				user: { id: tommasoID },
+			}),
+			lastMessagePromise,
+		]))[0];
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.members[0].user).to.be.an('object');
 		expect(lastMessage.members[0].user.online).to.eq(true);
@@ -103,14 +121,16 @@ describe('Webhooks', function() {
 	});
 
 	it('message.update', async function() {
-		await client.updateMessage(
-			{
-				...messageResponse.message,
-				text: 'new stuff',
-			},
-			tommasoID,
-		);
-		await sleep(200);
+		await Promise.all([
+			client.updateMessage(
+				{
+					...messageResponse.message,
+					text: 'new stuff',
+				},
+				tommasoID,
+			),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.user).to.be.an('object');
 		expect(lastMessage.type).to.eq('message.updated');
@@ -119,33 +139,39 @@ describe('Webhooks', function() {
 		expect(lastMessage.message.text).to.eq('new stuff');
 	});
 
-	it('message.reaction when reaction is added', async function() {
-		await chan.sendReaction(messageResponse.message.id, {
-			type: 'lol',
-			user: { id: tommasoID },
-		});
-		await sleep(200);
+	it('reaction.new when reaction is added', async function() {
+		await Promise.all([
+			chan.sendReaction(messageResponse.message.id, {
+				type: 'lol',
+				user: { id: tommasoID },
+			}),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.user).to.be.an('object');
-		expect(lastMessage.type).to.eq('message.reaction');
+		expect(lastMessage.type).to.eq('reaction.new');
 		expect(lastMessage.message.reaction_counts).to.eql({ lol: 1 });
 	});
 
-	it('message.reaction when reaction is removed', async function() {
-		let tommasoClient = await getTestClientForUser(tommasoID);
-		let tommasoChannel = tommasoClient.channel(chan.type, chan.id);
+	it('reaction.deleted when reaction is removed', async function() {
+		const tommasoClient = await getTestClientForUser(tommasoID);
+		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
-		await tommasoChannel.deleteReaction(messageResponse.message.id, 'lol');
-		await sleep(200);
+		await Promise.all([
+			tommasoChannel.deleteReaction(messageResponse.message.id, 'lol'),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.user).to.be.an('object');
-		expect(lastMessage.type).to.eq('message.reaction');
+		expect(lastMessage.type).to.eq('reaction.deleted');
 		expect(lastMessage.message.reaction_counts).to.eql({});
 	});
 
 	it('message.deleted', async function() {
-		await client.deleteMessage(messageResponse.message.id);
-		await sleep(200);
+		await Promise.all([
+			client.deleteMessage(messageResponse.message.id),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('message.deleted');
 		expect(lastMessage.message.user).to.be.an('object');
@@ -153,31 +179,27 @@ describe('Webhooks', function() {
 	});
 
 	it('member.added', async function() {
-		await chan.addMembers([thierryID]);
-		await sleep(200);
+		await Promise.all([chan.addMembers([thierryID]), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('member.added');
 	});
 
 	it('member.updated', async function() {
-		await chan.addModerators([thierryID]);
-		await sleep(200);
+		await Promise.all([chan.addModerators([thierryID]), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(messages).to.have.length(1);
 		expect(lastMessage.type).to.eq('member.updated');
 	});
 
 	it('member.removed', async function() {
-		await chan.removeMembers([thierryID]);
-		await sleep(200);
+		await Promise.all([chan.removeMembers([thierryID]), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(messages).to.have.length(1);
 		expect(lastMessage.type).to.eq('member.removed');
 	});
 
 	it('channel.updated without message', async function() {
-		await chan.update({ awesome: 'yes' });
-		await sleep(200);
+		await Promise.all([chan.update({ awesome: 'yes' }), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(messages).to.have.length(1);
 		expect(lastMessage.type).to.eq('channel.updated');
@@ -185,11 +207,13 @@ describe('Webhooks', function() {
 	});
 
 	it('channel.updated with a message', async function() {
-		await chan.update(
-			{ awesome: 'yes yes' },
-			{ text: uuidv4(), custom_stuff: 'bananas', user: { id: tommasoID } },
-		);
-		await sleep(200);
+		await Promise.all([
+			chan.update(
+				{ awesome: 'yes yes' },
+				{ text: uuidv4(), custom_stuff: 'bananas', user: { id: tommasoID } },
+			),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(messages).to.have.length(1);
 		expect(lastMessage.type).to.eq('channel.updated');
@@ -199,8 +223,7 @@ describe('Webhooks', function() {
 	});
 
 	it('channel.deleted', async function() {
-		await chan.delete();
-		await sleep(200);
+		await Promise.all([chan.delete(), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('channel.deleted');
 	});

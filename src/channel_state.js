@@ -94,6 +94,66 @@ export class ChannelState {
 		}
 	}
 
+	addReaction(reaction, reaction_counts) {
+		const { messages } = this;
+		for (let i = 0; i < messages.length; i++) {
+			let message = messages[i];
+			const idMatch = message.id && message.id === reaction.message_id;
+
+			if (!idMatch) {
+				continue;
+			}
+			message = this._removeReactionFromMessage(message, reaction);
+			message = message.update('own_reactions', (old = []) =>
+				old.concat([reaction]),
+			);
+			message = message.update('latest_reactions', (old = []) =>
+				old.concat([reaction]),
+			);
+			if (reaction_counts) {
+				message = message.set('reaction_counts', reaction_counts);
+			} else {
+				message = message.updateIn(['reaction_counts', reaction.type], old =>
+					old ? old + 1 : 1,
+				);
+			}
+			this.messages = messages.set(i, message);
+			break;
+		}
+	}
+
+	_removeReactionFromMessage(message, reaction) {
+		const filterReaction = old =>
+			old.filter(
+				item => item.type !== reaction.type || item.user.id !== reaction.user.id,
+			);
+		message = message.update('own_reactions', filterReaction);
+		message = message.update('latest_reactions', filterReaction);
+		return message;
+	}
+
+	removeReaction(reaction, reaction_counts) {
+		const { messages } = this;
+		for (let i = 0; i < messages.length; i++) {
+			let message = messages[i];
+			const idMatch = message.id && message.id === reaction.message_id;
+
+			if (!idMatch) {
+				continue;
+			}
+			message = this._removeReactionFromMessage(message, reaction);
+			if (reaction_counts) {
+				message = message.set('reaction_counts', reaction_counts);
+			} else {
+				message = message.updateIn(['reaction_counts', reaction.type], old =>
+					old ? old - 1 : 0,
+				);
+			}
+			this.messages = messages.set(i, message);
+			break;
+		}
+	}
+
 	/**
 	 * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isnt found
 	 *

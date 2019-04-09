@@ -97,6 +97,8 @@ describe('Channels - Delete', function() {
 		expect(state.channel.deleted_at).to.be.undefined;
 		expect(state.channel.member_count).to.equal(2);
 		expect(state.messages.length).to.equal(0);
+		expect(state.channel.color).to.equal('green');
+		expect(state.channel.created_by.id).to.equal(client.user.id);
 	});
 
 	it('Update channel is not allowed to recover', async function() {

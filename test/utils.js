@@ -44,6 +44,36 @@ export function assertHTTPErrorCode(r, done, code) {
 	});
 }
 
+export async function expectHTTPErrorCode(code, request) {
+	let response;
+	try {
+		response = await request;
+	} catch (e) {
+		// check http status code
+		if (e.status === code) {
+			return;
+		}
+
+		// check status code in message
+		let message;
+		try {
+			message = JSON.parse(e.message);
+		} catch (e) {
+			// best effort json decoding
+		}
+		if (message && message.StatusCode === code) {
+			return;
+		}
+
+		// log error for easy debugging a test failure
+		console.log(e);
+		throw new Error(`status code is not ${code} but ${e.status}`);
+	}
+	// log response for easy debugging a test failure
+	console.log(response);
+	throw new Error('request should have failed');
+}
+
 export function runAndLogPromise(promiseCallable) {
 	promiseCallable()
 		.then(() => {})
