@@ -104,15 +104,16 @@ export class Channel {
 	/**
 	 * sendEvent - Send an event on this channel
 	 *
-	 * @param {object} chatEvent for example {type: 'message.read'}
+	 * @param {object} event for example {type: 'message.read'}
 	 *
 	 * @return {object} The Server Response
 	 */
-	async sendEvent(chatEvent) {
+	async sendEvent(event) {
 		this._checkInitialized();
 		const data = await this.client.post(this._channelURL() + '/event', {
-			event: chatEvent,
+			event,
 		});
+
 		return data;
 	}
 
@@ -332,7 +333,7 @@ export class Channel {
 	 *
 	 * @return {Promise} Description
 	 */
-	markRead() {
+	markRead(data = {}) {
 		this._checkInitialized();
 
 		if (!this.getConfig().read_events) {
@@ -345,12 +346,14 @@ export class Channel {
 			lastMessageCreatedAt = lastMessage.created_at;
 			lastMessageID = lastMessage.id;
 		}
-
-		return this.sendEvent({
+		const eventData = {
 			type: 'message.read',
-			lastMessageID,
-			lastMessageCreatedAt,
-		});
+			last_message_id: lastMessageID,
+			last_message_at: lastMessageCreatedAt,
+			...data,
+		};
+
+		return this.sendEvent(eventData);
 	}
 
 	/**

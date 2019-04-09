@@ -711,6 +711,68 @@ describe('Moderation', function() {
 	});
 });
 
+describe('Import via Webhook compat', function() {
+	// based on the use case that you are importing data to stream via
+	// a webhook integration...
+	const srvClient = getTestClient(true);
+
+	const channelID = uuidv4();
+	const created_by = { id: uuidv4() };
+
+	it('Created At should work', async function() {
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const response = await channel.sendMessage({
+			text: 'an old message',
+			created_at: '2017-04-08T17:36:10.540Z',
+			user: created_by,
+		});
+		expect(response.message.created_at).to.equal('2017-04-08T17:36:10.54Z');
+	});
+
+	it('Updated At should work', async function() {
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const response = await channel.sendMessage({
+			text: 'an old message',
+			updated_at: '2017-04-08T17:36:10.540Z',
+			user: created_by,
+		});
+		expect(response.message.updated_at).to.equal('2017-04-08T17:36:10.54Z');
+	});
+
+	it('Client side should raise an error', async function() {
+		const userID = uuidv4();
+		const userClient = await getTestClientForUser(userID);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.create();
+		const responsePromise = channel.sendMessage({
+			text: 'an old message',
+			created_at: '2017-04-08T17:36:10.540Z',
+			user: created_by,
+		});
+		await expect(responsePromise).to.be.rejectedWith(
+			'message.updated_at or message.created_at',
+		);
+	});
+
+	it('Mark Read should fail without a user', async function() {
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const responsePromise = channel.markRead();
+		await expect(responsePromise).to.be.rejectedWith(
+			'Please specify a user when sending an event server side',
+		);
+	});
+
+	it('Mark Read should work server side', async function() {
+		const userID = uuidv4();
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const response = await channel.markRead({ user: { id: userID } });
+	});
+});
+
 describe('User management', function() {
 	const srvClient = getTestClient(true);
 	const userClient = getTestClient(false);
