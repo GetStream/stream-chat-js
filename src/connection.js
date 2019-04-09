@@ -75,7 +75,6 @@ export class StableWSConnection {
 		try {
 			this.isConnecting = true;
 			healthCheck = await this._connect();
-			this.connectionID = healthCheck.connection_id;
 			this.isConnecting = false;
 			this.consecutiveFailures = 0;
 			this._startMonitor();
@@ -137,7 +136,7 @@ export class StableWSConnection {
 	 *
 	 * @return {promise} Promise that completes once the first health check message is received
 	 */
-	_connect() {
+	async _connect() {
 		this._setupConnectionPromise();
 		this.ws = new isoWS(this.wsURL);
 		this.ws.onopen = this.onopen.bind(this, this.wsID);
@@ -145,7 +144,10 @@ export class StableWSConnection {
 		this.ws.onerror = this.onerror.bind(this, this.wsID);
 		this.ws.onmessage = this.onmessage.bind(this, this.wsID);
 
-		return this.connectionOpen;
+		const response = await this.connectionOpen;
+		this.connectionID = response.connection_id;
+
+		return response;
 	}
 
 	/**

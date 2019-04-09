@@ -524,6 +524,7 @@ export class StreamChat {
 	}
 
 	recoverState = async () => {
+		this.connectionID = this.wsConnection.connectionID;
 		const cids = Object.keys(this.activeChannels || {});
 		const lastMessageIDs = {};
 		for (const c of Object.values(this.activeChannels)) {
