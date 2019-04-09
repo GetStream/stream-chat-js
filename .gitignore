@@ -63,3 +63,5 @@ typings/
 .DS_Store
 /dist/
 .tern-port
+
+/.vscode
