@@ -708,7 +708,7 @@ export class Channel {
 				this.state.read = this.state.read.set(this.client.user.id, new Date(0));
 			}
 			for (const read of state.read) {
-				const parsedRead = Object.assign({...read});
+				const parsedRead = Object.assign({ ...read });
 				parsedRead.last_read = new Date(read.last_read);
 				this.state.read = this.state.read.set(read.user.id, parsedRead);
 			}
