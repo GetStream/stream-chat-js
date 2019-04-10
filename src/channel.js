@@ -704,8 +704,13 @@ export class Channel {
 			}
 		}
 		if (state.read) {
+			if (this.client.userID != null) {
+				this.state.read = this.state.read.set(this.client.user.id, new Date(0));
+			}
 			for (const read of state.read) {
-				this.state.read = this.state.read.set(read.user.id, read);
+				const parsedRead = Object.assign({...read});
+				parsedRead.last_read = new Date(read.last_read);
+				this.state.read = this.state.read.set(read.user.id, parsedRead);
 			}
 		}
 		if (state.members) {
