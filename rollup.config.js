@@ -18,7 +18,6 @@ process.env.NODE_ENV = 'production';
 const externalPackages = [
 	'axios',
 	'cross-fetch',
-	'crypto',
 	'form-data',
 	'isomorphic-ws',
 	'lodash',
@@ -72,7 +71,7 @@ const normalBundle = {
 			sourcemap: true,
 		},
 	],
-	external: externalPackages.concat(['http', 'https', 'jsonwebtoken']),
+	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
 	plugins: [
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
