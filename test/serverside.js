@@ -6,14 +6,24 @@ import {
 	getTestClientForUser,
 	sleep,
 } from './utils';
-import { AllowAll, DenyAll } from '../src/permissions';
+import {
+	AllowAll,
+	DenyAll,
+	Permission,
+	AnyResource,
+	AnyRole,
+	Allow,
+} from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import fs from 'fs';
+import chaiLike from 'chai-like';
 import chaiAsPromised from 'chai-as-promised';
+import chaiSorted from 'chai-sorted';
 
-chai.use(require('chai-like'));
+chai.use(chaiLike);
 chai.use(chaiAsPromised);
+chai.use(chaiSorted);
 
 const expect = chai.expect;
 
@@ -825,10 +835,50 @@ describe('Channel types', function() {
 
 		it('should have the default permissions', function() {
 			expect(newChannelType.permissions).to.have.length(7);
+			expect(newChannelType.permissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
 		});
 
 		it('should fail to create an already existing type', async function() {
 			await expectHTTPErrorCode(400, client.createChannelType({ name: newType }));
+		});
+
+		it('permissions should be created', async function() {
+			const name = uuidv4();
+			const permissions = [
+				new Permission(uuidv4(), 20, AnyResource, AnyRole, false, Allow),
+				new Permission(uuidv4(), 32, AnyResource, AnyRole, false, Allow),
+				new Permission(uuidv4(), 2, AnyResource, AnyRole, false, Allow),
+			];
+			const newChanType = await client.createChannelType({
+				name,
+				permissions,
+				commands: ['all'],
+			});
+			await sleep(500);
+
+			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
+
+			const expectedData = {
+				automod: 'AI',
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				connect_events: true,
+				max_message_length: 5000,
+				message_retention: 'infinite',
+				mutes: true,
+				name: `${name}`,
+				reactions: true,
+				replies: true,
+				search: true,
+				read_events: true,
+				typing_events: true,
+				permissions,
+			};
+			expect(newChanType).like(expectedData);
+			expect(newChanType.permissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
 		});
 	});
 
@@ -848,6 +898,9 @@ describe('Channel types', function() {
 			});
 			channelPermissions = channelType.permissions;
 			expect(channelPermissions).to.have.length(7);
+			expect(channelPermissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
 			await sleep(1000);
 		});
 
@@ -915,9 +968,18 @@ describe('Channel types', function() {
 
 		it('changing permissions', async function() {
 			const response = await client.updateChannelType(channelTypeName, {
-				permissions: [AllowAll, DenyAll],
+				permissions: [
+					AllowAll,
+					DenyAll,
+					new Permission(uuidv4(), 20, AnyResource, AnyRole, false, Allow),
+					new Permission(uuidv4(), 32, AnyResource, AnyRole, false, Allow),
+					new Permission(uuidv4(), 2, AnyResource, AnyRole, false, Allow),
+				],
 			});
-			expect(response.permissions).to.have.length(2);
+			expect(response.permissions).to.have.length(5);
+			expect(response.permissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
 		});
 
 		it('changing commands to a bad one', async function() {
@@ -1006,6 +1068,9 @@ describe('Channel types', function() {
 
 		it('should have default permissions', function() {
 			expect(channelData.permissions).to.have.length(7);
+			expect(channelData.permissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
 			expect(channelData.permissions[0].action).to.eq('Allow');
 			expect(channelData.permissions[1].action).to.eq('Deny');
 		});
@@ -1076,6 +1141,12 @@ describe('Channel types', function() {
 
 		it('default messaging channel type should have default permissions', function() {
 			expect(channelTypes.channel_types.messaging.permissions).to.have.length(7);
+			expect(channelTypes.channel_types.messaging.permissions).to.be.sortedBy(
+				'priority',
+				{
+					descending: true,
+				},
+			);
 		});
 
 		it('should return configs correctly for channel type messaging', function() {
