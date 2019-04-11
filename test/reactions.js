@@ -10,6 +10,7 @@ import {
 	getTestClient,
 	getTestClientForUser,
 	getTestClientForUser2,
+	expectHTTPErrorCode,
 	sleep,
 } from './utils';
 import uuidv4 from 'uuid/v4';
@@ -101,11 +102,13 @@ describe('Reactions', function() {
 
 	it('Size constraints', async function() {
 		const message = await getTestMessage('Whatever bro', channel);
-		const p = channel.sendReaction(message.id, {
-			type: 'love',
-			extra: 'x'.repeat(256),
-		});
-		await expect(p).to.be.rejected;
+		await expectHTTPErrorCode(
+			400,
+			channel.sendReaction(message.id, {
+				type: 'love',
+				extra: 'x'.repeat(256),
+			}),
+		);
 	});
 
 	it('Remove a reaction', async function() {
@@ -251,14 +254,18 @@ describe('Reactions', function() {
 		const data = await disabledChannel.sendMessage({ text, user });
 		const messageID = data.message.id;
 		expect(data.message.text).to.equal('nada');
-		const reply = disabledChannel.sendReaction(messageID, {
-			type: 'love',
-			user,
-		});
-		await expect(reply).to.be.rejected;
+		await expectHTTPErrorCode(
+			400,
+			disabledChannel.sendReaction(messageID, {
+				type: 'love',
+				user,
+			}),
+		);
 
 		//listing reactions
-		const response = disabledChannel.getReactions(messageID, { limit: 3 });
-		await expect(response).to.be.rejected;
+		await expectHTTPErrorCode(
+			400,
+			disabledChannel.getReactions(messageID, { limit: 3 }),
+		);
 	});
 });

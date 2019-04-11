@@ -3,7 +3,6 @@ import {
 	createUsers,
 	createUserToken,
 	expectHTTPErrorCode,
-	assertHTTPErrorCode,
 	getTestClientForUser,
 	sleep,
 } from './utils';
@@ -145,12 +144,12 @@ describe('App configs', function() {
 	});
 
 	it('Using a tampered token fails because of auth enabled', async function() {
-		await expect(client2.setUser(user, userToken)).to.be.rejected;
+		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
 		client2.disconnect();
 	});
 
 	it('Using dev token fails because of auth enabled', async function() {
-		await expect(client2.setUser(user, client2.devToken(user.id))).to.be.rejected;
+		await expectHTTPErrorCode(401, client2.setUser(user, client2.devToken(user.id)));
 		client2.disconnect();
 	});
 
@@ -191,14 +190,12 @@ describe('App configs', function() {
 		await sleep(1000);
 	});
 
-	it('A user cannot do super stuff because permission checks are back on', function(done) {
-		getTestClientForUser(uuidv4()).then(client => {
-			client
-				.channel('messaging', 'secret-place')
-				.watch()
-				.then(() => done('should have failed'))
-				.catch(() => done());
-		});
+	it('A user cannot do super stuff because permission checks are back on', async function() {
+		const client = await getTestClientForUser(uuidv4());
+		await expectHTTPErrorCode(
+			403,
+			client.channel('messaging', 'secret-place').watch(),
+		);
 	});
 
 	it('Re-enable auth checks', async function() {
@@ -209,35 +206,32 @@ describe('App configs', function() {
 	});
 
 	it('Using a tampered token fails because auth is back on', async function() {
-		await expect(client2.setUser(user, userToken)).to.be.rejected;
+		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
 		client2.disconnect();
 	});
 
 	describe('Push notifications', function() {
 		describe('APN', function() {
-			it('Adding bad apn certificate config', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding bad apn certificate config', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'certificate',
 							p12_cert: 'boogus',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding good apn certificate config', function(done) {
-				client
-					.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: fs.readFileSync(
-								'./test/push_test/stream-push-test.p12',
-							),
-						},
-					})
-					.then(() => done())
-					.catch(e => done(`should not have failed ${e}`));
+			it('Adding good apn certificate config', async function() {
+				await client.updateAppSettings({
+					apn_config: {
+						auth_type: 'certificate',
+						p12_cert: fs.readFileSync(
+							'./test/push_test/stream-push-test.p12',
+						),
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -251,9 +245,10 @@ describe('App configs', function() {
 					host: 'https://api.development.push.apple.com',
 				});
 			});
-			it('Adding bad apn invalid template', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding bad apn invalid template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'certificate',
 							p12_cert: fs.readFileSync(
@@ -261,13 +256,13 @@ describe('App configs', function() {
 							),
 							notification_template: '{ {{ } }',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding bad apn message is not a valid JSON', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding bad apn message is not a valid JSON', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'certificate',
 							p12_cert: fs.readFileSync(
@@ -275,13 +270,13 @@ describe('App configs', function() {
 							),
 							notification_template: '{{ message.id }}',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding bad apn token', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding bad apn token', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'token',
 							bundle_id: 'com.apple.test',
@@ -289,13 +284,13 @@ describe('App configs', function() {
 							key_id: 'keykey',
 							team_id: 'sfd',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding incomplete token data: no bundle_id', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding incomplete token data: no bundle_id', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'token',
 							auth_key: fs.readFileSync(
@@ -306,13 +301,13 @@ describe('App configs', function() {
 							team_id: 'sfd',
 							bundle_id: '',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding incomplete token data: no key_id', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding incomplete token data: no key_id', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'token',
 							auth_key: fs.readFileSync(
@@ -323,13 +318,13 @@ describe('App configs', function() {
 							bundle_id: 'bundly',
 							team_id: 'sfd',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding incomplete token data: no team', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding incomplete token data: no team', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							auth_type: 'token',
 							auth_key: fs.readFileSync(
@@ -340,26 +335,22 @@ describe('App configs', function() {
 							bundle_id: 'sfd',
 							team_id: '',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding good apn token', function(done) {
-				client
-					.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
-							key_id: 'keykey',
-							bundle_id: 'com.apple.test',
-							team_id: 'sfd',
-						},
-					})
-					.then(() => done())
-					.catch(e => done(`should not have failed ${e}`));
+			it('Adding good apn token', async function() {
+				await client.updateAppSettings({
+					apn_config: {
+						auth_type: 'token',
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: 'keykey',
+						bundle_id: 'com.apple.test',
+						team_id: 'sfd',
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -375,23 +366,20 @@ describe('App configs', function() {
 					key_id: 'keykey',
 				});
 			});
-			it('Adding good apn token in dev mode', function(done) {
-				client
-					.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
-							key_id: 'keykey',
-							bundle_id: 'com.apple.test',
-							team_id: 'sfd',
-							development: true,
-						},
-					})
-					.then(() => done())
-					.catch(() => done('should not have failed'));
+			it('Adding good apn token in dev mode', async function() {
+				await client.updateAppSettings({
+					apn_config: {
+						auth_type: 'token',
+						auth_key: fs.readFileSync(
+							'./test/push_test/push-test-auth-key.p8',
+							'utf-8',
+						),
+						key_id: 'keykey',
+						bundle_id: 'com.apple.test',
+						team_id: 'sfd',
+						development: true,
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -407,15 +395,12 @@ describe('App configs', function() {
 					host: 'https://api.development.push.apple.com',
 				});
 			});
-			it('Disable APN', function(done) {
-				client
-					.updateAppSettings({
-						apn_config: {
-							disabled: true,
-						},
-					})
-					.then(() => done())
-					.catch(e => done(`should not have failed ${e}`));
+			it('Disable APN', async function() {
+				await client.updateAppSettings({
+					apn_config: {
+						disabled: true,
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -429,48 +414,46 @@ describe('App configs', function() {
 			});
 		});
 		describe('Firebase', function() {
-			it('Adding bad template', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding bad template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						firebase_config: {
 							notification_template: '{ {{ } }',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding invalid json template', function(done) {
-				client
-					.updateAppSettings({
+
+			it('Adding invalid json template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						apn_config: {
 							notification_template: '{{ message.id }}',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding invalid server key', function(done) {
-				client
-					.updateAppSettings({
+			it('Adding invalid server key', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
 						firebase_config: {
 							server_key: 'asdasd',
 							notification_template: '{ }',
 						},
-					})
-					.then(() => done('should have failed'))
-					.catch(() => done());
+					}),
+				);
 			});
-			it('Adding good server key', function(done) {
-				client
-					.updateAppSettings({
-						firebase_config: {
-							server_key:
-								'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
-							notification_template: '{ }',
-						},
-					})
-					.then(() => done())
-					.catch(() => done('should not have failed'));
+			it('Adding good server key', async function() {
+				await client.updateAppSettings({
+					firebase_config: {
+						server_key:
+							'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+						notification_template: '{ }',
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -481,15 +464,12 @@ describe('App configs', function() {
 					enabled: true,
 				});
 			});
-			it('Disable firebase', function(done) {
-				client
-					.updateAppSettings({
-						firebase_config: {
-							disabled: true,
-						},
-					})
-					.then(() => done())
-					.catch(e => done(`should not have failed ${e}`));
+			it('Disable firebase', async function() {
+				await client.updateAppSettings({
+					firebase_config: {
+						disabled: true,
+					},
+				});
 			});
 			it('Describe app settings', async function() {
 				const response = await client.getAppSettings();
@@ -632,12 +612,10 @@ describe('Devices', function() {
 
 	describe('No user id provided', function() {
 		it(`can't add devices`, async function() {
-			const p = client.addDevice(deviceId, 'apn');
-			await expect(p).to.be.rejected;
+			await expectHTTPErrorCode(400, client.addDevice(deviceId, 'apn'));
 		});
 		it(`cant't list devices`, async function() {
-			const p = client.getDevices();
-			await expect(p).to.be.rejected;
+			await expectHTTPErrorCode(400, client.getDevices());
 		});
 	});
 
@@ -675,8 +653,7 @@ describe('Moderation', function() {
 
 	describe('Mutes', function() {
 		it('source user not set', async function() {
-			const p = srvClient.muteUser(targetUser);
-			await expect(p).to.be.rejected;
+			await expectHTTPErrorCode(400, srvClient.muteUser(targetUser));
 		});
 		it('source user set', async function() {
 			const data = await srvClient.muteUser(targetUser, srcUser);
@@ -695,8 +672,7 @@ describe('Moderation', function() {
 
 	describe('Unmutes', function() {
 		it('source user not set', async function() {
-			const p = srvClient.unmuteUser(targetUser);
-			await expect(p).to.be.rejected;
+			await expectHTTPErrorCode(400, srvClient.unmuteUser(targetUser));
 		});
 		it('source user set', async function() {
 			await srvClient.unmuteUser(targetUser, srcUser);
@@ -851,9 +827,8 @@ describe('Channel types', function() {
 			expect(newChannelType.permissions).to.have.length(7);
 		});
 
-		it('should fail to create an already existing type', function(done) {
-			const p = client.createChannelType({ name: newType });
-			assertHTTPErrorCode(p, done, 400);
+		it('should fail to create an already existing type', async function() {
+			await expectHTTPErrorCode(400, client.createChannelType({ name: newType }));
 		});
 	});
 
@@ -861,9 +836,8 @@ describe('Channel types', function() {
 		let channelType, channelTypeName;
 		let channelPermissions;
 
-		it('updating a not existing one should fail', function(done) {
-			const p = client.updateChannelType(`${uuidv4()}`, {});
-			assertHTTPErrorCode(p, done, 404);
+		it('updating a not existing one should fail', async function() {
+			await expectHTTPErrorCode(404, client.updateChannelType(`${uuidv4()}`, {}));
 		});
 
 		it('create a new one with defaults', async function() {
@@ -877,40 +851,31 @@ describe('Channel types', function() {
 			await sleep(1000);
 		});
 
-		it('defaults should be there via channel.watch', function(done) {
-			getTestClientForUser('tommaso')
-				.then(client => {
-					client
-						.channel(channelTypeName, 'test')
-						.watch()
-						.then(data => {
-							const expectedData = {
-								automod: 'AI',
-								commands: [
-									{
-										args: '[@username] [text]',
-										description: 'Ban a user',
-										name: 'ban',
-										set: 'moderation_set',
-									},
-								],
-								connect_events: true,
-								max_message_length: 5000,
-								message_retention: 'infinite',
-								mutes: true,
-								name: `${channelTypeName}`,
-								reactions: true,
-								replies: true,
-								search: true,
-								read_events: true,
-								typing_events: true,
-							};
-							expect(data.channel.config).like(expectedData);
-							done();
-						})
-						.catch(e => done(e));
-				})
-				.catch(e => done(e));
+		it('defaults should be there via channel.watch', async function() {
+			const client = await getTestClientForUser('tommaso');
+			const data = await client.channel(channelTypeName, 'test').watch();
+			const expectedData = {
+				automod: 'AI',
+				commands: [
+					{
+						args: '[@username] [text]',
+						description: 'Ban a user',
+						name: 'ban',
+						set: 'moderation_set',
+					},
+				],
+				connect_events: true,
+				max_message_length: 5000,
+				message_retention: 'infinite',
+				mutes: true,
+				name: `${channelTypeName}`,
+				reactions: true,
+				replies: true,
+				search: true,
+				read_events: true,
+				typing_events: true,
+			};
+			expect(data.channel.config).like(expectedData);
 		});
 
 		it('flip replies config to false', async function() {
@@ -994,9 +959,8 @@ describe('Channel types', function() {
 	describe('Deleting channel types', function() {
 		const name = uuidv4();
 
-		it('should fail to delete a missing type', function(done) {
-			const p = client.deleteChannelType(uuidv4());
-			assertHTTPErrorCode(p, done, 404);
+		it('should fail to delete a missing type', async function() {
+			await expectHTTPErrorCode(404, client.deleteChannelType(uuidv4()));
 		});
 
 		it('should work fine', async function() {
@@ -1006,9 +970,8 @@ describe('Channel types', function() {
 			await sleep(1000);
 		});
 
-		it('should fail to delete a deleted type', function(done) {
-			const p = client.deleteChannelType(name);
-			assertHTTPErrorCode(p, done, 404);
+		it('should fail to delete a deleted type', async function() {
+			await expectHTTPErrorCode(404, client.deleteChannelType(name));
 		});
 
 		describe('deleting a channel type with active channels should fail', function() {
@@ -1024,9 +987,8 @@ describe('Channel types', function() {
 				await tClient.channel(typeName, 'general').watch();
 			});
 
-			it('create a channel of the new type', function(done) {
-				const p = client.deleteChannelType(typeName);
-				assertHTTPErrorCode(p, done, 400);
+			it('create a channel of the new type', async function() {
+				await expectHTTPErrorCode(400, client.deleteChannelType(typeName));
 			});
 		});
 	});
@@ -1034,29 +996,21 @@ describe('Channel types', function() {
 	describe('Get channel type', function() {
 		let channelData;
 
-		it('should fail to get a missing type', function(done) {
-			const p = client.getChannelType(uuidv4());
-			assertHTTPErrorCode(p, done, 404);
+		it('should fail to get a missing type', async function() {
+			await expectHTTPErrorCode(404, client.getChannelType(uuidv4()));
 		});
 
-		it('should return messaging type correctly', function(done) {
-			client
-				.getChannelType('messaging')
-				.then(response => {
-					channelData = response;
-					done();
-				})
-				.catch(done);
+		it('should return messaging type correctly', async function() {
+			channelData = await client.getChannelType('messaging');
 		});
 
-		it('should have default permissions', function(done) {
+		it('should have default permissions', function() {
 			expect(channelData.permissions).to.have.length(7);
 			expect(channelData.permissions[0].action).to.eq('Allow');
 			expect(channelData.permissions[1].action).to.eq('Deny');
-			done();
 		});
 
-		it('should return configs correctly', function(done) {
+		it('should return configs correctly', function() {
 			const expectedData = {
 				automod: 'disabled',
 				commands: [
@@ -1109,30 +1063,22 @@ describe('Channel types', function() {
 				typing_events: true,
 			};
 			expect(channelData).like(expectedData);
-			done();
 		});
 	});
 
 	describe('List channel types', function() {
 		let channelTypes;
 
-		it('should return at least the defaults channel types', function(done) {
-			client
-				.listChannelTypes()
-				.then(response => {
-					channelTypes = response;
-					expect(Object.keys(channelTypes.channel_types).length).to.gte(10);
-					done();
-				})
-				.catch(done);
+		it('should return at least the defaults channel types', async function() {
+			channelTypes = await client.listChannelTypes();
+			expect(Object.keys(channelTypes.channel_types).length).to.gte(10);
 		});
 
-		it('default messaging channel type should have default permissions', function(done) {
+		it('default messaging channel type should have default permissions', function() {
 			expect(channelTypes.channel_types.messaging.permissions).to.have.length(7);
-			done();
 		});
 
-		it('should return configs correctly for channel type messaging', function(done) {
+		it('should return configs correctly for channel type messaging', function() {
 			const expectedData = {
 				automod: 'disabled',
 				commands: [
@@ -1185,7 +1131,6 @@ describe('Channel types', function() {
 				typing_events: true,
 			};
 			expect(channelTypes.channel_types.messaging).like(expectedData);
-			done();
 		});
 	});
 
@@ -1196,19 +1141,16 @@ describe('Channel types', function() {
 			client2 = await getTestClientForUser('tommaso');
 		});
 
-		it('should fail to create', function(done) {
-			const p = client2.createChannelType({ name: uuidv4() });
-			assertHTTPErrorCode(p, done, 403);
+		it('should fail to create', async function() {
+			await expectHTTPErrorCode(403, client2.createChannelType({ name: uuidv4() }));
 		});
 
-		it('should fail to delete', function(done) {
-			const p = client2.deleteChannelType('messaging');
-			assertHTTPErrorCode(p, done, 403);
+		it('should fail to delete', async function() {
+			await expectHTTPErrorCode(403, client2.deleteChannelType('messaging'));
 		});
 
-		it('should fail to update', function(done) {
-			const p = client2.updateChannelType('messaging', {});
-			assertHTTPErrorCode(p, done, 403);
+		it('should fail to update', async function() {
+			await expectHTTPErrorCode(403, client2.updateChannelType('messaging', {}));
 		});
 	});
 });

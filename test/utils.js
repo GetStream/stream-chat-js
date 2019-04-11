@@ -38,36 +38,31 @@ export function sleep(ms) {
 	});
 }
 
-export function assertHTTPErrorCode(r, done, code) {
-	r.then(() => done('should fail')).catch(e => {
-		e.status === code ? done() : done(`status code is not ${code} but ${e.status}`);
-	});
-}
-
 export async function expectHTTPErrorCode(code, request) {
 	let response;
 	try {
 		response = await request;
 	} catch (e) {
 		// check http status code
-		if (e.status === code) {
-			return;
-		}
+		let actualCode = e.status;
 
-		// check status code in message
-		let message;
-		try {
-			message = JSON.parse(e.message);
-		} catch (e) {
-			// best effort json decoding
+		if (!actualCode) {
+			// if no http status code get code from message message
+			let message;
+			try {
+				message = JSON.parse(e.message);
+			} catch (e) {
+				// best effort json decoding
+			}
+			actualCode = message && message.StatusCode;
 		}
-		if (message && message.StatusCode === code) {
+		if (actualCode === code) {
 			return;
 		}
 
 		// log error for easy debugging a test failure
 		console.log(e);
-		throw new Error(`status code is not ${code} but ${e.status}`);
+		throw new Error(`status code is not ${code} but ${actualCode}`);
 	}
 	// log response for easy debugging a test failure
 	console.log(response);

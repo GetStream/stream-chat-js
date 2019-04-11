@@ -1,17 +1,11 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
-import fs from 'fs';
 
 import {
-	createUserToken,
-	getTestClient,
 	getTestClientForUser,
-	runAndLogPromise,
+	expectHTTPErrorCode,
 	getServerTestClient,
 	createUsers,
-	sleep,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -162,10 +156,12 @@ describe('Member style channel init', () => {
 		await messageReceived;
 		await notificationReceived;
 		// second time should fail...
-		const promise = nickChannel.acceptInvite({
-			message: { text: 'Nick accepted the chat invite.' },
-		});
-		await expect(promise).to.be.rejected;
+		await expectHTTPErrorCode(
+			400,
+			nickChannel.acceptInvite({
+				message: { text: 'Nick accepted the chat invite.' },
+			}),
+		);
 	});
 
 	it('Reject an invite', async () => {
@@ -188,7 +184,6 @@ describe('Member style channel init', () => {
 		expect(response.members[1].invite_rejected_at).to.not.equal(null);
 		await updateReceived;
 		// second time should fail...
-		const promise = nickChannel.rejectInvite();
-		await expect(promise).to.be.rejected;
+		await expectHTTPErrorCode(400, nickChannel.rejectInvite());
 	});
 });
