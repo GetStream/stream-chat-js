@@ -20,6 +20,7 @@ import http from 'http';
 import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
+import pkg from '../package.json';
 
 function isReadableStream(obj) {
 	return (
@@ -988,9 +989,9 @@ export class StreamChat {
 	}
 
 	_userAgent() {
-		const description = this.node ? 'node' : 'browser';
-		const version = '1.0';
-		return `stream-chat-${description}-${version}`;
+		return `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${
+			pkg.version
+		}`;
 	}
 
 	/**
@@ -1023,7 +1024,11 @@ export class StreamChat {
 				api_key: this.key,
 				connection_id: this.connectionID,
 			},
-			headers: { Authorization: token, 'stream-auth-type': this.getAuthType() },
+			headers: {
+				Authorization: token,
+				'stream-auth-type': this.getAuthType(),
+				'x-stream-client': this._userAgent(),
+			},
 		};
 	}
 
