@@ -1,5 +1,10 @@
 import uuidv4 from 'uuid/v4';
-import { getTestClient, getTestClientForUser, createUserToken, sleep } from './utils';
+import {
+	getTestClient,
+	getTestClientForUser,
+	createUserToken,
+	expectHTTPErrorCode,
+} from './utils';
 import chai from 'chai';
 const expect = chai.expect;
 
@@ -80,37 +85,29 @@ describe('Channels - members', function() {
 		await tommasoChannel.watch();
 	});
 
-	it(`tommaso tries to create a channel that's too large`, function(done) {
-		const chan = tommasoClient.channel(channelGroup, `big-boy-${uuidv4()}`, {
-			stuff: 'x'.repeat(6 * 1024),
-		});
-		chan.create()
-			.then(function() {
-				done('should fail');
-			})
-			.catch(function() {
-				done();
-			});
+	it(`tommaso tries to create a channel that's too large`, async function() {
+		await expectHTTPErrorCode(
+			400,
+			tommasoClient
+				.channel(channelGroup, `big-boy-${uuidv4()}`, {
+					stuff: 'x'.repeat(6 * 1024),
+				})
+				.create(),
+		);
 	});
 
 	it(`tommaso tries to create a channel with a reserved character`, async function() {
-		const chan = tommasoClient.channel(channelGroup, `!${channelId}`);
-		let failed = true;
-		try {
-			await chan.watch();
-			failed = false;
-		} catch (e) {
-			// failure is expected
-		}
-		if (!failed) {
-			expect.fail('should have failed');
-		}
+		await expectHTTPErrorCode(
+			400,
+			tommasoClient.channel(channelGroup, `!${channelId}`).watch(),
+		);
 	});
 
 	it('thierry tries to join the channel', async function() {
-		thierryChannel = thierryClient.channel(channelGroup, channelId);
-		const p = thierryChannel.watch();
-		await expect(p).to.be.rejected;
+		await expectHTTPErrorCode(
+			403,
+			thierryClient.channel(channelGroup, channelId).watch(),
+		);
 	});
 
 	it('tommaso adds thierry as channel member', async function() {
@@ -142,7 +139,6 @@ describe('Channels - members', function() {
 		expect(event.user.id).to.eql(thierryID);
 
 		event = tommasoChannelEventQueue.pop();
-
 		expect(event.type).to.eql('channel.updated');
 		event = tommasoChannelEventQueue.pop();
 		expect(event.type).to.eql('member.added');
@@ -159,11 +155,11 @@ describe('Channels - members', function() {
 		tommasoMessageID = event.message.id;
 	});
 
-	it('thierry tries to update the channel description', function(done) {
-		thierryChannel
-			.update({ description: 'taking over this channel now!' })
-			.then(() => done('should fail'))
-			.catch(() => done());
+	it('thierry tries to update the channel description', async function() {
+		await expectHTTPErrorCode(
+			403,
+			thierryChannel.update({ description: 'taking over this channel now!' }),
+		);
 	});
 
 	it('tommaso updates the channel description', async function() {
@@ -177,11 +173,14 @@ describe('Channels - members', function() {
 		});
 	});
 
-	it('thierry tries to update tommaso message', function(done) {
-		thierryClient
-			.updateMessage({ id: tommasoMessageID, text: 'I mean, awesome chat' })
-			.then(() => done('should fail'))
-			.catch(() => done());
+	it('thierry tries to update tommaso message', async function() {
+		await expectHTTPErrorCode(
+			403,
+			thierryClient.updateMessage({
+				id: tommasoMessageID,
+				text: 'I mean, awesome chat',
+			}),
+		);
 	});
 
 	it('thierry mutes himself', async function() {

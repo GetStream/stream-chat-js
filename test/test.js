@@ -259,14 +259,17 @@ describe('Chat', function() {
 
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				let p = client.addDevice(deviceId, 'apn');
-				await expect(p).to.be.rejected;
+				const errorMsg =
+					'Both secret and user tokens are not set, did you forget to call client.setUser?';
+				await expect(client.addDevice(deviceId, 'apn')).to.be.rejectedWith(
+					errorMsg,
+				);
 
-				p = client.getDevices();
-				await expect(p).to.be.rejected;
+				await expect(client.getDevices()).to.be.rejectedWith(errorMsg);
 
-				p = client.removeDevice(wontBeRemoved);
-				await expect(p).to.be.rejected;
+				await expect(client.removeDevice(wontBeRemoved)).to.be.rejectedWith(
+					errorMsg,
+				);
 			});
 		});
 
@@ -316,8 +319,7 @@ describe('Chat', function() {
 			});
 			describe('Removing', function() {
 				it(`can't remove someone else's device`, async function() {
-					const p = client.removeDevice(wontBeRemoved);
-					await expect(p).to.be.rejected;
+					await expectHTTPErrorCode(404, client.removeDevice(wontBeRemoved));
 				});
 				it(`can only remove own device`, async function() {
 					await client.removeDevice(deviceId);
@@ -325,12 +327,10 @@ describe('Chat', function() {
 					expect(response.devices.length).to.equal(0);
 				});
 				it(`can't delete already deleted devices`, async function() {
-					const p = client.removeDevice(deviceId);
-					await expect(p).to.be.rejected;
+					await expectHTTPErrorCode(404, client.removeDevice(deviceId));
 				});
 				it(`can't delete devices with bogus ids`, async function() {
-					const p = client.removeDevice('totes fake');
-					await expect(p).to.be.rejected;
+					await expectHTTPErrorCode(404, client.removeDevice('totes fake'));
 				});
 			});
 		});
@@ -494,13 +494,15 @@ describe('Chat', function() {
 			done();
 		});
 
-		it('Invalid secret should fail setUser', function() {
+		it('Invalid secret should fail setUser', async function() {
 			const client3 = new StreamChat('892s22ypvt6m', 'invalidsecret');
-			const connectPromise = client3.setUser({
-				id: 'daenerys',
-				name: 'Mother of dragons',
-			});
-			expect(connectPromise).to.be.rejected;
+			await expectHTTPErrorCode(
+				401,
+				client3.setUser({
+					id: 'daenerys',
+					name: 'Mother of dragons',
+				}),
+			);
 		});
 	});
 
@@ -927,13 +929,12 @@ describe('Chat', function() {
 
 		describe('Fail', () => {
 			// empty message
-			it('Add a Chat message with a wrong custom field', function() {
+			it('Add a Chat message with a wrong custom field', async function() {
 				const message = {
 					text: 'helloworld chat test',
 					attachments: '123', // we don't allow this its reserved
 				};
-				const p = channel.sendMessage(message);
-				expect(p).to.rejected;
+				await expectHTTPErrorCode(400, channel.sendMessage(message));
 			});
 
 			it('Add a chat message with text that is too long', async function() {
@@ -957,11 +958,7 @@ describe('Chat', function() {
 					text: 'yo',
 				};
 				await channel.sendMessage(message);
-				const p = channel.sendMessage(message);
-				p.catch(e => {
-					expect(e.status).to.eq(400);
-				});
-				expect(p).to.rejected;
+				await expectHTTPErrorCode(400, channel.sendMessage(message));
 			});
 
 			it('Edit a chat message with text that is too long', async function() {
@@ -977,16 +974,17 @@ describe('Chat', function() {
 				message.text =
 					'This is bigger than the limit of 10 chars for this channel';
 
-				const p = authClient.updateMessage(message);
-				await expect(p).to.be.rejected;
+				await expectHTTPErrorCode(400, authClient.updateMessage(message));
 			});
 
 			it(`Add a Chat Message that's too large in content`, async function() {
-				const p = channel.sendMessage({
-					text: 'boop',
-					stuff: 'x'.repeat(5 * 1024),
-				});
-				await expect(p).to.be.rejected;
+				await expectHTTPErrorCode(
+					400,
+					channel.sendMessage({
+						text: 'boop',
+						stuff: 'x'.repeat(5 * 1024),
+					}),
+				);
 			});
 
 			it(`Edit a Chat Message that's too large in content`, async function() {
@@ -998,8 +996,7 @@ describe('Chat', function() {
 				const newMsg = Object.assign({}, message, {
 					new_stuff: 'x'.repeat(5 * 1024),
 				});
-				const p = authClient.updateMessage(newMsg);
-				await expect(p).to.be.rejected;
+				await expectHTTPErrorCode(400, authClient.updateMessage(newMsg));
 			});
 		});
 	});
@@ -1354,10 +1351,12 @@ describe('Chat', function() {
 			const notPermittedChan = authClient.channel('livestream', 'circonflexes');
 			await notPermittedChan.watch();
 			for (const event of events) {
-				const response = notPermittedChan.sendEvent({
-					type: event,
-				});
-				await expect(response).to.be.rejected;
+				await expectHTTPErrorCode(
+					400,
+					notPermittedChan.sendEvent({
+						type: event,
+					}),
+				);
 			}
 		});
 	});
