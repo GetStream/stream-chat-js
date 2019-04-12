@@ -31,3 +31,8 @@ yarn add stream-chat
 ### API Documentation
 
 Documentation for this JavaScript client are available at the [Stream website](https://getstream.io/chat/docs/?language=js)
+
+### Contributing 
+
+We welcome code changes that improve this library or fix a problem, please make sure to follow all best practices and add tests if applicable before submitting a Pull Request on Github. We are very happy to merge your code in the official repository. Make sure to sign our [Contributor License Agreement (CLA)](https://docs.google.com/forms/d/e/1FAIpQLScFKsKkAJI7mhCr7K9rEIOpqIDThrWxuvxnwUq2XkHyG154vQ/viewform) first. See our license file for more details.
+
