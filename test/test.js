@@ -1608,7 +1608,7 @@ describe('Chat', function() {
 		});
 	});
 
-	describe.only('Mentions', function() {
+	describe('Mentions', function() {
 		let channel;
 		const userID = 'tommaso-' + uuidv4();
 		const channelID = `free4all-` + uuidv4();
