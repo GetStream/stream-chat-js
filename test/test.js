@@ -1608,6 +1608,77 @@ describe('Chat', function() {
 		});
 	});
 
+	describe.only('Mentions', function() {
+		let channel;
+		const userID = 'tommaso-' + uuidv4();
+		const channelID = `free4all-` + uuidv4();
+		const thierry = {
+			id: uuidv4(),
+			instrument: 'saxophone',
+		};
+		let msg;
+
+		before(async () => {
+			await getTestClient(true).updateUser(thierry);
+			await getTestClient(true).updateUser({id: userID, instrument:'guitar'});
+			channel = serverAuthClient.channel('team', channelID, {
+				created_by: { id: thierry.id },
+			});
+			await channel.create();
+		});
+
+		it('should validate that mentioned_users is a list of existing user IDs', done => {
+			channel
+				.sendMessage({
+					text: '@thierry how are you doing?',
+					user: {id: userID},
+					mentioned_users: thierry.id,
+				})
+				.then(() => done('should have failed but it did not'))
+				.catch(() => done());
+		});
+
+		it('mentioned_users on sendMessage should be accepted', async () => {
+			msg = await channel
+			.sendMessage({
+				text: '@thierry how are you doing?',
+				user: {id: userID},
+				mentioned_users: [thierry.id],
+			});	
+		});
+
+		it('mentioned_users should be returned as a list of full users by send message', () => {
+			expect(msg.message.mentioned_users).to.be.an('array');
+			expect(msg.message.mentioned_users).to.have.length(1);
+			expect(msg.message.mentioned_users[0]).to.be.an('object');
+			expect(msg.message.mentioned_users[0].id).to.eq(thierry.id);
+		});
+
+		it('mentioned_users should be returned as a list of full users in channel state', async () => {
+			await channel.query();
+			msg = channel.state.messages[0];
+			expect(msg.mentioned_users).to.be.an('array');
+			expect(msg.mentioned_users).to.have.length(1);
+			expect(msg.mentioned_users[0]).to.be.an('object');
+			expect(msg.mentioned_users[0].id).to.eq(thierry.id);
+			expect(msg.mentioned_users[0].instrument).to.eq('saxophone');
+		});
+
+		it('should be possible to edit the list of mentioned users', async () => {
+			const client = await getTestClient(true);
+			const response = await client.updateMessage({id:msg.id, text: msg.text, mentioned_users:[userID]}, thierry.id);
+			expect(response.message.mentioned_users[0].instrument).to.eq('guitar');
+			channel = serverAuthClient.channel('team', channelID);
+			await channel.query();
+			msg = channel.state.messages[0];
+			expect(msg.mentioned_users).to.be.an('array');
+			expect(msg.mentioned_users).to.have.length(1);
+			expect(msg.mentioned_users[0]).to.be.an('object');
+			expect(msg.mentioned_users[0].id).to.eq(userID);
+			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
+		});
+	});
+
 	describe('Moderation', function() {
 		serverAuthClient = getTestClient(true);
 
