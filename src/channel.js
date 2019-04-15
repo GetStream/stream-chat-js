@@ -613,7 +613,10 @@ export class Channel {
 				s.typing = s.typing.without(event.user.id);
 				break;
 			case 'message.read':
-				s.read = s.read.set(event.user.id, Immutable({ user: {... event.user}, last_read: event.received_at }));
+				s.read = s.read.set(
+					event.user.id,
+					Immutable({ user: { ...event.user }, last_read: event.received_at }),
+				);
 				break;
 			case 'user.watching.start':
 			case 'user.updated':

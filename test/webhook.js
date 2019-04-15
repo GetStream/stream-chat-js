@@ -126,11 +126,10 @@ describe('Webhooks', function() {
 	it('unread_count and channel_unread_count should not be the same', async function() {
 		const serverSideClient = getTestClient(true);
 		const cid = uuidv4();
-		const chan2 = serverSideClient
-			.channel('messaging', cid, {
-				created_by: { id: tommasoID },
-				members: [tommasoID],
-			});
+		const chan2 = serverSideClient.channel('messaging', cid, {
+			created_by: { id: tommasoID },
+			members: [tommasoID],
+		});
 		await chan2.create();
 		await chan2.sendMessage({
 			text: uuidv4(),
