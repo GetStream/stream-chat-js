@@ -48,6 +48,7 @@ describe('Notifications - members not watching', function() {
 				expect(e.message).to.be.an('object');
 				expect(e.message.user).to.be.an('object');
 				expect(e.message.user.id).to.eq(tommasoID);
+				expect(e.total_unread_count).to.eq(1);
 				expect(e.unread_count).to.eq(1);
 				resolve();
 			});
@@ -83,6 +84,7 @@ describe('Notifications - members not watching', function() {
 		expect(events).to.have.length(1);
 		expect(events[0].type).to.eq('notification.mark_read');
 		expect(events[0].unread_count).to.eq(0);
+		expect(events[0].total_unread_count).to.eq(0);
 		events.pop();
 	});
 });
@@ -151,6 +153,7 @@ describe('Notifications - doing stuff on different tabs', function() {
 		expect(tab1Events[0].cid).to.eq(`messaging:${cid}`);
 		expect(tab1Events[0].type).to.eq('message.new');
 		expect(tab1Events[0].unread_count).to.eq(1);
+		expect(tab1Events[0].total_unread_count).to.eq(1);
 	});
 
 	it('tab2: should have a notification.message_new event only', async function() {
@@ -233,6 +236,7 @@ describe('Unread on connect', function() {
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
+		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
 	});
 
@@ -249,6 +253,7 @@ describe('Unread on connect', function() {
 			createUserToken(thierryID),
 		);
 		expect(response.me.unread_count).to.eq(4);
+		expect(response.me.total_unread_count).to.eq(4);
 	});
 
 	it('insert 100 messages to messaging:chatty', async function() {
@@ -272,6 +277,7 @@ describe('Unread on connect', function() {
 			createUserToken(thierryID),
 		);
 		expect(response.me.unread_count).to.eq(100);
+		expect(response.me.total_unread_count).to.eq(100);
 	});
 
 	it('thierry marks messaging:chatty as read', async function() {
@@ -280,6 +286,7 @@ describe('Unread on connect', function() {
 		const receivedEvent = new Promise(resolve => {
 			const subscription = thierryClient.on('notification.mark_read', e => {
 				expect(e.unread_count).to.eq(3);
+				expect(e.total_unread_count).to.eq(3);
 				subscription.unsubscribe();
 				resolve();
 			});
@@ -295,12 +302,14 @@ describe('Unread on connect', function() {
 			createUserToken(thierryID),
 		);
 		expect(response.me.unread_count).to.eq(3);
+		expect(response.me.total_unread_count).to.eq(3);
 	});
 
 	it('thierry is removed from the channel and gets notified about it', async function() {
 		const readChangeReceived = new Promise(resolve => {
 			const subscription = thierryClient.on('notification.mark_read', e => {
 				expect(e.unread_count).to.eq(2);
+				expect(e.total_unread_count).to.eq(2);
 				subscription.unsubscribe();
 				resolve();
 			});

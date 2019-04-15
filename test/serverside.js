@@ -493,7 +493,7 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Push notifications test endpoint', function() {
+	describe.skip('Push notifications test endpoint', function() {
 		const deviceID = uuidv4();
 		const userID = uuidv4();
 		const apnConfig = {

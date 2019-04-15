@@ -96,6 +96,7 @@ describe('Webhooks', function() {
 		expect(lastMessage.members[0]).to.be.an('object');
 		expect(lastMessage.members[0].user).to.be.an('object');
 		expect(lastMessage.members[0].user.unread_count).to.eq(1);
+		expect(lastMessage.members[0].user.total_unread_count).to.eq(1);
 		expect(lastMessage.members[0].user.id).to.eq(tommasoID);
 		expect(lastMessage.members[0].user.online).to.eq(false);
 	});
@@ -118,6 +119,30 @@ describe('Webhooks', function() {
 		expect(lastMessage.members[0].user).to.be.an('object');
 		expect(lastMessage.members[0].user.online).to.eq(true);
 		expect(lastMessage.members[0].user.unread_count).to.eq(1);
+		expect(lastMessage.members[0].user.channel_unread_count).to.eq(1);
+		expect(lastMessage.members[0].user.total_unread_count).to.eq(1);
+	});
+
+	it('unread_count and channel_unread_count should not be the same', async function() {
+		const serverSideClient = getTestClient(true);
+		const cid = uuidv4();
+		const chan2 = serverSideClient
+			.channel('messaging', cid, {
+				created_by: { id: tommasoID },
+				members: [tommasoID],
+			});
+		await chan2.create();
+		await chan2.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		await lastMessagePromise;
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.members[0].user).to.be.an('object');
+		expect(lastMessage.members[0].user.online).to.eq(true);
+		expect(lastMessage.members[0].user.unread_count).to.eq(2);
+		expect(lastMessage.members[0].user.channel_unread_count).to.eq(1);
+		expect(lastMessage.members[0].user.total_unread_count).to.eq(2);
 	});
 
 	it('message.update', async function() {
