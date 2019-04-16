@@ -356,6 +356,38 @@ describe('Chat', function() {
 				'supercalifragilisticexpialidocious',
 			);
 		});
+
+		it.only('Basic Query using $q syntax', async function() {
+			// add a very special message
+			const channel = authClient.channel('messaging', 'poppins');
+			await channel.create();
+			const keyword = 'supercalifragilisticexpialidocious';
+			await channel.sendMessage({ text: `words ${keyword} what?` });
+			await channel.sendMessage({ text: `great movie because of ${keyword}` });
+
+			const filters = { type: 'messaging' };
+			const response = await authClient.search(
+				filters,
+				{ text: { $q: 'supercalifragilisticexpialidocious' } },
+				{ limit: 2, offset: 0 },
+			);
+			expect(response.results.length).to.equal(2);
+			expect(response.results[0].message.text).to.contain(
+				'supercalifragilisticexpialidocious',
+			);
+		});
+
+		it.only('Basic Query using $q syntax on a field thats not supported', async function() {
+			const filters = { type: 'messaging' };
+			const searchPromise = authClient.search(
+				filters,
+				{ mycustomfield: { $q: 'supercalifragilisticexpialidocious' } },
+				{ limit: 2, offset: 0 },
+			);
+			expect(searchPromise).to.be.rejectedWith(
+				'Fulltext search is not enabled for message field "mycustomfield"',
+			);
+		});
 	});
 
 	describe('Server Side Integration', function() {
