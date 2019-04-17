@@ -131,11 +131,13 @@ describe('Webhooks', function() {
 			members: [tommasoID],
 		});
 		await chan2.create();
-		await chan2.sendMessage({
-			text: uuidv4(),
-			user: { id: tommasoID },
-		});
-		await lastMessagePromise;
+		await Promise.all([
+			chan2.sendMessage({
+				text: uuidv4(),
+				user: { id: tommasoID },
+			}),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.members[0].user).to.be.an('object');
 		expect(lastMessage.members[0].user.online).to.eq(true);
