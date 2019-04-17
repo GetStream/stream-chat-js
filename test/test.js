@@ -1620,7 +1620,7 @@ describe('Chat', function() {
 
 		before(async () => {
 			await getTestClient(true).updateUser(thierry);
-			await getTestClient(true).updateUser({id: userID, instrument:'guitar'});
+			await getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
 			channel = serverAuthClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 			});
@@ -1631,7 +1631,7 @@ describe('Chat', function() {
 			channel
 				.sendMessage({
 					text: '@thierry how are you doing?',
-					user: {id: userID},
+					user: { id: userID },
 					mentioned_users: thierry.id,
 				})
 				.then(() => done('should have failed but it did not'))
@@ -1639,12 +1639,11 @@ describe('Chat', function() {
 		});
 
 		it('mentioned_users on sendMessage should be accepted', async () => {
-			msg = await channel
-			.sendMessage({
+			msg = await channel.sendMessage({
 				text: '@thierry how are you doing?',
-				user: {id: userID},
+				user: { id: userID },
 				mentioned_users: [thierry.id],
-			});	
+			});
 		});
 
 		it('mentioned_users should be returned as a list of full users by send message', () => {
@@ -1666,7 +1665,10 @@ describe('Chat', function() {
 
 		it('should be possible to edit the list of mentioned users', async () => {
 			const client = await getTestClient(true);
-			const response = await client.updateMessage({id:msg.id, text: msg.text, mentioned_users:[userID]}, thierry.id);
+			const response = await client.updateMessage(
+				{ id: msg.id, text: msg.text, mentioned_users: [userID] },
+				thierry.id,
+			);
 			expect(response.message.mentioned_users[0].instrument).to.eq('guitar');
 			channel = serverAuthClient.channel('team', channelID);
 			await channel.query();
