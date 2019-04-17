@@ -61,7 +61,7 @@ describe('Query Users', function() {
 		expect(response.users[0].id).to.equal(userID);
 	});
 
-	it.only('query users unsupported field', async function() {
+	it('query users unsupported field', async function() {
 		const userID = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
 			mycustomfield: 'Curiosity Rover',
