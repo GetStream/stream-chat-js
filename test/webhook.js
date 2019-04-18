@@ -51,11 +51,11 @@ describe('Webhooks', function() {
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 		});
 
-		server.listen(43210, '127.0.0.1');
+		server.listen(4322, '127.0.0.1');
 		await client.updateUser({ id: thierryID });
 		await client.updateUser({ id: tommasoID });
 		await client.updateAppSettings({
-			webhook_url: 'http://127.0.0.1:43210/',
+			webhook_url: 'http://127.0.0.1:4322/',
 		});
 		await sleep(1000);
 	});
