@@ -727,6 +727,30 @@ describe('Import via Webhook compat', function() {
 		expect(response.message.updated_at).to.equal('2017-04-08T17:36:10.54Z');
 	});
 
+	it.only('HTML should work', async function() {
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const html = 'search with <a href="https://google.com/">google</a>';
+		const response = await channel.sendMessage({
+			html: html,
+			user: created_by,
+		});
+		expect(response.message.html).to.equal(html);
+	});
+
+	it.only('clientside HTML should raise an error', async function() {
+		const userID = uuidv4();
+		const userClient = await getTestClientForUser(userID);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.create();
+		const html = 'search with <a href="https://google.com/">google</a>';
+		const sendPromise = channel.sendMessage({
+			html: html,
+			user: created_by,
+		});
+		expect(sendPromise).to.be.rejectedWith('message.html');
+	});
+
 	it('Client side should raise an error', async function() {
 		const userID = uuidv4();
 		const userClient = await getTestClientForUser(userID);
