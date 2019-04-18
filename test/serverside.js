@@ -697,13 +697,17 @@ describe('Moderation', function() {
 	});
 });
 
-describe('Import via Webhook compat', function() {
+describe.only('Import via Webhook compat', function() {
 	// based on the use case that you are importing data to stream via
 	// a webhook integration...
 	const srvClient = getTestClient(true);
-
+	const userID = uuidv4();
+	let userClient;
 	const channelID = uuidv4();
 	const created_by = { id: uuidv4() };
+	before(async function() {
+		userClient = await getTestClientForUser(userID);
+	});
 
 	it('Created At should work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
@@ -728,8 +732,6 @@ describe('Import via Webhook compat', function() {
 	});
 
 	it('Client side should raise an error', async function() {
-		const userID = uuidv4();
-		const userClient = await getTestClientForUser(userID);
 		const channel = userClient.channel('livestream', channelID);
 		await channel.create();
 		const responsePromise = channel.sendMessage({
@@ -752,10 +754,19 @@ describe('Import via Webhook compat', function() {
 	});
 
 	it('Mark Read should work server side', async function() {
-		const userID = uuidv4();
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const response = await channel.markRead({ user: { id: userID } });
+	});
+
+	it('Mark Read should should fail server side if the provided user doesnt exists', async function() {
+		const channel = srvClient.channel('messaging', channelID, { created_by });
+		await channel.create();
+		const nonExistingUser = uuidv4();
+		const response = channel.markRead({ user: { id: nonExistingUser } });
+		await expect(response).to.be.rejectedWith(
+			'The specified event user `' + nonExistingUser + '` doesnt exists',
+		);
 	});
 });
 
