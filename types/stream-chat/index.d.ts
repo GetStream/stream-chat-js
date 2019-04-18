@@ -57,13 +57,13 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): void;
+  setUser(user: User, userToken: string): Promise<void>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
   disconnect(): void;
 
-  setAnonymousUser(): void;
+  setAnonymousUser(): Promise<void>;
   setGuestUser(user: User): Promise<void>;
 
   on(callbackOrString: string, callbackOrNothing: any): void;
@@ -126,6 +126,8 @@ export class StreamChat {
 
   updateMessage(message: Message, userId: string): Promise<APIResponse>;
   deleteMessage(messageID: string): Promise<APIResponse>;
+
+  verifyWebHook(requestBody: object, xSignature: string): boolean;
 }
 
 export class ClientState {
