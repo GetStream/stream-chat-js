@@ -357,25 +357,8 @@ describe('Chat', function() {
 			);
 		});
 
-		it.only('Test ordering for autocomplete', async function() {
-			// add a very special message
-			const channelID = uuidv4();
-			const channel = authClient.channel('messaging', channelID);
-			await channel.create();
-			await channel.sendMessage({ text: `tommaso barbugli` });
-			await channel.sendMessage({ text: `bart lorang` });
-
-			console.log(channel.cid);
-			const filters = { cid: channel.cid };
-			const response = await authClient.search(filters, 'ba', {
-				limit: 2,
-				offset: 0,
-			});
-			expect(response.results.length).to.equal(2);
-			expect(response.results[0].message.text).to.contain('bart lorang');
-		});
-
-		it('Basic Query using $q syntax', async function() {
+		it.skip('Basic Query using $q syntax', async function() {
+			// TODO: we didn't add support for this just yet...
 			// add a very special message
 			const channel = authClient.channel('messaging', 'poppins');
 			await channel.create();
@@ -395,7 +378,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it('Basic Query using $q syntax on a field thats not supported', async function() {
+		it.skip('Basic Query using $q syntax on a field thats not supported', async function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
