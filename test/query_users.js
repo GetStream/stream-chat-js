@@ -79,8 +79,8 @@ describe('Query Users', function() {
 			mycustomfield: 'Curiosity Rover',
 		});
 		const queryPromise = client.queryUsers({ mycustomfield: { $q: 'rove' } });
-		expect(queryPromise).to.be.rejectedWith(
-			'Fulltext search is not enabled for user field "mycustomfield"',
+		await expect(queryPromise).to.be.rejectedWith(
+			'search is not enabled for field users.mycustomfield',
 		);
 	});
 });
