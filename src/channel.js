@@ -333,7 +333,7 @@ export class Channel {
 	 *
 	 * @return {Promise} Description
 	 */
-	markRead(data = {}) {
+	async markRead(data = {}) {
 		this._checkInitialized();
 
 		if (!this.getConfig().read_events) {
@@ -346,14 +346,14 @@ export class Channel {
 			lastMessageCreatedAt = lastMessage.created_at;
 			lastMessageID = lastMessage.id;
 		}
-		const eventData = {
-			type: 'message.read',
+
+		const response = await this.client.post(this._channelURL() + '/read', {
 			last_message_id: lastMessageID,
 			last_message_at: lastMessageCreatedAt,
 			...data,
-		};
+		});
 
-		return this.sendEvent(eventData);
+		return response;
 	}
 
 	/**

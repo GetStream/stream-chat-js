@@ -757,6 +757,49 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const response = await channel.markRead({ user: { id: userID } });
 	});
+
+	it.only('Mark Read server side specific message', async function() {
+		const userID = 'a-' + uuidv4();
+		const userID2 = 'b-' + uuidv4();
+		await createUsers([userID, userID2]);
+		const channelID = uuidv4();
+		const channel = srvClient.channel('messaging', channelID, {
+			created_by,
+			members: [userID, userID2],
+		});
+		await channel.create();
+		const response1 = await channel.sendMessage({ text: '1', user: created_by });
+		await sleep(800);
+		const response2 = await channel.sendMessage({ text: '2', user: created_by });
+		console.log(response1.message.created_at, response2.message.created_at);
+		const userClientBeforeMarkRead = await getTestClientForUser(userID);
+		expect(userClientBeforeMarkRead.health.me.total_unread_count).to.equal(2);
+
+		// user 2 unread count should be 0 since we marked all as read.
+		console.log('userid2', userID2);
+		const markReadResponse2 = await channel.markRead({ user: { id: userID2 } });
+		const userClient2 = await getTestClientForUser(userID2);
+		expect(userClient2.health.me.total_unread_count).to.equal(0);
+		const userChannel2 = userClient2.channel('messaging', channelID);
+		await userChannel2.watch();
+		const unread2 = userChannel2.countUnread();
+		expect(unread2).to.equal(0);
+
+		// user 1 unread count should be 1
+		const markReadResponse = await channel.markRead({
+			user: { id: userID },
+			message_id: response1.message.id,
+		});
+
+		console.log('markReadResponse', markReadResponse);
+
+		const userClient = await getTestClientForUser(userID);
+		const userChannel = userClient.channel('messaging', channelID);
+		await userChannel.watch();
+		const unread = userChannel.countUnread();
+		expect(userClient.health.me.total_unread_count).to.equal(1);
+		expect(unread).to.equal(1);
+	});
 });
 
 describe('User management', function() {
