@@ -101,7 +101,7 @@ export class StreamChat {
   ): Promise<APIResponse>;
   search(filterConditions: object, query: object, options: object): Promise<APIResponse>;
 
-  addDevice(device: Device): Promise<APIResponse>;
+  addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
   getDevices(userId: string): Promise<APIResponse>;
   removeDevice(deviceId: string): Promise<APIResponse>;
 
