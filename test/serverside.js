@@ -697,7 +697,7 @@ describe('Moderation', function() {
 	});
 });
 
-describe.only('Import via Webhook compat', function() {
+describe('Import via Webhook compat', function() {
 	// based on the use case that you are importing data to stream via
 	// a webhook integration...
 	const srvClient = getTestClient(true);
