@@ -846,6 +846,24 @@ export class StreamChat {
 		});
 	}
 
+	async deleteUser(userID, options) {
+		return await this.delete(this.baseURL + `/users/${userID}`, {
+			...options,
+		});
+	}
+
+	async deactivateUser(userID, options) {
+		return await this.post(this.baseURL + `/users/${userID}/deactivate`, {
+			...options,
+		});
+	}
+
+	async exportUser(userID, options) {
+		return await this.get(this.baseURL + `/users/${userID}/export`, {
+			...options,
+		});
+	}
+
 	/** banUser - bans a user from all channels
 	 *
 	 * @param targetUserID
