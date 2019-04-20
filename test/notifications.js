@@ -318,15 +318,39 @@ describe('Unread on connect', function() {
 		const memberDeletedReceived = new Promise(resolve => {
 			thierryClient.on('notification.removed_from_channel', e => {
 				expect(e.channel).to.be.an('object');
-				expect(e.channel.cid).to.eq(`messaging:${cids[3]}`);
+				expect(e.channel.cid).to.eq(`messaging:${cids[0]}`);
 				resolve();
 			});
 		});
 
 		await serverSideClient
-			.channel('messaging', cids[3])
+			.channel('messaging', cids[0])
 			.removeMembers([thierryID, tommasoID]);
 		await memberDeletedReceived;
 		await readChangeReceived;
+	});
+
+	it('thierry re-connects and receives unread_count=2', async function() {
+		thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.unread_count).to.eq(2);
+		expect(response.me.total_unread_count).to.eq(2);
+	});
+
+	it('one channel is deleted', async function() {
+		await serverSideClient.channel('messaging', cids[4]).delete();
+	});
+
+	it('thierry re-connects and receives unread_count=1', async function() {
+		thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.unread_count).to.eq(1);
+		expect(response.me.total_unread_count).to.eq(1);
 	});
 });
