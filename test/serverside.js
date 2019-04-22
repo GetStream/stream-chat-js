@@ -780,7 +780,7 @@ describe('Import via Webhook compat', function() {
 	it('Mark Read should work server side', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.markRead({ user: { id: userID } });
+		await channel.markRead({ user: { id: userID } });
 	});
 
 	it('Mark Read should should fail server side if the provided user doesnt exists', async function() {
@@ -791,6 +791,49 @@ describe('Import via Webhook compat', function() {
 		await expect(response).to.be.rejectedWith(
 			'The specified event user `' + nonExistingUser + '` doesnt exists',
 		);
+	});
+
+	it('Mark Read server side specific message', async function() {
+		const userID = `a-${uuidv4()}`;
+		const userID2 = `b-${uuidv4()}`;
+		await createUsers([userID, userID2]);
+		const channelID = uuidv4();
+		const channel = srvClient.channel('messaging', channelID, {
+			created_by,
+			members: [userID, userID2],
+		});
+		await channel.create();
+		const response1 = await channel.sendMessage({ text: '1', user: created_by });
+		await sleep(800);
+		await channel.sendMessage({ text: '2', user: created_by });
+		const userClientBeforeMarkRead = await getTestClientForUser(userID);
+		expect(userClientBeforeMarkRead.health.me.total_unread_count).to.equal(2);
+
+		let userClient2 = await getTestClientForUser(userID2);
+		let userChannel2 = userClient2.channel('messaging', channelID);
+		await userChannel2.watch();
+		expect(userChannel2.countUnread()).to.equal(2);
+
+		// user 2 unread count should be 0 since we marked all as read.
+		await channel.markRead({ user: { id: userID2 } });
+		userChannel2 = userClient2.channel('messaging', channelID);
+		userClient2 = await getTestClientForUser(userID2);
+		expect(userClient2.health.me.total_unread_count).to.equal(0);
+		const unread2 = userChannel2.countUnread();
+		expect(unread2).to.equal(0);
+
+		// user 1 unread count should be 1
+		await channel.markRead({
+			user: { id: userID },
+			message_id: response1.message.id,
+		});
+
+		const userClient = await getTestClientForUser(userID);
+		const userChannel = userClient.channel('messaging', channelID);
+		const r = await userChannel.watch();
+		const unread = userChannel.countUnread();
+		expect(userClient.health.me.total_unread_count).to.equal(1);
+		expect(unread).to.equal(1);
 	});
 });
 

@@ -245,7 +245,7 @@ describe('Webhooks', function() {
 			lastMessagePromise,
 		]))[0];
 		expect(lastMessage).to.not.be.null;
-		expect(lastMessage.members).to.be.null;
+		expect(lastMessage.members).to.be.undefined;
 	});
 
 	it('channel.updated without message', async function() {
