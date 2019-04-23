@@ -804,7 +804,6 @@ describe('Import via Webhook compat', function() {
 		});
 		await channel.create();
 		const response1 = await channel.sendMessage({ text: '1', user: created_by });
-		await sleep(800);
 		await channel.sendMessage({ text: '2', user: created_by });
 		const userClientBeforeMarkRead = await getTestClientForUser(userID);
 		expect(userClientBeforeMarkRead.health.me.total_unread_count).to.equal(2);

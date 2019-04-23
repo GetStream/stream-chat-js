@@ -164,6 +164,234 @@ describe('Notifications - doing stuff on different tabs', function() {
 	});
 });
 
+describe('Mark all read server-side', function(){
+	const serverSideClient = getTestClient(true);
+	const cids = [uuidv4(), uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	const thierryID = `thierry-${uuidv4()}`;
+	const tommasoID = `tommaso-${uuidv4()}`;
+
+	before(async () => {
+		await serverSideClient.updateUser({ id: tommasoID });
+		await serverSideClient.updateUser({ id: thierryID });
+
+		for (let i = 0; i < 5; i++) {
+			await serverSideClient
+				.channel('messaging', cids[i], {
+					created_by: { id: tommasoID },
+				})
+				.create();
+			await serverSideClient
+				.channel('livestream', cids[i], {
+					created_by: { id: tommasoID },
+				})
+				.create();
+		}
+	});
+	
+	it('add thierry to all channels', async function() {
+		await sleep(1000);
+		const p = [];
+		for (let i = 0; i < 5; i++) {
+			p.push(
+				serverSideClient.channel('messaging', cids[i]).addMembers([thierryID]),
+			);
+			p.push(
+				serverSideClient.channel('livestream', cids[i]).addMembers([thierryID]),
+			);
+		}
+		await Promise.all(p);
+		await sleep(1000);
+	});
+
+	it('add 1 message to 5 messaging channels', async function() {
+		const p = [];
+		for (let i = 0; i < 5; i++) {
+			p.push(
+				serverSideClient
+					.channel('messaging', cids[i])
+					.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			);
+		}
+		await Promise.all(p);
+	});
+
+	it('thierry connects and receives unread_count=5', async function() {
+		const thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.total_unread_count).to.eq(5);
+		expect(response.me.unread_count).to.eq(5);
+		await thierryClient.disconnect();
+	});
+
+	it('thierry checks unread counts via query channel', async function() {
+		const thierryClient = getTestClient(false);
+		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		const channelStates = await thierryClient.queryChannels(
+			{ type: 'messaging', members: { $in: [thierryID] } },
+			{ last_message_at: 1 },
+			{ watch: false },
+		);
+		expect(channelStates).to.have.length(5);
+		expect(channelStates[0].countUnread()).to.eq(1);
+		expect(channelStates[1].countUnread()).to.eq(1);
+		expect(channelStates[2].countUnread()).to.eq(1);
+		expect(channelStates[3].countUnread()).to.eq(1);
+		expect(channelStates[4].countUnread()).to.eq(1);
+	});
+
+	it('server marks all as read', async function() {
+		await serverSideClient.markAllRead({ user: { id: thierryID } });
+	});
+
+	it('thierry connects and receives unread_count=0', async function() {
+		const thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.total_unread_count).to.eq(0);
+		expect(response.me.unread_count).to.eq(0);
+		await thierryClient.disconnect();
+	});
+
+	it('thierry checks unread counts via query channel', async function() {
+		const thierryClient = getTestClient(false);
+		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		const channelStates = await thierryClient.queryChannels(
+			{ type: 'messaging', members: { $in: [thierryID] } },
+			{ last_message_at: 1 },
+			{ watch: false },
+		);
+		expect(channelStates).to.have.length(5);
+		expect(channelStates[0].countUnread()).to.eq(0);
+		expect(channelStates[1].countUnread()).to.eq(0);
+		expect(channelStates[2].countUnread()).to.eq(0);
+		expect(channelStates[3].countUnread()).to.eq(0);
+		expect(channelStates[4].countUnread()).to.eq(0);
+	});
+
+});
+
+describe('Mark all read', function(){
+	const serverSideClient = getTestClient(true);
+	const cids = [uuidv4(), uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	const thierryID = `thierry-${uuidv4()}`;
+	const tommasoID = `tommaso-${uuidv4()}`;
+
+	before(async () => {
+		await serverSideClient.updateUser({ id: tommasoID });
+		await serverSideClient.updateUser({ id: thierryID });
+
+		for (let i = 0; i < 5; i++) {
+			await serverSideClient
+				.channel('messaging', cids[i], {
+					created_by: { id: tommasoID },
+				})
+				.create();
+			await serverSideClient
+				.channel('livestream', cids[i], {
+					created_by: { id: tommasoID },
+				})
+				.create();
+		}
+	});
+
+	it('add thierry to all channels', async function() {
+		await sleep(1000);
+		const p = [];
+		for (let i = 0; i < 5; i++) {
+			p.push(
+				serverSideClient.channel('messaging', cids[i]).addMembers([thierryID]),
+			);
+			p.push(
+				serverSideClient.channel('livestream', cids[i]).addMembers([thierryID]),
+			);
+		}
+		await Promise.all(p);
+		await sleep(1000);
+	});
+
+	it('add 1 message to 5 messaging channels', async function() {
+		const p = [];
+		for (let i = 0; i < 5; i++) {
+			p.push(
+				serverSideClient
+					.channel('messaging', cids[i])
+					.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			);
+		}
+		await Promise.all(p);
+	});
+
+	it('thierry connects and receives unread_count=5', async function() {
+		const thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.total_unread_count).to.eq(5);
+		expect(response.me.unread_count).to.eq(5);
+		await thierryClient.disconnect();
+	});
+
+	it('thierry checks unread counts via query channel', async function() {
+		const thierryClient = getTestClient(false);
+		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		const channelStates = await thierryClient.queryChannels(
+			{ type: 'messaging', members: { $in: [thierryID] } },
+			{ last_message_at: 1 },
+			{ watch: false },
+		);
+		expect(channelStates).to.have.length(5);
+		expect(channelStates[0].countUnread()).to.eq(1);
+		expect(channelStates[1].countUnread()).to.eq(1);
+		expect(channelStates[2].countUnread()).to.eq(1);
+		expect(channelStates[3].countUnread()).to.eq(1);
+		expect(channelStates[4].countUnread()).to.eq(1);
+	});
+
+	it('thierry marks all as read', async function() {
+		const thierryClient = getTestClient(false);
+		await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		await thierryClient.markAllRead();
+		await thierryClient.disconnect();
+	});
+
+	it('thierry connects and receives unread_count=0', async function() {
+		const thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.total_unread_count).to.eq(0);
+		expect(response.me.unread_count).to.eq(0);
+		await thierryClient.disconnect();
+	});
+
+	it('thierry checks unread counts via query channel', async function() {
+		const thierryClient = getTestClient(false);
+		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		const channelStates = await thierryClient.queryChannels(
+			{ type: 'messaging', members: { $in: [thierryID] } },
+			{ last_message_at: 1 },
+			{ watch: false },
+		);
+		expect(channelStates).to.have.length(5);
+		expect(channelStates[0].countUnread()).to.eq(0);
+		expect(channelStates[1].countUnread()).to.eq(0);
+		expect(channelStates[2].countUnread()).to.eq(0);
+		expect(channelStates[3].countUnread()).to.eq(0);
+		expect(channelStates[4].countUnread()).to.eq(0);
+	});
+
+});
+
 describe('Unread on connect', function() {
 	const serverSideClient = getTestClient(true);
 	const cids = [uuidv4(), uuidv4(), uuidv4(), uuidv4(), uuidv4()];

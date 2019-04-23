@@ -108,6 +108,16 @@ describe('Webhooks', function() {
 		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
 		await tommasoChannel.markRead();
+		await lastMessagePromise;
+		expect(lastMessage.user).to.be.an('object');
+		expect(lastMessage.user.channel_unread_count).to.eq(0);
+		expect(lastMessage.user.channel_last_read_at).to.be.a('string');
+		const parsedDate = new Date(lastMessage.user.channel_last_read_at);
+		expect(parsedDate.toString()).to.not.eq('Invalid Date');
+		expect(lastMessage.user.total_unread_count).to.eq(0);
+		expect(lastMessage.user.total_unread_count).to.eq(0);
+		expect(lastMessage.user.unread_channels).to.eq(0);
+		expect(lastMessage.user.unread_count).to.eq(0);
 	});
 
 	it('online status and unread_count should update', async function() {
