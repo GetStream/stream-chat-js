@@ -773,7 +773,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const responsePromise = channel.markRead();
 		await expect(responsePromise).to.be.rejectedWith(
-			'Please specify a user when sending an event server side',
+			'Please specify a user when marking a channel as read server side',
 		);
 	});
 
@@ -789,7 +789,7 @@ describe('Import via Webhook compat', function() {
 		const nonExistingUser = uuidv4();
 		const response = channel.markRead({ user: { id: nonExistingUser } });
 		await expect(response).to.be.rejectedWith(
-			'The specified event user `' + nonExistingUser + '` doesnt exists',
+			`The specified event user "${nonExistingUser}" does not exists`,
 		);
 	});
 
