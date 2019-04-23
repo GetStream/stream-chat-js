@@ -846,10 +846,8 @@ export class StreamChat {
 		});
 	}
 
-	async deleteUser(userID, options) {
-		return await this.delete(this.baseURL + `/users/${userID}`, {
-			...options,
-		});
+	async deleteUser(userID, params) {
+		return await this.delete(this.baseURL + `/users/${userID}`, params);
 	}
 
 	async deactivateUser(userID, options) {
