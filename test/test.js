@@ -1679,6 +1679,35 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0].id).to.eq(userID);
 			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
 		});
+
+		it('mentions inside replies should be enriched correctly', async () => {
+			const response = await channel.sendMessage({
+				text: '@thierry how are you doing?',
+				user: { id: userID },
+				mentioned_users: [thierry.id],
+			});
+			const replyResponse = await channel.sendMessage({
+				text: '@tommaso I am doing great?',
+				user: { id: thierry.id },
+				mentioned_users: [userID],
+				parent_id: response.message.id,
+			});
+			expect(replyResponse.message.mentioned_users).to.be.an('array');
+			expect(replyResponse.message.mentioned_users).to.have.length(1);
+			expect(replyResponse.message.mentioned_users[0]).to.be.an('object');
+			expect(replyResponse.message.mentioned_users[0].id).to.eq(userID);
+			expect(replyResponse.message.mentioned_users[0].instrument).to.eq('guitar');
+
+			channel = serverAuthClient.channel('team', channelID);
+			await channel.query();
+			const parent = channel.state.messages[channel.state.messages.length - 1];
+			const replies = await channel.getReplies(parent.id);
+			expect(replies.messages[0].mentioned_users).to.be.an('array');
+			expect(replies.messages[0].mentioned_users).to.have.length(1);
+			expect(replies.messages[0].mentioned_users[0]).to.be.an('object');
+			expect(replies.messages[0].mentioned_users[0].id).to.eq(userID);
+			expect(replies.messages[0].mentioned_users[0].instrument).to.eq('guitar');
+		});
 	});
 
 	describe('Moderation', function() {
