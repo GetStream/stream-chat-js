@@ -33,7 +33,7 @@ Promise.config({
 	},
 });
 
-describe.skip('GDPR endpoints', function() {
+describe('GDPR endpoints', function() {
 	const serverClient = getServerTestClient();
 
 	it('export data for a user', async function() {
@@ -232,7 +232,6 @@ describe.skip('GDPR endpoints', function() {
 		const userID2 = uuidv4();
 		const creatorID = uuidv4();
 		const channelID = uuidv4();
-		console.log('channelID', channelID);
 		const user = await serverClient.updateUser({ id: userID, name: 'hello' });
 		const channel = serverClient.channel('livestream', channelID, {
 			created_by: { id: creatorID },
@@ -273,20 +272,17 @@ describe.skip('GDPR endpoints', function() {
 		const channel2 = serverClient.channel('livestream', channelID);
 		const state = await channel2.query();
 
-		console.log('deleted user with id', userID);
-		console.log('state.messages', state.messages);
-
 		const otherMessage = state.messages[0];
-		console.log('otherMessage.latest_reactions', otherMessage.latest_reactions);
+		const deletedMessage = state.messages[1];
+		// validate the reaction is gone
 		expect(otherMessage.text).to.equal('thats funny');
 		expect(state.messages.length).to.equal(2);
 		expect(otherMessage.reaction_counts).to.deep.equal({});
 		expect(otherMessage.latest_reactions.length).to.equal(0);
+		expect(otherMessage.own_reactions.length).to.equal(0);
 
-		expect(state.messages[0].deleted_at).to.not.be.undefined;
-		expect(state.messages[0].text).to.equal('');
-
-		expect(state.messages[1].deleted_at).to.be.undefined;
-		console.log(state.messages[1]);
+		// verify that the message is marked as deleted and the content is removed..
+		expect(deletedMessage.deleted_at).to.not.be.undefined;
+		expect(deletedMessage.text).to.equal('');
 	});
 });
