@@ -468,11 +468,19 @@ describe('Unread on connect', function() {
 	it('thierry marks one messaging channel as read', async function() {
 		const chan = thierryClient.channel('messaging', cids[1]);
 		await chan.watch();
+		expect(chan.state.read).to.be.an('object');
+		expect(chan.state.read[thierryID]).to.be.an('object');
+		expect(chan.state.read[thierryID].user).to.be.an('object');
+		const previousLastRead = chan.state.read[thierryID].last_read;
 		let resp = chan.countUnread();
 		expect(resp).to.eq(1);
 		await chan.markRead();
 		resp = chan.countUnread();
 		expect(resp).to.eq(0);
+		expect(chan.state.read).to.be.an('object');
+		expect(chan.state.read[thierryID]).to.be.an('object');
+		expect(chan.state.read[thierryID].user).to.be.an('object');
+		expect(chan.state.read[thierryID].last_read).to.be.greaterThan(previousLastRead);
 	});
 
 	it('thierry re-connects and receive unread_count=4', async function() {
