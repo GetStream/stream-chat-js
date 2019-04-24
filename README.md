@@ -37,6 +37,7 @@ Documentation for this JavaScript client are available at the [Stream website](h
 Note that you need 2FA enabled on NPM, publishing with Yarn gives error, use NPM directly for this:
 
 ```
+npm version bug
 npm publish
 ```
 
