@@ -16,6 +16,7 @@ export interface Attachment {
 export interface Message {
   text: string;
   attachments?: Attachment[];
+  mentioned_users?: User[];
   [propName: string]: any;
 }
 
@@ -50,7 +51,7 @@ export interface Reaction {
 }
 
 export class StreamChat {
-  constructor(key: string, secretOrOptions: string, options?: object);
+  constructor(key: string, secretOrOptions?: string, options?: object);
 
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;
@@ -66,8 +67,8 @@ export class StreamChat {
   setAnonymousUser(): Promise<void>;
   setGuestUser(user: User): Promise<void>;
 
-  on(callbackOrString: string, callbackOrNothing: any): void;
-  off(callbackOrString: string, callbackOrNothing: any): void;
+  on(callbackOrString: string, callbackOrNothing?: any): void;
+  off(callbackOrString: string, callbackOrNothing?: any): void;
 
   get(url: string, params: object): Promise<APIResponse>;
   put(url: string, data: object): Promise<APIResponse>;
@@ -182,7 +183,7 @@ export class Channel {
   stopWatching(): Promise<APIResponse>;
   getReplies(parent_id: string, options: object): Promise<APIResponse>;
   getReactions(message_id: string, options: object): Promise<APIResponse>;
-  countUnread(lastRead: Date): number;
+  countUnread(lastRead?: Date): number;
   create(): Promise<APIResponse>;
   query(options: object): Promise<APIResponse>;
   banUser(targetUserID: string, options: object): Promise<APIResponse>;

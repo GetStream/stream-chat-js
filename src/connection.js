@@ -285,10 +285,14 @@ export class StableWSConnection {
 		if (!healthy && this.isHealthy) {
 			// bummer we are offline
 			this.isHealthy = false;
-			this.eventCallback({
-				type: 'connection.changed',
-				online: false,
-			});
+			setTimeout(() => {
+				if (!this.isHealthy) {
+					this.eventCallback({
+						type: 'connection.changed',
+						online: false,
+					});
+				}
+			}, 5000);
 		}
 	};
 
@@ -358,16 +362,9 @@ export class StableWSConnection {
 	 */
 	_retryInterval() {
 		// try to reconnect in 0-5 seconds (random to spread out the load from failures)
-		let max = this.consecutiveFailures * 5000;
-		if (max > 25000) {
-			max = 25000;
-		}
-		const min = (this.consecutiveFailures - 1) * 5000;
-		let interval = Math.round(Math.random() * (max - min) + min);
-		if (interval < 1000) {
-			interval = 1000;
-		}
-		return interval;
+		const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
+		const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
+		return Math.floor(Math.random() * (max - min) + min);
 	}
 
 	/**
