@@ -118,6 +118,22 @@ export class Channel {
 	}
 
 	/**
+	 * sendTypingEvent - Similar to sendEvent but dedicated to typing events
+	 *
+	 * @param {object} event for example {type: 'typing.start'}
+	 *
+	 * @return {object} The Server Response
+	 */
+	async sendTypingEvent(event) {
+		this._checkInitialized();
+		const data = await this.client.post(this._channelURL() + '/typing', {
+			event,
+		});
+
+		return data;
+	}
+
+	/**
 	 * sendReaction - Send a reaction about a message
 	 *
 	 * @param {string} messageID the message id
@@ -283,7 +299,7 @@ export class Channel {
 		// send a typing.start every 2 seconds
 		if (diff > 2000) {
 			this.lastTypingEvent = new Date();
-			await this.sendEvent({
+			await this.sendTypingEvent({
 				type: 'typing.start',
 			});
 		}
@@ -298,7 +314,7 @@ export class Channel {
 		}
 		this.lastTypingEvent = null;
 		this.isTyping = false;
-		await this.sendEvent({
+		await this.sendTypingEvent({
 			type: 'typing.stop',
 		});
 	}
