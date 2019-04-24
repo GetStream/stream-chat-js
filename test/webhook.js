@@ -9,7 +9,7 @@ describe('Webhooks', function() {
 	let server;
 	let lastMessage;
 	let lastMessagePromise;
-	let messages;
+	let messages = [];
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 	const channelID = `fun-${uuidv4()}`;
@@ -50,13 +50,13 @@ describe('Webhooks', function() {
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 		});
 
-		server.listen(4322, '127.0.0.1');
-		await client.updateUser({ id: thierryID });
-		await client.updateUser({ id: tommasoID });
+		await server.listen(4322, '127.0.0.1');
 		await client.updateAppSettings({
 			webhook_url: 'http://127.0.0.1:4322/',
 		});
-		await sleep(1000);
+		await sleep(100);
+		await client.updateUser({ id: thierryID });
+		await client.updateUser({ id: tommasoID });
 	});
 
 	beforeEach(function() {
@@ -64,11 +64,11 @@ describe('Webhooks', function() {
 		messages = [];
 	});
 
-	after(() => {
-		client.updateAppSettings({
+	after(async () => {
+		await client.updateAppSettings({
 			webhook_url: '',
 		});
-		server.close();
+		await server.close();
 	});
 
 	it('should receive new message event', async function() {
@@ -107,8 +107,10 @@ describe('Webhooks', function() {
 		const tommasoClient = await getTestClientForUser(tommasoID);
 		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
-		await tommasoChannel.markRead();
-		await lastMessagePromise;
+		await Promise.all([
+			tommasoChannel.markRead(),
+			lastMessagePromise,
+		]);
 		expect(lastMessage.user).to.be.an('object');
 		expect(lastMessage.user.channel_unread_count).to.eq(0);
 		expect(lastMessage.user.channel_last_read_at).to.be.a('string');
@@ -220,6 +222,14 @@ describe('Webhooks', function() {
 		expect(lastMessage.type).to.eq('message.deleted');
 		expect(lastMessage.message.user).to.be.an('object');
 		expect(lastMessage.message.user.id).to.eq(tommasoID);
+	});
+
+	it('user.updated', async function() {
+		await Promise.all([
+			client.updateUser({id: thierryID, awesome: true}),
+		    lastMessagePromise]);
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.type).to.eq('user.updated');
 	});
 
 	it('member.added', async function() {
