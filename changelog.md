@@ -1,3 +1,8 @@
+
+## April 24th 2019 -
+
+- GDPR endpoints: deleteUser, exportUser and deactivateUser
+
 ## April 24th 2019 - 0.8.0
 
 - markRead now supports sending a message_id to mark the channel read up to (and including) that specific message
