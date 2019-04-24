@@ -14,8 +14,8 @@ client.updateAppSettings({}); // $ExpectType Promise<object>
 const currentSettings = client.getAppSettings(); // $ExpectType Promise<object>
 client.disconnect(); // $ExpectType void
 
-client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType void
-client.setAnonymousUser(); // $ExpectType void
+client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<void>
+client.setAnonymousUser(); // $ExpectType Promise<void>
 client.setGuestUser({ id: 'steven' }); // $ExpectType Promise<void>
 
 client.get('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
@@ -38,6 +38,6 @@ const event = {
 };
 client.dispatchEvent(event); // $ExpectType void
 client.handleEvent(event); // $ExpectType void
-client.recoverState(); // $ExpectType void
+client.recoverState(); // $ExpectType Promise<void>
 
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
