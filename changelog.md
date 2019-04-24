@@ -1,6 +1,8 @@
 ## April 17th 2019 -
 
 - markRead now supports sending a message_id to mark the channel read up to (and including) that specific message
+- added markAllRead client method
+- countUnread can be called without any parameters now client-side and it will default to current user's read state
 
 ## April 9th 2019 - 0.7.2
 
