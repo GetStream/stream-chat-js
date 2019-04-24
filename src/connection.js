@@ -286,7 +286,7 @@ export class StableWSConnection {
 			// bummer we are offline
 			this.isHealthy = false;
 			setTimeout(() => {
-				if (!this.isHealthy){
+				if (!this.isHealthy) {
 					this.eventCallback({
 						type: 'connection.changed',
 						online: false,

@@ -107,10 +107,7 @@ describe('Webhooks', function() {
 		const tommasoClient = await getTestClientForUser(tommasoID);
 		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
 		await tommasoChannel.watch();
-		await Promise.all([
-			tommasoChannel.markRead(),
-			lastMessagePromise,
-		]);
+		await Promise.all([tommasoChannel.markRead(), lastMessagePromise]);
 		expect(lastMessage.user).to.be.an('object');
 		expect(lastMessage.user.channel_unread_count).to.eq(0);
 		expect(lastMessage.user.channel_last_read_at).to.be.a('string');
@@ -226,8 +223,9 @@ describe('Webhooks', function() {
 
 	it('user.updated', async function() {
 		await Promise.all([
-			client.updateUser({id: thierryID, awesome: true}),
-		    lastMessagePromise]);
+			client.updateUser({ id: thierryID, awesome: true }),
+			lastMessagePromise,
+		]);
 		expect(lastMessage).to.not.be.null;
 		expect(lastMessage.type).to.eq('user.updated');
 	});
