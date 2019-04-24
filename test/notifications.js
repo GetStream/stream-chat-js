@@ -164,7 +164,7 @@ describe('Notifications - doing stuff on different tabs', function() {
 	});
 });
 
-describe('Mark all read server-side', function(){
+describe('Mark all read server-side', function() {
 	const serverSideClient = getTestClient(true);
 	const cids = [uuidv4(), uuidv4(), uuidv4(), uuidv4(), uuidv4()];
 	const thierryID = `thierry-${uuidv4()}`;
@@ -187,7 +187,7 @@ describe('Mark all read server-side', function(){
 				.create();
 		}
 	});
-	
+
 	it('add thierry to all channels', async function() {
 		await sleep(1000);
 		const p = [];
@@ -272,10 +272,9 @@ describe('Mark all read server-side', function(){
 		expect(channelStates[3].countUnread()).to.eq(0);
 		expect(channelStates[4].countUnread()).to.eq(0);
 	});
-
 });
 
-describe('Mark all read', function(){
+describe('Mark all read', function() {
 	const serverSideClient = getTestClient(true);
 	const cids = [uuidv4(), uuidv4(), uuidv4(), uuidv4(), uuidv4()];
 	const thierryID = `thierry-${uuidv4()}`;
@@ -355,10 +354,7 @@ describe('Mark all read', function(){
 
 	it('thierry marks all as read', async function() {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser(
-			{ id: thierryID },
-			createUserToken(thierryID),
-		);
+		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
 		await thierryClient.markAllRead();
 		await thierryClient.disconnect();
 	});
@@ -389,7 +385,6 @@ describe('Mark all read', function(){
 		expect(channelStates[3].countUnread()).to.eq(0);
 		expect(channelStates[4].countUnread()).to.eq(0);
 	});
-
 });
 
 describe('Unread on connect', function() {

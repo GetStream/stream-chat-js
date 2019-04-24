@@ -466,12 +466,12 @@ export class Channel {
 	countUnread(lastRead) {
 		this._checkInitialized();
 		if (lastRead == null) {
-			lastRead = this.state.read[this.client.userID] ? this.state.read[this.client.userID].last_read : null;
+			lastRead = this.state.read[this.client.userID]
+				? this.state.read[this.client.userID].last_read
+				: null;
 		}
 		if (this.client._isUsingServerAuth() && this.client.userID) {
-			throw Error(
-				`you must call setUser to use countUnread serverside`,
-			);
+			throw Error(`you must call setUser to use countUnread serverside`);
 		}
 		let count = 0;
 		for (const m of this.state.messages) {
