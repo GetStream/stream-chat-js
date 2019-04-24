@@ -921,6 +921,17 @@ export class StreamChat {
 		});
 	}
 
+	/**
+	 * markAllRead - marks all channels for this user as read
+	 *
+	 * @return {Promise} Description
+	 */
+	async markAllRead(data = {}) {
+		const response = await this.post(this.baseURL + '/channels/read', {
+			...data,
+		});
+	}
+
 	createChannelType(data) {
 		const channelData = Object.assign({}, { commands: ['all'] }, data);
 		return this.post(this.baseURL + '/channeltypes', channelData);

@@ -183,7 +183,7 @@ export class Channel {
   stopWatching(): Promise<APIResponse>;
   getReplies(parent_id: string, options: object): Promise<APIResponse>;
   getReactions(message_id: string, options: object): Promise<APIResponse>;
-  countUnread(lastRead: Date): number;
+  countUnread(lastRead?: Date): number;
   create(): Promise<APIResponse>;
   query(options: object): Promise<APIResponse>;
   banUser(targetUserID: string, options: object): Promise<APIResponse>;

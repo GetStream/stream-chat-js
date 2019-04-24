@@ -773,14 +773,14 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const responsePromise = channel.markRead();
 		await expect(responsePromise).to.be.rejectedWith(
-			'Please specify a user when sending an event server side',
+			'Please specify a user when marking a channel as read server side',
 		);
 	});
 
 	it('Mark Read should work server side', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.markRead({ user: { id: userID } });
+		await channel.markRead({ user: { id: userID } });
 	});
 
 	it('Mark Read should should fail server side if the provided user doesnt exists', async function() {
@@ -789,8 +789,50 @@ describe('Import via Webhook compat', function() {
 		const nonExistingUser = uuidv4();
 		const response = channel.markRead({ user: { id: nonExistingUser } });
 		await expect(response).to.be.rejectedWith(
-			'The specified event user `' + nonExistingUser + '` doesnt exists',
+			`The specified event user "${nonExistingUser}" does not exists`,
 		);
+	});
+
+	it('Mark Read server side specific message', async function() {
+		const userID = `a-${uuidv4()}`;
+		const userID2 = `b-${uuidv4()}`;
+		await createUsers([userID, userID2]);
+		const channelID = uuidv4();
+		const channel = srvClient.channel('messaging', channelID, {
+			created_by,
+			members: [userID, userID2],
+		});
+		await channel.create();
+		const response1 = await channel.sendMessage({ text: '1', user: created_by });
+		await channel.sendMessage({ text: '2', user: created_by });
+		const userClientBeforeMarkRead = await getTestClientForUser(userID);
+		expect(userClientBeforeMarkRead.health.me.total_unread_count).to.equal(2);
+
+		let userClient2 = await getTestClientForUser(userID2);
+		let userChannel2 = userClient2.channel('messaging', channelID);
+		await userChannel2.watch();
+		expect(userChannel2.countUnread()).to.equal(2);
+
+		// user 2 unread count should be 0 since we marked all as read.
+		await channel.markRead({ user: { id: userID2 } });
+		userChannel2 = userClient2.channel('messaging', channelID);
+		userClient2 = await getTestClientForUser(userID2);
+		expect(userClient2.health.me.total_unread_count).to.equal(0);
+		const unread2 = userChannel2.countUnread();
+		expect(unread2).to.equal(0);
+
+		// user 1 unread count should be 1
+		await channel.markRead({
+			user: { id: userID },
+			message_id: response1.message.id,
+		});
+
+		const userClient = await getTestClientForUser(userID);
+		const userChannel = userClient.channel('messaging', channelID);
+		const r = await userChannel.watch();
+		const unread = userChannel.countUnread();
+		expect(userClient.health.me.total_unread_count).to.equal(1);
+		expect(unread).to.equal(1);
 	});
 });
 

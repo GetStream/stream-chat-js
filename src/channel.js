@@ -333,7 +333,7 @@ export class Channel {
 	 *
 	 * @return {Promise} Description
 	 */
-	markRead(data = {}) {
+	async markRead(data = {}) {
 		this._checkInitialized();
 
 		if (!this.getConfig().read_events) {
@@ -346,14 +346,14 @@ export class Channel {
 			lastMessageCreatedAt = lastMessage.created_at;
 			lastMessageID = lastMessage.id;
 		}
-		const eventData = {
-			type: 'message.read',
+
+		const response = await this.client.post(this._channelURL() + '/read', {
 			last_message_id: lastMessageID,
 			last_message_at: lastMessageCreatedAt,
 			...data,
-		};
+		});
 
-		return this.sendEvent(eventData);
+		return response;
 	}
 
 	/**
@@ -459,14 +459,27 @@ export class Channel {
 	/**
 	 * countUnread - Count the number of messages with a date thats newer than the last read timestamp
 	 *
-	 * @param {date} lastRead the time that the user read a message
+	 * @param [date] lastRead the time that the user read a message, defaults to current user's read state
 	 *
 	 * @return {int} Unread count
 	 */
 	countUnread(lastRead) {
+		this._checkInitialized();
+		if (lastRead == null) {
+			lastRead = this.state.read[this.client.userID]
+				? this.state.read[this.client.userID].last_read
+				: null;
+		}
+		if (this.client._isUsingServerAuth() && this.client.userID) {
+			throw Error(`you must call setUser to use countUnread serverside`);
+		}
 		let count = 0;
 		for (const m of this.state.messages) {
-			if (m.created_at > lastRead) {
+			if (lastRead == null) {
+				count++;
+				continue;
+			}
+			if (m.updated_at > lastRead) {
 				count++;
 			}
 		}
