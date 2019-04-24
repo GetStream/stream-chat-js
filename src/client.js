@@ -988,6 +988,7 @@ export class StreamChat {
 			'latest_reactions',
 			'own_reactions',
 			'reply_count',
+			'reaction_counts',
 			'created_at',
 			'updated_at',
 			'html',
