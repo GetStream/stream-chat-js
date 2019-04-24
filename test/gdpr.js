@@ -226,12 +226,13 @@ describe.skip('GDPR endpoints', function() {
 		expect(state.messages[0].text).to.equal('hi');
 	});
 
-	it.only('hard delete a user, their message and reactions', async function() {
+	it('hard delete a user, their message and reactions', async function() {
 		// setup
 		const userID = uuidv4();
 		const userID2 = uuidv4();
 		const creatorID = uuidv4();
 		const channelID = uuidv4();
+		console.log('channelID', channelID);
 		const user = await serverClient.updateUser({ id: userID, name: 'hello' });
 		const channel = serverClient.channel('livestream', channelID, {
 			created_by: { id: creatorID },
@@ -272,11 +273,15 @@ describe.skip('GDPR endpoints', function() {
 		const channel2 = serverClient.channel('livestream', channelID);
 		const state = await channel2.query();
 
+		console.log('deleted user with id', userID);
 		console.log('state.messages', state.messages);
-		expect(state.messages.length).to.equal(2);
+
 		const otherMessage = state.messages[0];
+		console.log('otherMessage.latest_reactions', otherMessage.latest_reactions);
 		expect(otherMessage.text).to.equal('thats funny');
+		expect(state.messages.length).to.equal(2);
 		expect(otherMessage.reaction_counts).to.deep.equal({});
+		expect(otherMessage.latest_reactions.length).to.equal(0);
 
 		expect(state.messages[0].deleted_at).to.not.be.undefined;
 		expect(state.messages[0].text).to.equal('');
