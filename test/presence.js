@@ -89,7 +89,7 @@ describe('Presence', function() {
 	});
 
 	describe('Channel online counts', function() {
-		it('stopWatching and online count', async function() {
+		it('stopWatching and watcher count', async function() {
 			// user1 is watching this channel
 			const id = 'christmas' + uuidv4();
 			const b = user1Client.channel('messaging', id, {
@@ -98,6 +98,7 @@ describe('Presence', function() {
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
+					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
 					if (results.length === 3) {
@@ -115,6 +116,39 @@ describe('Presence', function() {
 			const channel = james.channel('messaging', id);
 			await channel.watch();
 			await channel.stopWatching();
+			await eventPromise;
+		});
+
+		it('disconnect and watcher count', async function() {
+			// user1 is watching this channel
+			const id = 'christmas' + uuidv4();
+			const b = user1Client.channel('messaging', id, {
+				members: ['doug', 'claire', 'user1', 'james'],
+			});
+			const results = [];
+			const eventPromise = new Promise(resolve => {
+				b.on('all', e => {
+					results.push([e.watcher_count, e.user.id]);
+					expect(e.watcher_count).to.equal(b.state.watcher_count);
+					// expect to see thierry join, james join and james leave
+					if (results.length === 3) {
+						const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
+						expect(results).to.deep.equal(expected);
+						resolve();
+					}
+				});
+			});
+
+			// user1 starts watching
+			await b.watch();
+			const james = await getTestClientForUser('james');
+			// A second client to make sure james doesn't go completely offline
+			const jamesBackup = await getTestClientForUser('james');
+			const channel = james.channel('messaging', id);
+			// james start watching it
+			await channel.watch();
+			// Watching client goes offline
+			await james.disconnect();
 			await eventPromise;
 		});
 	});
