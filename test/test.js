@@ -459,7 +459,6 @@ describe('Chat', function() {
 				name: 'Tommaso Barbugli',
 				role: 'admin',
 			});
-			console.log('response', response);
 			expect(response.users.tommaso.id).to.equal('tommaso');
 		});
 	});
