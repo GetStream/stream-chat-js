@@ -801,6 +801,117 @@ describe('Chat', function() {
 				expect(channels[0].data.id).to.equal(channelID);
 			});
 
+			it('Channel Filtering equal Members', async function() {
+				const uuid = uuidv4();
+
+				const uniqueMember = `jackjones-${uuid}`;
+				const uniqueMember2 = `jackjones2-${uuid}`;
+				await createUsers([uniqueMember, uniqueMember2]);
+				const channelID = `chat-with-${uuid}`;
+				const channelID2 = `chat-with2-${uuid}`;
+				const memberChannel = authClient.channel('messaging', channelID, {
+					members: [uniqueMember, uniqueMember2],
+				});
+				await memberChannel.create();
+				const memberChannels2 = authClient.channel('messaging', channelID2, {
+					members: [uniqueMember, uniqueMember2],
+				});
+				await memberChannels2.create();
+
+				const sort = { last_message_at: -1 };
+				const filter = { members: { $eq: [uniqueMember, uniqueMember2] } };
+				const channels = await authClient.queryChannels(filter, sort);
+				expect(channels.length).to.equal(2);
+				expect(channels[0].data.id).to.equal(channelID);
+				expect(channels[1].data.id).to.equal(channelID2);
+				//members out of order
+				const filter2 = { members: { $eq: [uniqueMember2, uniqueMember] } };
+				const channels2 = await authClient.queryChannels(filter2, sort);
+				expect(channels2.length).to.equal(2);
+				expect(channels2[0].data.id).to.equal(channelID);
+				expect(channels2[1].data.id).to.equal(channelID2);
+			});
+
+			it('Channel Filtering equal Members short mode', async function() {
+				const uuid = uuidv4();
+
+				const uniqueMember = `jackjones-${uuid}`;
+				const uniqueMember2 = `jackjones2-${uuid}`;
+				await createUsers([uniqueMember, uniqueMember2]);
+				const channelID = `chat-with-${uuid}`;
+				const channelID2 = `chat-with2-${uuid}`;
+				const memberChannel = authClient.channel('messaging', channelID, {
+					members: [uniqueMember, uniqueMember2],
+				});
+				await memberChannel.create();
+				const memberChannels2 = authClient.channel('messaging', channelID2, {
+					members: [uniqueMember, uniqueMember2],
+				});
+				await memberChannels2.create();
+
+				const sort = { last_message_at: -1 };
+				const filter = { members: [uniqueMember, uniqueMember2] };
+				const channels = await authClient.queryChannels(filter, sort);
+				expect(channels.length).to.equal(2);
+				expect(channels[0].data.id).to.equal(channelID);
+				expect(channels[1].data.id).to.equal(channelID2);
+			});
+
+			it('Channel Filtering equal array custom field', async function() {
+				const uuid = uuidv4();
+
+				const uniqueMember = `jackjones-${uuid}`;
+				await createUsers([uniqueMember]);
+				const channelID = `chat-with-${uuid}`;
+				const memberChannel = authClient.channel('messaging', channelID, {
+					custom: [1, 2, 3, 4],
+				});
+				await memberChannel.create();
+
+				const sort = { last_message_at: -1 };
+				const filter = { custom: [1, 2, 3, 4] };
+				const channels = await authClient.queryChannels(filter, sort);
+				expect(channels.length).to.equal(1);
+				expect(channels[0].data.id).to.equal(channelID);
+				//query out of order
+				const filter2 = { custom: [4, 3, 2, 1] };
+				const channels2 = await authClient.queryChannels(filter2, sort);
+				expect(channels2.length).to.equal(1);
+				expect(channels2[0].data.id).to.equal(channelID);
+			});
+
+			it('Channel Filtering equal Members and custom field', async function() {
+				const uuid = uuidv4();
+
+				const uniqueMember = `jackjones-${uuid}`;
+				const uniqueMember2 = `jackjones2-${uuid}`;
+				await createUsers([uniqueMember, uniqueMember2]);
+				const channelID = `chat-with-${uuid}`;
+				const channelID2 = `chat-with2-${uuid}`;
+				const memberChannel = authClient.channel('messaging', channelID, {
+					members: [uniqueMember, uniqueMember2],
+					abc: 2,
+				});
+				await memberChannel.create();
+				const memberChannels2 = authClient.channel('messaging', channelID2, {
+					members: [uniqueMember, uniqueMember2],
+					abc: 2,
+				});
+				await memberChannels2.create();
+
+				const sort = { last_message_at: -1 };
+				const filter = {
+					$and: [
+						{ members: { $eq: [uniqueMember, uniqueMember2] } },
+						{ abc: 2 },
+					],
+				};
+				const channels = await authClient.queryChannels(filter, sort);
+				expect(channels.length).to.equal(2);
+				expect(channels[0].data.id).to.equal(channelID);
+				expect(channels[1].data.id).to.equal(channelID2);
+			});
+
 			it('Add a Chat message with a custom field', async function() {
 				const message = {
 					text: 'helloworld chat test',
