@@ -978,6 +978,26 @@ describe('Chat', function() {
 				expect(message2.attachments[0].type).to.equal('video');
 			});
 
+			it('Mix URLs and attachments', async function() {
+				const url = '#awesome https://unsplash.com/photos/kGSapVfg8Kw';
+				const text = `Time for vacation! ${url}`;
+				const attachments = [{
+					type: 'hashtag',
+					name: 'awesome',
+					awesome: true,
+				}];
+				let response = await channel.sendMessage({ text, attachments });
+				let message = response.message;
+				expect(message.attachments.length).to.equal(2);
+				expect(message.attachments[0].type).to.equal('hashtag');
+				expect(message.attachments[1].type).to.equal('image');
+
+				response = await authClient.updateMessage({ id: message.id, text: '#awesome text only', attachments: [attachments[0]] });
+				message = response.message;
+				expect(message.attachments.length).to.equal(1);
+				expect(message.attachments[0].type).to.equal('hashtag');
+			});
+
 			it('URL enrichment response format', async function() {
 				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
 				const text = `Time for vacation! ${url}`;
