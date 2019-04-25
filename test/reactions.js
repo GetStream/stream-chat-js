@@ -236,7 +236,6 @@ describe('Reactions', function() {
 		}
 		// paginate
 		const response = await channel.getReactions(messageID, { limit: 3 });
-		console.log('respones', response);
 		expect(response.reactions.length).to.equal(3);
 	});
 

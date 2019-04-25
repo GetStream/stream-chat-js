@@ -857,7 +857,7 @@ describe('Chat', function() {
 				expect(channels[1].data.id).to.equal(channelID2);
 			});
 
-			it('Channel Filtering equal array custom field', async function() {
+			it.skip('Channel Filtering equal array custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -880,7 +880,7 @@ describe('Chat', function() {
 				expect(channels2[0].data.id).to.equal(channelID);
 			});
 
-			it('Channel Filtering equal Members and custom field', async function() {
+			it.skip('Channel Filtering equal Members and custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -1595,8 +1595,6 @@ describe('Chat', function() {
 				watchers: { limit: 2, offset: 0 },
 			});
 			expect(results.watchers[0]).not.to.be.null;
-			console.log('result', results.watchers[0]);
-			console.log('members', results.members[0]);
 			expect(results.watchers[0].role).to.eql('user');
 			expect(results.members[0].user.role).to.eql('user');
 			expect(results.members[0].role).to.eql('moderator');
