@@ -50,6 +50,7 @@ describe('Notifications - members not watching', function() {
 				expect(e.message.user.id).to.eq(tommasoID);
 				expect(e.total_unread_count).to.eq(1);
 				expect(e.unread_count).to.eq(1);
+				expect(e.unread_channels).to.eq(1);
 				resolve();
 			});
 		});
@@ -254,6 +255,7 @@ describe('Mark all read server-side', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(0);
 		expect(response.me.unread_count).to.eq(0);
+		expect(response.me.unread_channels).to.eq(0);
 		await thierryClient.disconnect();
 	});
 
@@ -333,6 +335,7 @@ describe('Mark all read', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
+		expect(response.me.unread_channels).to.eq(5);
 		await thierryClient.disconnect();
 	});
 
