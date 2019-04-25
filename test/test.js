@@ -802,7 +802,7 @@ describe('Chat', function() {
 				expect(channels[0].data.id).to.equal(channelID);
 			});
 
-			it('Channel Filtering equal Members', async function() {
+			it.skip('Channel Filtering equal Members', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -845,7 +845,7 @@ describe('Chat', function() {
 				]);
 			});
 
-			it('Channel Filtering equal Members short mode', async function() {
+			it.skip('Channel Filtering equal Members short mode', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
