@@ -864,17 +864,18 @@ describe('Chat', function() {
 				await createUsers([uniqueMember]);
 				const channelID = `chat-with-${uuid}`;
 				const memberChannel = authClient.channel('messaging', channelID, {
-					custom: [1, 2, 3, 4],
+					custom_array_field: [1, 2, 3, 4],
+					unique: uuid,
 				});
 				await memberChannel.create();
 
 				const sort = { last_message_at: -1 };
-				const filter = { custom: [1, 2, 3, 4] };
+				const filter = { custom_array_field: [1, 2, 3, 4], unique: uuid };
 				const channels = await authClient.queryChannels(filter, sort);
 				expect(channels.length).to.equal(1);
 				expect(channels[0].data.id).to.equal(channelID);
 				//query out of order
-				const filter2 = { custom: [4, 3, 2, 1] };
+				const filter2 = { custom_array_field: [4, 3, 2, 1], unique: uuid };
 				const channels2 = await authClient.queryChannels(filter2, sort);
 				expect(channels2.length).to.equal(1);
 				expect(channels2[0].data.id).to.equal(channelID);
