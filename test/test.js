@@ -6,6 +6,7 @@ import Immutable from 'seamless-immutable';
 import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
+import assertArrays from 'chai-arrays';
 
 import {
 	createUserToken,
@@ -20,7 +21,7 @@ import {
 import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
-
+chai.use(assertArrays);
 chai.use(chaiAsPromised);
 
 if (process.env.NODE_ENV !== 'production') {
@@ -822,14 +823,26 @@ describe('Chat', function() {
 				const filter = { members: { $eq: [uniqueMember, uniqueMember2] } };
 				const channels = await authClient.queryChannels(filter, sort);
 				expect(channels.length).to.equal(2);
-				expect(channels[0].data.id).to.equal(channelID);
-				expect(channels[1].data.id).to.equal(channelID2);
+				expect(channels[0].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
+				expect(channels[1].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
 				//members out of order
 				const filter2 = { members: { $eq: [uniqueMember2, uniqueMember] } };
 				const channels2 = await authClient.queryChannels(filter2, sort);
 				expect(channels2.length).to.equal(2);
-				expect(channels2[0].data.id).to.equal(channelID);
-				expect(channels2[1].data.id).to.equal(channelID2);
+				expect(channels2[0].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
+				expect(channels2[1].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
 			});
 
 			it('Channel Filtering equal Members short mode', async function() {
@@ -853,8 +866,14 @@ describe('Chat', function() {
 				const filter = { members: [uniqueMember, uniqueMember2] };
 				const channels = await authClient.queryChannels(filter, sort);
 				expect(channels.length).to.equal(2);
-				expect(channels[0].data.id).to.equal(channelID);
-				expect(channels[1].data.id).to.equal(channelID2);
+				expect(channels[0].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
+				expect(channels[1].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
 			});
 
 			it('Channel Filtering equal array custom field', async function() {
@@ -909,8 +928,14 @@ describe('Chat', function() {
 				};
 				const channels = await authClient.queryChannels(filter, sort);
 				expect(channels.length).to.equal(2);
-				expect(channels[0].data.id).to.equal(channelID);
-				expect(channels[1].data.id).to.equal(channelID2);
+				expect(channels[0].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
+				expect(channels[1].data.id).to.be.containingAnyOf([
+					channelID,
+					channelID2,
+				]);
 			});
 
 			it('Add a Chat message with a custom field', async function() {
