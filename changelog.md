@@ -1,4 +1,3 @@
-
 ## April 24th 2019 -
 
 - GDPR endpoints: deleteUser, exportUser and deactivateUser
