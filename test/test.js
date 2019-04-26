@@ -801,7 +801,7 @@ describe('Chat', function() {
 				expect(channels[0].data.id).to.equal(channelID);
 			});
 
-			it.skip('Channel Filtering equal Members', async function() {
+			it('Channel Filtering equal Members', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -844,7 +844,7 @@ describe('Chat', function() {
 				]);
 			});
 
-			it.skip('Channel Filtering equal Members short mode', async function() {
+			it('Channel Filtering equal Members short mode', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -875,7 +875,7 @@ describe('Chat', function() {
 				]);
 			});
 
-			it.skip('Channel Filtering equal array custom field', async function() {
+			it('Channel Filtering equal array custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -899,7 +899,7 @@ describe('Chat', function() {
 				expect(channels2[0].data.id).to.equal(channelID);
 			});
 
-			it.skip('Channel Filtering equal Members and custom field', async function() {
+			it('Channel Filtering equal Members and custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
