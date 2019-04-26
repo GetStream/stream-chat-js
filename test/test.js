@@ -1913,6 +1913,9 @@ describe('Chat', function() {
 			image: 'myimageurl',
 			role: 'user',
 		};
+		before(async () => {
+			await createUsers('evilUserIP');
+		});
 
 		serverAuthClient.updateUser(evil);
 
@@ -1923,6 +1926,20 @@ describe('Chat', function() {
 				reason: 'Stop spamming your YouTube channel',
 			});
 		});
+
+		it('Ban IP should fail if we share the same ip with target', async function() {
+			try {
+				await serverAuthClient.banUser('evilUserIP', {
+					timeout: 60,
+					reason: 'Stop spamming your YouTube channel',
+					ban_ip: true,
+				});
+				expect().fail('cannot ban own user ip');
+			} catch (e) {
+				expect(e).not.to.be.null;
+			}
+		});
+
 		it('Mute', async function() {
 			const data = await authClient.muteUser('eviluser');
 			expect(data.mute.user.id).to.equal('thierry2');
