@@ -1046,14 +1046,14 @@ export class StreamChat {
 	}
 
 	_getToken() {
-		if (!this.secret && !this.userToken && !this.anonymous) {
+		if (this.secret == null && this.userToken == null && !this.anonymous) {
 			throw new Error(
 				`Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
 			);
 		}
 		let token = '';
 		if (!this.anonymous) {
-			token = this.userToken ? this.userToken : JWTServerToken(this.secret);
+			token = this.userToken != null ? this.userToken : JWTServerToken(this.secret);
 		}
 		return token;
 	}

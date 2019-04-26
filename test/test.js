@@ -550,6 +550,13 @@ describe('Chat', function() {
 
 			p = chan.stopWatching();
 			await expect(p).to.be.rejectedWith(errorMsg);
+
+			const anonClient = getTestClient(false);
+			await anonClient.setAnonymousUser();
+			await anonClient.disconnect();
+
+			p = anonClient.addDevice('deviceID', 'apn');
+			await expect(p).to.be.rejectedWith(errorMsg);
 		});
 	});
 
