@@ -21,7 +21,8 @@
     "react/prop-types": 0,
     "no-var": 2,
     "linebreak-style": [2, "unix"],
-    "semi": [1, "always"]
+    "semi": [1, "always"],
+    "no-buffer-constructor": "error"
   },
   "env": {
     "es6": true,

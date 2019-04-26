@@ -234,11 +234,17 @@ export class StreamChat {
 		// remove the user specific fields
 		delete this.user;
 		delete this._user;
-
-		delete this.anonymous;
 		delete this.userID;
-		delete this.userToken;
+
+		this.anonymous = false;
+		this.userToken = null;
+
 		this.connectionEstablishedCount = 0;
+
+		for (const channel of Object.values(this.activeChannels)) {
+			channel._disconnect();
+		}
+
 		// close the WS connection
 		if (this.wsConnection) {
 			return this.wsConnection.disconnect();
@@ -570,12 +576,7 @@ export class StreamChat {
 			throw Error('User object is too large');
 		}
 
-		let token = '';
-
-		if (this.anonymous === false) {
-			token =
-				this.userToken !== null ? this.userToken : JWTServerToken(this.secret);
-		}
+		const token = this._getToken();
 
 		const authType = this.getAuthType();
 		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
@@ -1032,17 +1033,7 @@ export class StreamChat {
 	};
 
 	_addClientParams(params = {}) {
-		let token = '';
-		if (this.secret === null && this.userToken === null && this.anonymous === false) {
-			throw new Error(
-				'Both secret and user tokens are not set, did you forget to call client.setUser?',
-			);
-		}
-
-		if (this.anonymous === false) {
-			token =
-				this.userToken !== null ? this.userToken : JWTServerToken(this.secret);
-		}
+		const token = this._getToken();
 
 		return {
 			...this.options,
@@ -1058,6 +1049,19 @@ export class StreamChat {
 				'x-stream-client': this._userAgent(),
 			},
 		};
+	}
+
+	_getToken() {
+		if (this.secret == null && this.userToken == null && !this.anonymous) {
+			throw new Error(
+				`Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
+			);
+		}
+		let token = '';
+		if (!this.anonymous) {
+			token = this.userToken != null ? this.userToken : JWTServerToken(this.secret);
+		}
+		return token;
 	}
 
 	_startCleaning() {

@@ -104,7 +104,7 @@ export function DevToken(userId) {
  * @return {boolean}
  */
 export function CheckSignature(body, secret, signature) {
-	const key = new Buffer(secret, 'ascii');
+	const key = Buffer.from(secret, 'ascii');
 	const hash = crypto
 		.createHmac('sha256', key)
 		.update(body)
