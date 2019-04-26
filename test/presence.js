@@ -196,18 +196,17 @@ describe('Presence', function() {
 			expect(timmy.online).to.equal(false);
 		});
 
-		it('Query Channel and Presence', async function() {
+		it.only('Query Channel and Presence', async function() {
 			const channel = uuidv4();
 			const userID = `sarah123-${channel}`;
 
-			console.log('start2');
 			// create a channel where channel.members contains wendy
 			await getTestClient(true).updateUser({ id: userID });
 			const b = user1Client.channel('messaging', channel, {
 				members: ['sandra', userID, 'user1'],
 			});
 			console.log('created a channel with user', userID);
-			await b.watch({ presence: true });
+			await b.watch({ presence: true, watchers: { limit: 10 } });
 			// sandra goes online should trigger an event
 			console.log('marking user online', userID);
 
@@ -275,6 +274,35 @@ describe('Presence', function() {
 				);
 				// jessica goes online should trigger an event
 				await getTestClientForUser('jessica', 'sayhi');
+			}
+			runAndLogPromise(runTest);
+		});
+
+		it.only('State and Query Channels and Presence', function(done) {
+			const channelName = uuidv4();
+			const director = `Denis Villeneuve - ${uuidv4()}`;
+			// same as above, but with the query channels endpoint
+			user1Client.on('user.presence.changed', event => {
+				console.log(event.type);
+				if (event.user.id === paulID) {
+					expect(event.user.status).to.equal('rallying fremen');
+					expect(event.user.online).to.equal(true);
+					done();
+				}
+			});
+			async function runTest() {
+				const b = user1Client.channel('messaging', channelName, {
+					members: [paulID, 'duncan', 'jessica', 'user1'],
+					director,
+				});
+				await b.create();
+				const r = await user1Client.queryChannels(
+					{ director },
+					{ last_message_at: -1 },
+					{ presence: true },
+				);
+				console.log('waiting for connect..... event');
+				await getTestClientForUser(paulID, 'rallying fremen');
 			}
 			runAndLogPromise(runTest);
 		});

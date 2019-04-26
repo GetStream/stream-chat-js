@@ -723,6 +723,22 @@ export class Channel {
 	}
 
 	_initializeState(state) {
+		// add the Users
+		console.log('state', state);
+		if (state.members) {
+			for (const m of state.members) {
+				console.log('m', m);
+				this._client.state.updateUserReference(m.user, this.cid);
+			}
+		}
+
+		if (state.watchers) {
+			for (const w of state.watchers) {
+				console.log('w', w);
+				this._client.state.updateUserReference(w.user, this.cid);
+			}
+		}
+
 		// immutable list of maps
 		const messages = state.messages || [];
 		if (!this.state.messages) {

@@ -503,6 +503,7 @@ export class StreamChat {
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
 			client.state.updateUser(event.user);
+			client._updateUserReferences(event.user);
 		}
 		if (event.type === 'health.check') {
 			if (event.me) {
@@ -553,6 +554,29 @@ export class StreamChat {
 			});
 		}
 	};
+
+	/*
+	_updateUserReferences updates the members and watchers of the currently active channels
+	that contain this user
+	*/
+	_updateUserReferences(user) {
+		const refs = this.state.userChannelReferences[user.id] || [];
+		console.log('_updateUserReferences', user, refs);
+		for (const channelID of refs) {
+			const c = this.activeChannels[channelID];
+			// search the members and watchers and update as needed...
+			if (c.state.members[user.id]) {
+				console.log('member before', c.cid, c.state.members[user.id]);
+				c.state.members = c.state.members.setIn([user.id, 'user'], user);
+				console.log('member after', c.state.members[user.id]);
+			}
+			if (c.state.watchers[user.id]) {
+				console.log('member before', c.cid, c.state.watchers[user.id]);
+				c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+				console.log('member after', c.state.watchers[user.id]);
+			}
+		}
+	}
 
 	async connect() {
 		this.connecting = true;
@@ -639,6 +663,8 @@ export class StreamChat {
 				...options,
 			},
 		});
+
+		this.state.updateUsers(data.users);
 
 		return data;
 	}
