@@ -260,8 +260,7 @@ describe('Chat', function() {
 
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				const errorMsg =
-					'Both secret and user tokens are not set, did you forget to call client.setUser?';
+				const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
 				await expect(client.addDevice(deviceId, 'apn')).to.be.rejectedWith(
 					errorMsg,
 				);
@@ -536,6 +535,21 @@ describe('Chat', function() {
 					name: 'Mother of dragons',
 				}),
 			);
+		});
+
+		it('Calling a method after disconnect should raise a clear error', async function() {
+			const client2 = await getTestClientForUser('bob');
+			const chan = client2.channel('messaging', uuidv4());
+			await chan.watch();
+			await client2.disconnect();
+
+			const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+
+			let p = client2.addDevice('deviceID', 'apn');
+			await expect(p).to.be.rejectedWith(errorMsg);
+
+			p = chan.stopWatching();
+			await expect(p).to.be.rejectedWith(errorMsg);
 		});
 	});
 
