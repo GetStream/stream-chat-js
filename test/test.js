@@ -549,7 +549,9 @@ describe('Chat', function() {
 			await expect(p).to.be.rejectedWith(errorMsg);
 
 			p = chan.stopWatching();
-			await expect(p).to.be.rejectedWith(errorMsg);
+			await expect(p).to.be.rejectedWith(
+				`You can't use a channel after client.disconnect() was called`,
+			);
 
 			const anonClient = getTestClient(false);
 			await anonClient.setAnonymousUser();

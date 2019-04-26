@@ -234,11 +234,17 @@ export class StreamChat {
 		// remove the user specific fields
 		delete this.user;
 		delete this._user;
-
-		delete this.anonymous;
 		delete this.userID;
-		delete this.userToken;
+
+		this.anonymous = false;
+		this.userToken = null;
+
 		this.connectionEstablishedCount = 0;
+
+		for (const channel of Object.values(this.activeChannels)) {
+			channel._disconnect();
+		}
+
 		// close the WS connection
 		if (this.wsConnection) {
 			return this.wsConnection.disconnect();
