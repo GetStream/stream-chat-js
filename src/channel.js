@@ -136,10 +136,11 @@ export class Channel {
 	 *
 	 * @param {string} messageID the message id
 	 * @param {object} reaction the reaction object for instance {type: 'love'}
+	 * @param {string} user_id the id of the user (used only for server side request) default null
 	 *
 	 * @return {object} The Server Response
 	 */
-	async sendReaction(messageID, reaction) {
+	async sendReaction(messageID, reaction, user_id) {
 		if (!messageID) {
 			throw Error(`Message id is missing`);
 		}
@@ -149,6 +150,9 @@ export class Channel {
 		const body = {
 			reaction,
 		};
+		if (user_id != null) {
+			body.reaction = {...reaction, user:{id:user_id}};
+		}
 		const data = await this.getClient().post(
 			this.getClient().baseURL + `/messages/${messageID}/reaction`,
 			body,

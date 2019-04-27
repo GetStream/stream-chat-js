@@ -2,6 +2,7 @@
 
 - add channel.countUnreadMentions
 - improve client.disconnect
+- add userID param to add reactions server-side
 
 ## April 24th 2019 - 0.9.1
 
