@@ -1,4 +1,14 @@
-## April 24th 2019 -
+## April 27th 2019 - 0.10.0
+
+- add channel.countUnreadMentions
+- improve client.disconnect
+- add userID param to add reactions server-side
+
+## April 24th 2019 - 0.9.1
+
+- add babel runtime to dependencies
+
+## April 24th 2019 - 0.9.0
 
 - GDPR endpoints: deleteUser, exportUser and deactivateUser
 

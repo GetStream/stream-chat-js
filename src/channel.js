@@ -136,10 +136,11 @@ export class Channel {
 	 *
 	 * @param {string} messageID the message id
 	 * @param {object} reaction the reaction object for instance {type: 'love'}
+	 * @param {string} user_id the id of the user (used only for server side request) default null
 	 *
 	 * @return {object} The Server Response
 	 */
-	async sendReaction(messageID, reaction) {
+	async sendReaction(messageID, reaction, user_id) {
 		if (!messageID) {
 			throw Error(`Message id is missing`);
 		}
@@ -149,6 +150,9 @@ export class Channel {
 		const body = {
 			reaction,
 		};
+		if (user_id != null) {
+			body.reaction = { ...reaction, user: { id: user_id } };
+		}
 		const data = await this.getClient().post(
 			this.getClient().baseURL + `/messages/${messageID}/reaction`,
 			body,
@@ -473,6 +477,13 @@ export class Channel {
 		return data;
 	}
 
+	lastRead() {
+		this._checkInitialized();
+		return this.state.read[this.getClient().userID]
+			? this.state.read[this.getClient().userID].last_read
+			: null;
+	}
+
 	/**
 	 * countUnread - Count the number of messages with a date thats newer than the last read timestamp
 	 *
@@ -481,14 +492,8 @@ export class Channel {
 	 * @return {int} Unread count
 	 */
 	countUnread(lastRead) {
-		this._checkInitialized();
 		if (lastRead == null) {
-			lastRead = this.state.read[this.getClient().userID]
-				? this.state.read[this.getClient().userID].last_read
-				: null;
-		}
-		if (this.getClient()._isUsingServerAuth() && this.getClient().userID) {
-			throw Error(`you must call setUser to use countUnread serverside`);
+			lastRead = this.lastRead();
 		}
 		let count = 0;
 		for (const m of this.state.messages) {
@@ -498,6 +503,31 @@ export class Channel {
 			}
 			if (m.updated_at > lastRead) {
 				count++;
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * countUnread - Count the number of unread messages mentioning the current user
+	 *
+	 * @return {int} Unread mentions count
+	 */
+	countUnreadMentions() {
+		const lastRead = this.lastRead();
+		let count = 0;
+		for (const m of this.state.messages) {
+			if (lastRead == null) {
+				count++;
+				continue;
+			}
+			if (m.updated_at > lastRead) {
+				if (
+					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
+					-1
+				) {
+					count++;
+				}
 			}
 		}
 		return count;

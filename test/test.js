@@ -1839,6 +1839,7 @@ describe('Chat', function() {
 			await getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
 			channel = serverAuthClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
+				members: [userID, thierry.id],
 			});
 			await channel.create();
 		});
@@ -1894,6 +1895,31 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0]).to.be.an('object');
 			expect(msg.mentioned_users[0].id).to.eq(userID);
 			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
+		});
+
+		it('channel.countUnreadMentions should return 1', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(1);
+		});
+
+		it('channel.countUnreadMentions should return 0 for another user', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			await channel.markRead();
+			await sleep(500);
+			expect(channel.countUnreadMentions()).to.eq(0);
+		});
+
+		it('channel.countUnreadMentions should return 0 after calling markRead', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			await channel.markRead();
+			await sleep(500);
+			expect(channel.countUnreadMentions()).to.eq(0);
 		});
 
 		it('mentions inside replies should be enriched correctly', async () => {
