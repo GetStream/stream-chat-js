@@ -151,7 +151,7 @@ export class Channel {
 			reaction,
 		};
 		if (user_id != null) {
-			body.reaction = {...reaction, user:{id:user_id}};
+			body.reaction = { ...reaction, user: { id: user_id } };
 		}
 		const data = await this.getClient().post(
 			this.getClient().baseURL + `/messages/${messageID}/reaction`,

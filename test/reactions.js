@@ -104,13 +104,17 @@ describe('Reactions', function() {
 	it('Add a reaction server-side', async function() {
 		// setup the test message
 		const message = await getTestMessage('Add a reaction', channel);
-		
+
 		const serverSide = getTestClient(true);
 		const serverSideChannel = serverSide.channel('livestream', channel.id);
 		// add a reaction
-		const reply = await serverSideChannel.sendReaction(message.id, {
-			type: 'love',
-		}, userID);
+		const reply = await serverSideChannel.sendReaction(
+			message.id,
+			{
+				type: 'love',
+			},
+			userID,
+		);
 
 		expect(reply.message.text).to.equal(message.text);
 		expect(reply.reaction.user.id).to.equal(userID);
@@ -266,16 +270,13 @@ describe('Reactions', function() {
 		expect(response.reactions.length).to.equal(3);
 	});
 
-	it('Reactions with colons and dots', async function(){
+	it('Reactions with colons and dots', async function() {
 		const data = await channel.sendMessage({ text: uuidv4() });
 		const messageID = data.message.id;
 		const reaction = await channel.sendReaction(messageID, {
 			type: 'love:1.0',
 		});
-		await channel.deleteReaction(
-			messageID,
-			'love:1.0',
-		);
+		await channel.deleteReaction(messageID, 'love:1.0');
 	});
 
 	it('Reactions disabled', async function() {
