@@ -1017,6 +1017,10 @@ export class StreamChat {
 		return await this.delete(this.baseURL + `/messages/${messageID}`);
 	}
 
+	async getMessage(messageID) {
+		return await this.get(this.baseURL + `/messages/${messageID}`);
+	}
+
 	_userAgent() {
 		return `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${
 			pkg.version

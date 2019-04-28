@@ -1824,6 +1824,64 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Get message', function() {
+		let serverClient;
+		let channel;
+		const channelID = uuidv4();
+		const thierry = {
+			id: uuidv4(),
+		};
+		let message;
+
+		before(async () => {
+			serverClient = await getTestClient(true);
+			await serverClient.updateUser(thierry);
+			channel = serverClient.channel('team', channelID, {
+				created_by: { id: thierry.id },
+				members: [thierry.id],
+			});
+			await channel.create();
+			const r = await channel.sendMessage({
+				text: '@thierry how are you doing?',
+				user: thierry,
+			});
+			message = r.message;
+			delete message.user.online;
+			delete message.user.last_active;
+			delete message.user.updated_at;
+		});
+
+		it('should return a 404 for a message that does not exist', () => {
+			const p = serverClient.getMessage('bad message');
+			expect(p).to.be.rejectedWith('message with id bad message not found');
+		});
+
+		it('servers side get a message should work', async () => {
+			const r = await serverClient.getMessage(message.id);
+			delete r.message.user.online;
+			delete r.message.user.last_active;
+			delete r.message.user.updated_at;
+			expect(r.message).to.deep.eq(message);
+		});
+
+		it('client side get a message should work', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const r = await client.getMessage(message.id);
+			delete r.message.user.online;
+			delete r.message.user.last_active;
+			delete r.message.user.updated_at;
+			expect(r.message).to.deep.eq(message);
+		});
+
+		it('client side get a message does permission checking', async () => {
+			const uid = uuidv4();
+			const client = await getTestClientForUser(uid);
+			expect(client.getMessage(message.id)).to.be.rejectedWith(
+				`User '${uid}' with role user is not allowed to access Resource ReadChannel on channel type team`,
+			);
+		});
+	});
+
 	describe('Mentions', function() {
 		let channel;
 		const userID = 'tommaso-' + uuidv4();
