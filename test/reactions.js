@@ -14,6 +14,7 @@ import {
 	sleep,
 } from './utils';
 import uuidv4 from 'uuid/v4';
+import { async } from 'rxjs/internal/scheduler/async';
 
 const expect = chai.expect;
 
@@ -42,12 +43,13 @@ describe('Reactions', function() {
 	let reactionClientServerSide;
 	let channel;
 	let serverSideUser;
+	const userID = uuidv4();
 
 	before(async () => {
 		reactionClientServerSide = getTestClient(true);
 
 		serverSideUser = {
-			id: 'server-side-delete-reaction-user',
+			id: uuidv4(),
 			name: 'tommy',
 			status: 'busy',
 			image: 'myimageurl',
@@ -56,8 +58,8 @@ describe('Reactions', function() {
 
 		reactionClientServerSide.updateUser(serverSideUser);
 		reactionClientServerSide.setUser(serverSideUser);
-		reactionClient = await getTestClientForUser('userR', 'reacting to stuff yeah');
-		channel = reactionClient.channel('livestream', 'reactions');
+		reactionClient = await getTestClientForUser(userID, 'reacting to stuff yeah');
+		channel = reactionClient.channel('livestream', uuidv4());
 		await channel.watch();
 	});
 
@@ -74,7 +76,7 @@ describe('Reactions', function() {
     - Verify that you cant add a reaction when reactions are disabled..
     */
 
-	it.skip('Add a reaction', async function() {
+	it('Add a reaction', async function() {
 		// setup the test message
 		const message = await getTestMessage('Add a reaction', channel);
 		// add a reaction
@@ -82,8 +84,7 @@ describe('Reactions', function() {
 			type: 'love',
 		});
 		expect(reply.message.text).to.equal(message.text);
-		expect(reply.reaction.user.id).to.equal('userR');
-		expect(reply.reaction.id).to.not.be.undefined;
+		expect(reply.reaction.user.id).to.equal(userID);
 		const reactionID = reply.reaction.id;
 		// check the message from the response
 		expect(reply.message.own_reactions).to.deep.equal([reply.reaction]);
@@ -98,6 +99,36 @@ describe('Reactions', function() {
 		// check the own reactions
 		expect(lastMessage.own_reactions.length).to.equal(1);
 		expect(lastMessage.own_reactions).to.deep.equal([reply.reaction]);
+	});
+
+	it('Add a reaction server-side', async function() {
+		// setup the test message
+		const message = await getTestMessage('Add a reaction', channel);
+
+		const serverSide = getTestClient(true);
+		const serverSideChannel = serverSide.channel('livestream', channel.id);
+		// add a reaction
+		const reply = await serverSideChannel.sendReaction(
+			message.id,
+			{
+				type: 'love',
+			},
+			userID,
+		);
+
+		expect(reply.message.text).to.equal(message.text);
+		expect(reply.reaction.user.id).to.equal(userID);
+		const reactionID = reply.reaction.id;
+
+		// query state
+		const state = await channel.query();
+		const lastMessage = state.messages[state.messages.length - 1];
+		expect(lastMessage.id).to.equal(message.id);
+		// check the counts should be {love: 1}
+		expect(lastMessage.reaction_counts).to.deep.equal({ love: 1 });
+		// check the reactions, should contain the new reaction
+		expect(lastMessage.latest_reactions).to.have.length(1);
+		expect(lastMessage.latest_reactions[0].user.id).to.eq(userID);
 	});
 
 	it('Size constraints', async function() {
@@ -212,7 +243,7 @@ describe('Reactions', function() {
 			type: 'love',
 		});
 		expect(reply.message.text).to.equal(text);
-		expect(reply.reaction.user.id).to.equal('userR');
+		expect(reply.reaction.user.id).to.equal(userID);
 		expect(reply.reaction.type).to.equal('love');
 
 		const state = await channel.query();
@@ -237,6 +268,15 @@ describe('Reactions', function() {
 		// paginate
 		const response = await channel.getReactions(messageID, { limit: 3 });
 		expect(response.reactions.length).to.equal(3);
+	});
+
+	it('Reactions with colons and dots', async function() {
+		const data = await channel.sendMessage({ text: uuidv4() });
+		const messageID = data.message.id;
+		const reaction = await channel.sendReaction(messageID, {
+			type: 'love:1.0',
+		});
+		await channel.deleteReaction(messageID, 'love:1.0');
 	});
 
 	it('Reactions disabled', async function() {
