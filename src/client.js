@@ -244,6 +244,8 @@ export class StreamChat {
 		for (const channel of Object.values(this.activeChannels)) {
 			channel._disconnect();
 		}
+		// ensure we no longer return inactive channels
+		this.activeChannels = {};
 
 		// close the WS connection
 		if (this.wsConnection) {
