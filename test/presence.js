@@ -196,7 +196,7 @@ describe('Presence', function() {
 			expect(timmy.online).to.equal(false);
 		});
 
-		it.only('Query Channel and Presence', async function() {
+		it('Query Channel and Presence', async function() {
 			const channel = uuidv4();
 			const userID = `sarah123-${channel}`;
 
@@ -234,35 +234,6 @@ describe('Presence', function() {
 			);
 			await getTestClientForUser(userID, 'going to watch a movie');
 			await eventReceived;
-		});
-
-		it('Query Channels and Presence', function(done) {
-			const channelName = uuidv4();
-			const director = `Denis Villeneuve - ${uuidv4()}`;
-			// same as above, but with the query channels endpoint
-			user1Client.on('user.presence.changed', event => {
-				console.log(event.type);
-				if (event.user.id === paulID) {
-					expect(event.user.status).to.equal('rallying fremen');
-					expect(event.user.online).to.equal(true);
-					done();
-				}
-			});
-			async function runTest() {
-				const b = user1Client.channel('messaging', channelName, {
-					members: [paulID, 'duncan', 'jessica', 'user1'],
-					director,
-				});
-				await b.create();
-				const r = await user1Client.queryChannels(
-					{ director },
-					{ last_message_at: -1 },
-					{ presence: true },
-				);
-				console.log('waiting for connect..... event');
-				await getTestClientForUser(paulID, 'rallying fremen');
-			}
-			runAndLogPromise(runTest);
 		});
 
 		it('Query Users and Presence the other one', function(done) {

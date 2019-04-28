@@ -14,7 +14,7 @@ export class ClientState {
 
 	updateUsers(users) {
 		for (const user of users) {
-			this.users = this.users.set(user.id, Immutable(user));
+			this.updateUser(user);
 		}
 	}
 
@@ -25,12 +25,13 @@ export class ClientState {
 	}
 
 	updateUserReference(user, channelID) {
+		if (user == null) {
+			return;
+		}
 		this.updateUser(user);
 		if (!this.userChannelReferences[user.id]) {
-			this.userChannelReferences[user.id] = [];
+			this.userChannelReferences[user.id] = {};
 		}
-		this.userChannelReferences[user.id].push(channelID);
-
-		console.log('userChannelReferences', this.userChannelReferences);
+		this.userChannelReferences[user.id][channelID] = true;
 	}
 }

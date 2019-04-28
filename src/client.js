@@ -560,20 +560,16 @@ export class StreamChat {
 	that contain this user
 	*/
 	_updateUserReferences(user) {
-		const refs = this.state.userChannelReferences[user.id] || [];
-		console.log('_updateUserReferences', user, refs);
+		const refMap = this.state.userChannelReferences[user.id] || {};
+		const refs = Object.keys(refMap);
 		for (const channelID of refs) {
 			const c = this.activeChannels[channelID];
 			// search the members and watchers and update as needed...
 			if (c.state.members[user.id]) {
-				console.log('member before', c.cid, c.state.members[user.id]);
 				c.state.members = c.state.members.setIn([user.id, 'user'], user);
-				console.log('member after', c.state.members[user.id]);
 			}
 			if (c.state.watchers[user.id]) {
-				console.log('member before', c.cid, c.state.watchers[user.id]);
 				c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
-				console.log('member after', c.state.watchers[user.id]);
 			}
 		}
 	}
