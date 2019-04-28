@@ -246,6 +246,8 @@ export class StreamChat {
 		}
 		// ensure we no longer return inactive channels
 		this.activeChannels = {};
+		// reset client state
+		this.state = new ClientState();
 
 		// close the WS connection
 		if (this.wsConnection) {
@@ -567,11 +569,13 @@ export class StreamChat {
 		for (const channelID of refs) {
 			const c = this.activeChannels[channelID];
 			// search the members and watchers and update as needed...
-			if (c.state.members[user.id]) {
-				c.state.members = c.state.members.setIn([user.id, 'user'], user);
-			}
-			if (c.state.watchers[user.id]) {
-				c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+			if (c && c.state) {
+				if (c.state.members[user.id]) {
+					c.state.members = c.state.members.setIn([user.id, 'user'], user);
+				}
+				if (c.state.watchers[user.id]) {
+					c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+				}
 			}
 		}
 	}

@@ -1,4 +1,9 @@
-## April 24th 2019 -
+## April 28th 2019 - 0.9.2
+
+- Improved user presence support. If listening to user presence, channel.state.members and channel.state.watchers
+  are now automatically updated with the user's online/offline presence.
+
+## April 24th 2019 - 0.9.1
 
 - GDPR endpoints: deleteUser, exportUser and deactivateUser
 
