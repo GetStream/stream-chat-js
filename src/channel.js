@@ -501,7 +501,7 @@ export class Channel {
 				count++;
 				continue;
 			}
-			if (m.updated_at > lastRead) {
+			if (m.created_at > lastRead) {
 				count++;
 			}
 		}
@@ -521,7 +521,7 @@ export class Channel {
 				count++;
 				continue;
 			}
-			if (m.updated_at > lastRead) {
+			if (m.created_at > lastRead) {
 				if (
 					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
 					-1
