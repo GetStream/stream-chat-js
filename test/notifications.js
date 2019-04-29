@@ -227,7 +227,6 @@ describe('Mark all read server-side', function() {
 		await thierryClient.disconnect();
 	});
 
-
 	it('thierry checks unread counts via query channel', async function() {
 		const thierryClient = getTestClient(false);
 		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
@@ -634,7 +633,7 @@ describe('Unread on connect', function() {
 	it('tommaso likes one message', async function() {
 		const chan = serverSideClient.channel('messaging', cids[2]);
 		const r = await chan.query();
-		await chan.sendReaction(chan.state.messages[0].id, {type:'love'}, tommasoID);
+		await chan.sendReaction(chan.state.messages[0].id, { type: 'love' }, tommasoID);
 	});
 
 	it('thierry re-connects and receives unread_count=0', async function() {
