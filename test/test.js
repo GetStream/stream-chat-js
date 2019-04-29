@@ -1906,37 +1906,106 @@ describe('Chat', function() {
 	describe('Moderation', function() {
 		serverAuthClient = getTestClient(true);
 
-		const evil = {
-			id: 'eviluser',
+		const eviluser = {
+			id: 'eviluser' + uuidv4(),
 			name: 'Eviluser',
 			status: 'busy',
 			image: 'myimageurl',
 			role: 'user',
 		};
-		before(async () => {
-			await createUsers('evilUserIP');
-		});
+		const eviluser2 = {
+			id: 'eviluser2' + uuidv4(),
+			name: 'Eviluser2',
+			status: 'busy2',
+			image: 'myimageurl2',
+			role: 'user',
+		};
 
-		serverAuthClient.updateUser(evil);
+		const moderator = {
+			id: 'moderator' + uuidv4(),
+			name: 'moderator-x',
+			status: 'busy2',
+			image: 'myimageurl2',
+			role: 'user',
+		};
+		let channel;
+		const channelID = `ban-test-channel-` + uuidv4();
+
+		before(async () => {
+			await getTestClient(true).updateUser({
+				id: eviluser.id,
+				instrument: 'guitar',
+			});
+			await getTestClient(true).updateUser({
+				id: eviluser2.id,
+				instrument: 'guitar',
+			});
+			serverAuthClient.updateUser(moderator);
+
+			channel = serverAuthClient.channel('messaging', channelID, {
+				created_by: { id: moderator.id },
+			});
+
+			await channel.create();
+			await sleep(500);
+			//send a message to the channel so we can have the user ip
+
+			const text = 'this is a terrible message and should be moderated';
+			const message = {
+				text,
+				user: eviluser,
+			};
+
+			//ensure we know eviluser.id IP
+			const response = await channel.sendMessage(message);
+			expect(response.message.text).to.equal(text);
+			expect(response.message.user.id).to.equal(eviluser.id);
+			await sleep(500);
+			const message2 = {
+				text,
+				user: eviluser2,
+			};
+
+			//ensure we know eviluser2.id IP
+			const response2 = await channel.sendMessage(message2);
+			expect(response2.message.text).to.equal(text);
+			expect(response2.message.user.id).to.equal(eviluser2.id);
+			await sleep(500);
+
+			const message3 = {
+				text,
+				user: moderator,
+			};
+
+			//ensure we know moderator IP
+			const response3 = await channel.sendMessage(message3);
+			expect(response3.message.text).to.equal(text);
+			expect(response3.message.user.id).to.equal(moderator.id);
+			await sleep(500);
+		});
 
 		it('Ban', async function() {
 			// ban a user for 60 minutes
-			await serverAuthClient.banUser('eviluser', {
+			await serverAuthClient.banUser(eviluser2.id, {
 				timeout: 60,
 				reason: 'Stop spamming your YouTube channel',
+				user_id: moderator.id,
 			});
 		});
 
-		it('Ban IP should fail if we share the same ip with target', async function() {
+		it('Ban IP should fail if we share the same ip with target user', async function() {
 			try {
-				await serverAuthClient.banUser('evilUserIP', {
+				await serverAuthClient.banUser(eviluser.id, {
 					timeout: 60,
 					reason: 'Stop spamming your YouTube channel',
 					ban_ip: true,
+					user_id: moderator.id,
 				});
-				expect().fail('cannot ban own user ip');
+				expect.fail('should fail');
 			} catch (e) {
-				expect(e).not.to.be.null;
+				expect(e.message).to.equal(
+					'StreamChat error code 4: Ban failed with error: "creator and target user share same ip"',
+				);
 			}
 		});
 
