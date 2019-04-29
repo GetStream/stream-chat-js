@@ -200,14 +200,23 @@ describe('Presence', function() {
 			const channel = uuidv4();
 			const userID = `sarah123-${channel}`;
 
-			console.log('start2');
 			// create a channel where channel.members contains wendy
 			await getTestClient(true).updateUser({ id: userID });
 			const b = user1Client.channel('messaging', channel, {
 				members: ['sandra', userID, 'user1'],
 			});
-			console.log('created a channel with user', userID);
-			await b.watch({ presence: true });
+			const stateResponse = await b.watch({
+				presence: true,
+				watchers: { limit: 10 },
+			});
+			// everyone except user1 should be offline
+			for (const m of stateResponse.members) {
+				const shouldBeOnline = m.user.id == user1Client.userID;
+				expect(m.user.online).to.equal(shouldBeOnline);
+			}
+			expect(b.state.members[userID].user.online).to.equal(false);
+			expect(user1Client.state.users[userID].online).to.equal(false);
+
 			// sandra goes online should trigger an event
 			console.log('marking user online', userID);
 
@@ -216,6 +225,9 @@ describe('Presence', function() {
 					if (event.user.id === userID) {
 						expect(event.user.status).to.equal('going to watch a movie');
 						expect(event.user.online).to.equal(true);
+						expect(b.state.members[userID].user.online).to.equal(true);
+						expect(user1Client.state.users[userID].online).to.equal(true);
+
 						resolve();
 					}
 				}),
@@ -224,41 +236,13 @@ describe('Presence', function() {
 			await eventReceived;
 		});
 
-		it('Query Channels and Presence', function(done) {
-			const channelName = uuidv4();
-			const director = `Denis Villeneuve - ${uuidv4()}`;
-			// same as above, but with the query channels endpoint
-			user1Client.on('user.presence.changed', event => {
-				console.log(event.type);
-				if (event.user.id === paulID) {
-					expect(event.user.status).to.equal('rallying fremen');
-					expect(event.user.online).to.equal(true);
-					done();
-				}
-			});
-			async function runTest() {
-				const b = user1Client.channel('messaging', channelName, {
-					members: [paulID, 'duncan', 'jessica', 'user1'],
-					director,
-				});
-				await b.create();
-				const r = await user1Client.queryChannels(
-					{ director },
-					{ last_message_at: -1 },
-					{ presence: true },
-				);
-				console.log('waiting for connect..... event');
-				await getTestClientForUser(paulID, 'rallying fremen');
-			}
-			runAndLogPromise(runTest);
-		});
-
 		it('Query Users and Presence the other one', function(done) {
 			// Same as above but with the query users endpoint
 			user1Client.on('user.presence.changed', event => {
 				if (event.user.id === 'jessica') {
 					expect(event.user.status).to.equal('sayhi');
 					expect(event.user.online).to.equal(true);
+					expect(user1Client.state.users.jessica.online).to.equal(true);
 					done();
 				}
 			});
@@ -273,8 +257,45 @@ describe('Presence', function() {
 					{ last_active2: -1 },
 					{ presence: true },
 				);
+				expect(resp.users[0].online).to.equal(false);
+				expect(user1Client.state.users.jessica.online).to.equal(false);
 				// jessica goes online should trigger an event
 				await getTestClientForUser('jessica', 'sayhi');
+			}
+			runAndLogPromise(runTest);
+		});
+
+		it('State and Query Channels and Presence', function(done) {
+			const channelName = uuidv4();
+			const director = `Denis Villeneuve - ${uuidv4()}`;
+			const b = user1Client.channel('messaging', channelName, {
+				members: [paulID, 'duncan', 'jessica', 'user1'],
+				director,
+			});
+			// same as above, but with the query channels endpoint
+			user1Client.on('user.presence.changed', event => {
+				console.log(event.type);
+				if (event.user.id === paulID) {
+					expect(event.user.status).to.equal('rallying fremen');
+					expect(event.user.online).to.equal(true);
+					expect(b.state.members[paulID].user.online).to.equal(true);
+					expect(user1Client.state.users[paulID].online).to.equal(true);
+					expect();
+					done();
+				}
+			});
+			async function runTest() {
+				await b.create();
+				const r = await user1Client.queryChannels(
+					{ director },
+					{ last_message_at: -1 },
+					{ presence: true },
+				);
+				// start out as offline
+				expect(r[0].state.members[paulID].user.online).to.equal(false);
+				expect(user1Client.state.users[paulID].online).to.equal(false);
+				console.log('waiting for connect..... event');
+				await getTestClientForUser(paulID, 'rallying fremen');
 			}
 			runAndLogPromise(runTest);
 		});

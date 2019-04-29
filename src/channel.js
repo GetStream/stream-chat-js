@@ -32,7 +32,7 @@ export class Channel {
 			);
 		}
 
-		this.client = client;
+		this._client = client;
 		this.type = type;
 		this.id = id;
 		// used by the frontend, gets updated:
@@ -47,6 +47,19 @@ export class Channel {
 		this.initialized = false;
 		this.lastTypingEvent = null;
 		this.isTyping = false;
+		this.disconnected = false;
+	}
+
+	/**
+	 * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
+	 *
+	 * @return {object}
+	 */
+	getClient() {
+		if (this.disconnected === true) {
+			throw Error(`You can't use a channel after client.disconnect() was called`);
+		}
+		return this._client;
 	}
 
 	/**
@@ -55,7 +68,8 @@ export class Channel {
 	 * @return {object}
 	 */
 	getConfig() {
-		return this.client.configs[this.type];
+		const client = this.getClient();
+		return client.configs[this.type];
 	}
 
 	/**
@@ -67,14 +81,14 @@ export class Channel {
 	 */
 
 	async sendMessage(message) {
-		const data = await this.client.post(this._channelURL() + '/message', {
+		const data = await this.getClient().post(this._channelURL() + '/message', {
 			message,
 		});
 		return data;
 	}
 
 	sendFile(uri, name, contentType, user) {
-		return this.client.sendFile(
+		return this.getClient().sendFile(
 			`${this._channelURL()}/file`,
 			uri,
 			name,
@@ -84,7 +98,7 @@ export class Channel {
 	}
 
 	sendImage(uri, name, contentType, user) {
-		return this.client.sendFile(
+		return this.getClient().sendFile(
 			`${this._channelURL()}/image`,
 			uri,
 			name,
@@ -94,11 +108,11 @@ export class Channel {
 	}
 
 	deleteFile(url) {
-		return this.client.delete(`${this._channelURL()}/file`, { url });
+		return this.getClient().delete(`${this._channelURL()}/file`, { url });
 	}
 
 	deleteImage(url) {
-		return this.client.delete(`${this._channelURL()}/image`, { url });
+		return this.getClient().delete(`${this._channelURL()}/image`, { url });
 	}
 
 	/**
@@ -110,7 +124,7 @@ export class Channel {
 	 */
 	async sendEvent(event) {
 		this._checkInitialized();
-		const data = await this.client.post(this._channelURL() + '/event', {
+		const data = await this.getClient().post(this._channelURL() + '/event', {
 			event,
 		});
 
@@ -122,10 +136,11 @@ export class Channel {
 	 *
 	 * @param {string} messageID the message id
 	 * @param {object} reaction the reaction object for instance {type: 'love'}
+	 * @param {string} user_id the id of the user (used only for server side request) default null
 	 *
 	 * @return {object} The Server Response
 	 */
-	async sendReaction(messageID, reaction) {
+	async sendReaction(messageID, reaction, user_id) {
 		if (!messageID) {
 			throw Error(`Message id is missing`);
 		}
@@ -135,8 +150,11 @@ export class Channel {
 		const body = {
 			reaction,
 		};
-		const data = await this.client.post(
-			this.client.baseURL + `/messages/${messageID}/reaction`,
+		if (user_id != null) {
+			body.reaction = { ...reaction, user: { id: user_id } };
+		}
+		const data = await this.getClient().post(
+			this.getClient().baseURL + `/messages/${messageID}/reaction`,
 			body,
 		);
 		return data;
@@ -160,13 +178,13 @@ export class Channel {
 		}
 
 		const url =
-			this.client.baseURL + `/messages/${messageID}/reaction/${reactionType}`;
+			this.getClient().baseURL + `/messages/${messageID}/reaction/${reactionType}`;
 		//provided when server side request
 		if (user_id) {
-			return this.client.delete(url, { user_id });
+			return this.getClient().delete(url, { user_id });
 		}
 
-		return this.client.delete(url);
+		return this.getClient().delete(url);
 	}
 
 	/**
@@ -177,7 +195,7 @@ export class Channel {
 	 * @return {type} The server response
 	 */
 	async update(channelData, updateMessage) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			message: updateMessage,
 			data: channelData,
 		});
@@ -191,7 +209,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async delete() {
-		const data = await this.client.delete(this._channelURL());
+		const data = await this.getClient().delete(this._channelURL());
 		return data;
 	}
 
@@ -201,12 +219,12 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async truncate() {
-		const data = await this.client.post(this._channelURL() + '/truncate');
+		const data = await this.getClient().post(this._channelURL() + '/truncate');
 		return data;
 	}
 
 	async acceptInvite(options = {}) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			accept_invite: true,
 			...options,
 		});
@@ -215,7 +233,7 @@ export class Channel {
 	}
 
 	async rejectInvite(options = {}) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			reject_invite: true,
 			...options,
 		});
@@ -224,7 +242,7 @@ export class Channel {
 	}
 
 	async addMembers(members) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			add_members: members,
 		});
 		this.data = data.channel;
@@ -232,7 +250,7 @@ export class Channel {
 	}
 
 	async addModerators(members) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			add_moderators: members,
 		});
 		this.data = data.channel;
@@ -240,7 +258,7 @@ export class Channel {
 	}
 
 	async removeMembers(members) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			remove_members: members,
 		});
 		this.data = data.channel;
@@ -248,7 +266,7 @@ export class Channel {
 	}
 
 	async demoteModerators(members) {
-		const data = await this.client.post(this._channelURL(), {
+		const data = await this.getClient().post(this._channelURL(), {
 			demote_moderators: members,
 		});
 		this.data = data.channel;
@@ -260,12 +278,15 @@ export class Channel {
 		if (!messageID) {
 			throw Error(`Message id is missing`);
 		}
-		return this.client.post(this.client.baseURL + `/messages/${messageID}/action`, {
-			message_id: messageID,
-			form_data: formData,
-			id: this.id,
-			type: this.type,
-		});
+		return this.getClient().post(
+			this.getClient().baseURL + `/messages/${messageID}/action`,
+			{
+				message_id: messageID,
+				form_data: formData,
+				id: this.id,
+				type: this.type,
+			},
+		);
 	}
 
 	/**
@@ -347,7 +368,7 @@ export class Channel {
 			lastMessageID = lastMessage.id;
 		}
 
-		const response = await this.client.post(this._channelURL() + '/read', {
+		const response = await this.getClient().post(this._channelURL() + '/read', {
 			last_message_id: lastMessageID,
 			last_message_at: lastMessageCreatedAt,
 			...data,
@@ -386,9 +407,9 @@ export class Channel {
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.client.wsPromise;
+		await this.getClient().wsPromise;
 
-		if (!this.client._hasConnectionID()) {
+		if (!this.getClient()._hasConnectionID()) {
 			defaultOptions.watch = false;
 		}
 
@@ -406,7 +427,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async stopWatching() {
-		const response = await this.client.post(
+		const response = await this.getClient().post(
 			this._channelURL() + '/stop-watching',
 			{},
 		);
@@ -423,8 +444,8 @@ export class Channel {
 	 * @return {type} A response with a list of messages
 	 */
 	async getReplies(parent_id, options) {
-		const data = await this.client.get(
-			this.client.baseURL + `/messages/${parent_id}/replies`,
+		const data = await this.getClient().get(
+			this.getClient().baseURL + `/messages/${parent_id}/replies`,
 			{
 				...options,
 			},
@@ -447,13 +468,20 @@ export class Channel {
 	 * @return {object} Server response
 	 */
 	async getReactions(message_id, options) {
-		const data = await this.client.get(
-			this.client.baseURL + `/messages/${message_id}/reactions`,
+		const data = await this.getClient().get(
+			this.getClient().baseURL + `/messages/${message_id}/reactions`,
 			{
 				...options,
 			},
 		);
 		return data;
+	}
+
+	lastRead() {
+		this._checkInitialized();
+		return this.state.read[this.getClient().userID]
+			? this.state.read[this.getClient().userID].last_read
+			: null;
 	}
 
 	/**
@@ -464,14 +492,8 @@ export class Channel {
 	 * @return {int} Unread count
 	 */
 	countUnread(lastRead) {
-		this._checkInitialized();
 		if (lastRead == null) {
-			lastRead = this.state.read[this.client.userID]
-				? this.state.read[this.client.userID].last_read
-				: null;
-		}
-		if (this.client._isUsingServerAuth() && this.client.userID) {
-			throw Error(`you must call setUser to use countUnread serverside`);
+			lastRead = this.lastRead();
 		}
 		let count = 0;
 		for (const m of this.state.messages) {
@@ -479,8 +501,33 @@ export class Channel {
 				count++;
 				continue;
 			}
-			if (m.updated_at > lastRead) {
+			if (m.created_at > lastRead) {
 				count++;
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * countUnread - Count the number of unread messages mentioning the current user
+	 *
+	 * @return {int} Unread mentions count
+	 */
+	countUnreadMentions() {
+		const lastRead = this.lastRead();
+		let count = 0;
+		for (const m of this.state.messages) {
+			if (lastRead == null) {
+				count++;
+				continue;
+			}
+			if (m.created_at > lastRead) {
+				if (
+					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
+					-1
+				) {
+					count++;
+				}
 			}
 		}
 		return count;
@@ -509,14 +556,14 @@ export class Channel {
 	 */
 	async query(options) {
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.client.wsPromise;
+		await this.getClient().wsPromise;
 
-		let queryURL = `${this.client.baseURL}/channels/${this.type}`;
+		let queryURL = `${this.getClient().baseURL}/channels/${this.type}`;
 		if (this.id) {
 			queryURL += `/${this.id}`;
 		}
 
-		const state = await this.client.post(queryURL + '/query', {
+		const state = await this.getClient().post(queryURL + '/query', {
 			data: this._data,
 			state: true,
 			...options,
@@ -527,12 +574,12 @@ export class Channel {
 			this.id = state.channel.id;
 			this.cid = state.channel.cid;
 			// set the channel as active...
-			if (!(this.cid in this.client.activeChannels)) {
-				this.client.activeChannels[this.cid] = this;
+			if (!(this.cid in this.getClient().activeChannels)) {
+				this.getClient().activeChannels[this.cid] = this;
 			}
 		}
 
-		this.client._addChannelConfig(state);
+		this.getClient()._addChannelConfig(state);
 
 		// add any messages to our channel state
 		this._initializeState(state);
@@ -549,7 +596,7 @@ export class Channel {
 	 */
 	async banUser(targetUserID, options) {
 		this._checkInitialized();
-		return await this.client.banUser(targetUserID, {
+		return await this.getClient().banUser(targetUserID, {
 			...options,
 			type: this.type,
 			id: this.id,
@@ -564,7 +611,7 @@ export class Channel {
 	 */
 	async unbanUser(targetUserID) {
 		this._checkInitialized();
-		return await this.client.unbanUser(targetUserID, {
+		return await this.getClient().unbanUser(targetUserID, {
 			type: this.type,
 			id: this.id,
 		});
@@ -691,12 +738,12 @@ export class Channel {
 		if (!this.id) {
 			throw new Error('channel id is not defined');
 		}
-		const channelURL = `${this.client.baseURL}/channels/${this.type}/${this.id}`;
+		const channelURL = `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
 		return channelURL;
 	};
 
 	_checkInitialized() {
-		if (!this.initialized && !this.client._isUsingServerAuth()) {
+		if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
 			throw Error(
 				`Channel ${
 					this.cid
@@ -706,6 +753,19 @@ export class Channel {
 	}
 
 	_initializeState(state) {
+		// add the Users
+		if (state.members) {
+			for (const m of state.members) {
+				this.getClient().state.updateUserReference(m.user, this.cid);
+			}
+		}
+
+		if (state.watchers) {
+			for (const w of state.watchers) {
+				this.getClient().state.updateUserReference(w.user, this.cid);
+			}
+		}
+
 		// immutable list of maps
 		const messages = state.messages || [];
 		if (!this.state.messages) {
@@ -720,8 +780,11 @@ export class Channel {
 			}
 		}
 		if (state.read) {
-			if (this.client.userID != null) {
-				this.state.read = this.state.read.set(this.client.user.id, new Date(0));
+			if (this.getClient().userID != null) {
+				this.state.read = this.state.read.set(
+					this.getClient().user.id,
+					new Date(0),
+				);
 			}
 			for (const read of state.read) {
 				const parsedRead = Object.assign({ ...read });
@@ -734,5 +797,9 @@ export class Channel {
 				this.state.members = this.state.members.set(m.user.id, m);
 			}
 		}
+	}
+
+	_disconnect() {
+		this.disconnected = true;
 	}
 }

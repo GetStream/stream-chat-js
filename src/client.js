@@ -234,11 +234,21 @@ export class StreamChat {
 		// remove the user specific fields
 		delete this.user;
 		delete this._user;
-
-		delete this.anonymous;
 		delete this.userID;
-		delete this.userToken;
+
+		this.anonymous = false;
+		this.userToken = null;
+
 		this.connectionEstablishedCount = 0;
+
+		for (const channel of Object.values(this.activeChannels)) {
+			channel._disconnect();
+		}
+		// ensure we no longer return inactive channels
+		this.activeChannels = {};
+		// reset client state
+		this.state = new ClientState();
+
 		// close the WS connection
 		if (this.wsConnection) {
 			return this.wsConnection.disconnect();
@@ -497,6 +507,7 @@ export class StreamChat {
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
 			client.state.updateUser(event.user);
+			client._updateUserReferences(event.user);
 		}
 		if (event.type === 'health.check') {
 			if (event.me) {
@@ -548,6 +559,27 @@ export class StreamChat {
 		}
 	};
 
+	/*
+	_updateUserReferences updates the members and watchers of the currently active channels
+	that contain this user
+	*/
+	_updateUserReferences(user) {
+		const refMap = this.state.userChannelReferences[user.id] || {};
+		const refs = Object.keys(refMap);
+		for (const channelID of refs) {
+			const c = this.activeChannels[channelID];
+			// search the members and watchers and update as needed...
+			if (c && c.state) {
+				if (c.state.members[user.id]) {
+					c.state.members = c.state.members.setIn([user.id, 'user'], user);
+				}
+				if (c.state.watchers[user.id]) {
+					c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+				}
+			}
+		}
+	}
+
 	async connect() {
 		this.connecting = true;
 		const client = this;
@@ -570,12 +602,7 @@ export class StreamChat {
 			throw Error('User object is too large');
 		}
 
-		let token = '';
-
-		if (this.anonymous === false) {
-			token =
-				this.userToken !== null ? this.userToken : JWTServerToken(this.secret);
-		}
+		const token = this._getToken();
 
 		const authType = this.getAuthType();
 		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
@@ -638,6 +665,8 @@ export class StreamChat {
 				...options,
 			},
 		});
+
+		this.state.updateUsers(data.users);
 
 		return data;
 	}
@@ -1016,6 +1045,10 @@ export class StreamChat {
 		return await this.delete(this.baseURL + `/messages/${messageID}`);
 	}
 
+	async getMessage(messageID) {
+		return await this.get(this.baseURL + `/messages/${messageID}`);
+	}
+
 	_userAgent() {
 		return `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${
 			pkg.version
@@ -1032,17 +1065,7 @@ export class StreamChat {
 	};
 
 	_addClientParams(params = {}) {
-		let token = '';
-		if (this.secret === null && this.userToken === null && this.anonymous === false) {
-			throw new Error(
-				'Both secret and user tokens are not set, did you forget to call client.setUser?',
-			);
-		}
-
-		if (this.anonymous === false) {
-			token =
-				this.userToken !== null ? this.userToken : JWTServerToken(this.secret);
-		}
+		const token = this._getToken();
 
 		return {
 			...this.options,
@@ -1058,6 +1081,19 @@ export class StreamChat {
 				'x-stream-client': this._userAgent(),
 			},
 		};
+	}
+
+	_getToken() {
+		if (this.secret == null && this.userToken == null && !this.anonymous) {
+			throw new Error(
+				`Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
+			);
+		}
+		let token = '';
+		if (!this.anonymous) {
+			token = this.userToken != null ? this.userToken : JWTServerToken(this.secret);
+		}
+		return token;
 	}
 
 	_startCleaning() {

@@ -260,8 +260,7 @@ describe('Chat', function() {
 
 		describe('User is not set', function() {
 			it('device management does not work', async function() {
-				const errorMsg =
-					'Both secret and user tokens are not set, did you forget to call client.setUser?';
+				const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
 				await expect(client.addDevice(deviceId, 'apn')).to.be.rejectedWith(
 					errorMsg,
 				);
@@ -536,6 +535,30 @@ describe('Chat', function() {
 					name: 'Mother of dragons',
 				}),
 			);
+		});
+
+		it('Calling a method after disconnect should raise a clear error', async function() {
+			const client2 = await getTestClientForUser('bob');
+			const chan = client2.channel('messaging', uuidv4());
+			await chan.watch();
+			await client2.disconnect();
+
+			const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+
+			let p = client2.addDevice('deviceID', 'apn');
+			await expect(p).to.be.rejectedWith(errorMsg);
+
+			p = chan.stopWatching();
+			await expect(p).to.be.rejectedWith(
+				`You can't use a channel after client.disconnect() was called`,
+			);
+
+			const anonClient = getTestClient(false);
+			await anonClient.setAnonymousUser();
+			await anonClient.disconnect();
+
+			p = anonClient.addDevice('deviceID', 'apn');
+			await expect(p).to.be.rejectedWith(errorMsg);
 		});
 	});
 
@@ -1801,6 +1824,64 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Get message', function() {
+		let serverClient;
+		let channel;
+		const channelID = uuidv4();
+		const thierry = {
+			id: uuidv4(),
+		};
+		let message;
+
+		before(async () => {
+			serverClient = await getTestClient(true);
+			await serverClient.updateUser(thierry);
+			channel = serverClient.channel('team', channelID, {
+				created_by: { id: thierry.id },
+				members: [thierry.id],
+			});
+			await channel.create();
+			const r = await channel.sendMessage({
+				text: '@thierry how are you doing?',
+				user: thierry,
+			});
+			message = r.message;
+			delete message.user.online;
+			delete message.user.last_active;
+			delete message.user.updated_at;
+		});
+
+		it('should return a 404 for a message that does not exist', () => {
+			const p = serverClient.getMessage('bad message');
+			expect(p).to.be.rejectedWith('message with id bad message not found');
+		});
+
+		it('servers side get a message should work', async () => {
+			const r = await serverClient.getMessage(message.id);
+			delete r.message.user.online;
+			delete r.message.user.last_active;
+			delete r.message.user.updated_at;
+			expect(r.message).to.deep.eq(message);
+		});
+
+		it('client side get a message should work', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const r = await client.getMessage(message.id);
+			delete r.message.user.online;
+			delete r.message.user.last_active;
+			delete r.message.user.updated_at;
+			expect(r.message).to.deep.eq(message);
+		});
+
+		it('client side get a message does permission checking', async () => {
+			const uid = uuidv4();
+			const client = await getTestClientForUser(uid);
+			expect(client.getMessage(message.id)).to.be.rejectedWith(
+				`User '${uid}' with role user is not allowed to access Resource ReadChannel on channel type team`,
+			);
+		});
+	});
+
 	describe('Mentions', function() {
 		let channel;
 		const userID = 'tommaso-' + uuidv4();
@@ -1816,6 +1897,7 @@ describe('Chat', function() {
 			await getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
 			channel = serverAuthClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
+				members: [userID, thierry.id],
 			});
 			await channel.create();
 		});
@@ -1871,6 +1953,31 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0]).to.be.an('object');
 			expect(msg.mentioned_users[0].id).to.eq(userID);
 			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
+		});
+
+		it('channel.countUnreadMentions should return 1', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(1);
+		});
+
+		it('channel.countUnreadMentions should return 0 for another user', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			await channel.markRead();
+			await sleep(500);
+			expect(channel.countUnreadMentions()).to.eq(0);
+		});
+
+		it('channel.countUnreadMentions should return 0 after calling markRead', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			await channel.markRead();
+			await sleep(500);
+			expect(channel.countUnreadMentions()).to.eq(0);
 		});
 
 		it('mentions inside replies should be enriched correctly', async () => {
