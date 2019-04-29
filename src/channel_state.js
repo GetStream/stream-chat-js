@@ -104,9 +104,11 @@ export class ChannelState {
 				continue;
 			}
 			message = this._removeReactionFromMessage(message, reaction);
-			message = message.update('own_reactions', (old = []) =>
-				old.concat([reaction]),
-			);
+			if (this._channel.getClient().userID === reaction.user.id) {
+				message = message.update('own_reactions', (old = []) =>
+					old.concat([reaction]),
+				);
+			}
 			message = message.update('latest_reactions', (old = []) =>
 				old.concat([reaction]),
 			);
