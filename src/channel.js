@@ -361,16 +361,7 @@ export class Channel {
 			return Promise.resolve(null);
 		}
 
-		const lastMessage = this.lastMessage();
-		let lastMessageCreatedAt, lastMessageID;
-		if (lastMessage) {
-			lastMessageCreatedAt = lastMessage.created_at;
-			lastMessageID = lastMessage.id;
-		}
-
 		const response = await this.getClient().post(this._channelURL() + '/read', {
-			last_message_id: lastMessageID,
-			last_message_at: lastMessageCreatedAt,
 			...data,
 		});
 
@@ -436,7 +427,7 @@ export class Channel {
 	}
 
 	/**
-	 * getReplies - Description
+	 * getReplies - List the message replies for a parent message
 	 *
 	 * @param {type} parent_id The message parent id, ie the top of the thread
 	 * @param {type} options   Pagination params, ie {limit:10, idlte: 10}
@@ -534,9 +525,9 @@ export class Channel {
 	}
 
 	/**
-	 * create - Description
+	 * create - Creates a new channel
 	 *
-	 * @return {type} Description
+	 * @return {type} The Server Reponse
 	 */
 	create = async () => {
 		const options = {

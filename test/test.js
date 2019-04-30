@@ -1858,18 +1858,22 @@ describe('Chat', function() {
 
 		it('servers side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
+			expect(r.message.channel.id).to.eq(channelID);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
+			delete r.message.channel;
 			expect(r.message).to.deep.eq(message);
 		});
 
 		it('client side get a message should work', async () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
+			expect(r.message.channel.id).to.eq(channelID);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
+			delete r.message.channel;
 			expect(r.message).to.deep.eq(message);
 		});
 
