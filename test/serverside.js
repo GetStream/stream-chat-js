@@ -895,6 +895,7 @@ describe('Channel types', function() {
 		it('should have the right defaults and name', function() {
 			const expectedData = {
 				automod: 'AI',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -939,6 +940,7 @@ describe('Channel types', function() {
 
 			const expectedData = {
 				automod: 'AI',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -986,6 +988,7 @@ describe('Channel types', function() {
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
 				automod: 'AI',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
@@ -1156,6 +1159,7 @@ describe('Channel types', function() {
 		it('should return configs correctly', function() {
 			const expectedData = {
 				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[text]',
@@ -1230,6 +1234,7 @@ describe('Channel types', function() {
 		it('should return configs correctly for channel type messaging', function() {
 			const expectedData = {
 				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[text]',
