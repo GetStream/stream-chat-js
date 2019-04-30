@@ -1021,6 +1021,7 @@ describe('Channel types', function() {
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
 				automod: 'AI',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
