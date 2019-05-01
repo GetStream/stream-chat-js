@@ -67,6 +67,10 @@ describe('Managing users', function() {
 	const user = {
 		id: uuidv4(),
 	};
+	const evilUser = 'evil-user' + uuidv4();
+	before(async () => {
+		await createUsers([evilUser, user.id]);
+	});
 
 	it('edit user inserts if missing', async function() {
 		await client.updateUser(user);
@@ -105,7 +109,9 @@ describe('Managing users', function() {
 	});
 
 	it('ban user', async function() {
-		await client.banUser(user.id);
+		await client.banUser(evilUser, {
+			user_id: user.id,
+		});
 	});
 
 	it('remove ban', async function() {

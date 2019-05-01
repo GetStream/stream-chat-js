@@ -824,7 +824,7 @@ describe('Chat', function() {
 				expect(channels[0].data.id).to.equal(channelID);
 			});
 
-			it.skip('Channel Filtering equal Members', async function() {
+			it('Channel Filtering equal Members', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -867,7 +867,7 @@ describe('Chat', function() {
 				]);
 			});
 
-			it.skip('Channel Filtering equal Members short mode', async function() {
+			it('Channel Filtering equal Members short mode', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -898,7 +898,7 @@ describe('Chat', function() {
 				]);
 			});
 
-			it.skip('Channel Filtering equal array custom field', async function() {
+			it('Channel Filtering equal array custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -922,7 +922,7 @@ describe('Chat', function() {
 				expect(channels2[0].data.id).to.equal(channelID);
 			});
 
-			it.skip('Channel Filtering equal Members and custom field', async function() {
+			it('Channel Filtering equal Members and custom field', async function() {
 				const uuid = uuidv4();
 
 				const uniqueMember = `jackjones-${uuid}`;
@@ -2025,6 +2025,18 @@ describe('Chat', function() {
 			role: 'user',
 		};
 
+		const moderator = {
+			id: 'eviluser-mod',
+			name: 'moderator',
+			status: 'busy',
+			image: 'myimageurl',
+			role: 'user',
+		};
+
+		before(async () => {
+			await createUsers([moderator.id]);
+		});
+
 		serverAuthClient.updateUser(evil);
 
 		it('Ban', async function() {
@@ -2032,6 +2044,7 @@ describe('Chat', function() {
 			await serverAuthClient.banUser('eviluser', {
 				timeout: 60,
 				reason: 'Stop spamming your YouTube channel',
+				user_id: moderator.id,
 			});
 		});
 		it('Mute', async function() {
