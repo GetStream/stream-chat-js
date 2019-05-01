@@ -2016,7 +2016,7 @@ describe('Chat', function() {
 
 	describe('Moderation', function() {
 		serverAuthClient = getTestClient(true);
-
+		const channelID = 'moderated-channel-' + uuidv4();
 		const evil = {
 			id: 'eviluser',
 			name: 'Eviluser',
@@ -2024,17 +2024,42 @@ describe('Chat', function() {
 			image: 'myimageurl',
 			role: 'user',
 		};
-
 		const moderator = {
 			id: 'eviluser-mod',
 			name: 'moderator',
+			status: 'busy',
+			image: 'myimageurl',
+			role: 'admin',
+		};
+		const evilUserIP = {
+			id: 'eviluser-ip',
+			name: 'Eviluser-ip',
 			status: 'busy',
 			image: 'myimageurl',
 			role: 'user',
 		};
 
 		before(async () => {
-			await createUsers([moderator.id]);
+			await createUsers([moderator.id, evilUserIP.id]);
+			const moderatedChannel = await serverAuthClient.channel(
+				'messaging',
+				channelID,
+				{
+					created_by: { id: moderator.id },
+				},
+			);
+			await moderatedChannel.create();
+			//send a message as evilUserIP so we can grab his IP.
+			await moderatedChannel.sendMessage({
+				text: 'this message will be moderated',
+				user: evilUserIP,
+			});
+			//send a message as moderator so we can grab his IP.
+			await moderatedChannel.sendMessage({
+				text: 'stop sending those messages',
+				user: moderator,
+			});
+			await sleep(1000); //wait for user ip to be updated
 		});
 
 		serverAuthClient.updateUser(evil);
@@ -2047,6 +2072,24 @@ describe('Chat', function() {
 				user_id: moderator.id,
 			});
 		});
+
+		it('Ban user IP should fail if ban creator and ban target share the same IP', async function() {
+			try {
+				// ban a user IP for 60 minutes
+				await serverAuthClient.banUser(evilUserIP.id, {
+					timeout: 60,
+					reason: 'Stop spamming your YouTube channel',
+					ban_ip: true,
+					user_id: moderator.id,
+				});
+				expect().fail('should fail');
+			} catch (e) {
+				expect(e.message).to.be.equal(
+					'StreamChat error code 4: Ban failed with error: "creator and target user share same ip"',
+				);
+			}
+		});
+
 		it('Mute', async function() {
 			const data = await authClient.muteUser('eviluser');
 			expect(data.mute.user.id).to.equal('thierry2');
