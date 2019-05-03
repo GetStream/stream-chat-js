@@ -58,7 +58,7 @@ describe('Query Users', function() {
 		]);
 		const response = await serverClient.queryUsers({
 			id: { $in: [userID, userID2] },
-			name: { $autocomplete: 'ro' },
+			name: { $autocomplete: 'rox' },
 		});
 		expect(response.users[0].name).to.equal('Roxanne');
 		expect(response.users[1].name).to.equal('Curiosity Rover');
