@@ -45,7 +45,7 @@ describe('Channels - Create', function() {
 	});
 });
 
-describe('Channels - members', function() {
+describe.only('Channels - members', function() {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 
@@ -206,6 +206,7 @@ describe('Channels - members', function() {
 		let resp = await channel.create();
 
 		expect(resp.members.length).to.be.equal(initialMembers.length);
+		console.log(resp.members);
 		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 
