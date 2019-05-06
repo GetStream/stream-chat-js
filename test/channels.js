@@ -209,11 +209,10 @@ describe('Channels - members', function() {
 		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 
-		for (let i = 0; i < 5; i++) {
+		for (let i = 0; i < 3; i++) {
 			await channel.sendMessage({ text: 'new message' });
-			await channel.update;
-			await channel.update({ color: 'blue' }, { text: 'got new message!' });
 			resp = await channel.addMembers(newMembers);
+			await channel.update({ color: 'blue' }, { text: 'got new message!' });
 		}
 
 		expect(resp.members.length).to.be.equal(4);
@@ -222,10 +221,10 @@ describe('Channels - members', function() {
 		expect(resp.members[2].user.id).to.be.equal(newMembers[0]);
 		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
 
-		for (let i = 0; i < 5; i++) {
+		for (let i = 0; i < 3; i++) {
+			await channel.removeMembers(newMembers);
 			await channel.sendMessage({ text: 'new message' });
 			await channel.update({ color: 'blue' }, { text: 'got new message!' });
-			await channel.removeMembers(newMembers);
 		}
 
 		resp = await channel.watch();
