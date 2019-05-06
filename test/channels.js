@@ -210,11 +210,12 @@ describe('Channels - members', function() {
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 
 		for (let i = 0; i < 3; i++) {
-			await channel.sendMessage({ text: 'new message' });
-			resp = await channel.addMembers(newMembers);
-			await channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op1 = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.addMembers(newMembers);
+			await Promise.all([op1, op2, op3]);
 		}
-
+		resp = await channel.watch();
 		expect(resp.members.length).to.be.equal(4);
 		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
@@ -222,9 +223,10 @@ describe('Channels - members', function() {
 		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
 
 		for (let i = 0; i < 3; i++) {
-			await channel.removeMembers(newMembers);
-			await channel.sendMessage({ text: 'new message' });
-			await channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op1 = channel.removeMembers(newMembers);
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.sendMessage({ text: 'new message' });
+			await Promise.all([op1, op2, op3]);
 		}
 
 		resp = await channel.watch();
