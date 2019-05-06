@@ -45,7 +45,7 @@ describe('Channels - Create', function() {
 	});
 });
 
-describe.only('Channels - members', function() {
+describe('Channels - members', function() {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 
@@ -196,17 +196,17 @@ describe.only('Channels - members', function() {
 	});
 
 	it('member list is correctly returned', async function() {
-		const newMembers = ['member-one', 'member-two'];
+		const newMembers = ['member1', 'member2'];
 		await createUsers(newMembers);
 		const channelId = `test-member-cache-${uuidv4()}`;
 		const initialMembers = [tommasoID, thierryID];
 		const channel = tommasoClient.channel('messaging', channelId);
-		let resp = await channel.create();
-		await channel.addMembers(initialMembers);
-		 resp = await channel.watch();
+		await channel.create();
+		await channel.addMembers([initialMembers[0]]);
+		await channel.addMembers([initialMembers[1]]);
+		let resp = await channel.watch();
 
 		expect(resp.members.length).to.be.equal(initialMembers.length);
-		console.log(resp.members);
 		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 
