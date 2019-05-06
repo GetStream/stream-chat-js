@@ -4,6 +4,7 @@ import {
 	getTestClientForUser,
 	createUserToken,
 	expectHTTPErrorCode,
+	createUsers,
 } from './utils';
 import chai from 'chai';
 const expect = chai.expect;
@@ -192,5 +193,41 @@ describe('Channels - members', function() {
 
 	it('thierry gets promoted', async function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+	});
+
+	it('member list is correctly returned', async function() {
+		const newMembers = ['member-one', 'member-two'];
+		await createUsers(newMembers);
+		const channelId = `test-member-cache-${uuidv4()}`;
+		const initialMembers = [tommasoID, thierryID];
+		const channel = tommasoClient.channel('messaging', channelId, {
+			members: initialMembers,
+		});
+		let resp = await channel.create();
+
+		expect(resp.members.length).to.be.equal(initialMembers.length);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+
+		for (let i = 0; i < 10; i++) {
+			await channel.sendMessage({ text: 'new message' });
+			resp = await channel.addMembers(newMembers); //add 2 members
+		}
+
+		expect(resp.members.length).to.be.equal(4);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+		expect(resp.members[2].user.id).to.be.equal(newMembers[0]);
+		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
+
+		for (let i = 0; i < 10; i++) {
+			await channel.sendMessage({ text: 'new message' });
+			await channel.removeMembers(newMembers);
+		}
+
+		resp = await channel.watch();
+		expect(resp.members.length).to.be.equal(2);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 	});
 });
