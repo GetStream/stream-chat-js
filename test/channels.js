@@ -200,10 +200,10 @@ describe.only('Channels - members', function() {
 		await createUsers(newMembers);
 		const channelId = `test-member-cache-${uuidv4()}`;
 		const initialMembers = [tommasoID, thierryID];
-		const channel = tommasoClient.channel('messaging', channelId, {
-			members: initialMembers,
-		});
+		const channel = tommasoClient.channel('messaging', channelId);
 		let resp = await channel.create();
+		await channel.addMembers(initialMembers);
+		 resp = await channel.watch();
 
 		expect(resp.members.length).to.be.equal(initialMembers.length);
 		console.log(resp.members);
