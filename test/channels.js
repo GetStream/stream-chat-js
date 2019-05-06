@@ -212,8 +212,8 @@ describe('Channels - members', function() {
 		for (let i = 0; i < 5; i++) {
 			await channel.sendMessage({ text: 'new message' });
 			await channel.update;
-			await channel.update({ color: 'blue' }, { text: 'got new message!' }),
-				(resp = await channel.addMembers(newMembers)); //add 2 members
+			await channel.update({ color: 'blue' }, { text: 'got new message!' });
+			resp = await channel.addMembers(newMembers);
 		}
 
 		expect(resp.members.length).to.be.equal(4);
@@ -224,8 +224,8 @@ describe('Channels - members', function() {
 
 		for (let i = 0; i < 5; i++) {
 			await channel.sendMessage({ text: 'new message' });
-			await channel.update({ color: 'blue' }, { text: 'got new message!' }),
-				await channel.removeMembers(newMembers);
+			await channel.update({ color: 'blue' }, { text: 'got new message!' });
+			await channel.removeMembers(newMembers);
 		}
 
 		resp = await channel.watch();
