@@ -1033,7 +1033,11 @@ export class StreamChat {
 		});
 
 		if (userId != null) {
-			clonedMessage.user = { id: userId };
+			if (typeof userId == 'string' || userId instanceof String) {
+				clonedMessage.user_id = userId;
+			} else {
+				clonedMessage.user = { id: userId.id };
+			}
 		}
 
 		return await this.post(this.baseURL + `/messages/${message.id}`, {

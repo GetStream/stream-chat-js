@@ -191,6 +191,104 @@ describe('Channels server side - Send Message', function() {
 	});
 });
 
+describe('Update Message Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		message = resp.message;
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await client.updateMessage(message, null);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: UpdateMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('update server side message using user_id', async function() {
+		const resp = await client.updateMessage(message, messageOwner.id);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('update server side message using user object', async function() {
+		const resp = await client.updateMessage(message, messageOwner);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
+describe('Update Message Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		message = resp.message;
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await client.updateMessage(message, null);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: UpdateMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('update server side message using user_id', async function() {
+		const resp = await client.updateMessage(message, messageOwner.id);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('update server side message using user object', async function() {
+		const resp = await client.updateMessage(message, messageOwner);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
 describe('Managing users', function() {
 	const client = getTestClient(true);
 	const user = {
