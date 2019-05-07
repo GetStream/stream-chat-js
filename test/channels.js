@@ -235,4 +235,42 @@ describe('Channels - members', function() {
 		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 	});
+
+	it('channel last_message_at is correctly returned', async function() {
+		const unique = uuidv4();
+		const newMembers = ['member1', 'member2'];
+		await createUsers(newMembers);
+		const channelId = `channel-messages-cache-${unique}`;
+		const channel2Id = `channel-messages-cache2-${unique}`;
+		const channel = tommasoClient.channel('messaging', channelId, {
+			unique: unique,
+		});
+		await channel.create();
+		const channel2 = tommasoClient.channel('messaging', channel2Id, {
+			unique: unique,
+		});
+		await channel2.create();
+
+		for (let i = 0; i < 10; i++) {
+			const msg = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ unique, color: 'blue' });
+			const op3 = channel.addMembers(newMembers);
+			const msg2 = await channel2.sendMessage({ text: 'new message 2' });
+			const results = await Promise.all([msg, op2, op3]);
+
+			if (i % 2 === 0) {
+				let last_message = results[0].message.created_at;
+				if (msg2.message.created_at > last_message) {
+					last_message = msg2.message.created_at;
+				}
+				const channels = await tommasoClient.queryChannels(
+					{ unique: unique },
+					{ last_message_at: -1 },
+					{ state: true },
+				);
+				expect(channels.length).to.be.equal(2);
+				expect(channels[0].data.last_message_at).to.be.equal(last_message);
+			}
+		}
+	});
 });
