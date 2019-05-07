@@ -761,7 +761,6 @@ describe('Import via Webhook compat', function() {
 		const responsePromise = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
-			user: created_by,
 		});
 		await expect(responsePromise).to.be.rejectedWith(
 			'message.updated_at or message.created_at',
