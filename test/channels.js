@@ -236,7 +236,7 @@ describe('Channels - members', function() {
 		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
 	});
 
-	it('channel last_message_at is correctly returned', async function() {
+	it('channel messages and last_message_at are correctly returned', async function() {
 		const unique = uuidv4();
 		const newMembers = ['member1', 'member2'];
 		await createUsers(newMembers);
@@ -251,6 +251,8 @@ describe('Channels - members', function() {
 		});
 		await channel2.create();
 
+		const channel1Messages = [];
+		const channel2Messages = [];
 		for (let i = 0; i < 10; i++) {
 			const msg = channel.sendMessage({ text: 'new message' });
 			const op2 = channel.update({ unique, color: 'blue' });
@@ -271,6 +273,18 @@ describe('Channels - members', function() {
 				expect(channels.length).to.be.equal(2);
 				expect(channels[0].data.last_message_at).to.be.equal(last_message);
 			}
+			channel1Messages.push(results[0].message);
+			channel2Messages.push(msg2.message);
+		}
+
+		const stateChannel1 = await channel.watch();
+		const stateChannel2 = await channel2.watch();
+
+		for (let i = 0; i < stateChannel1.message; i++) {
+			expect(stateChannel1.message.id).to.be.equal(channel1Messages.reverse()[i]);
+		}
+		for (let i = 0; i < stateChannel2.message; i++) {
+			expect(stateChannel2.message.id).to.be.equal(channel2Messages.reverse()[i]);
 		}
 	});
 });
