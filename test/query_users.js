@@ -33,7 +33,7 @@ Promise.config({
 	},
 });
 
-describe.skip('Query Users', function() {
+describe('Query Users', function() {
 	it('query users by id', async function() {
 		const userID = uuidv4();
 		const client = await getTestClientForUser(userID);
@@ -46,16 +46,8 @@ describe.skip('Query Users', function() {
 		const userID = uuidv4();
 		const userID2 = uuidv4();
 		const serverClient = getServerTestClient();
-		const client = await serverClient.updateUsers([
-			{
-				id: userID,
-				name: 'Curiosity Rover',
-			},
-			{
-				id: userID2,
-				name: 'Roxanne',
-			},
-		]);
+		await serverClient.updateUsers([{ id: userID, name: 'Curiosity Rover' }]);
+		await serverClient.updateUsers([{ id: userID2, name: 'Roxanne' }]);
 		const response = await serverClient.queryUsers({
 			id: { $in: [userID, userID2] },
 			name: { $autocomplete: 'ro' },
