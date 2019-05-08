@@ -280,11 +280,25 @@ describe('Channels - members', function() {
 		const stateChannel1 = await channel.watch();
 		const stateChannel2 = await channel2.watch();
 
-		for (let i = 0; i < stateChannel1.message; i++) {
-			expect(stateChannel1.message.id).to.be.equal(channel1Messages.reverse()[i]);
+		const expectedChannel1Messages = channel1Messages;
+		const expectedChannel2Messages = channel2Messages;
+
+		expect(stateChannel1.messages.length).to.be.equal(
+			expectedChannel1Messages.length,
+		);
+		expect(stateChannel2.messages.length).to.be.equal(
+			expectedChannel2Messages.length,
+		);
+
+		for (let i = 0; i < stateChannel1.messages.length; i++) {
+			expect(stateChannel1.messages[i].id).to.be.equal(
+				expectedChannel1Messages[i].id,
+			);
 		}
-		for (let i = 0; i < stateChannel2.message; i++) {
-			expect(stateChannel2.message.id).to.be.equal(channel2Messages.reverse()[i]);
+		for (let i = 0; i < stateChannel2.messages.length; i++) {
+			expect(stateChannel2.messages[i].id).to.be.equal(
+				expectedChannel2Messages[i].id,
+			);
 		}
 	});
 });
