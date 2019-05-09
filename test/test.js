@@ -378,7 +378,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax on a field thats not supported', async function() {
+		it.skip('Basic Query using $q syntax on a field thats not supported', function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
