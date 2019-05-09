@@ -199,9 +199,7 @@ describe('Channels - members', function() {
 describe.only('Channels - Members are update correctly', function() {
 	const channelId = uuidv4();
 	const cid = `messaging:${channelId}`;
-
 	const johnID = `john-${uuidv4()}`;
-
 	const members = [
 		{
 			id: `member1-${uuidv4()}`,
