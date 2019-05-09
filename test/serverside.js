@@ -894,7 +894,8 @@ describe('Channel types', function() {
 
 		it('should have the right defaults and name', function() {
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -938,7 +939,8 @@ describe('Channel types', function() {
 			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
 
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -985,7 +987,8 @@ describe('Channel types', function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
@@ -1020,7 +1023,8 @@ describe('Channel types', function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
