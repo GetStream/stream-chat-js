@@ -378,7 +378,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax on a field thats not supported', async function() {
+		it.skip('Basic Query using $q syntax on a field thats not supported', function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
@@ -1942,6 +1942,20 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0].instrument).to.eq('saxophone');
 		});
 
+		it('channel.countUnreadMentions should return 1', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(1);
+		});
+
+		it('channel.countUnreadMentions should return 0 for own messages', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(0);
+		});
+
 		it('should be possible to edit the list of mentioned users', async () => {
 			const client = await getTestClient(true);
 			const response = await client.updateMessage(
@@ -1957,13 +1971,6 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0]).to.be.an('object');
 			expect(msg.mentioned_users[0].id).to.eq(userID);
 			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
-		});
-
-		it('channel.countUnreadMentions should return 1', async () => {
-			const client = await getTestClientForUser(userID);
-			const channel = client.channel('team', channelID);
-			await channel.watch();
-			expect(channel.countUnreadMentions()).to.eq(1);
 		});
 
 		it('channel.countUnreadMentions should return 0 for another user', async () => {
