@@ -4,6 +4,7 @@ import {
 	getTestClientForUser,
 	createUserToken,
 	expectHTTPErrorCode,
+	createUsers,
 } from './utils';
 import chai from 'chai';
 const expect = chai.expect;
@@ -192,5 +193,112 @@ describe('Channels - members', function() {
 
 	it('thierry gets promoted', async function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+	});
+
+	it('member list is correctly returned', async function() {
+		const newMembers = ['member1', 'member2'];
+		await createUsers(newMembers);
+		const channelId = `test-member-cache-${uuidv4()}`;
+		const initialMembers = [tommasoID, thierryID];
+		const channel = tommasoClient.channel('messaging', channelId);
+		await channel.create();
+		await channel.addMembers([initialMembers[0]]);
+		await channel.addMembers([initialMembers[1]]);
+		let resp = await channel.watch();
+
+		expect(resp.members.length).to.be.equal(initialMembers.length);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+
+		for (let i = 0; i < 3; i++) {
+			const op1 = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.addMembers(newMembers);
+			await Promise.all([op1, op2, op3]);
+		}
+		resp = await channel.watch();
+		expect(resp.members.length).to.be.equal(4);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+		expect(resp.members[2].user.id).to.be.equal(newMembers[0]);
+		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
+
+		for (let i = 0; i < 3; i++) {
+			const op1 = channel.removeMembers(newMembers);
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.sendMessage({ text: 'new message' });
+			await Promise.all([op1, op2, op3]);
+		}
+
+		resp = await channel.watch();
+		expect(resp.members.length).to.be.equal(2);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+	});
+
+	it('channel messages and last_message_at are correctly returned', async function() {
+		const unique = uuidv4();
+		const newMembers = ['member1', 'member2'];
+		await createUsers(newMembers);
+		const channelId = `channel-messages-cache-${unique}`;
+		const channel2Id = `channel-messages-cache2-${unique}`;
+		const channel = tommasoClient.channel('messaging', channelId, {
+			unique: unique,
+		});
+		await channel.create();
+		const channel2 = tommasoClient.channel('messaging', channel2Id, {
+			unique: unique,
+		});
+		await channel2.create();
+
+		const channel1Messages = [];
+		const channel2Messages = [];
+		for (let i = 0; i < 10; i++) {
+			const msg = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ unique, color: 'blue' });
+			const op3 = channel.addMembers(newMembers);
+			const msg2 = await channel2.sendMessage({ text: 'new message 2' });
+			const results = await Promise.all([msg, op2, op3]);
+
+			if (i % 2 === 0) {
+				let last_message = results[0].message.created_at;
+				if (msg2.message.created_at > last_message) {
+					last_message = msg2.message.created_at;
+				}
+				const channels = await tommasoClient.queryChannels(
+					{ unique: unique },
+					{ last_message_at: -1 },
+					{ state: true },
+				);
+				expect(channels.length).to.be.equal(2);
+				expect(channels[0].data.last_message_at).to.be.equal(last_message);
+			}
+			channel1Messages.push(results[0].message);
+			channel2Messages.push(msg2.message);
+		}
+
+		const stateChannel1 = await channel.watch();
+		const stateChannel2 = await channel2.watch();
+
+		const expectedChannel1Messages = channel1Messages;
+		const expectedChannel2Messages = channel2Messages;
+
+		expect(stateChannel1.messages.length).to.be.equal(
+			expectedChannel1Messages.length,
+		);
+		expect(stateChannel2.messages.length).to.be.equal(
+			expectedChannel2Messages.length,
+		);
+
+		for (let i = 0; i < stateChannel1.messages.length; i++) {
+			expect(stateChannel1.messages[i].id).to.be.equal(
+				expectedChannel1Messages[i].id,
+			);
+		}
+		for (let i = 0; i < stateChannel2.messages.length; i++) {
+			expect(stateChannel2.messages[i].id).to.be.equal(
+				expectedChannel2Messages[i].id,
+			);
+		}
 	});
 });
