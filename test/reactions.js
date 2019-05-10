@@ -2,19 +2,8 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
-import fs from 'fs';
-import {
-	createUserToken,
-	getTestClient,
-	getTestClientForUser,
-	getTestClientForUser2,
-	expectHTTPErrorCode,
-	sleep,
-} from './utils';
+import { expectHTTPErrorCode, getTestClient, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
-import { async } from 'rxjs/internal/scheduler/async';
 
 const expect = chai.expect;
 
@@ -44,9 +33,23 @@ describe('Reactions', function() {
 	let channel;
 	let serverSideUser;
 	const userID = uuidv4();
+	const everythingDisabledChannelType = uuidv4();
 
 	before(async () => {
 		reactionClientServerSide = getTestClient(true);
+		await reactionClientServerSide.createChannelType({
+			name: everythingDisabledChannelType,
+			typing_events: false,
+			read_events: false,
+			connect_events: false,
+			reactions: false,
+			replies: false,
+			search: false,
+			mutes: false,
+			message_retention: 'infinite',
+			automod: 'disabled',
+			commands: ['moderation_set'],
+		});
 
 		serverSideUser = {
 			id: uuidv4(),
@@ -283,7 +286,7 @@ describe('Reactions', function() {
 		const serverSide = getTestClient(true);
 		const user = { id: 'thierry' };
 		const disabledChannel = serverSide.channel(
-			'everythingDisabled',
+			everythingDisabledChannelType,
 			'old-school-irc',
 			{ created_by: user },
 		);
