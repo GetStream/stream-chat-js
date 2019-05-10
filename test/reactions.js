@@ -33,12 +33,12 @@ describe('Reactions', function() {
 	let channel;
 	let serverSideUser;
 	const userID = uuidv4();
-	const everythingDisabledChannelID = uuidv4();
+	const everythingDisabledChannelType = uuidv4();
 
 	before(async () => {
 		reactionClientServerSide = getTestClient(true);
 		await reactionClientServerSide.createChannelType({
-			name: everythingDisabledChannelID,
+			name: everythingDisabledChannelType,
 			typing_events: false,
 			read_events: false,
 			connect_events: false,
@@ -46,7 +46,7 @@ describe('Reactions', function() {
 			replies: false,
 			search: false,
 			mutes: false,
-			message_retention: '10',
+			message_retention: 'infinite',
 			automod: 'disabled',
 			commands: ['moderation_set'],
 		});
@@ -286,7 +286,7 @@ describe('Reactions', function() {
 		const serverSide = getTestClient(true);
 		const user = { id: 'thierry' };
 		const disabledChannel = serverSide.channel(
-			everythingDisabledChannelID,
+			everythingDisabledChannelType,
 			'old-school-irc',
 			{ created_by: user },
 		);
