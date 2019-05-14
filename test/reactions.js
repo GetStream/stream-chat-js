@@ -59,8 +59,6 @@ describe('Reactions', function() {
 			role: 'user',
 		};
 
-		reactionClientServerSide.updateUser(serverSideUser);
-		reactionClientServerSide.setUser(serverSideUser);
 		reactionClient = await getTestClientForUser(userID, 'reacting to stuff yeah');
 		channel = reactionClient.channel('livestream', uuidv4());
 		await channel.watch();
@@ -181,6 +179,7 @@ describe('Reactions', function() {
 		// add a reaction
 		const reply = await channel.sendReaction(message.id, {
 			type: 'love',
+			user: serverSideUser,
 		});
 		// remove the reaction...
 		const removeResponse = await channel.deleteReaction(

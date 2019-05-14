@@ -62,6 +62,381 @@ describe('Query Channels', function() {
 	});
 });
 
+describe('Channels server side - Create', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const client = getTestClient(true);
+
+	it('creating server side channels require created_by or created_by_id', async function() {
+		const channelId = uuidv4();
+		try {
+			await client
+				.channel('messaging', channelId, {
+					color: 'green',
+				})
+				.create();
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: GetOrCreateChannel failed with error: "either data.created_by or data.created_by_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user created_by and created_by_id should fail', async function() {
+		const channelId = uuidv4();
+
+		try {
+			await client
+				.channel('messaging', channelId, {
+					color: 'green',
+					created_by: channelCreator,
+					created_by_id: channelCreator.id,
+				})
+				.create();
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: GetOrCreateChannel failed with error: "cannot set both data.created_by and data.created_by_id."',
+			);
+		}
+	});
+
+	it('create server side channel with created_by', async function() {
+		const channelId = uuidv4();
+
+		const resp = await client
+			.channel('messaging', channelId, {
+				color: 'green',
+				created_by: channelCreator,
+			})
+			.create();
+		expect(resp.channel.created_by.id).to.be.equal(channelCreator.id);
+	});
+
+	it('create server side channel with created_by_id', async function() {
+		const channelId = uuidv4();
+
+		const resp = await client
+			.channel('messaging', channelId, {
+				color: 'green',
+				created_by_id: channelCreator.id,
+			})
+			.create();
+		expect(resp.channel.created_by.id).to.be.equal(channelCreator.id);
+	});
+});
+
+describe('Channels server side - Send Message', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await channel.sendMessage({ text: 'hi' });
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await channel.sendMessage({
+				text: 'hi',
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendMessage failed with error: "cannot set both fields message.user and message.user_id."',
+			);
+		}
+	});
+
+	it('create server side message with user', async function() {
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('create server side channel with user_id', async function() {
+		const resp = await channel.sendMessage({ text: 'hi', user_id: messageOwner.id });
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
+describe('Mark Read Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const markReadUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'mark-read-ss-' + uuidv4();
+	const client = getTestClient(true);
+	let channel;
+
+	before(async () => {
+		await createUsers([markReadUser.id]);
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		await channel.sendMessage({ text: 'hi', user: channelCreator });
+	});
+	it('mark read in server side auth require user or user_id', async function() {
+		try {
+			await channel.markRead();
+			expect().fail('should fail missing user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkRead failed with error: "user or user_id is a required field when using server side auth."',
+			);
+		}
+	});
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await channel.markRead({
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkRead failed with error: "cannot set both fields user and user_id."',
+			);
+		}
+	});
+	it('create server side event with user', async function() {
+		const resp = await channel.markRead({ user: markReadUser });
+		expect(resp.event.user.id).to.be.equal(markReadUser.id);
+	});
+	it('create server side event with user_id', async function() {
+		const resp = await channel.markRead({ user_id: markReadUser.id });
+		expect(resp.event.user.id).to.be.equal(markReadUser.id);
+	});
+});
+
+describe('Mark Read All Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const markReadUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'mark-read-ss-' + uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		await createUsers([markReadUser.id]);
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: channelCreator });
+		message = resp.message;
+	});
+
+	it('mark read in server side auth require user or user_id', async function() {
+		try {
+			await client.markAllRead();
+			expect().fail('should fail missing user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkAllRead failed with error: "user or user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await client.markAllRead({
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkAllRead failed with error: "cannot set both fields user and user_id."',
+			);
+		}
+	});
+
+	it('create server side event with user', async function() {
+		await client.markAllRead({ user: markReadUser });
+	});
+
+	it('create server side event with user_id', async function() {
+		await client.markAllRead({ user_id: markReadUser.id });
+	});
+});
+
+describe('Send Event Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const eventUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'events-' + uuidv4();
+	const client = getTestClient(true);
+	let eventChannel;
+	let message;
+
+	before(async () => {
+		await createUsers([eventUser.id]);
+		eventChannel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await eventChannel.create();
+		const resp = await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
+		message = resp.message;
+	});
+
+	it('creating server side event require user or user_id', async function() {
+		const event = {
+			type: 'message.read',
+		};
+		try {
+			await eventChannel.sendEvent(event);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendEvent failed with error: "event.user or event.user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		const event = {
+			type: 'message.read',
+			user: eventUser,
+			user_id: eventUser.id,
+		};
+		try {
+			await eventChannel.sendEvent(event);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendEvent failed with error: "cannot set both fields event.user and event.user_id."',
+			);
+		}
+	});
+
+	it('update server side event using user_id', async function() {
+		const event = {
+			type: 'message.read',
+			user_id: eventUser.id,
+		};
+		const resp = await eventChannel.sendEvent(event);
+		expect(resp.event.user.id).to.be.equal(eventUser.id);
+	});
+
+	it('update server side event using user object', async function() {
+		const event = {
+			type: 'message.read',
+			user: eventUser,
+		};
+		const resp = await eventChannel.sendEvent(event);
+		expect(resp.event.user.id).to.be.equal(eventUser.id);
+	});
+});
+
+describe('Update Message Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		message = resp.message;
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await client.updateMessage(message, null);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: UpdateMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+			);
+		}
+	});
+
+	it('update server side message using user_id', async function() {
+		const resp = await client.updateMessage(message, messageOwner.id);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('update server side message using user object', async function() {
+		const resp = await client.updateMessage(message, messageOwner);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
 describe('Managing users', function() {
 	const client = getTestClient(true);
 	const user = {
@@ -761,7 +1136,6 @@ describe('Import via Webhook compat', function() {
 		const responsePromise = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
-			user: created_by,
 		});
 		await expect(responsePromise).to.be.rejectedWith(
 			'message.updated_at or message.created_at',
@@ -773,7 +1147,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const responsePromise = channel.markRead();
 		await expect(responsePromise).to.be.rejectedWith(
-			'Please specify a user when marking a channel as read server side',
+			'StreamChat error code 4: MarkRead failed with error: "user or user_id is a required field when using server side auth."',
 		);
 	});
 
