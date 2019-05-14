@@ -1023,8 +1023,22 @@ describe('Devices', function() {
 		it('can delete any device', async function() {
 			await client.removeDevice(devices[1], users[1]);
 			const result = await client.getDevices(devices[1], users[1]);
-			expect(result.devices.length).to.equal(0);
+			expect(result.devices).to.have.length(0);
 		});
+	});
+
+	it('user has custom data', async function() {
+		const user = {
+			id: uuidv4(),
+			name: 'bob',
+			hobby: 'painting',
+		};
+		await client.updateUser(user);
+
+		await client.addDevice(uuidv4(), 'apn', user.id);
+
+		const result = await client.getDevices(user.id);
+		expect(result.devices).to.have.length(1);
 	});
 });
 
