@@ -302,3 +302,91 @@ describe('Channels - members', function() {
 		}
 	});
 });
+
+describe('Channels - Members are update correctly', function() {
+	const channelId = uuidv4();
+	const cid = `messaging:${channelId}`;
+	const johnID = `john-${uuidv4()}`;
+	const members = [
+		{
+			id: `member1-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+		{
+			id: `member2-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+		{
+			id: `member3-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+	];
+
+	const runWithOtherOperations = async function(op) {
+		const op2 = channel.update({ color: 'green' }, { text: 'got new message!' });
+		const op3 = channel.sendMessage({ text: 'new message' });
+		const op4 = channel.sendMessage({ text: 'new message' });
+		const results = await Promise.all([op, op2, op3, op4]);
+		return results[0];
+	};
+
+	let channel;
+	let client;
+	before(async function() {
+		client = await getTestClientForUser(johnID);
+		await createUsers(
+			members.map(function(member) {
+				return member.id;
+			}),
+		);
+
+		channel = client.channel('messaging', channelId, {
+			color: 'green',
+			members: [members[0].id],
+		});
+		const response = await channel.create();
+		expect(response.channel.color).to.equal('green');
+		expect(response.channel.cid).to.equal(cid);
+		expect(response.channel.members).to.equal(undefined);
+		expect(response.members.length).to.equal(1);
+	});
+
+	it('channel state must be updated after removing a member', async function() {
+		const resp = await runWithOtherOperations(channel.removeMembers([members[0].id]));
+		expect(resp.members.length).to.be.equal(0);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(0);
+	});
+
+	it('channel state must be updated after adding a member', async function() {
+		const resp = await runWithOtherOperations(channel.addMembers([members[0].id]));
+		expect(resp.members.length).to.be.equal(1);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(1);
+		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
+	});
+
+	it('channel state must be updated after adding multiple members', async function() {
+		const resp = await runWithOtherOperations(
+			channel.addMembers([members[0].id, members[1].id, members[2].id]),
+		);
+		expect(resp.members.length).to.be.equal(3);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(3);
+		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
+		expect(channelState.members[1].user.id).to.be.equal(members[1].id);
+		expect(channelState.members[2].user.id).to.be.equal(members[2].id);
+	});
+
+	it('channel state must be updated after removing multiple members', async function() {
+		const resp = await runWithOtherOperations(
+			channel.removeMembers([members[0].id, members[1].id, members[2].id]),
+		);
+		expect(resp.members.length).to.be.equal(0);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(0);
+	});
+});
