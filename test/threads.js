@@ -113,10 +113,11 @@ describe('Threads and Replies', function() {
 
 	it('Posting a reaction to a threaded message should work correctly', async () => {
 		// create a few replies on a channel where we are not listening...
-		const testClient = getServerTestClient();
-		const user = { id: 'john' };
+		const serverClient = getServerTestClient();
+		const serverUser = { id: 'john' };
 		const testChannel = replyClient.channel('livestream', 'reactionRepliesTest');
 		await testChannel.create();
+		const serverChannel = serverClient.channel('livestream', 'reactionRepliesTest');
 		// add a message
 		const sendMessageResponse = await testChannel.sendMessage({
 			text: 'testing replies',
@@ -134,10 +135,11 @@ describe('Threads and Replies', function() {
 			type: 'love',
 		});
 
-		const { serverReaction } = await serverchannel.sendReaction(
+		const { reaction: serverReaction } = await serverChannel.sendReaction(
 			replyResponse.message.id,
 			{
 				type: 'love',
+				user: serverUser,
 			},
 		);
 
@@ -146,9 +148,9 @@ describe('Threads and Replies', function() {
 		const thread = testChannel.state.threads[parentID];
 		expect(thread[0].id).to.equal(replyResponse.message.id);
 		expect(thread[0].user.id).to.equal('replytesting');
-		expect(thread[0].reaction_counts).to.eql({ love: 1 });
+		expect(thread[0].reaction_counts).to.eql({ love: 2 });
 		expect(thread[0].own_reactions).to.eql([reaction]);
-		expect(thread[0].latest_reactions).to.eql([reaction]);
+		expect(thread[0].latest_reactions).to.eql([serverReaction, reaction]);
 	});
 
 	it('Query replies should return the last x replies and support pagination', async () => {
