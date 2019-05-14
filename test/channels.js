@@ -195,6 +195,24 @@ describe('Channels - members', function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
 	});
 
+	it('correct member count', async function() {
+		const members = [uuidv4(), uuidv4()];
+		await createUsers(members);
+
+		const channel = tommasoClient.channel('messaging', uuidv4(), { members });
+		await channel.create();
+
+		const newMembers = [uuidv4(), uuidv4()];
+		await createUsers(newMembers);
+
+		await channel.addMembers([newMembers[0]]);
+		await channel.addMembers([newMembers[1]]);
+
+		const resp = await channel.query();
+		expect(resp.members.length).to.be.equal(4);
+		expect(resp.channel.member_count).to.be.equal(4);
+	});
+
 	it('member list is correctly returned', async function() {
 		const newMembers = ['member1', 'member2'];
 		await createUsers(newMembers);
