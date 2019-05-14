@@ -94,34 +94,74 @@ export class ChannelState {
 		}
 	}
 
-	addReaction(reaction, reaction_counts) {
-		const { messages } = this;
+	/**
+	 * Applies callback function with given arguments in addition with message object
+	 * to all the messages in channel, including thread messages.
+	 * @param {*} callback Accepts message as first argument and rest spreaded from args
+	 * @param {*} args
+	 */
+	_forEachMessage(callback, args) {
+		const { messages, threads } = this;
+		// Normal messages
 		for (let i = 0; i < messages.length; i++) {
 			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+			message = callback.apply(this, [message, ...args]);
 
-			if (!idMatch) {
-				continue;
-			}
-			message = this._removeReactionFromMessage(message, reaction);
-			if (this._channel.getClient().userID === reaction.user.id) {
-				message = message.update('own_reactions', (old = []) =>
-					old.concat([reaction]),
-				);
-			}
-			message = message.update('latest_reactions', (old = []) =>
-				old.concat([reaction]),
-			);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
-				message = message.updateIn(['reaction_counts', reaction.type], old =>
-					old ? old + 1 : 1,
-				);
-			}
+			if (!message) continue;
 			this.messages = messages.set(i, message);
 			break;
 		}
+
+		const threadKeys = Object.keys(threads);
+		for (let j = 0; j < threadKeys.length; j++) {
+			for (let i = 0; i < threadKeys[j].length; i++) {
+				let threadMessages = threads[threadKeys[j]];
+				let message = threadMessages[i];
+
+				message = callback.apply(this, [message, ...args]);
+				if (!message) continue;
+
+				threadMessages = threadMessages.set(i, message);
+				this.threads = this.threads.set(threadKeys[j], threadMessages);
+
+				break;
+			}
+		}
+	}
+
+	addReaction(reaction, reaction_counts) {
+		this._forEachMessage(this._addReaction, [reaction, reaction_counts]);
+	}
+
+	removeReaction(reaction, reaction_counts) {
+		this._forEachMessage(this._removeReaction, [reaction, reaction_counts]);
+	}
+
+	_addReaction(message, reaction, reaction_counts) {
+		const idMatch = message.id && message.id === reaction.message_id;
+
+		if (!idMatch) {
+			return false;
+		}
+
+		message = this._removeReactionFromMessage(message, reaction);
+		if (this._channel.getClient().userID === reaction.user.id) {
+			message = message.update('own_reactions', (old = []) =>
+				old.concat([reaction]),
+			);
+		}
+		message = message.update('latest_reactions', (old = []) =>
+			old.concat([reaction]),
+		);
+		if (reaction_counts) {
+			message = message.set('reaction_counts', reaction_counts);
+		} else {
+			message = message.updateIn(['reaction_counts', reaction.type], old =>
+				old ? old + 1 : 1,
+			);
+		}
+
+		return message;
 	}
 
 	_removeReactionFromMessage(message, reaction) {
@@ -134,26 +174,22 @@ export class ChannelState {
 		return message;
 	}
 
-	removeReaction(reaction, reaction_counts) {
-		const { messages } = this;
-		for (let i = 0; i < messages.length; i++) {
-			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+	_removeReaction(message, reaction, reaction_counts) {
+		const idMatch = message.id && message.id === reaction.message_id;
 
-			if (!idMatch) {
-				continue;
-			}
-			message = this._removeReactionFromMessage(message, reaction);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
-				message = message.updateIn(['reaction_counts', reaction.type], old =>
-					old ? old - 1 : 0,
-				);
-			}
-			this.messages = messages.set(i, message);
-			break;
+		if (!idMatch) {
+			return false;
 		}
+		message = this._removeReactionFromMessage(message, reaction);
+		if (reaction_counts) {
+			message = message.set('reaction_counts', reaction_counts);
+		} else {
+			message = message.updateIn(['reaction_counts', reaction.type], old =>
+				old ? old - 1 : 0,
+			);
+		}
+
+		return message;
 	}
 
 	/**
