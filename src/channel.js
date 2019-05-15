@@ -698,10 +698,10 @@ export class Channel {
 				channel.data = Immutable(event.channel);
 				break;
 			case 'reaction.new':
-				s.addReaction(event.reaction, event.message.reaction_counts);
+				s.addReaction(event.reaction, event.message);
 				break;
 			case 'reaction.deleted':
-				s.removeReaction(event.reaction, event.message.reaction_counts);
+				s.removeReaction(event.reaction, event.message);
 				break;
 			default:
 		}
