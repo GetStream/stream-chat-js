@@ -99,7 +99,7 @@ export class ChannelState {
 		if (!message) return;
 		const { parent_id, show_in_channel } = message;
 
-		if (parent_id) {
+		if (parent_id && this.threads[parent_id]) {
 			const thread = this.threads[parent_id];
 
 			for (let i = 0; i < thread.length; i++) {
@@ -165,7 +165,7 @@ export class ChannelState {
 		if (!message) return;
 		const { parent_id, show_in_channel } = message;
 
-		if (parent_id) {
+		if (parent_id && this.threads[parent_id]) {
 			const thread = this.threads[parent_id];
 			for (let i = 0; i < thread.length; i++) {
 				let message = thread[i];
