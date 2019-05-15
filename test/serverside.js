@@ -868,9 +868,10 @@ describe('App configs', function() {
 		});
 	});
 
-	describe.skip('Push notifications test endpoint', function() {
+	describe('Push notifications test endpoint', function() {
 		const deviceID = uuidv4();
 		const userID = uuidv4();
+		let user = {};
 		const apnConfig = {
 			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
 			key_id: 'whatever',
@@ -885,6 +886,8 @@ describe('App configs', function() {
 
 		before(async function() {
 			await client.addDevice(deviceID, 'apn', userID);
+			const resp = await client.updateUser({ id: userID, name: uuidv4() });
+			user = resp.users[userID];
 		});
 
 		after(async function() {
@@ -946,6 +949,54 @@ describe('App configs', function() {
 			const msgID = uuidv4();
 			const p = client.testPushSettings(userID, { messageID: msgID });
 			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
+		});
+
+		it('Random message', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }}"}',
+			});
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${userID} ${user.name} ${msg.message.text}"}`,
+			);
+		});
+
+		it('Specific message', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }}"}',
+				messageID: msg.message.id,
+			});
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${userID} ${user.name} ${msg.message.text}"}`,
+			);
 		});
 
 		it('Bad apn template error gets returned in response', async function() {
