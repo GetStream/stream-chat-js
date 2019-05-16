@@ -84,7 +84,8 @@ describe('Webhooks', function() {
 	});
 
 	it('should receive new message event with members included', async function() {
-		await Promise.all([chan.addMembers([thierryID, tommasoID]), lastMessagePromise]);
+		await Promise.all([chan.addMembers([thierryID]), lastMessagePromise]);
+		await Promise.all([chan.addMembers([tommasoID]), lastMessagePromise]);
 		await Promise.all([
 			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
 			lastMessagePromise,
@@ -262,10 +263,9 @@ describe('Webhooks', function() {
 	});
 
 	it('member.removed', async function() {
-		await Promise.all([
-			chan.removeMembers([thierryID, tommasoID, jaapID]),
-			lastMessagePromise,
-		]);
+		await Promise.all([chan.removeMembers([thierryID]), lastMessagePromise]);
+		await Promise.all([chan.removeMembers([tommasoID]), lastMessagePromise]);
+		await Promise.all([chan.removeMembers([jaapID]), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
 		expect(messages).to.have.length(3);
 		expect(lastMessage.type).to.eq('member.removed');
