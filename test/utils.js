@@ -1,5 +1,6 @@
 import { StreamChat } from '../src';
-
+import chai from 'chai';
+const expect = chai.expect;
 const apiKey = '892s22ypvt6m';
 const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
 
@@ -38,13 +39,14 @@ export function sleep(ms) {
 	});
 }
 
-export async function expectHTTPErrorCode(code, request) {
+export async function expectHTTPErrorCode(code, request, expectedMessage) {
 	let response;
 	try {
 		response = await request;
 	} catch (e) {
 		// check http status code
 		let actualCode = e.status;
+		const actualMessage = e.message;
 
 		if (!actualCode) {
 			// if no http status code get code from message message
@@ -57,6 +59,9 @@ export async function expectHTTPErrorCode(code, request) {
 			actualCode = message && message.StatusCode;
 		}
 		if (actualCode === code) {
+			if (expectedMessage) {
+				expect(actualMessage).to.be.equal(expectedMessage);
+			}
 			return;
 		}
 
