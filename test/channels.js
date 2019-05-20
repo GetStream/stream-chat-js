@@ -390,3 +390,58 @@ describe('Channels - Members are update correctly', function() {
 		expect(channelState.members.length).to.be.equal(0);
 	});
 });
+
+describe('Channels - Distinct channels', function() {
+	const tommasoID = `tommaso-${uuidv4()}`;
+	const thierryID = `thierry-${uuidv4()}`;
+
+	const channelGroup = 'messaging';
+	const tommasoToken = createUserToken(tommasoID);
+	const thierryToken = createUserToken(thierryID);
+
+	const tommasoClient = getTestClient();
+	const thierryClient = getTestClient();
+
+	const unique = uuidv4();
+	before(async () => {
+		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.setUser({ id: thierryID }, thierryToken);
+	});
+
+	it('create a distinct channel without specifying members should fail', async function() {
+		const channel = thierryClient.channel(channelGroup, '');
+		await expectHTTPErrorCode(
+			400,
+			channel.create(),
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "When using member based IDs specify at least 2 members"',
+		);
+	});
+
+	it('create a distinct channel with only one member should fail', async function() {
+		const channel = thierryClient.channel(channelGroup, '', {
+			members: [tommasoID],
+		});
+		await expectHTTPErrorCode(
+			400,
+			channel.create(),
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "When using member based IDs specify at least 2 members"',
+		);
+	});
+
+	it('create a distinct channel with 2 members', async function() {
+		const channel = thierryClient.channel(channelGroup, '', {
+			members: [tommasoID, thierryID],
+			unique: unique,
+		});
+		await channel.create();
+	});
+
+	it('query previous created distinct channel', async function() {
+		const channels = await thierryClient.queryChannels({
+			members: [tommasoID, thierryID],
+			unique: unique,
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].data.unique).to.be.equal(unique);
+	});
+});
