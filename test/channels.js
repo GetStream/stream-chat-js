@@ -452,7 +452,7 @@ describe('Channels - Distinct channels', function() {
 		await expectHTTPErrorCode(
 			400,
 			distinctChannel.addMembers([newMember]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channels with the desired members"',
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
 		);
 	});
 
@@ -460,7 +460,7 @@ describe('Channels - Distinct channels', function() {
 		await expectHTTPErrorCode(
 			400,
 			distinctChannel.removeMembers([tommasoID]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channels with the desired members"',
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
 		);
 	});
 });
