@@ -966,10 +966,10 @@ describe('App configs', function() {
 
 			const response = await client.testPushSettings(userID, {
 				apnTemplate:
-					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }}"}',
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }} {{ channel.id }}"}',
 			});
 			expect(response.rendered_apn_template).to.eq(
-				`{"stuff": "${userID} ${user.name} ${msg.message.text}"}`,
+				`{"stuff": "${userID} ${user.name} ${msg.message.text} ${chan.id}"}`,
 			);
 		});
 
@@ -991,11 +991,11 @@ describe('App configs', function() {
 
 			const response = await client.testPushSettings(userID, {
 				apnTemplate:
-					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }}"}',
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }} {{ channel.id }}"}',
 				messageID: msg.message.id,
 			});
 			expect(response.rendered_apn_template).to.eq(
-				`{"stuff": "${userID} ${user.name} ${msg.message.text}"}`,
+				`{"stuff": "${userID} ${user.name} ${msg.message.text} ${chan.id}"}`,
 			);
 		});
 
