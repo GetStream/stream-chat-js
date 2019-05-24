@@ -442,11 +442,6 @@ describe('Managing users', function() {
 	const user = {
 		id: uuidv4(),
 	};
-	const evilUser = uuidv4();
-
-	before(async function() {
-		await createUsers([evilUser]);
-	});
 
 	const evilUser = 'evil-user' + uuidv4();
 	before(async () => {
