@@ -2032,13 +2032,19 @@ describe('Chat', function() {
 			role: 'user',
 		};
 
-		serverAuthClient.updateUser(evil);
+		const modUserID = uuidv4();
+
+		before(async function() {
+			await createUsers([modUserID]);
+			await serverAuthClient.updateUser(evil);
+		});
 
 		it('Ban', async function() {
 			// ban a user for 60 minutes
 			await serverAuthClient.banUser('eviluser', {
 				timeout: 60,
 				reason: 'Stop spamming your YouTube channel',
+				user_id: modUserID,
 			});
 		});
 		it('Mute', async function() {

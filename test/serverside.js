@@ -160,7 +160,7 @@ describe('Channels server side - Send Message', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: SendMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+				'StreamChat error code 4: SendMessage failed with error: "either message.user or message.user_id must be provided when using server side auth."',
 			);
 		}
 	});
@@ -175,7 +175,7 @@ describe('Channels server side - Send Message', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: SendMessage failed with error: "cannot set both fields message.user and message.user_id."',
+				'StreamChat error code 4: SendMessage failed with error: "cannot set both message.user and message.user_id."',
 			);
 		}
 	});
@@ -222,7 +222,7 @@ describe('Mark Read Server Side', function() {
 			expect().fail('should fail missing user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: MarkRead failed with error: "user or user_id is a required field when using server side auth."',
+				'StreamChat error code 4: MarkRead failed with error: "either user or user_id must be provided when using server side auth."',
 			);
 		}
 	});
@@ -235,7 +235,7 @@ describe('Mark Read Server Side', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: MarkRead failed with error: "cannot set both fields user and user_id."',
+				'StreamChat error code 4: MarkRead failed with error: "cannot set both user and user_id."',
 			);
 		}
 	});
@@ -283,7 +283,7 @@ describe('Mark Read All Server Side', function() {
 			expect().fail('should fail missing user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: MarkAllRead failed with error: "user or user_id is a required field when using server side auth."',
+				'StreamChat error code 4: MarkAllRead failed with error: "either user or user_id must be provided when using server side auth."',
 			);
 		}
 	});
@@ -297,7 +297,7 @@ describe('Mark Read All Server Side', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: MarkAllRead failed with error: "cannot set both fields user and user_id."',
+				'StreamChat error code 4: MarkAllRead failed with error: "cannot set both user and user_id."',
 			);
 		}
 	});
@@ -348,7 +348,7 @@ describe('Send Event Server Side', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: SendEvent failed with error: "event.user or event.user_id is a required field when using server side auth."',
+				'StreamChat error code 4: SendEvent failed with error: "either event.user or event.user_id must be provided when using server side auth."',
 			);
 		}
 	});
@@ -364,7 +364,7 @@ describe('Send Event Server Side', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: SendEvent failed with error: "cannot set both fields event.user and event.user_id."',
+				'StreamChat error code 4: SendEvent failed with error: "cannot set both event.user and event.user_id."',
 			);
 		}
 	});
@@ -421,7 +421,7 @@ describe('Update Message Server Side', function() {
 			expect().fail('should fail user ou user_id');
 		} catch (e) {
 			expect(e.message).to.be.equal(
-				'StreamChat error code 4: UpdateMessage failed with error: "message.user or message.user_id is a required field when using server side auth."',
+				'StreamChat error code 4: UpdateMessage failed with error: "either message.user or message.user_id must be provided when using server side auth."',
 			);
 		}
 	});
@@ -446,6 +446,11 @@ describe('Managing users', function() {
 
 	before(async function() {
 		await createUsers([evilUser]);
+	});
+
+	const evilUser = 'evil-user' + uuidv4();
+	before(async () => {
+		await createUsers([evilUser, user.id]);
 	});
 
 	it('edit user inserts if missing', async function() {
@@ -1219,7 +1224,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const responsePromise = channel.markRead();
 		await expect(responsePromise).to.be.rejectedWith(
-			'StreamChat error code 4: MarkRead failed with error: "user or user_id is a required field when using server side auth."',
+			'StreamChat error code 4: MarkRead failed with error: "either user or user_id must be provided when using server side auth."',
 		);
 	});
 
@@ -1235,7 +1240,7 @@ describe('Import via Webhook compat', function() {
 		const nonExistingUser = uuidv4();
 		const response = channel.markRead({ user: { id: nonExistingUser } });
 		await expect(response).to.be.rejectedWith(
-			`The specified event user "${nonExistingUser}" does not exists`,
+			`the user ${nonExistingUser} does not exist`,
 		);
 	});
 
