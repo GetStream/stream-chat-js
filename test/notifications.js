@@ -146,6 +146,8 @@ describe('Notifications - doing stuff on different tabs', function() {
 		const tommasoChannel = tommasoClient.channel('messaging', cid);
 		await tommasoChannel.watch();
 		await tommasoChannel.sendMessage(message);
+
+		expect(tommasoChannel.countUnread()).to.eq(0);
 	});
 
 	it('tab1: should have a message.new event only', async function() {

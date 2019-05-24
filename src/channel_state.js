@@ -94,34 +94,60 @@ export class ChannelState {
 		}
 	}
 
-	addReaction(reaction, reaction_counts) {
+	addReaction(reaction, message) {
 		const { messages } = this;
-		for (let i = 0; i < messages.length; i++) {
-			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+		if (!message) return;
+		const { parent_id, show_in_channel } = message;
 
-			if (!idMatch) {
-				continue;
+		if (parent_id && this.threads[parent_id]) {
+			const thread = this.threads[parent_id];
+
+			for (let i = 0; i < thread.length; i++) {
+				let message = thread[i];
+				message = this._addReactionToMessage(message, reaction);
+				if (!message) {
+					continue;
+				}
+				this.threads = this.threads.set(parent_id, thread.set(i, message));
+				break;
 			}
-			message = this._removeReactionFromMessage(message, reaction);
-			if (this._channel.getClient().userID === reaction.user.id) {
-				message = message.update('own_reactions', (old = []) =>
-					old.concat([reaction]),
-				);
+		}
+
+		if ((!show_in_channel && !parent_id) || show_in_channel) {
+			for (let i = 0; i < messages.length; i++) {
+				let message = messages[i];
+				message = this._addReactionToMessage(message, reaction);
+				if (!message) {
+					continue;
+				}
+				this.messages = messages.set(i, message);
+				break;
 			}
-			message = message.update('latest_reactions', (old = []) =>
+		}
+	}
+
+	_addReactionToMessage(message, reaction) {
+		const idMatch = message.id && message.id === reaction.message_id;
+
+		if (!idMatch) {
+			return false;
+		}
+
+		message = this._removeReactionFromMessage(message, reaction);
+		if (this._channel.getClient().userID === reaction.user.id) {
+			message = message.update('own_reactions', (old = []) =>
 				old.concat([reaction]),
 			);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
-				message = message.updateIn(['reaction_counts', reaction.type], old =>
-					old ? old + 1 : 1,
-				);
-			}
-			this.messages = messages.set(i, message);
-			break;
 		}
+		message = message.update('latest_reactions', (old = []) =>
+			old.concat([reaction]),
+		);
+
+		message = message.updateIn(['reaction_counts', reaction.type], old =>
+			old ? old + 1 : 1,
+		);
+
+		return message;
 	}
 
 	_removeReactionFromMessage(message, reaction) {
@@ -134,25 +160,45 @@ export class ChannelState {
 		return message;
 	}
 
-	removeReaction(reaction, reaction_counts) {
+	removeReaction(reaction, message) {
 		const { messages } = this;
-		for (let i = 0; i < messages.length; i++) {
-			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+		if (!message) return;
+		const { parent_id, show_in_channel } = message;
 
-			if (!idMatch) {
-				continue;
-			}
-			message = this._removeReactionFromMessage(message, reaction);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
+		if (parent_id && this.threads[parent_id]) {
+			const thread = this.threads[parent_id];
+			for (let i = 0; i < thread.length; i++) {
+				let message = thread[i];
+				const idMatch = message.id && message.id === reaction.message_id;
+
+				if (!idMatch) {
+					continue;
+				}
+				message = this._removeReactionFromMessage(message, reaction);
 				message = message.updateIn(['reaction_counts', reaction.type], old =>
 					old ? old - 1 : 0,
 				);
+
+				this.threads = this.threads.set(parent_id, thread.set(i, message));
+				break;
 			}
-			this.messages = messages.set(i, message);
-			break;
+		}
+		if ((!show_in_channel && !parent_id) || show_in_channel) {
+			for (let i = 0; i < messages.length; i++) {
+				let message = messages[i];
+				const idMatch = message.id && message.id === reaction.message_id;
+
+				if (!idMatch) {
+					continue;
+				}
+				message = this._removeReactionFromMessage(message, reaction);
+				message = message.updateIn(['reaction_counts', reaction.type], old =>
+					old ? old - 1 : 0,
+				);
+
+				this.messages = messages.set(i, message);
+				break;
+			}
 		}
 	}
 

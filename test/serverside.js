@@ -62,11 +62,391 @@ describe('Query Channels', function() {
 	});
 });
 
+describe('Channels server side - Create', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const client = getTestClient(true);
+
+	it('creating server side channels require created_by or created_by_id', async function() {
+		const channelId = uuidv4();
+		try {
+			await client
+				.channel('messaging', channelId, {
+					color: 'green',
+				})
+				.create();
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: GetOrCreateChannel failed with error: "either data.created_by or data.created_by_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user created_by and created_by_id should fail', async function() {
+		const channelId = uuidv4();
+
+		try {
+			await client
+				.channel('messaging', channelId, {
+					color: 'green',
+					created_by: channelCreator,
+					created_by_id: channelCreator.id,
+				})
+				.create();
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: GetOrCreateChannel failed with error: "cannot set both data.created_by and data.created_by_id."',
+			);
+		}
+	});
+
+	it('create server side channel with created_by', async function() {
+		const channelId = uuidv4();
+
+		const resp = await client
+			.channel('messaging', channelId, {
+				color: 'green',
+				created_by: channelCreator,
+			})
+			.create();
+		expect(resp.channel.created_by.id).to.be.equal(channelCreator.id);
+	});
+
+	it('create server side channel with created_by_id', async function() {
+		const channelId = uuidv4();
+
+		const resp = await client
+			.channel('messaging', channelId, {
+				color: 'green',
+				created_by_id: channelCreator.id,
+			})
+			.create();
+		expect(resp.channel.created_by.id).to.be.equal(channelCreator.id);
+	});
+});
+
+describe('Channels server side - Send Message', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await channel.sendMessage({ text: 'hi' });
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendMessage failed with error: "either message.user or message.user_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await channel.sendMessage({
+				text: 'hi',
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendMessage failed with error: "cannot set both message.user and message.user_id."',
+			);
+		}
+	});
+
+	it('create server side message with user', async function() {
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('create server side channel with user_id', async function() {
+		const resp = await channel.sendMessage({ text: 'hi', user_id: messageOwner.id });
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
+describe('Mark Read Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const markReadUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'mark-read-ss-' + uuidv4();
+	const client = getTestClient(true);
+	let channel;
+
+	before(async () => {
+		await createUsers([markReadUser.id]);
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		await channel.sendMessage({ text: 'hi', user: channelCreator });
+	});
+	it('mark read in server side auth require user or user_id', async function() {
+		try {
+			await channel.markRead();
+			expect().fail('should fail missing user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkRead failed with error: "either user or user_id must be provided when using server side auth."',
+			);
+		}
+	});
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await channel.markRead({
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkRead failed with error: "cannot set both user and user_id."',
+			);
+		}
+	});
+	it('create server side event with user', async function() {
+		const resp = await channel.markRead({ user: markReadUser });
+		expect(resp.event.user.id).to.be.equal(markReadUser.id);
+	});
+	it('create server side event with user_id', async function() {
+		const resp = await channel.markRead({ user_id: markReadUser.id });
+		expect(resp.event.user.id).to.be.equal(markReadUser.id);
+	});
+});
+
+describe('Mark Read All Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const markReadUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'mark-read-ss-' + uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		await createUsers([markReadUser.id]);
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: channelCreator });
+		message = resp.message;
+	});
+
+	it('mark read in server side auth require user or user_id', async function() {
+		try {
+			await client.markAllRead();
+			expect().fail('should fail missing user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkAllRead failed with error: "either user or user_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		try {
+			await client.markAllRead({
+				user: channelCreator,
+				user_id: channelCreator.id,
+			});
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: MarkAllRead failed with error: "cannot set both user and user_id."',
+			);
+		}
+	});
+
+	it('create server side event with user', async function() {
+		await client.markAllRead({ user: markReadUser });
+	});
+
+	it('create server side event with user_id', async function() {
+		await client.markAllRead({ user_id: markReadUser.id });
+	});
+});
+
+describe('Send Event Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const eventUser = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'admin',
+	};
+
+	const channelID = 'events-' + uuidv4();
+	const client = getTestClient(true);
+	let eventChannel;
+	let message;
+
+	before(async () => {
+		await createUsers([eventUser.id]);
+		eventChannel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await eventChannel.create();
+		const resp = await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
+		message = resp.message;
+	});
+
+	it('creating server side event require user or user_id', async function() {
+		const event = {
+			type: 'message.read',
+		};
+		try {
+			await eventChannel.sendEvent(event);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendEvent failed with error: "either event.user or event.user_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('specify both user user and user_id should fail', async function() {
+		const event = {
+			type: 'message.read',
+			user: eventUser,
+			user_id: eventUser.id,
+		};
+		try {
+			await eventChannel.sendEvent(event);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: SendEvent failed with error: "cannot set both event.user and event.user_id."',
+			);
+		}
+	});
+
+	it('update server side event using user_id', async function() {
+		const event = {
+			type: 'message.read',
+			user_id: eventUser.id,
+		};
+		const resp = await eventChannel.sendEvent(event);
+		expect(resp.event.user.id).to.be.equal(eventUser.id);
+	});
+
+	it('update server side event using user object', async function() {
+		const event = {
+			type: 'message.read',
+			user: eventUser,
+		};
+		const resp = await eventChannel.sendEvent(event);
+		expect(resp.event.user.id).to.be.equal(eventUser.id);
+	});
+});
+
+describe('Update Message Server Side', function() {
+	const channelCreator = {
+		id: uuidv4(),
+		name: 'creator',
+		role: 'user',
+	};
+	const messageOwner = {
+		id: uuidv4(),
+		name: 'message-owner',
+		role: 'user',
+	};
+
+	const channelID = uuidv4();
+	const client = getTestClient(true);
+	let channel;
+	let message;
+
+	before(async () => {
+		channel = client.channel('messaging', channelID, {
+			color: 'green',
+			created_by: channelCreator,
+		});
+		await channel.create();
+		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
+		message = resp.message;
+	});
+
+	it('creating server side message require user or user_id', async function() {
+		try {
+			await client.updateMessage(message, null);
+			expect().fail('should fail user ou user_id');
+		} catch (e) {
+			expect(e.message).to.be.equal(
+				'StreamChat error code 4: UpdateMessage failed with error: "either message.user or message.user_id must be provided when using server side auth."',
+			);
+		}
+	});
+
+	it('update server side message using user_id', async function() {
+		const resp = await client.updateMessage(message, messageOwner.id);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+
+	it('update server side message using user object', async function() {
+		const resp = await client.updateMessage(message, messageOwner);
+		expect(resp.message.user.id).to.be.equal(messageOwner.id);
+	});
+});
+
 describe('Managing users', function() {
 	const client = getTestClient(true);
 	const user = {
 		id: uuidv4(),
 	};
+	const evilUser = 'evil-user' + uuidv4();
+	before(async () => {
+		await createUsers([evilUser, user.id]);
+	});
+
 	const evilUser = 'evil-user' + uuidv4();
 	before(async () => {
 		await createUsers([evilUser, user.id]);
@@ -115,7 +495,7 @@ describe('Managing users', function() {
 	});
 
 	it('remove ban', async function() {
-		await client.unbanUser(user.id);
+		await client.unbanUser(evilUser);
 	});
 });
 
@@ -499,9 +879,10 @@ describe('App configs', function() {
 		});
 	});
 
-	describe.skip('Push notifications test endpoint', function() {
+	describe('Push notifications test endpoint', function() {
 		const deviceID = uuidv4();
 		const userID = uuidv4();
+		let user = {};
 		const apnConfig = {
 			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
 			key_id: 'whatever',
@@ -516,6 +897,8 @@ describe('App configs', function() {
 
 		before(async function() {
 			await client.addDevice(deviceID, 'apn', userID);
+			const resp = await client.updateUser({ id: userID, name: uuidv4() });
+			user = resp.users[userID];
 		});
 
 		after(async function() {
@@ -577,6 +960,54 @@ describe('App configs', function() {
 			const msgID = uuidv4();
 			const p = client.testPushSettings(userID, { messageID: msgID });
 			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
+		});
+
+		it('Random message', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }} {{ channel.id }}"}',
+			});
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${userID} ${user.name} ${msg.message.text} ${chan.id}"}`,
+			);
+		});
+
+		it('Specific message', async function() {
+			await client.updateAppSettings({
+				apn_config: apnConfig,
+			});
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{ sender.id }} {{ sender.name }} {{ message.text }} {{ channel.id }}"}',
+				messageID: msg.message.id,
+			});
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${userID} ${user.name} ${msg.message.text} ${chan.id}"}`,
+			);
 		});
 
 		it('Bad apn template error gets returned in response', async function() {
@@ -654,8 +1085,22 @@ describe('Devices', function() {
 		it('can delete any device', async function() {
 			await client.removeDevice(devices[1], users[1]);
 			const result = await client.getDevices(devices[1], users[1]);
-			expect(result.devices.length).to.equal(0);
+			expect(result.devices).to.have.length(0);
 		});
+	});
+
+	it('user has custom data', async function() {
+		const user = {
+			id: uuidv4(),
+			name: 'bob',
+			hobby: 'painting',
+		};
+		await client.updateUser(user);
+
+		await client.addDevice(uuidv4(), 'apn', user.id);
+
+		const result = await client.getDevices(user.id);
+		expect(result.devices).to.have.length(1);
 	});
 });
 
@@ -767,7 +1212,6 @@ describe('Import via Webhook compat', function() {
 		const responsePromise = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
-			user: created_by,
 		});
 		await expect(responsePromise).to.be.rejectedWith(
 			'message.updated_at or message.created_at',
@@ -779,7 +1223,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const responsePromise = channel.markRead();
 		await expect(responsePromise).to.be.rejectedWith(
-			'Please specify a user when marking a channel as read server side',
+			'StreamChat error code 4: MarkRead failed with error: "either user or user_id must be provided when using server side auth."',
 		);
 	});
 
@@ -795,7 +1239,7 @@ describe('Import via Webhook compat', function() {
 		const nonExistingUser = uuidv4();
 		const response = channel.markRead({ user: { id: nonExistingUser } });
 		await expect(response).to.be.rejectedWith(
-			`The specified event user "${nonExistingUser}" does not exists`,
+			`the user ${nonExistingUser} does not exist`,
 		);
 	});
 
@@ -900,7 +1344,8 @@ describe('Channel types', function() {
 
 		it('should have the right defaults and name', function() {
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -944,7 +1389,8 @@ describe('Channel types', function() {
 			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
 
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
@@ -991,7 +1437,8 @@ describe('Channel types', function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
@@ -1026,7 +1473,8 @@ describe('Channel types', function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
-				automod: 'AI',
+				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[@username] [text]',
