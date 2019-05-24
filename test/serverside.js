@@ -491,9 +491,7 @@ describe('Managing users', function() {
 	});
 
 	it('remove ban', async function() {
-		await client.unbanUser(evilUser, {
-			user_id: user.id,
-		});
+		await client.unbanUser(evilUser);
 	});
 });
 
