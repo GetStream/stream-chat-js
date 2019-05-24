@@ -442,6 +442,11 @@ describe('Managing users', function() {
 	const user = {
 		id: uuidv4(),
 	};
+	const evilUser = uuidv4();
+
+	before(async function() {
+		await createUsers([evilUser]);
+	});
 
 	it('edit user inserts if missing', async function() {
 		await client.updateUser(user);
@@ -480,11 +485,15 @@ describe('Managing users', function() {
 	});
 
 	it('ban user', async function() {
-		await client.banUser(user.id);
+		await client.banUser(evilUser, {
+			user_id: user.id,
+		});
 	});
 
 	it('remove ban', async function() {
-		await client.unbanUser(user.id);
+		await client.unbanUser(evilUser, {
+			user_id: user.id,
+		});
 	});
 });
 
