@@ -275,13 +275,12 @@ export class ChannelState {
 	 */
 	clean() {
 		const now = new Date();
-
 		// prevent old users from showing up as typing
 		for (const [userID, lastEvent] of Object.entries(this.typing)) {
 			const since = now - new Date(lastEvent.received_at);
 			if (since > 7000) {
 				this.typing = this.typing.without(userID);
-				this._channel.client.dispatchEvent({
+				this._channel.getClient().dispatchEvent({
 					type: 'typing.stop',
 					user: { id: userID },
 					cid: this._channel.cid,
