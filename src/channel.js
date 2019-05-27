@@ -273,6 +273,23 @@ export class Channel {
 		return data;
 	}
 
+	sendMMLAction(messageID, values) {
+		this._checkInitialized();
+		if (!messageID) {
+			throw Error(`Message id is missing`);
+		}
+		return this.getClient().post(
+			this.getClient().baseURL + `/messages/${messageID}/action`,
+			{
+				message_id: messageID,
+				values,
+				action_type: 'MML',
+				id: this.id,
+				type: this.type,
+			},
+		);
+	}
+
 	sendAction(messageID, formData) {
 		this._checkInitialized();
 		if (!messageID) {
