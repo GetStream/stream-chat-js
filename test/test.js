@@ -378,7 +378,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax on a field thats not supported', async function() {
+		it.skip('Basic Query using $q syntax on a field thats not supported', function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
@@ -1858,18 +1858,22 @@ describe('Chat', function() {
 
 		it('servers side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
+			expect(r.message.channel.id).to.eq(channelID);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
+			delete r.message.channel;
 			expect(r.message).to.deep.eq(message);
 		});
 
 		it('client side get a message should work', async () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
+			expect(r.message.channel.id).to.eq(channelID);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
+			delete r.message.channel;
 			expect(r.message).to.deep.eq(message);
 		});
 
@@ -1938,6 +1942,20 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0].instrument).to.eq('saxophone');
 		});
 
+		it('channel.countUnreadMentions should return 1', async () => {
+			const client = await getTestClientForUser(thierry.id);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(1);
+		});
+
+		it('channel.countUnreadMentions should return 0 for own messages', async () => {
+			const client = await getTestClientForUser(userID);
+			const channel = client.channel('team', channelID);
+			await channel.watch();
+			expect(channel.countUnreadMentions()).to.eq(0);
+		});
+
 		it('should be possible to edit the list of mentioned users', async () => {
 			const client = await getTestClient(true);
 			const response = await client.updateMessage(
@@ -1953,13 +1971,6 @@ describe('Chat', function() {
 			expect(msg.mentioned_users[0]).to.be.an('object');
 			expect(msg.mentioned_users[0].id).to.eq(userID);
 			expect(msg.mentioned_users[0].instrument).to.eq('guitar');
-		});
-
-		it('channel.countUnreadMentions should return 1', async () => {
-			const client = await getTestClientForUser(userID);
-			const channel = client.channel('team', channelID);
-			await channel.watch();
-			expect(channel.countUnreadMentions()).to.eq(1);
 		});
 
 		it('channel.countUnreadMentions should return 0 for another user', async () => {
@@ -2021,13 +2032,19 @@ describe('Chat', function() {
 			role: 'user',
 		};
 
-		serverAuthClient.updateUser(evil);
+		const modUserID = uuidv4();
+
+		before(async function() {
+			await createUsers([modUserID]);
+			await serverAuthClient.updateUser(evil);
+		});
 
 		it('Ban', async function() {
 			// ban a user for 60 minutes
 			await serverAuthClient.banUser('eviluser', {
 				timeout: 60,
 				reason: 'Stop spamming your YouTube channel',
+				user_id: modUserID,
 			});
 		});
 		it('Mute', async function() {

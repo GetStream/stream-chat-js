@@ -4,6 +4,7 @@ import {
 	getTestClientForUser,
 	createUserToken,
 	expectHTTPErrorCode,
+	createUsers,
 } from './utils';
 import chai from 'chai';
 const expect = chai.expect;
@@ -192,5 +193,292 @@ describe('Channels - members', function() {
 
 	it('thierry gets promoted', async function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+	});
+
+	it('correct member count', async function() {
+		const members = [uuidv4(), uuidv4()];
+		await createUsers(members);
+
+		const channel = tommasoClient.channel('messaging', uuidv4(), { members });
+		await channel.create();
+
+		const newMembers = [uuidv4(), uuidv4()];
+		await createUsers(newMembers);
+
+		await channel.addMembers([newMembers[0]]);
+		await channel.addMembers([newMembers[1]]);
+
+		const resp = await channel.query();
+		expect(resp.members.length).to.be.equal(4);
+		expect(resp.channel.member_count).to.be.equal(4);
+	});
+
+	it('member list is correctly returned', async function() {
+		const newMembers = ['member1', 'member2'];
+		await createUsers(newMembers);
+		const channelId = `test-member-cache-${uuidv4()}`;
+		const initialMembers = [tommasoID, thierryID];
+		const channel = tommasoClient.channel('messaging', channelId);
+		await channel.create();
+		await channel.addMembers([initialMembers[0]]);
+		await channel.addMembers([initialMembers[1]]);
+		let resp = await channel.watch();
+
+		expect(resp.members.length).to.be.equal(initialMembers.length);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+
+		for (let i = 0; i < 3; i++) {
+			const op1 = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.addMembers(newMembers);
+			await Promise.all([op1, op2, op3]);
+		}
+		resp = await channel.watch();
+		expect(resp.members.length).to.be.equal(4);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+		expect(resp.members[2].user.id).to.be.equal(newMembers[0]);
+		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
+
+		for (let i = 0; i < 3; i++) {
+			const op1 = channel.removeMembers(newMembers);
+			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
+			const op3 = channel.sendMessage({ text: 'new message' });
+			await Promise.all([op1, op2, op3]);
+		}
+
+		resp = await channel.watch();
+		expect(resp.members.length).to.be.equal(2);
+		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
+		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+	});
+
+	it('channel messages and last_message_at are correctly returned', async function() {
+		const unique = uuidv4();
+		const newMembers = ['member1', 'member2'];
+		await createUsers(newMembers);
+		const channelId = `channel-messages-cache-${unique}`;
+		const channel2Id = `channel-messages-cache2-${unique}`;
+		const channel = tommasoClient.channel('messaging', channelId, {
+			unique: unique,
+		});
+		await channel.create();
+		const channel2 = tommasoClient.channel('messaging', channel2Id, {
+			unique: unique,
+		});
+		await channel2.create();
+
+		const channel1Messages = [];
+		const channel2Messages = [];
+		for (let i = 0; i < 10; i++) {
+			const msg = channel.sendMessage({ text: 'new message' });
+			const op2 = channel.update({ unique, color: 'blue' });
+			const op3 = channel.addMembers(newMembers);
+			const msg2 = await channel2.sendMessage({ text: 'new message 2' });
+			const results = await Promise.all([msg, op2, op3]);
+
+			if (i % 2 === 0) {
+				let last_message = results[0].message.created_at;
+				if (msg2.message.created_at > last_message) {
+					last_message = msg2.message.created_at;
+				}
+				const channels = await tommasoClient.queryChannels(
+					{ unique: unique },
+					{ last_message_at: -1 },
+					{ state: true },
+				);
+				expect(channels.length).to.be.equal(2);
+				expect(channels[0].data.last_message_at).to.be.equal(last_message);
+			}
+			channel1Messages.push(results[0].message);
+			channel2Messages.push(msg2.message);
+		}
+
+		const stateChannel1 = await channel.watch();
+		const stateChannel2 = await channel2.watch();
+
+		const expectedChannel1Messages = channel1Messages;
+		const expectedChannel2Messages = channel2Messages;
+
+		expect(stateChannel1.messages.length).to.be.equal(
+			expectedChannel1Messages.length,
+		);
+		expect(stateChannel2.messages.length).to.be.equal(
+			expectedChannel2Messages.length,
+		);
+
+		for (let i = 0; i < stateChannel1.messages.length; i++) {
+			expect(stateChannel1.messages[i].id).to.be.equal(
+				expectedChannel1Messages[i].id,
+			);
+		}
+		for (let i = 0; i < stateChannel2.messages.length; i++) {
+			expect(stateChannel2.messages[i].id).to.be.equal(
+				expectedChannel2Messages[i].id,
+			);
+		}
+	});
+});
+
+describe('Channels - Members are update correctly', function() {
+	const channelId = uuidv4();
+	const cid = `messaging:${channelId}`;
+	const johnID = `john-${uuidv4()}`;
+	const members = [
+		{
+			id: `member1-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+		{
+			id: `member2-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+		{
+			id: `member3-${uuidv4()}`,
+			role: 'user',
+			counter: 0,
+		},
+	];
+
+	const runWithOtherOperations = async function(op) {
+		const op2 = channel.update({ color: 'green' }, { text: 'got new message!' });
+		const op3 = channel.sendMessage({ text: 'new message' });
+		const op4 = channel.sendMessage({ text: 'new message' });
+		const results = await Promise.all([op, op2, op3, op4]);
+		return results[0];
+	};
+
+	let channel;
+	let client;
+	before(async function() {
+		client = await getTestClientForUser(johnID);
+		await createUsers(
+			members.map(function(member) {
+				return member.id;
+			}),
+		);
+
+		channel = client.channel('messaging', channelId, {
+			color: 'green',
+			members: [members[0].id],
+		});
+		const response = await channel.create();
+		expect(response.channel.color).to.equal('green');
+		expect(response.channel.cid).to.equal(cid);
+		expect(response.channel.members).to.equal(undefined);
+		expect(response.members.length).to.equal(1);
+	});
+
+	it('channel state must be updated after removing a member', async function() {
+		const resp = await runWithOtherOperations(channel.removeMembers([members[0].id]));
+		expect(resp.members.length).to.be.equal(0);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(0);
+	});
+
+	it('channel state must be updated after adding a member', async function() {
+		const resp = await runWithOtherOperations(channel.addMembers([members[0].id]));
+		expect(resp.members.length).to.be.equal(1);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(1);
+		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
+	});
+
+	it('channel state must be updated after adding multiple members', async function() {
+		const resp = await runWithOtherOperations(
+			channel.addMembers([members[0].id, members[1].id, members[2].id]),
+		);
+		expect(resp.members.length).to.be.equal(3);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(3);
+		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
+		expect(channelState.members[1].user.id).to.be.equal(members[1].id);
+		expect(channelState.members[2].user.id).to.be.equal(members[2].id);
+	});
+
+	it('channel state must be updated after removing multiple members', async function() {
+		const resp = await runWithOtherOperations(
+			channel.removeMembers([members[0].id, members[1].id, members[2].id]),
+		);
+		expect(resp.members.length).to.be.equal(0);
+		const channelState = await channel.watch();
+		expect(channelState.members.length).to.be.equal(0);
+	});
+});
+
+describe('Channels - Distinct channels', function() {
+	const tommasoID = `tommaso-${uuidv4()}`;
+	const thierryID = `thierry-${uuidv4()}`;
+	const newMember = `member-${uuidv4()}`;
+
+	const channelGroup = 'messaging';
+	const tommasoToken = createUserToken(tommasoID);
+	const thierryToken = createUserToken(thierryID);
+
+	const tommasoClient = getTestClient();
+	const thierryClient = getTestClient();
+	let distinctChannel;
+
+	const unique = uuidv4();
+	before(async () => {
+		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await createUsers([newMember]);
+	});
+
+	it('create a distinct channel without specifying members should fail', async function() {
+		const channel = thierryClient.channel(channelGroup, '');
+		await expectHTTPErrorCode(
+			400,
+			channel.create(),
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "When using member based IDs specify at least 2 members"',
+		);
+	});
+
+	it('create a distinct channel with only one member should fail', async function() {
+		const channel = thierryClient.channel(channelGroup, '', {
+			members: [tommasoID],
+		});
+		await expectHTTPErrorCode(
+			400,
+			channel.create(),
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "When using member based IDs specify at least 2 members"',
+		);
+	});
+
+	it('create a distinct channel with 2 members should succeed', async function() {
+		distinctChannel = thierryClient.channel(channelGroup, '', {
+			members: [tommasoID, thierryID],
+			unique: unique,
+		});
+		await distinctChannel.create();
+	});
+
+	it('query previous created distinct channel', async function() {
+		const channels = await thierryClient.queryChannels({
+			members: [tommasoID, thierryID],
+			unique: unique,
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].data.unique).to.be.equal(unique);
+	});
+
+	it('adding members to distinct channel should fail', async function() {
+		await expectHTTPErrorCode(
+			400,
+			distinctChannel.addMembers([newMember]),
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
+		);
+	});
+
+	it('removing members from a distinct channel should fail', async function() {
+		await expectHTTPErrorCode(
+			400,
+			distinctChannel.removeMembers([tommasoID]),
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
+		);
 	});
 });

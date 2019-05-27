@@ -146,6 +146,8 @@ describe('Notifications - doing stuff on different tabs', function() {
 		const tommasoChannel = tommasoClient.channel('messaging', cid);
 		await tommasoChannel.watch();
 		await tommasoChannel.sendMessage(message);
+
+		expect(tommasoChannel.countUnread()).to.eq(0);
 	});
 
 	it('tab1: should have a message.new event only', async function() {
@@ -626,6 +628,25 @@ describe('Unread on connect', function() {
 
 	it('thierry re-connects and receives unread_count=0', async function() {
 		const chan = thierryClient.channel('messaging', cids[3]);
+		await chan.watch();
+		expect(chan.countUnread()).to.eq(0);
+	});
+
+	it('tommaso likes one message', async function() {
+		const chan = serverSideClient.channel('messaging', cids[2]);
+		const r = await chan.query();
+		await chan.sendReaction(chan.state.messages[0].id, { type: 'love' }, tommasoID);
+	});
+
+	it('thierry re-connects and receives unread_count=0', async function() {
+		thierryClient = getTestClient(false);
+		const response = await thierryClient.setUser(
+			{ id: thierryID },
+			createUserToken(thierryID),
+		);
+		expect(response.me.unread_count).to.eq(0);
+		expect(response.me.total_unread_count).to.eq(0);
+		const chan = thierryClient.channel('messaging', cids[2]);
 		await chan.watch();
 		expect(chan.countUnread()).to.eq(0);
 	});
