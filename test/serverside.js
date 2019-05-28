@@ -931,6 +931,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				firebase_config: firebaseConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
@@ -942,6 +943,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				apn_config: apnConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
@@ -953,6 +955,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				apn_config: apnConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 			const msgID = uuidv4();
 			const p = client.testPushSettings(userID, { messageID: msgID });
 			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
@@ -962,6 +965,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				apn_config: apnConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -984,6 +988,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				apn_config: apnConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1010,6 +1015,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				apn_config: apnConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				apnTemplate: '{{}',
@@ -1025,6 +1031,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				firebase_config: firebaseConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{{}',
@@ -1040,6 +1047,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				firebase_config: firebaseConfig,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
@@ -1097,6 +1105,136 @@ describe('Devices', function() {
 
 		const result = await client.getDevices(user.id);
 		expect(result.devices).to.have.length(1);
+	});
+
+	describe('Device invalidation', function() {
+		const userID = uuidv4();
+		let deviceID;
+		const apn_config = {
+			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
+			key_id: 'whatever',
+			team_id: 'stream',
+			bundle_id: 'bundle',
+			auth_type: 'token',
+		};
+		const firebase_config = {
+			server_key:
+				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+		};
+
+		before(async function() {
+			await client.updateUser({ id: userID });
+		});
+
+		beforeEach(async function() {
+			deviceID = uuidv4();
+			await client.updateAppSettings({
+				apn_config,
+				firebase_config,
+			});
+		});
+
+		afterEach(async function() {
+			await client.updateAppSettings({
+				apn_config: {
+					disabled: true,
+				},
+				firebase_config: {
+					disabled: true,
+				},
+			});
+		});
+
+		it('changing apn notification template does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+			await client.removeDevice(deviceID, userID);
+		});
+
+		it('changing firebase notification template does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'firebase', userID);
+			await client.updateAppSettings({
+				firebase_config: {
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+			await client.removeDevice(deviceID, userID);
+		});
+
+		it.only('changing apn config invalidates device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(0);
+		});
+
+		it('changing apn config and notification template invalidates device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(0);
+		});
+
+		it('re-adding device after config change does not error', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing apn config invalidates only apn devices', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			const [apnID, firebaseID1, firebaseID2] = [uuidv4(), uuidv4(), uuidv4()];
+			await client.addDevice(apnID, 'apn', userID);
+			await client.addDevice(firebaseID1, 'firebase', userID);
+			await client.addDevice(firebaseID2, 'firebase', userID);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(2);
+			for (const d of devices) {
+				expect(d.push_provider).to.equal('firebase');
+			}
+		});
+
+		it('cannot delete invalidated device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const p = client.removeDevice(deviceID, userID);
+			await expect(p).to.be.rejectedWith(
+				`user ${userID} does not have device with id ${deviceID}`,
+			);
+		});
 	});
 });
 
