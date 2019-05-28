@@ -879,14 +879,14 @@ describe('App configs', function() {
 		const deviceID = uuidv4();
 		const userID = uuidv4();
 		let user = {};
-		const apnConfig = {
+		const apn_config = {
 			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
 			key_id: 'whatever',
 			team_id: 'stream',
 			bundle_id: 'bundle',
 			auth_type: 'token',
 		};
-		const firebaseConfig = {
+		const firebase_config = {
 			server_key:
 				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 		};
@@ -914,10 +914,11 @@ describe('App configs', function() {
 		});
 
 		it('User has no devices', async function() {
-			await client.removeDevice(deviceID, userID);
+			await client.updateAppSettings({
+				firebase_config,
+			});
 			const p = client.testPushSettings(userID);
 			await expect(p).to.be.rejectedWith(`User has no devices associated`);
-			await client.addDevice(deviceID, 'apn', userID);
 		});
 
 		it('App has push disabled', async function() {
@@ -929,7 +930,7 @@ describe('App configs', function() {
 
 		it('No APN + APN template', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -941,7 +942,7 @@ describe('App configs', function() {
 
 		it('No Firebase + firebase template', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -953,7 +954,7 @@ describe('App configs', function() {
 
 		it('Bad message id', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 			const msgID = uuidv4();
@@ -963,7 +964,7 @@ describe('App configs', function() {
 
 		it('Random message', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -986,7 +987,7 @@ describe('App configs', function() {
 
 		it('Specific message', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -1013,7 +1014,7 @@ describe('App configs', function() {
 
 		it('Bad apn template error gets returned in response', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -1029,7 +1030,7 @@ describe('App configs', function() {
 
 		it('Bad firebase template error gets returned in response', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -1045,7 +1046,7 @@ describe('App configs', function() {
 
 		it('All good', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 
@@ -1134,17 +1135,6 @@ describe('Devices', function() {
 			});
 		});
 
-		afterEach(async function() {
-			await client.updateAppSettings({
-				apn_config: {
-					disabled: true,
-				},
-				firebase_config: {
-					disabled: true,
-				},
-			});
-		});
-
 		it('changing apn notification template does not invalidate device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
@@ -1169,7 +1159,7 @@ describe('Devices', function() {
 			await client.removeDevice(deviceID, userID);
 		});
 
-		it.only('changing apn config invalidates device', async function() {
+		it('changing apn config invalidates device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
