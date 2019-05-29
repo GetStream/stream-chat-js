@@ -1109,7 +1109,7 @@ describe('Devices', function() {
 	});
 
 	describe('Device invalidation', function() {
-		const userID = uuidv4();
+		let userID;
 		let deviceID;
 		const apn_config = {
 			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
@@ -1123,11 +1123,10 @@ describe('Devices', function() {
 				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 		};
 
-		before(async function() {
-			await client.updateUser({ id: userID });
-		});
-
 		beforeEach(async function() {
+			userID = uuidv4();
+			await client.updateUser({ id: userID });
+
 			deviceID = uuidv4();
 			await client.updateAppSettings({
 				apn_config,
@@ -1145,7 +1144,6 @@ describe('Devices', function() {
 			});
 			const { devices } = await client.getDevices(userID);
 			expect(devices).to.have.length(1);
-			await client.removeDevice(deviceID, userID);
 		});
 
 		it('changing firebase notification template does not invalidate device', async function() {
@@ -1157,7 +1155,6 @@ describe('Devices', function() {
 			});
 			const { devices } = await client.getDevices(userID);
 			expect(devices).to.have.length(1);
-			await client.removeDevice(deviceID, userID);
 		});
 
 		it('changing apn config invalidates device', async function() {
@@ -1192,7 +1189,6 @@ describe('Devices', function() {
 			});
 			const { devices } = await client.getDevices(userID);
 			expect(devices).to.have.length(1);
-			await client.removeDevice(deviceID, userID);
 		});
 
 		it('keep devices and then update', async function() {
@@ -1282,6 +1278,63 @@ describe('Devices', function() {
 			await expect(p).to.be.rejectedWith(
 				`user ${userID} does not have device with id ${deviceID}`,
 			);
+		});
+
+		it('Cache testing', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			let r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+		});
+
+		it('Cache testing - 2', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			let r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'B TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
 		});
 	});
 });
