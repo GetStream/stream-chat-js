@@ -1133,6 +1133,7 @@ describe('Devices', function() {
 				apn_config,
 				firebase_config,
 			});
+			await sleep(100);
 		});
 
 		it('changing apn notification template does not invalidate device', async function() {
@@ -1168,6 +1169,50 @@ describe('Devices', function() {
 			});
 			const { devices } = await client.getDevices(userID);
 			expect(devices).to.have.length(0);
+		});
+
+		it('using keep_devices does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					keep_devices: true,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('no-op update does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: apn_config.team_id,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+			await client.removeDevice(deviceID, userID);
+		});
+
+		it('keep devices and then update', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					keep_devices: true,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'B TEAM',
+				},
+			});
+			const r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
 		});
 
 		it('changing apn config and notification template invalidates device', async function() {
