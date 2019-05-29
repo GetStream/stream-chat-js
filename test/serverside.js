@@ -1168,6 +1168,23 @@ describe('Devices', function() {
 			expect(devices).to.have.length(0);
 		});
 
+		it('adding apn config invalidates orphaned devices', async function() {
+			await client.updateAppSettings({
+				apn_config: {
+					disabled: true,
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config,
+			});
+			const r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+		});
+
 		it('using keep_devices does not invalidate device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
