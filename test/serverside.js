@@ -1194,6 +1194,19 @@ describe('Devices', function() {
 			expect(devices).to.have.length(1);
 		});
 
+		it('adding same device twice does not error', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
 		it('changing apn config invalidates only apn devices', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			const [apnID, firebaseID1, firebaseID2] = [uuidv4(), uuidv4(), uuidv4()];
