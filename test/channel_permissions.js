@@ -1022,7 +1022,7 @@ describe('Commerce permissions', function() {
 
 	describe('Create channel', function() {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
-		roleAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, allowed));
+		roleNotAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, createChannel(ctx, ctx.user, notAllowed));
 		roleAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, allowed));
 	});
