@@ -265,7 +265,7 @@ function roleNotAllowed(roleName, test) {
 	it(`${roleName} is not allowed`, done => test(done));
 }
 
-describe.only('Messaging permissions', function() {
+describe('Messaging permissions', function() {
 	const ctx = new Context('messaging');
 
 	before(async () => {
