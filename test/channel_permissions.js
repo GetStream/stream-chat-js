@@ -10,7 +10,7 @@ class Context {
 		this.adminUser = { id: `admin-${uuidv4()}`, role: 'admin' };
 		this.guestUser = { id: `guest-${uuidv4()}`, role: 'guest' };
 		this.user = { id: `user-${uuidv4()}`, role: 'user' };
-		this.moderator = { id: `moderator-${uuidv4()}`, role: 'channel_moderator' };
+		this.moderator = { id: `moderator-${uuidv4()}`, role: 'user' };
 		this.messageOwner = { id: `message-owner-${uuidv4()}` };
 		this.channelOwner = { id: `channel-owner-${uuidv4()}` };
 		this.channelMember = { id: `channel-member-${uuidv4()}`, role: 'user' };
@@ -31,6 +31,7 @@ class Context {
 		});
 		await this.channel.create();
 		await this.channel.addMembers([this.channelMember.id]);
+		await this.channel.addModerators([this.moderator.id]);
 	}
 }
 
@@ -264,7 +265,7 @@ function roleNotAllowed(roleName, test) {
 	it(`${roleName} is not allowed`, done => test(done));
 }
 
-describe('Messaging permissions', function() {
+describe.only('Messaging permissions', function() {
 	const ctx = new Context('messaging');
 
 	before(async () => {
