@@ -468,6 +468,10 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
+	 * @return {date}
+	 */
 	lastRead() {
 		this._checkInitialized();
 		return this.state.read[this.getClient().userID]
