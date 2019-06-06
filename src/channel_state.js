@@ -20,6 +20,8 @@ export class ChannelState {
 		this.mutedUsers = Immutable([]);
 		this.watchers = Immutable({});
 		this.members = Immutable({});
+		this.last_message_at =
+			channel.last_message_at != null ? new Date(channel.last_message_at) : null;
 	}
 
 	/**
@@ -60,7 +62,11 @@ export class ChannelState {
 		// parse all the new message dates and add __html for react
 		const parsedMessages = [];
 		for (const message of newMessages) {
-			parsedMessages.push(this.messageToImmutable(message));
+			const parsedMsg = this.messageToImmutable(message);
+			parsedMessages.push(parsedMsg);
+			if (parsedMsg.created_at > this.last_message_at) {
+				this.last_message_at = parsedMsg.created_at;
+			}
 		}
 
 		// update or append the messages...
@@ -94,32 +100,60 @@ export class ChannelState {
 		}
 	}
 
-	addReaction(reaction, reaction_counts) {
+	addReaction(reaction, message) {
 		const { messages } = this;
-		for (let i = 0; i < messages.length; i++) {
-			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+		if (!message) return;
+		const { parent_id, show_in_channel } = message;
 
-			if (!idMatch) {
-				continue;
+		if (parent_id && this.threads[parent_id]) {
+			const thread = this.threads[parent_id];
+
+			for (let i = 0; i < thread.length; i++) {
+				let message = thread[i];
+				message = this._addReactionToMessage(message, reaction);
+				if (!message) {
+					continue;
+				}
+				this.threads = this.threads.set(parent_id, thread.set(i, message));
+				break;
 			}
-			message = this._removeReactionFromMessage(message, reaction);
+		}
+
+		if ((!show_in_channel && !parent_id) || show_in_channel) {
+			for (let i = 0; i < messages.length; i++) {
+				let message = messages[i];
+				message = this._addReactionToMessage(message, reaction);
+				if (!message) {
+					continue;
+				}
+				this.messages = messages.set(i, message);
+				break;
+			}
+		}
+	}
+
+	_addReactionToMessage(message, reaction) {
+		const idMatch = message.id && message.id === reaction.message_id;
+
+		if (!idMatch) {
+			return false;
+		}
+
+		message = this._removeReactionFromMessage(message, reaction);
+		if (this._channel.getClient().userID === reaction.user.id) {
 			message = message.update('own_reactions', (old = []) =>
 				old.concat([reaction]),
 			);
-			message = message.update('latest_reactions', (old = []) =>
-				old.concat([reaction]),
-			);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
-				message = message.updateIn(['reaction_counts', reaction.type], old =>
-					old ? old + 1 : 1,
-				);
-			}
-			this.messages = messages.set(i, message);
-			break;
 		}
+		message = message.update('latest_reactions', (old = []) =>
+			old.concat([reaction]),
+		);
+
+		message = message.updateIn(['reaction_counts', reaction.type], old =>
+			old ? old + 1 : 1,
+		);
+
+		return message;
 	}
 
 	_removeReactionFromMessage(message, reaction) {
@@ -132,25 +166,45 @@ export class ChannelState {
 		return message;
 	}
 
-	removeReaction(reaction, reaction_counts) {
+	removeReaction(reaction, message) {
 		const { messages } = this;
-		for (let i = 0; i < messages.length; i++) {
-			let message = messages[i];
-			const idMatch = message.id && message.id === reaction.message_id;
+		if (!message) return;
+		const { parent_id, show_in_channel } = message;
 
-			if (!idMatch) {
-				continue;
-			}
-			message = this._removeReactionFromMessage(message, reaction);
-			if (reaction_counts) {
-				message = message.set('reaction_counts', reaction_counts);
-			} else {
+		if (parent_id && this.threads[parent_id]) {
+			const thread = this.threads[parent_id];
+			for (let i = 0; i < thread.length; i++) {
+				let message = thread[i];
+				const idMatch = message.id && message.id === reaction.message_id;
+
+				if (!idMatch) {
+					continue;
+				}
+				message = this._removeReactionFromMessage(message, reaction);
 				message = message.updateIn(['reaction_counts', reaction.type], old =>
 					old ? old - 1 : 0,
 				);
+
+				this.threads = this.threads.set(parent_id, thread.set(i, message));
+				break;
 			}
-			this.messages = messages.set(i, message);
-			break;
+		}
+		if ((!show_in_channel && !parent_id) || show_in_channel) {
+			for (let i = 0; i < messages.length; i++) {
+				let message = messages[i];
+				const idMatch = message.id && message.id === reaction.message_id;
+
+				if (!idMatch) {
+					continue;
+				}
+				message = this._removeReactionFromMessage(message, reaction);
+				message = message.updateIn(['reaction_counts', reaction.type], old =>
+					old ? old - 1 : 0,
+				);
+
+				this.messages = messages.set(i, message);
+				break;
+			}
 		}
 	}
 
@@ -227,13 +281,12 @@ export class ChannelState {
 	 */
 	clean() {
 		const now = new Date();
-
 		// prevent old users from showing up as typing
 		for (const [userID, lastEvent] of Object.entries(this.typing)) {
 			const since = now - new Date(lastEvent.received_at);
 			if (since > 7000) {
 				this.typing = this.typing.without(userID);
-				this._channel.client.dispatchEvent({
+				this._channel.getClient().dispatchEvent({
 					type: 'typing.stop',
 					user: { id: userID },
 					cid: this._channel.cid,

@@ -361,16 +361,7 @@ export class Channel {
 			return Promise.resolve(null);
 		}
 
-		const lastMessage = this.lastMessage();
-		let lastMessageCreatedAt, lastMessageID;
-		if (lastMessage) {
-			lastMessageCreatedAt = lastMessage.created_at;
-			lastMessageID = lastMessage.id;
-		}
-
 		const response = await this.getClient().post(this._channelURL() + '/read', {
-			last_message_id: lastMessageID,
-			last_message_at: lastMessageCreatedAt,
 			...data,
 		});
 
@@ -436,7 +427,7 @@ export class Channel {
 	}
 
 	/**
-	 * getReplies - Description
+	 * getReplies - List the message replies for a parent message
 	 *
 	 * @param {type} parent_id The message parent id, ie the top of the thread
 	 * @param {type} options   Pagination params, ie {limit:10, idlte: 10}
@@ -477,6 +468,10 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
+	 * @return {date}
+	 */
 	lastRead() {
 		this._checkInitialized();
 		return this.state.read[this.getClient().userID]
@@ -497,11 +492,14 @@ export class Channel {
 		}
 		let count = 0;
 		for (const m of this.state.messages) {
+			if (this.getClient().userID === m.user.id) {
+				continue;
+			}
 			if (lastRead == null) {
 				count++;
 				continue;
 			}
-			if (m.updated_at > lastRead) {
+			if (m.created_at > lastRead) {
 				count++;
 			}
 		}
@@ -517,11 +515,14 @@ export class Channel {
 		const lastRead = this.lastRead();
 		let count = 0;
 		for (const m of this.state.messages) {
+			if (this.getClient().userID === m.user.id) {
+				continue;
+			}
 			if (lastRead == null) {
 				count++;
 				continue;
 			}
-			if (m.updated_at > lastRead) {
+			if (m.created_at > lastRead) {
 				if (
 					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
 					-1
@@ -534,9 +535,9 @@ export class Channel {
 	}
 
 	/**
-	 * create - Description
+	 * create - Creates a new channel
 	 *
-	 * @return {type} Description
+	 * @return {type} The Server Reponse
 	 */
 	create = async () => {
 		const options = {
@@ -701,10 +702,10 @@ export class Channel {
 				channel.data = Immutable(event.channel);
 				break;
 			case 'reaction.new':
-				s.addReaction(event.reaction, event.message.reaction_counts);
+				s.addReaction(event.reaction, event.message);
 				break;
 			case 'reaction.deleted':
-				s.removeReaction(event.reaction, event.message.reaction_counts);
+				s.removeReaction(event.reaction, event.message);
 				break;
 			default:
 		}
