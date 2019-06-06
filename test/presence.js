@@ -10,6 +10,7 @@ import {
 	getTestClient,
 	getTestClientForUser,
 	getTestClientForUser2,
+	getServerTestClient,
 	createUsers,
 	runAndLogPromise,
 	sleep,
@@ -152,6 +153,64 @@ describe('Presence', function() {
 			await eventPromise;
 		});
 	});
+
+
+		describe('Presence - user updates', function() {
+			it('user update via setUser', async function() {
+				// there are 2 ways to update a user... setUser and updateUsers
+				// we want to test if the message is updated.
+				const userID = `john-${uuidv4()}`;
+				const userID2 = `jack-${uuidv4()}`;
+				const testClient1 = await getTestClientForUser2(userID, 'busy');
+				const testClient2 = await getTestClientForUser2(userID2, 'busy');
+
+				const channelID = uuidv4();
+				const channel = testClient1.channel('livestream', {members: [userID, userID2]});
+				await channel.create();
+				await channel.sendMessage({text: "this message is fun"});
+
+				// watch with presence = true
+				const state = await testClient2.channel('livestream', {members: [userID, userID2]}).watch({presence: true})
+				const eventFired = new Promise(resolve => {
+					testClient2.on('user.updated', (event) => {
+						console.log('event', event);
+						resolve(event);
+					});
+				});
+
+				// trigger an update...
+				await getTestClientForUser2(userID, 'not busy');
+				const event = await eventFired;
+			})
+
+			it.only('user update via updateUser', async function() {
+				// there are 2 ways to update a user... setUser and updateUsers
+				// we want to test if the message is updated.
+				const userID = `john-${uuidv4()}`;
+				const userID2 = `jack-${uuidv4()}`;
+				const testClient1 = await getTestClientForUser2(userID, 'busy');
+				const testClient2 = await getTestClientForUser2(userID2, 'busy');
+
+				const channelID = uuidv4();
+				const channel = testClient1.channel('livestream', {members: [userID, userID2]});
+				await channel.create();
+				await channel.sendMessage({text: "this message is fun"});
+
+				// watch with presence = true
+				const state = await testClient2.channel('livestream', {members: [userID, userID2]}).watch({presence: true})
+				const eventFired = new Promise(resolve => {
+					testClient2.on('user.updated', (event) => {
+						console.log('event', event);
+						resolve(event);
+					});
+				});
+
+				// trigger an update...
+				const serverClient = getServerTestClient();
+				await serverClient.updateUsers([{id: userID, color: 'green'}])
+				const event = await eventFired;
+			})
+		});
 
 	describe('Presence - connections', function() {
 		it('connect should mark online and update status', async function() {
