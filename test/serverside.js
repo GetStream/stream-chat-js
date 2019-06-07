@@ -1098,6 +1098,43 @@ describe('Devices', function() {
 		const result = await client.getDevices(user.id);
 		expect(result.devices).to.have.length(1);
 	});
+
+	describe('device limit', function() {
+		it('oldest device gets scrapped', async function() {
+			const maxDevices = 25;
+			const user = {
+				id: uuidv4(),
+				name: 'bob',
+				hobby: 'painting',
+			};
+			await client.updateUser(user);
+
+			for (const _ of Array(maxDevices).keys()) {
+				await client.addDevice(uuidv4(), 'apn', user.id);
+				await sleep(100);
+			}
+			const { devices } = await client.getDevices(user.id);
+			expect(devices).to.have.length(maxDevices);
+
+			const deviceIDS = devices.map(x => x.id);
+
+			const deviceID = uuidv4();
+			await client.addDevice(deviceID, 'apn', user.id);
+
+			deviceIDS.pop();
+			deviceIDS.unshift(deviceID);
+
+			let result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			let newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+
+			result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+	});
 });
 
 describe('Moderation', function() {
