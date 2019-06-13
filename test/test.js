@@ -160,6 +160,34 @@ describe('Chat', function() {
 				done(exc);
 			});
 		});
+
+		it.only('Homeis roundtrip', async () => {
+			const userID1 = uuidv4();
+			const userID2 = uuidv4();
+			const client1 = await getTestClientForUser(userID1);
+			const client2 = await getTestClientForUser(userID2);
+			const channelForUser1 = client1.channel('messaging', {
+				members: [userID1, userID2],
+			});
+			const channelForUser2 = client2.channel('messaging', {
+				members: [userID1, userID2],
+			});
+			// client 2 listens...
+			const eventPromise = new Promise(resolve => {
+				channelForUser2.on('message.new', event => {
+					resolve(event);
+				});
+			});
+
+			const state2 = await channelForUser2.watch();
+			// client 1 sends a message
+			await channelForUser1.create(); // TODO: we should just use the member list as ids for other endpoints as well
+			const response = await channelForUser1.sendMessage({
+				text: 'user 1 says hi to user 2',
+			});
+			const event = await eventPromise;
+			expect(event.message.text).to.equal('user 1 says hi to user 2');
+		});
 	});
 
 	describe('Connect', function() {
