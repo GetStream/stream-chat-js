@@ -1,9 +1,10 @@
 {
   "name": "stream-chat",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
+  "repository": "https://github.com/GetStream/stream-chat-js.git",
   "main": "./dist/index.js",
   "module": "./dist/index.es.js",
   "jsnext:main": "./dist/index.es.js",

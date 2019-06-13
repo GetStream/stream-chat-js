@@ -20,6 +20,8 @@ export class ChannelState {
 		this.mutedUsers = Immutable([]);
 		this.watchers = Immutable({});
 		this.members = Immutable({});
+		this.last_message_at =
+			channel.last_message_at != null ? new Date(channel.last_message_at) : null;
 	}
 
 	/**
@@ -60,7 +62,11 @@ export class ChannelState {
 		// parse all the new message dates and add __html for react
 		const parsedMessages = [];
 		for (const message of newMessages) {
-			parsedMessages.push(this.messageToImmutable(message));
+			const parsedMsg = this.messageToImmutable(message);
+			parsedMessages.push(parsedMsg);
+			if (parsedMsg.created_at > this.last_message_at) {
+				this.last_message_at = parsedMsg.created_at;
+			}
 		}
 
 		// update or append the messages...

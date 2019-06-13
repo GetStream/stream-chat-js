@@ -1580,6 +1580,39 @@ describe('Chat', function() {
 	});
 
 	describe('Channel State', function() {
+		it('Should include last_message_at', async function() {
+			const c = authClient.channel('messaging', uuidv4());
+			await c.query();
+			expect(c.state.last_message_at).to.be.null;
+		});
+
+		it('Should include last_message_at', async function() {
+			const id = uuidv4();
+			let c = authClient.channel('messaging', id);
+			await c.create({ created_by: { id: uuidv4() } });
+			await c.sendMessage({ text: uuidv4() });
+			c = authClient.channel('messaging', id);
+			await c.query();
+			expect(c.state.last_message_at).to.be.not.null;
+		});
+
+		it('Should update last_message_at', async function() {
+			const id = uuidv4();
+			let c = authClient.channel('messaging', id);
+			await c.create({ created_by: { id: uuidv4() } });
+			await c.sendMessage({ text: uuidv4() });
+			c = authClient.channel('messaging', id);
+			await c.query({ watch: true });
+			const lastMsg = c.state.last_message_at;
+			expect(c.state.last_message_at).to.be.not.null;
+			await sleep(1000);
+			await c.sendMessage({ text: uuidv4() });
+			await sleep(2000);
+			expect(c.state.last_message_at).to.be.not.null;
+			expect(c.state.last_message_at).to.be.not.eq(lastMsg);
+			expect(Math.floor(c.state.last_message_at - lastMsg)).to.be.gt(0);
+		});
+
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
 			const message = { id: 1, text: 'my message' };
