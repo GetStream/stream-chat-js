@@ -1108,6 +1108,70 @@ describe('Devices', function() {
 		expect(result.devices).to.have.length(1);
 	});
 
+	describe('device limit', function() {
+		const maxDevices = 25;
+		let user;
+
+		beforeEach(async function() {
+			user = {
+				id: uuidv4(),
+				name: 'bob',
+				hobby: 'painting',
+			};
+			await client.updateUser(user);
+		});
+
+		it('oldest device gets scrapped', async function() {
+			for (const _ of Array(maxDevices).keys()) {
+				await client.addDevice(uuidv4(), 'apn', user.id);
+				await sleep(100);
+			}
+			const { devices } = await client.getDevices(user.id);
+			expect(devices).to.have.length(maxDevices);
+
+			const deviceIDS = devices.map(x => x.id);
+
+			const deviceID = uuidv4();
+			await client.addDevice(deviceID, 'apn', user.id);
+
+			deviceIDS.pop();
+			deviceIDS.unshift(deviceID);
+
+			let result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			let newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+
+			result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+
+		it('adding same device does not do anything', async function() {
+			for (const _ of Array(maxDevices).keys()) {
+				await client.addDevice(uuidv4(), 'apn', user.id);
+				await sleep(100);
+			}
+			const { devices } = await client.getDevices(user.id);
+			expect(devices).to.have.length(maxDevices);
+
+			const deviceIDS = devices.map(x => x.id);
+
+			await client.addDevice(deviceIDS[5], 'apn', user.id);
+
+			let result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			let newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+
+			result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+	});
+
 	describe('Device invalidation', function() {
 		let userID;
 		let deviceID;
