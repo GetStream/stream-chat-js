@@ -1,6 +1,6 @@
 import isoWS from 'isomorphic-ws';
 import { sleep } from './utils';
-import pkg from '../package';
+import pkg from '../package.json';
 
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
