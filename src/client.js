@@ -879,6 +879,12 @@ export class StreamChat {
 		return await this.delete(this.baseURL + `/users/${userID}`, params);
 	}
 
+	async activateUser(userID, options) {
+		return await this.post(this.baseURL + `/users/${userID}/activate`, {
+			...options,
+		});
+	}
+
 	async deactivateUser(userID, options) {
 		return await this.post(this.baseURL + `/users/${userID}/deactivate`, {
 			...options,
