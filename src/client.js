@@ -880,7 +880,7 @@ export class StreamChat {
 	}
 
 	async reactivateUser(userID, options) {
-		return await this.post(this.baseURL + `/users/${userID}/activate`, {
+		return await this.post(this.baseURL + `/users/${userID}/reactivate`, {
 			...options,
 		});
 	}
