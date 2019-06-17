@@ -169,7 +169,7 @@ describe('GDPR endpoints', function() {
 			const userID = uuidv4();
 			await serverClient.updateUser({ id: userID, name: 'hello' });
 
-			const p = serverClient.activateUser(userID);
+			const p = serverClient.reactivateUser(userID);
 
 			await expect(p).to.be.rejectedWith('is not deactivated');
 		});
@@ -192,7 +192,7 @@ describe('GDPR endpoints', function() {
 				mark_messages_deleted: true,
 			});
 
-			const { user } = await serverClient.activateUser(userID);
+			const { user } = await serverClient.reactivateUser(userID);
 			expect(user.deactivated_at).to.be.undefined;
 
 			// user can do stuff again
@@ -227,7 +227,7 @@ describe('GDPR endpoints', function() {
 				mark_messages_deleted: true,
 			});
 
-			const { user } = await serverClient.activateUser(userID, {
+			const { user } = await serverClient.reactivateUser(userID, {
 				restore_messages: true,
 			});
 			expect(user.deactivated_at).to.be.undefined;
