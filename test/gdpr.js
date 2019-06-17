@@ -164,8 +164,8 @@ describe('GDPR endpoints', function() {
 		});
 	});
 
-	describe('activate user', function() {
-		it('cannot activate active user', async function() {
+	describe('reactivate user', function() {
+		it('cannot reactivate active user', async function() {
 			const userID = uuidv4();
 			await serverClient.updateUser({ id: userID, name: 'hello' });
 
@@ -174,7 +174,7 @@ describe('GDPR endpoints', function() {
 			await expect(p).to.be.rejectedWith('is not deactivated');
 		});
 
-		it('activate user and keep messages', async function() {
+		it('reactivate user without restoring messages', async function() {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
@@ -188,45 +188,11 @@ describe('GDPR endpoints', function() {
 				user: { id: userID },
 			});
 
-			await serverClient.deactivateUser(userID);
-
-			const { user } = await serverClient.activateUser(userID);
-			expect(user.deactivated_at).to.be.undefined;
-
-			// user can do stuff again
-			const messageResponsePromise = channel.sendMessage({
-				text: 'I HAVE RISEN!!!',
-				user: { id: userID },
-			});
-			await expect(messageResponsePromise).to.be.fulfilled;
-
-			const channel2 = serverClient.channel('livestream', channelID);
-			const state = await channel2.query();
-			expect(state.messages).to.be.ofSize(2);
-			for (const msg of state.messages) {
-				expect(msg.deleted_at).to.be.undefined;
-			}
-		});
-
-		it('activate user and delete messages', async function() {
-			const userID = uuidv4();
-			const creatorID = uuidv4();
-			const channelID = uuidv4();
-			await serverClient.updateUser({ id: userID, name: 'hello' });
-			const channel = serverClient.channel('livestream', channelID, {
-				created_by: { id: creatorID },
-			});
-			await channel.create();
-			await channel.sendMessage({
-				text: 'hi',
-				user: { id: userID },
-			});
-
-			await serverClient.deactivateUser(userID);
-
-			const { user } = await serverClient.activateUser(userID, {
+			await serverClient.deactivateUser(userID, {
 				mark_messages_deleted: true,
 			});
+
+			const { user } = await serverClient.activateUser(userID);
 			expect(user.deactivated_at).to.be.undefined;
 
 			// user can do stuff again
@@ -239,6 +205,43 @@ describe('GDPR endpoints', function() {
 			const state = await channel2.query();
 			expect(state.messages).to.be.ofSize(2);
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
+			expect(state.messages[1].id).to.be.equal(message.id);
+			expect(state.messages[1].deleted_at).to.be.undefined;
+		});
+
+		it('reactivate user and restore messages', async function() {
+			const userID = uuidv4();
+			const creatorID = uuidv4();
+			const channelID = uuidv4();
+			await serverClient.updateUser({ id: userID, name: 'hello' });
+			const channel = serverClient.channel('livestream', channelID, {
+				created_by: { id: creatorID },
+			});
+			await channel.create();
+			await channel.sendMessage({
+				text: 'hi',
+				user: { id: userID },
+			});
+
+			await serverClient.deactivateUser(userID, {
+				mark_messages_deleted: true,
+			});
+
+			const { user } = await serverClient.activateUser(userID, {
+				restore_messages: true,
+			});
+			expect(user.deactivated_at).to.be.undefined;
+
+			// user can do stuff again
+			const { message } = await channel.sendMessage({
+				text: 'I HAVE RISEN!!!',
+				user: { id: userID },
+			});
+
+			const channel2 = serverClient.channel('livestream', channelID);
+			const state = await channel2.query();
+			expect(state.messages).to.be.ofSize(2);
+			expect(state.messages[0].deleted_at).to.be.undefined;
 			expect(state.messages[1].id).to.equal(message.id);
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
