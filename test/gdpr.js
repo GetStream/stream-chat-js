@@ -246,7 +246,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
 
-		it.only('deleted messages do not get restored', async function() {
+		it('deleted messages do not get restored', async function() {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
