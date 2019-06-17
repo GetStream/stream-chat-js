@@ -245,6 +245,57 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[1].id).to.equal(message.id);
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
+
+		it.only('deleted messages do not get restored', async function() {
+			const userID = uuidv4();
+			const creatorID = uuidv4();
+			const channelID = uuidv4();
+			await serverClient.updateUser({ id: userID, name: 'hello' });
+			const channel = serverClient.channel('livestream', channelID, {
+				created_by: { id: creatorID },
+			});
+			await channel.create();
+			await channel.sendMessage({
+				text: 'message1',
+				user: { id: userID },
+			});
+
+			const resp = await channel.sendMessage({
+				text: 'TO BE DELETED',
+				user: { id: userID },
+			});
+
+			const deletedID = resp.message.id;
+
+			await serverClient.deleteMessage(deletedID);
+
+			await serverClient.deactivateUser(userID, {
+				mark_messages_deleted: true,
+			});
+
+			const { user } = await serverClient.reactivateUser(userID, {
+				restore_messages: true,
+			});
+			expect(user.deactivated_at).to.be.undefined;
+
+			// user can do stuff again
+			const { message } = await channel.sendMessage({
+				text: 'I HAVE RISEN!!!',
+				user: { id: userID },
+			});
+
+			const channel2 = serverClient.channel('livestream', channelID);
+			const state = await channel2.query();
+
+			expect(state.messages).to.be.ofSize(3);
+			expect(state.messages[0].deleted_at).to.be.undefined;
+			//this one remains deleted
+			expect(state.messages[1].id).to.equal(deletedID);
+			expect(state.messages[1].deleted_at).to.not.be.undefined;
+
+			expect(state.messages[2].id).to.equal(message.id);
+			expect(state.messages[2].deleted_at).to.be.undefined;
+		});
 	});
 
 	describe('delete user', function() {
