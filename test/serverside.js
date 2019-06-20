@@ -1055,6 +1055,113 @@ describe('App configs', function() {
 			});
 			expect(response.rendered_firebase_template).to.eq('{}');
 		});
+
+		it('Members in the template using helper', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{implodeMembers otherMembers limit=2 suffixFmt="en %d anderen"}}: {{ message.text }}"}',
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[2].name}, ${members[1].name} en 1 anderen: ${
+					msg.message.text
+				}"}`,
+			);
+		});
+
+		it('Members in the template using handlebars', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: `{"stuff": "
+					{{~#each otherMembers}}
+						{{#ifLte @index 0}}
+							{{~this.name}}{{#ifLt @index 0 }}, {{/ifLt~}}
+						{{~else if @last~}}
+								{{{ " " }}} en {{remainder otherMembers 1}} anderen: {{message.text}}
+						{{~/ifLte~}}
+					{{/each~}}
+					"}`,
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[2].name} en 2 anderen: ${msg.message.text}"}`,
+			);
+		});
 	});
 });
 
