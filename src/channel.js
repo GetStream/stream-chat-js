@@ -408,7 +408,7 @@ export class Channel {
 		const state = await this.query(combined);
 		this.initialized = true;
 		this._initializeState(state);
-
+		this.data = state.channel;
 		return state;
 	}
 
