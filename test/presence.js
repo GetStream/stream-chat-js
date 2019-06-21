@@ -360,12 +360,16 @@ describe('Count watchers using events (test channel.stopWatching)', function() {
 	});
 	it('should track correctly using channel.stopWatching', async function() {
 		channel.watch();
+		let lastevent;
+
 		channel.on('all', function(e) {
 			if (e.type === 'user.watching.start') {
 				watcherClients++;
+				lastevent = e;
 			}
 			if (e.type === 'user.watching.stop') {
 				watcherClients--;
+				lastevent = e;
 			}
 		});
 
@@ -386,6 +390,7 @@ describe('Count watchers using events (test channel.stopWatching)', function() {
 		}
 		await sleep(1000);
 		expect(watcherClients).to.be.equal(1);
+		expect(lastevent.watcher_count).to.be.equal(1);
 	});
 });
 
@@ -422,12 +427,15 @@ describe('Count watchers using events (test client.disconnect)', function() {
 	});
 	it('should track correctly using channel.stopWatching', async function() {
 		channel.watch();
+		let lastevent;
 		channel.on('all', function(e) {
 			if (e.type === 'user.watching.start') {
 				watcherClients++;
+				lastevent = e;
 			}
 			if (e.type === 'user.watching.stop') {
 				watcherClients--;
+				lastevent = e;
 			}
 		});
 
@@ -448,5 +456,6 @@ describe('Count watchers using events (test client.disconnect)', function() {
 		}
 		await sleep(1000);
 		expect(watcherClients).to.be.equal(1);
+		expect(lastevent.watcher_count).to.be.equal(1);
 	});
 });
