@@ -13,6 +13,7 @@ import {
 	createUsers,
 	runAndLogPromise,
 	sleep,
+	getServerTestClient,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -323,5 +324,129 @@ describe('Presence', function() {
 			}
 			runTest();
 		});
+	});
+});
+
+describe('Count watchers using events (test channel.stopWatching)', function() {
+	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
+	const channelID = uuidv4();
+	const clients = {};
+	let channel;
+	const client = getTestClient(false);
+	let watcherClients;
+
+	before(async () => {
+		await createUsers(users);
+		await client.setUser({ id: users[0] }, createUserToken(users[0]));
+		channel = client.channel('messaging', channelID, {
+			members: users,
+			created_by_id: users[0],
+		});
+		await channel.create();
+		watcherClients = 0;
+		for (let i = 0; i < users.length; i++) {
+			//create 3 clients for each user
+			clients[users[i]] = [];
+			const client1 = await getTestClientForUser(users[i]);
+			const channel1 = client1.channel('messaging', channelID);
+			clients[users[i]].push({ client: client1, channel: channel1 });
+			const client2 = await getTestClientForUser(users[i]);
+			const channel2 = client2.channel('messaging', channelID);
+			clients[users[i]].push({ client: client2, channel: channel2 });
+			const client3 = await getTestClientForUser(users[i]);
+			const channel3 = client3.channel('messaging', channelID);
+			clients[users[i]].push({ client: client3, channel: channel3 });
+		}
+	});
+	it('should track correctly using channel.stopWatching', async function() {
+		channel.watch();
+		channel.on('all', function(e) {
+			if (e.type === 'user.watching.start') {
+				watcherClients++;
+			}
+			if (e.type === 'user.watching.stop') {
+				watcherClients--;
+			}
+		});
+
+		//connect all the clients
+		for (let u = 0; u < users.length; u++) {
+			for (let i = 0; i < 3; i++) {
+				const client = clients[users[u]][i];
+				await client.channel.watch();
+			}
+		}
+		await sleep(1000);
+
+		for (let u = 0; u < users.length; u++) {
+			for (let i = 0; i < 3; i++) {
+				const client = clients[users[u]][i];
+				await client.channel.stopWatching();
+			}
+		}
+		await sleep(1000);
+		expect(watcherClients).to.be.equal(1);
+	});
+});
+
+describe('Count watchers using events (test client.disconnect)', function() {
+	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
+	const channelID = uuidv4();
+	const clients = {};
+	let channel;
+	const client = getTestClient(false);
+	let watcherClients;
+
+	before(async () => {
+		await createUsers(users);
+		await client.setUser({ id: users[0] }, createUserToken(users[0]));
+		channel = client.channel('messaging', channelID, {
+			members: users,
+			created_by_id: users[0],
+		});
+		await channel.create();
+		watcherClients = 0;
+		for (let i = 0; i < users.length; i++) {
+			//create 3 clients for each user
+			clients[users[i]] = [];
+			const client1 = await getTestClientForUser(users[i]);
+			const channel1 = client1.channel('messaging', channelID);
+			clients[users[i]].push({ client: client1, channel: channel1 });
+			const client2 = await getTestClientForUser(users[i]);
+			const channel2 = client2.channel('messaging', channelID);
+			clients[users[i]].push({ client: client2, channel: channel2 });
+			const client3 = await getTestClientForUser(users[i]);
+			const channel3 = client3.channel('messaging', channelID);
+			clients[users[i]].push({ client: client3, channel: channel3 });
+		}
+	});
+	it('should track correctly using channel.stopWatching', async function() {
+		channel.watch();
+		channel.on('all', function(e) {
+			if (e.type === 'user.watching.start') {
+				watcherClients++;
+			}
+			if (e.type === 'user.watching.stop') {
+				watcherClients--;
+			}
+		});
+
+		//connect all the clients
+		for (let u = 0; u < users.length; u++) {
+			for (let i = 0; i < 3; i++) {
+				const client = clients[users[u]][i];
+				await client.channel.watch();
+			}
+		}
+		await sleep(1000);
+
+		for (let u = 0; u < users.length; u++) {
+			for (let i = 0; i < 3; i++) {
+				const client = clients[users[u]][i];
+				await client.client.disconnect();
+			}
+		}
+		await sleep(1000);
+		expect(watcherClients).to.be.equal(1);
 	});
 });
