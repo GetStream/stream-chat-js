@@ -693,7 +693,7 @@ export class Channel {
 				break;
 			case 'member.added':
 			case 'member.updated':
-				s.members = s.members.set(event.member.id, Immutable(event.member));
+				s.members = s.members.set(event.member.user_id, Immutable(event.member));
 				break;
 			case 'member.removed':
 				s.members = s.members.without(event.user.id);
