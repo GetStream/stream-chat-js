@@ -1101,7 +1101,7 @@ describe('App configs', function() {
 
 			expect(response.general_errors).to.be.undefined;
 			expect(response.rendered_apn_template).to.eq(
-				`{"stuff": "${members[2].name}, ${members[1].name} en 1 anderen: ${
+				`{"stuff": "${members[0].name}, ${members[1].name} en 1 anderen: ${
 					msg.message.text
 				}"}`,
 			);
@@ -1159,7 +1159,7 @@ describe('App configs', function() {
 
 			expect(response.general_errors).to.be.undefined;
 			expect(response.rendered_apn_template).to.eq(
-				`{"stuff": "${members[2].name} en 2 anderen: ${msg.message.text}"}`,
+				`{"stuff": "${members[0].name} en 2 anderen: ${msg.message.text}"}`,
 			);
 		});
 	});
