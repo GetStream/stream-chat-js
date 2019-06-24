@@ -1053,7 +1053,9 @@ describe('App configs', function() {
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
 			});
-			expect(response.rendered_firebase_template).to.eq('{}');
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+			expect(firebaseMsg.data.stream).to.not.be.undefined;
 		});
 
 		it('Members in the template using helper', async function() {
