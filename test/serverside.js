@@ -1585,26 +1585,30 @@ describe('Import via Webhook compat', function() {
 		userClient = await getTestClientForUser(userID);
 	});
 
-	it('Created At should work', async function() {
+	it('Created At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.created_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
+		);
 	});
 
-	it('Updated At should work', async function() {
+	it('Updated At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			updated_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.updated_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.updated_at is a reserved field"',
+		);
 	});
 
 	it('HTML should work', async function() {
@@ -1631,7 +1635,7 @@ describe('Import via Webhook compat', function() {
 		expect(sendPromise).to.be.rejectedWith('message.html');
 	});
 
-	it('Client side should raise an error', async function() {
+	it('Client side should also raise an error', async function() {
 		const channel = userClient.channel('livestream', channelID);
 		await channel.create();
 		const responsePromise = channel.sendMessage({
@@ -1639,7 +1643,7 @@ describe('Import via Webhook compat', function() {
 			created_at: '2017-04-08T17:36:10.540Z',
 		});
 		await expect(responsePromise).to.be.rejectedWith(
-			'message.updated_at or message.created_at',
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
 		);
 	});
 
