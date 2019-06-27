@@ -361,39 +361,53 @@ describe('Count watchers using events', function() {
 	it('should track correctly using channel.stopWatching', async function() {
 		let lastevent;
 
-		channel.on('all', function(e) {
-			if (e.type === 'user.watching.start') {
-				watchers++;
-				lastevent = e;
-			}
-			if (e.type === 'user.watching.stop') {
-				watchers--;
-				lastevent = e;
-			}
+		let eventNumber = 0;
+		const allEventsReceived = new Promise(resolve => {
+			channel.on('all', function(e) {
+				eventNumber++;
+
+				if (e.type === 'user.watching.start') {
+					watchers++;
+					lastevent = e;
+				}
+				if (e.type === 'user.watching.stop') {
+					watchers--;
+					lastevent = e;
+				}
+				if (eventNumber === 4) {
+					resolve();
+				}
+			});
 		});
 
+		let promises = [];
 		//connect all the clients
 		for (let u = 0; u < users.length; u++) {
 			for (let i = 0; i < 3; i++) {
 				const client = clients[users[u]][i];
-				await client.channel.watch();
+				promises.push(client.channel.watch());
 			}
 		}
-		await sleep(1000);
+		await Promise.all(promises);
 		expect(watchers).to.be.equal(3);
+
+		promises = [];
 
 		//stop watching or disconnect should update the counters properly
 		for (let u = 0; u < users.length; u++) {
 			for (let i = 0; i < 3; i++) {
 				const client = clients[users[u]][i];
 				if (i % 2 === 0) {
-					client.channel.stopWatching();
+					promises.push(client.channel.stopWatching());
 				} else {
-					client.client.disconnect();
+					promises.push(client.client.disconnect());
 				}
 			}
 		}
-		await sleep(1000);
+
+		promises.push(allEventsReceived);
+		await Promise.all(promises);
+
 		expect(watchers).to.be.equal(1);
 		expect(lastevent.watcher_count).to.be.equal(1);
 	});
