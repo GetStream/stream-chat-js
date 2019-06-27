@@ -382,6 +382,7 @@ describe('Count watchers using events', function() {
 		await sleep(1000);
 		expect(watchers).to.be.equal(3);
 
+		//stop watching or disconnect should update the counters properly
 		for (let u = 0; u < users.length; u++) {
 			for (let i = 0; i < 3; i++) {
 				const client = clients[users[u]][i];
