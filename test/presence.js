@@ -327,13 +327,13 @@ describe('Presence', function() {
 	});
 });
 
-describe('Count watchers using events (test channel.stopWatching)', function() {
+describe('Count watchers using events', function() {
 	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
 	const channelID = uuidv4();
 	const clients = {};
 	let channel;
 	const client = getTestClient(false);
-	let watcherClients;
+	let watchers;
 
 	before(async () => {
 		await createUsers(users);
@@ -342,8 +342,8 @@ describe('Count watchers using events (test channel.stopWatching)', function() {
 			members: users,
 			created_by_id: users[0],
 		});
-		await channel.create();
-		watcherClients = 0;
+		await channel.watch();
+		watchers = 1;
 		for (let i = 0; i < users.length; i++) {
 			//create 3 clients for each user
 			clients[users[i]] = [];
@@ -359,16 +359,15 @@ describe('Count watchers using events (test channel.stopWatching)', function() {
 		}
 	});
 	it('should track correctly using channel.stopWatching', async function() {
-		channel.watch();
 		let lastevent;
 
 		channel.on('all', function(e) {
 			if (e.type === 'user.watching.start') {
-				watcherClients++;
+				watchers++;
 				lastevent = e;
 			}
 			if (e.type === 'user.watching.stop') {
-				watcherClients--;
+				watchers--;
 				lastevent = e;
 			}
 		});
@@ -381,81 +380,122 @@ describe('Count watchers using events (test channel.stopWatching)', function() {
 			}
 		}
 		await sleep(1000);
+		expect(watchers).to.be.equal(3);
 
 		for (let u = 0; u < users.length; u++) {
 			for (let i = 0; i < 3; i++) {
 				const client = clients[users[u]][i];
-				await client.channel.stopWatching();
+				if (i % 2 === 0) {
+					client.channel.stopWatching();
+				} else {
+					client.client.disconnect();
+				}
 			}
 		}
 		await sleep(1000);
-		expect(watcherClients).to.be.equal(1);
+		expect(watchers).to.be.equal(1);
 		expect(lastevent.watcher_count).to.be.equal(1);
 	});
 });
 
-describe('Count watchers using events (test client.disconnect)', function() {
-	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
+describe('Count Anonymous users', function() {
+	const admin = 'tommaso' + uuidv4();
 	const channelID = uuidv4();
-	const clients = {};
+	const clients = [];
 	let channel;
 	const client = getTestClient(false);
-	let watcherClients;
+
+	const nClients = 5;
 
 	before(async () => {
-		await createUsers(users);
-		await client.setUser({ id: users[0] }, createUserToken(users[0]));
-		channel = client.channel('messaging', channelID, {
-			members: users,
-			created_by_id: users[0],
+		await createUsers([admin]);
+		await client.setUser({ id: admin }, createUserToken(admin));
+		channel = client.channel('livestream', channelID, {
+			created_by_id: admin,
 		});
 		await channel.create();
-		watcherClients = 0;
-		for (let i = 0; i < users.length; i++) {
+		for (let i = 0; i < nClients; i++) {
 			//create 3 clients for each user
-			clients[users[i]] = [];
-			const client1 = await getTestClientForUser(users[i]);
-			const channel1 = client1.channel('messaging', channelID);
-			clients[users[i]].push({ client: client1, channel: channel1 });
-			const client2 = await getTestClientForUser(users[i]);
-			const channel2 = client2.channel('messaging', channelID);
-			clients[users[i]].push({ client: client2, channel: channel2 });
-			const client3 = await getTestClientForUser(users[i]);
-			const channel3 = client3.channel('messaging', channelID);
-			clients[users[i]].push({ client: client3, channel: channel3 });
+			const client1 = await getTestClient(false);
+			await client1.setAnonymousUser();
+			const channel1 = client1.channel('livestream', channelID);
+			clients[i] = { client: client1, channel: channel1 };
 		}
 	});
-	it('should track correctly using channel.stopWatching', async function() {
-		channel.watch();
-		let lastevent;
-		channel.on('all', function(e) {
-			if (e.type === 'user.watching.start') {
-				watcherClients++;
-				lastevent = e;
-			}
-			if (e.type === 'user.watching.stop') {
-				watcherClients--;
-				lastevent = e;
-			}
-		});
-
+	it('each anon client should count as a user', async function() {
+		let lastWatcherInfo;
 		//connect all the clients
-		for (let u = 0; u < users.length; u++) {
-			for (let i = 0; i < 3; i++) {
-				const client = clients[users[u]][i];
-				await client.channel.watch();
-			}
+		for (let i = 0; i < nClients; i++) {
+			lastWatcherInfo = await clients[i].channel.watch();
+			expect(lastWatcherInfo.watcher_count).to.be.equal(i + 1);
 		}
-		await sleep(1000);
 
-		for (let u = 0; u < users.length; u++) {
-			for (let i = 0; i < 3; i++) {
-				const client = clients[users[u]][i];
-				await client.client.disconnect();
+		//stop watching or disconnect should update the counters properly
+		for (let i = 0; i < nClients; i++) {
+			if (i % 2 === 0) {
+				clients[i].channel.stopWatching();
+			} else {
+				clients[i].client.disconnect();
+			}
+			const resp = await channel.query({ state: true });
+			if (i !== nClients - 1) {
+				expect(resp.watcher_count).to.be.equal(nClients - (i + 1));
+			} else {
+				expect(resp.watcher_count).to.be.undefined;
 			}
 		}
-		await sleep(1000);
-		expect(watcherClients).to.be.equal(1);
-		expect(lastevent.watcher_count).to.be.equal(1);
+		const channelResponse = await channel.watch();
+		expect(channelResponse.watcher_count).to.be.equal(1);
+	});
+});
+
+describe('Count Guest users using state', function() {
+	const admin = 'tommaso' + uuidv4();
+	const channelID = uuidv4();
+	const clients = [];
+	let channel;
+	const client = getTestClient(false);
+
+	const nClients = 5;
+
+	before(async () => {
+		await createUsers([admin]);
+		await client.setUser({ id: admin }, createUserToken(admin));
+		channel = client.channel('livestream', channelID, {
+			created_by_id: admin,
+		});
+		await channel.create();
+		for (let i = 0; i < nClients; i++) {
+			//create 3 clients for each user
+			const client1 = await getTestClient(false);
+			await client1.setGuestUser({ id: uuidv4() });
+			const channel1 = client1.channel('livestream', channelID);
+			clients[i] = { client: client1, channel: channel1 };
+		}
+	});
+	it('validate watcher counts using state', async function() {
+		let lastWatcherInfo;
+		//connect all the clients
+		for (let i = 0; i < nClients; i++) {
+			lastWatcherInfo = await clients[i].channel.watch();
+			expect(lastWatcherInfo.watcher_count).to.be.equal(i + 1);
+		}
+
+		//stop watching or disconnect should update the counters properly
+		for (let i = 0; i < nClients; i++) {
+			if (i % 2 === 0) {
+				clients[i].channel.stopWatching();
+			} else {
+				clients[i].client.disconnect();
+			}
+			const resp = await channel.query({ state: true });
+			if (i !== nClients - 1) {
+				expect(resp.watcher_count).to.be.equal(nClients - (i + 1));
+			} else {
+				expect(resp.watcher_count).to.be.undefined;
+			}
+		}
+		const channelResponse = await channel.watch();
+		expect(channelResponse.watcher_count).to.be.equal(1);
 	});
 });
