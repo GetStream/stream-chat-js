@@ -415,7 +415,6 @@ describe('Count Anonymous users', function() {
 		});
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
-			//create 3 clients for each user
 			const client1 = await getTestClient(false);
 			await client1.setAnonymousUser();
 			const channel1 = client1.channel('livestream', channelID);
@@ -466,7 +465,6 @@ describe('Count Guest users using state', function() {
 		});
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
-			//create 3 clients for each user
 			const client1 = await getTestClient(false);
 			await client1.setGuestUser({ id: uuidv4() });
 			const channel1 = client1.channel('livestream', channelID);
