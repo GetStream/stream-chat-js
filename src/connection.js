@@ -161,18 +161,27 @@ export class StableWSConnection {
 		if (this.isConnecting || this.isHealthy) {
 			return;
 		}
-		this.isConnecting = true;
+
 		// reconnect in case of on error or on close
 		// also reconnect if the health check cycle fails
 		if (interval === undefined) {
 			interval = this._retryInterval();
 		}
 
+		// reconnect, or try again after a little while...
+		await sleep(interval);
+
+		// Check once again if by some other call to _reconnect is active or connection is
+		// already restored, then no need to proceed.
+		if (this.isConnecting || this.isHealthy) {
+			return;
+		}
+
+		this.isConnecting = true;
+
 		// cleanup the old connection
 		this._destroyCurrentWSConnection();
 
-		// reconnect, or try again after a little while...
-		await sleep(interval);
 		try {
 			const open = await this._connect();
 			if (this.recoverCallback) {

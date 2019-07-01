@@ -1053,7 +1053,116 @@ describe('App configs', function() {
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
 			});
-			expect(response.rendered_firebase_template).to.eq('{}');
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+			expect(firebaseMsg.data.stream).to.not.be.undefined;
+		});
+
+		it('Members in the template using helper', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{implodeMembers otherMembers limit=2 suffixFmt="en %d anderen"}}: {{ message.text }}"}',
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[0].name}, ${members[1].name} en 1 anderen: ${
+					msg.message.text
+				}"}`,
+			);
+		});
+
+		it('Members in the template using handlebars', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: `{"stuff": "
+					{{~#each otherMembers}}
+						{{#ifLte @index 0}}
+							{{~this.name}}{{#ifLt @index 0 }}, {{/ifLt~}}
+						{{~else if @last~}}
+								{{{ " " }}} en {{remainder otherMembers 1}} anderen: {{message.text}}
+						{{~/ifLte~}}
+					{{/each~}}
+					"}`,
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[0].name} en 2 anderen: ${msg.message.text}"}`,
+			);
 		});
 	});
 });
@@ -1476,26 +1585,30 @@ describe('Import via Webhook compat', function() {
 		userClient = await getTestClientForUser(userID);
 	});
 
-	it('Created At should work', async function() {
+	it('Created At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.created_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
+		);
 	});
 
-	it('Updated At should work', async function() {
+	it('Updated At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			updated_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.updated_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.updated_at is a reserved field"',
+		);
 	});
 
 	it('HTML should work', async function() {
@@ -1522,7 +1635,7 @@ describe('Import via Webhook compat', function() {
 		expect(sendPromise).to.be.rejectedWith('message.html');
 	});
 
-	it('Client side should raise an error', async function() {
+	it('Client side should also raise an error', async function() {
 		const channel = userClient.channel('livestream', channelID);
 		await channel.create();
 		const responsePromise = channel.sendMessage({
@@ -1530,7 +1643,7 @@ describe('Import via Webhook compat', function() {
 			created_at: '2017-04-08T17:36:10.540Z',
 		});
 		await expect(responsePromise).to.be.rejectedWith(
-			'message.updated_at or message.created_at',
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
 		);
 	});
 
