@@ -1,7 +1,5 @@
 import isoWS from 'isomorphic-ws';
 import { sleep } from './utils';
-import pkg from '../package.json';
-
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
  * - the browser will sometimes report that you're online or offline
@@ -29,7 +27,7 @@ export class StableWSConnection {
 
 		eventCallback,
 	}) {
-		this.wsURL = this.addClientVersion(wsURL);
+		this.wsURL = wsURL;
 		this.clientID = clientID;
 		this.userID = userID;
 		/** consecutive failures influence the duration of the timeout */
@@ -435,17 +433,5 @@ export class StableWSConnection {
 				that._reconnect();
 			}
 		}, that.monitorInterval);
-	}
-
-	addClientVersion(url) {
-		const userAgent = `stream-chat-javascript-client-${
-			!this.browser ? 'node' : 'browser'
-		}-${pkg.version}`;
-		if (url.includes('?')) {
-			url += '&x-stream-client=' + userAgent;
-		} else {
-			url += '?x-stream-client=' + userAgent;
-		}
-		return url;
 	}
 }
