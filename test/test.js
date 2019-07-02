@@ -1776,7 +1776,7 @@ describe('Chat', function() {
 			const response = await channel.query({ watchers: { limit: 10 } });
 			expect(response.watchers).to.not.eql({});
 			const fk = Object.keys(response.watchers)[0];
-			expect(response.watchers[fk].id).to.eql('!anon');
+			expect(response.watchers[fk].id.slice(0,5)).to.eql('!anon');
 			expect(response.watchers[fk].role).to.eql('anonymous');
 		});
 
