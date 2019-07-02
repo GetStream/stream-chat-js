@@ -21,6 +21,7 @@ import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
+import { logService } from './utils';
 
 function isReadableStream(obj) {
 	return (
@@ -86,7 +87,8 @@ export class StreamChat {
 		// mapping between channel groups and configs
 		this.configs = {};
 		this.anonymous = false;
-
+		this.logger = options.logger;
+		this.log = logService.log.bind({ logger: options.logger });
 		this._startCleaning();
 	}
 
@@ -536,6 +538,10 @@ export class StreamChat {
 	}
 
 	recoverState = async () => {
+		this.log('info', 'client:recoverState() - Begining of recoverState function', [
+			'reconnection',
+			'recover',
+		]);
 		this.connectionID = this.wsConnection.connectionID;
 		const cids = Object.keys(this.activeChannels || {});
 		const lastMessageIDs = {};
@@ -548,11 +554,26 @@ export class StreamChat {
 			lastMessageIDs[c.cid] = lastMessageId;
 		}
 		if (cids.length) {
+			this.log(
+				'info',
+				'client:recoverState() - Starting the querying of ' +
+					cids.length +
+					' channels',
+				['reconnection', 'recover', 'querychannels'],
+			);
+
 			await this.queryChannels(
 				{ cid: { $in: cids } },
 				{ last_message_at: -1 },
 				{ limit: 30, recovery: true, last_message_ids: lastMessageIDs },
 			);
+
+			this.log('info', 'client:recoverState() - Querying channels finished', [
+				'reconnection',
+				'recover',
+				'querychannels',
+			]);
+
 			this.dispatchEvent({
 				type: 'connection.recovered',
 			});
@@ -617,6 +638,7 @@ export class StreamChat {
 			recoverCallback: this.recoverState,
 			messageCallback: this.handleEvent,
 			eventCallback: this.dispatchEvent,
+			logger: this.logger,
 		});
 
 		const handshake = await this.wsConnection.connect();
