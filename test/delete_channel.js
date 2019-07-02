@@ -58,7 +58,7 @@ describe('Channels - Delete', function() {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		expect(deleteResponse.channel.cid).to.equal(channel.cid);
 		expect(deleteResponse.channel.color).to.be.undefined;
-		expect(deleteResponse.channel.created_by).to.be.undefined;
+		expect(deleteResponse.channel.created_by).to.be.null;
 		expect(deleteResponse.channel.last_message_at).to.be.undefined;
 	});
 
