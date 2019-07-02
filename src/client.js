@@ -607,7 +607,7 @@ export class StreamChat {
 		const authType = this.getAuthType();
 		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
 			this.key
-		}&authorization=${token}&stream-auth-type=${authType}`;
+		}&authorization=${token}&stream-auth-type=${authType}&x-stream-client=${this._userAgent()}`;
 
 		// The StableWSConnection handles all the reconnection logic.
 		this.wsConnection = new StableWSConnection({

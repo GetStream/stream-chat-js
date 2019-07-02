@@ -1,6 +1,5 @@
 import isoWS from 'isomorphic-ws';
 import { sleep } from './utils';
-
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
  * - the browser will sometimes report that you're online or offline
