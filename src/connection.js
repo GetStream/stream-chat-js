@@ -1,5 +1,5 @@
 import isoWS from 'isomorphic-ws';
-import { sleep, logService } from './utils';
+import { sleep } from './utils';
 
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
@@ -48,7 +48,6 @@ export class StableWSConnection {
 		this.eventCallback = eventCallback;
 
 		this.logger = logger;
-		this.log = logService.log.bind({ logger });
 
 		/** Incremented when a new WS connection is made */
 		this.wsID = 1;
@@ -83,6 +82,14 @@ export class StableWSConnection {
 			this.consecutiveFailures = 0;
 			this._startMonitor();
 			this._startHealthCheck();
+			this.logger(
+				'info',
+				'connection:connect() - Established ws connection with healthcheck: ' +
+					healthCheck,
+				{
+					tags: ['connection'],
+				},
+			);
 			return healthCheck;
 		} catch (e) {
 			this.isConnecting = false;
@@ -98,6 +105,15 @@ export class StableWSConnection {
 	 *
 	 */
 	disconnect() {
+		this.logger(
+			'info',
+			'connection:disconnect() - Closing the websocket connection for wsID ' +
+				this.wsID,
+			{
+				tags: ['connection'],
+			},
+		);
+
 		// start by removing all the listeners
 		if (this.healthCheckIntervalRef) {
 			clearInterval(this.healthCheckIntervalRef);
@@ -132,6 +148,7 @@ export class StableWSConnection {
 		}
 
 		delete this.ws;
+
 		return isClosedPromise;
 	}
 
@@ -160,15 +177,17 @@ export class StableWSConnection {
 	 * @param {int} interval number of ms to wait before connecting
 	 */
 	async _reconnect(interval) {
-		this.log('info', 'connection:_reconnect() - Initiating the reconnect', [
-			'reconnection',
-		]);
+		this.logger('info', 'connection:_reconnect() - Initiating the reconnect', {
+			tags: ['connection'],
+		});
 		// only allow 1 connection at the time
 		if (this.isConnecting || this.isHealthy) {
-			this.log(
+			this.logger(
 				'info',
 				'connection:_reconnect() - Abort (1) since already connecting or healthy',
-				['reconnection'],
+				{
+					tags: ['connection'],
+				},
 			);
 			return;
 		}
@@ -185,10 +204,12 @@ export class StableWSConnection {
 		// Check once again if by some other call to _reconnect is active or connection is
 		// already restored, then no need to proceed.
 		if (this.isConnecting || this.isHealthy) {
-			this.log(
+			this.logger(
 				'info',
 				'connection:_reconnect() - Abort (2) since already connecting or healthy',
-				['reconnection'],
+				{
+					tags: ['connection'],
+				},
 			);
 			return;
 		}
@@ -196,40 +217,53 @@ export class StableWSConnection {
 		this.isConnecting = true;
 
 		// cleanup the old connection
-		this.log('info', 'connection:_reconnect() : Destroying current WS connection', [
-			'reconnection',
-		]);
+		this.logger(
+			'info',
+			'connection:_reconnect() : Destroying current WS connection',
+			{
+				tags: ['connection'],
+			},
+		);
 		this._destroyCurrentWSConnection();
 
 		try {
 			const open = await this._connect();
 			if (this.recoverCallback) {
-				this.log(
+				this.logger(
 					'info',
 					'connection:_reconnect() : Waiting for recoverCallBack',
-					['reconnection'],
+					{
+						tags: ['connection'],
+					},
 				);
 				await this.recoverCallback(open);
-				this.log('info', 'connection:_reconnect() : Finished recoverCallBack', [
-					'reconnection',
-				]);
+				this.logger(
+					'info',
+					'connection:_reconnect() : Finished recoverCallBack',
+					{
+						tags: ['connection'],
+					},
+				);
 			}
 			this.isConnecting = false;
 			this.consecutiveFailures = 0;
 		} catch (e) {
 			this.isConnecting = false;
-			console.warn(`reconnect failed with error`, e);
 			// reconnect on WS failures, dont reconnect if there is a code bug
 			if (e.isWSFailure) {
-				this.log(
+				this.logger(
 					'info',
-					'connection:_reconnect() : WS failure, so going to reconnect',
-					['reconnection'],
+					'connection:_reconnect() : WS failure, so going to try to reconnect',
+					{
+						tags: ['connection'],
+					},
 				);
 				this._reconnect();
 			}
 		}
-		this.log('info', 'connection:_reconnect() : == END ==', ['reconnection']);
+		this.logger('info', 'connection:_reconnect() : == END ==', {
+			tags: ['connection'],
+		});
 	}
 
 	/**
@@ -241,10 +275,12 @@ export class StableWSConnection {
 	onlineStatusChanged = event => {
 		if (event.type === 'offline') {
 			// mark the connection as down
-			this.log(
+			this.logger(
 				'info',
 				'connection:onlineStatusChanged() : Status changing to offline',
-				['reconnection'],
+				{
+					tags: ['connection'],
+				},
 			);
 			this._setHealth(false);
 		} else if (event.type === 'online') {
@@ -252,11 +288,13 @@ export class StableWSConnection {
 			// We check this.isHealthy, not sure if it's always
 			// smart to create a new WS connection if the old one is still up and running.
 			// it's possible we didnt miss any messages, so this process is just expensive and not needed.
-			this.log(
+			this.logger(
 				'info',
 				'connection:onlineStatusChanged() : Status changing to online. isHealthy: ' +
 					this.isHealthy,
-				['reconnection'],
+				{
+					tags: ['connection'],
+				},
 			);
 			if (!this.isHealthy) {
 				this._reconnect(10);
@@ -272,12 +310,6 @@ export class StableWSConnection {
 	};
 
 	onmessage = (wsID, event) => {
-		this.log(
-			'info',
-			'connection:onmessage() - event type' + event.type + ' received',
-			['wsevents', 'reconnection'],
-		);
-
 		if (this.wsID !== wsID) return;
 
 		// we wait till the first message before we consider the connection open..
@@ -290,11 +322,6 @@ export class StableWSConnection {
 		// trigger the event..
 		this.lastEvent = new Date();
 		this.messageCallback(event);
-
-		this.log('info', 'connection:onmessage() - === END === ', [
-			'wsevents',
-			'reconnection',
-		]);
 	};
 
 	onclose = (wsID, event) => {
@@ -483,17 +510,12 @@ export class StableWSConnection {
 	_startMonitor() {
 		const that = this;
 		this.monitorIntervalRef = setInterval(() => {
-			this.log(
-				'info',
-				'connection:_startMonitor - checking if I should reconnect',
-				['healthmonitor'],
-			);
 			const now = new Date();
 			// means we missed a health check
 			if (now - that.lastEvent > this.healthCheckInterval + 10 * 1000) {
-				this.log('info', 'connection:_startMonitor - going to reconnect', [
-					'healthmonitor',
-				]);
+				this.logger('info', 'connection:_startMonitor - going to reconnect', {
+					tags: ['connection'],
+				});
 				that._setHealth(false);
 				that._reconnect();
 			}
