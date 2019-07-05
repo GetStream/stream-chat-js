@@ -187,3 +187,34 @@ describe('Member style channel init', () => {
 		await expectHTTPErrorCode(400, nickChannel.rejectInvite());
 	});
 });
+
+describe.only('Query invites',function () {
+
+	let users =['thierry-'+uuidv4(), 'tommaso-'+uuidv4(), 'josh-'+uuidv4(), 'scott-'+uuidv4()];
+	let channelID=uuidv4()
+	let thierryClient ;
+
+	before(async () => {
+		await createUsers(users);
+		thierryClient = await getTestClientForUser(users[0]);
+	});
+
+	it('Thierry creates a channel and invite Tommaso, Josh and Scott',async function () {
+		const c = thierryClient.channel('messaging',channelID, {
+			name: 'Founder Chat',
+				image: 'http://bit.ly/2O35mws',
+				members: users,
+				invites: [users[1],users[2],users[3]],
+		});
+		const state = await c.create();
+	})
+
+	it('Tommaso should have pending invites',async function () {
+		let tc= await getTestClientForUser(users[1])
+	    let channels= await tc.queryChannels({$invited:true})
+		expect(channels.length).to.be.equal(1)
+		expect(channels[0].id).to.be.equal(channelID)
+	})
+
+
+});
