@@ -70,7 +70,7 @@ describe('Member style server side', () => {
 	});
 });
 
-describe('Member style channel init', () => {
+describe.only('Member style channel init', () => {
 	before(async () => {
 		await createUsers(['thierry', 'tommaso', 'josh', 'scott', 'nick']);
 	});
@@ -151,6 +151,7 @@ describe('Member style channel init', () => {
 		const response = await nickChannel.acceptInvite({
 			message: { text: 'Nick accepted the chat invite.' },
 		});
+		await nickChannel.watch();
 		expect(response.message.text).to.equal('Nick accepted the chat invite.');
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
@@ -230,22 +231,22 @@ describe.only('Query invites',function () {
 		expect(channels[0].id).to.be.equal(channelID)
 	});
 	it('Tommaso accept the invite and pending invites go to zero',async function () {
-		let channels= await tommasoClient.queryChannels({$invited:true})
+		let channels= await tommasoClient.queryChannels({$invited:true});
 		await channels[0].acceptInvite();
 
-		channels= await tommasoClient.queryChannels({$invited:true})
+		channels= await tommasoClient.queryChannels({$invited:true});
 		expect(channels.length).to.be.equal(0)
 	});
 	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop',async function () {
-		let channels= await joshClient.queryChannels({$invited:true})
+		let channels= await joshClient.queryChannels({$invited:true});
 		await channels[0].rejectInvite();
+		await channels[0].stopWatching()
 
-		channels= await joshClient.queryChannels({$invited:true})
+		channels= await joshClient.queryChannels({$invited:true});
 		expect(channels.length).to.be.equal(0);
 
-		let rejectedChannel=joshClient.channel('messaging',channelID)
-
-		let resp =await rejectedChannel.watch({presence:true});
+		let rejectedChannel=joshClient.channel('messaging',channelID);
+		let resp=await rejectedChannel.watch({presence:true});
 		let channelEventsReceived=0;
 		rejectedChannel.on(function (e) {
 			channelEventsReceived++;
