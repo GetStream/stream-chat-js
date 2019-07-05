@@ -6,6 +6,7 @@ import {
 	expectHTTPErrorCode,
 	getServerTestClient,
 	createUsers,
+	sleep
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -211,28 +212,51 @@ describe.only('Query invites',function () {
 				invites: [users[1],users[2],users[3]],
 		});
 		const state = await c.create();
+		expect(state.channel.id).to.be.equal(channelID)
 	});
 	it('Tommaso should have pending invites',async function () {
 	    let channels= await tommasoClient.queryChannels({$invited:true})
-		expect(channels.length).to.be.equal(1)
+		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID)
 	});
 	it('Josh should have pending invites',async function () {
 		let channels= await joshClient.queryChannels({$invited:true})
-		expect(channels.length).to.be.equal(1)
+		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID)
 	});
 	it('Scott should have pending invites',async function () {
-
 		let channels= await scottClient.queryChannels({$invited:true})
-		expect(channels.length).to.be.equal(1)
+		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID)
 	});
 	it('Tommaso accept the invite and pending invites go to zero',async function () {
 		let channels= await tommasoClient.queryChannels({$invited:true})
-		await channels[0].acceptInvite()
+		await channels[0].acceptInvite();
 
 		channels= await tommasoClient.queryChannels({$invited:true})
 		expect(channels.length).to.be.equal(0)
+	});
+	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop',async function () {
+		let channels= await joshClient.queryChannels({$invited:true})
+		await channels[0].rejectInvite();
+
+		channels= await joshClient.queryChannels({$invited:true})
+		expect(channels.length).to.be.equal(0);
+
+		let rejectedChannel=joshClient.channel('messaging',channelID)
+
+		let resp =await rejectedChannel.watch({presence:true});
+		let channelEventsReceived=0;
+		rejectedChannel.on(function (e) {
+			channelEventsReceived++;
+			console.log(e)
+		});
+
+		let channel=tommasoClient.channel('messaging',channelID);
+	    await channel.watch({presence:true});
+		await channel.sendMessage({text:'hi'});
+
+		await sleep(500);
+		expect(channelEventsReceived).to.be.equal(0);
 	});
 });
