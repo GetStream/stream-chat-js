@@ -443,10 +443,10 @@ describe('Count Anonymous users', function() {
 			lastWatcherInfo = await clients[i].channel.watch();
 			expect(lastWatcherInfo.watcher_count).to.be.equal(i + 1);
 		}
-		const resp= await channel.query({
+		const resp = await channel.query({
 			messages: { limit: 10 },
 			members: { limit: 50, offset: 0 },
-			watchers: { limit: 6, offset: 0 }
+			watchers: { limit: 6, offset: 0 },
 		});
 		expect(resp.watchers.length).to.be.equal(nClients);
 		expect(resp.watcher_count).to.be.equal(nClients);
