@@ -83,6 +83,18 @@ describe('Query Users', function() {
 		expect(response.users[0].username).to.equal('rover_curiosity');
 	});
 
+	it('autocomplete users by id', async function() {
+		const userID = uuidv4();
+		const client = await getTestClientForUser(userID, 'just cruising', {
+			username: 'rover_curiosity',
+		});
+		const response = await client.queryUsers({
+			id: { $autocomplete: userID.slice(0, 10) },
+		});
+		expect(response.users[0].id).to.equal(userID);
+		expect(response.users[0].username).to.equal('rover_curiosity');
+	});
+
 	it('query users unsupported field', async function() {
 		const userID = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
