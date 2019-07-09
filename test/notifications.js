@@ -1,6 +1,6 @@
 import chai from 'chai';
 const expect = chai.expect;
-import { getTestClient, getTestClientForUser, createUserToken, sleep } from './utils';
+import {getTestClient, getTestClientForUser, createUserToken, sleep, createUsers} from './utils';
 import uuidv4 from 'uuid/v4';
 
 describe('Notifications - members not watching', function() {
@@ -650,4 +650,30 @@ describe('Unread on connect', function() {
 		await chan.watch();
 		expect(chan.countUnread()).to.eq(0);
 	});
+});
+
+describe('replies shouldnt increment unread counts', function () {
+	const user1 = uuidv4();
+	const user2 = uuidv4();
+	const channelID = uuidv4();
+	let client1;
+	let channel;
+	before(async function () {
+		await createUsers([user1, user2]);
+		client1 = await getTestClientForUser(user1);
+		channel = client1.channel('messaging', channelID, {members: [user1, user2]});
+		await channel.create();
+	});
+
+	it('send a message and add a reply', async function () {
+		const resp = await channel.sendMessage({text: 'hi'});
+		await channel.sendMessage({text: 'reply', parent_id: resp.message.id});
+	});
+
+	it('unread counts should be 1', async function () {
+		const client = await getTestClientForUser(user2);
+		expect(client.health.me.unread_count).to.be.equal(1);
+		expect(client.health.me.total_unread_count).to.be.equal(1);
+		expect(client.health.me.unread_channels).to.be.equal(1);
+	})
 });
