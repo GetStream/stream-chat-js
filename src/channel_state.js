@@ -58,7 +58,7 @@ export class ChannelState {
 	 * @param {array} newMessages A list of messages
 	 *
 	 */
-	addMessagesSorted(newMessages) {
+	addMessagesSorted(newMessages, initializing) {
 		// parse all the new message dates and add __html for react
 		const parsedMessages = [];
 		for (const message of newMessages) {
@@ -97,6 +97,13 @@ export class ChannelState {
 				: [];
 			threadMessages.sort(byDate);
 			this.threads = this.threads.set(parentID, threadMessages);
+		}
+
+		// If we are initializing the state of channel (e.g., in case of connection recovery),
+		// then in that case set the threads object to empty. This way we can ensure that we
+		// don't have any stale data in threads object and consumer can refetch the replies.
+		if (initializing) {
+			this.threads = Immutable([]);
 		}
 	}
 
