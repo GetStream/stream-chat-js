@@ -1,12 +1,7 @@
 import uuidv4 from 'uuid/v4';
-import {
-	getTestClient,
-	getTestClientForUser,
-	createUserToken,
-	expectHTTPErrorCode,
-	createUsers,
-} from './utils';
+import {createUsers, createUserToken, expectHTTPErrorCode, getTestClient, getTestClientForUser,} from './utils';
 import chai from 'chai';
+
 const expect = chai.expect;
 
 if (process.env.NODE_ENV !== 'production') {
@@ -481,4 +476,159 @@ describe('Channels - Distinct channels', function() {
 			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
 		);
 	});
+});
+
+describe.only('Query Channels and sort by unread',function () {
+	const channels=[];
+	const tommaso='tommaso'+uuidv4();
+	const thierry='thierry'+uuidv4();
+	let tommasoClient;
+	let thierryClient;
+	before(async function () {
+		thierryClient = await getTestClientForUser(thierry)
+		await createUsers([tommaso, thierry])
+		const cidPrefix = uuidv4()
+		for (let i = 3; i >= 0; i--) {
+			const channel = thierryClient.channel('messaging',cidPrefix+i,{
+			});
+			await channel.watch();
+			await channel.addMembers([tommaso, thierry])
+			for (let j = 0; j < i+1; j++) {
+				await channel.sendMessage({text: 'hi' + j})
+			}
+			channels.push(channel);
+		}
+	});
+
+
+	it('sort by has_unread and last_message_at asc should work',async function () {
+		tommasoClient=await getTestClientForUser(tommaso);
+
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			has_unread:1,
+			last_message_at:1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[0].cid);
+		expect(result[1].cid).to.be.equal(channels[1].cid);
+		expect(result[2].cid).to.be.equal(channels[2].cid);
+		expect(result[3].cid).to.be.equal(channels[3].cid);
+
+	});
+
+	it('sort by has_unread and last_message_at',async function () {
+		tommasoClient=await getTestClientForUser(tommaso);
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			has_unread:1,
+			last_message_at:-1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[3].cid);
+		expect(result[1].cid).to.be.equal(channels[2].cid);
+		expect(result[2].cid).to.be.equal(channels[1].cid);
+		expect(result[3].cid).to.be.equal(channels[0].cid);
+	});
+
+	it('sort by unread_count asc',async function () {
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			unread_count:1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[3].cid);
+		expect(result[1].cid).to.be.equal(channels[2].cid);
+		expect(result[2].cid).to.be.equal(channels[1].cid);
+		expect(result[3].cid).to.be.equal(channels[0].cid);
+	});
+
+	it('sort by unread_count desc',async function () {
+		let result= await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			unread_count:-1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[0].cid)
+		expect(result[1].cid).to.be.equal(channels[1].cid)
+		expect(result[2].cid).to.be.equal(channels[2].cid)
+		expect(result[3].cid).to.be.equal(channels[3].cid)
+	});
+
+
+	it('zero the counts and sort by has_unread and last_message_at asc',async function () {
+		tommasoClient = await getTestClientForUser(tommaso);
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			has_unread:1,
+			last_message_at:1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[0].cid);
+		expect(result[1].cid).to.be.equal(channels[1].cid);
+		expect(result[2].cid).to.be.equal(channels[2].cid);
+		expect(result[3].cid).to.be.equal(channels[3].cid);
+	})
+
+	it('zero the counts and sort by has_unread and last_message_at desc',async function () {
+		tommasoClient = await getTestClientForUser(tommaso);
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			has_unread:1,
+			last_message_at:-1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[3].cid);
+		expect(result[1].cid).to.be.equal(channels[2].cid);
+		expect(result[2].cid).to.be.equal(channels[1].cid);
+		expect(result[3].cid).to.be.equal(channels[0].cid);
+	})
+
+	it('zero the counts and sort by unread_count and last_message_at asc',async function () {
+		tommasoClient = await getTestClientForUser(tommaso);
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			unread_count:1,
+			last_message_at:1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[0].cid);
+		expect(result[1].cid).to.be.equal(channels[1].cid);
+		expect(result[2].cid).to.be.equal(channels[2].cid);
+		expect(result[3].cid).to.be.equal(channels[3].cid);
+	})
+
+	it('zero the counts and sort by unread_count and last_message_at desc',async function () {
+		tommasoClient = await getTestClientForUser(tommaso);
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let result = await tommasoClient.queryChannels({members:{$in:[tommaso]}},{
+			unread_count:1,
+			last_message_at:-1,
+		});
+
+		expect(result.length).to.be.equal(4);
+		expect(result[0].cid).to.be.equal(channels[3].cid);
+		expect(result[1].cid).to.be.equal(channels[2].cid);
+		expect(result[2].cid).to.be.equal(channels[1].cid);
+		expect(result[3].cid).to.be.equal(channels[0].cid);
+	})
 });
