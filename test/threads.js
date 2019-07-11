@@ -193,7 +193,7 @@ describe('Threads and Replies', function() {
 	it('Query replies should work with id_lt, id_lte, id_gt, id_gte', async () => {
 		// create a few replies using the server side on a channel where we are not listening...
 		const testClient = getServerTestClient();
-		const user = {id: 'john'};
+		const user = { id: 'john' };
 		const testChannel = testClient.channel('messaging', 'getRepliesTest', {
 			created_by: user,
 		});
@@ -220,29 +220,41 @@ describe('Threads and Replies', function() {
 				user,
 			});
 
-			replies.push(replyResponse.message)
+			replies.push(replyResponse.message);
 		}
 		// query replies should return messages 4 to 9
-		let response = await testChannel.getReplies(parentID, {id_gt: replies[3].id, limit: 10});
+		let response = await testChannel.getReplies(parentID, {
+			id_gt: replies[3].id,
+			limit: 10,
+		});
 		let wantIds = replies.slice(4, 10).map(m => m.id);
 		let gotIds = response.messages.map(m => m.id);
-		expect(wantIds).to.eql(gotIds)
+		expect(wantIds).to.eql(gotIds);
 
 		// query replies should return messages 3 to 9
-		response = await testChannel.getReplies(parentID, {id_gte: replies[3].id, limit: 10});
+		response = await testChannel.getReplies(parentID, {
+			id_gte: replies[3].id,
+			limit: 10,
+		});
 		wantIds = replies.slice(3, 10).map(m => m.id);
 		gotIds = response.messages.map(m => m.id);
-		expect(wantIds).to.eql(gotIds)
+		expect(wantIds).to.eql(gotIds);
 
-		response = await testChannel.getReplies(parentID, {id_lt: replies[3].id, limit: 10});
+		response = await testChannel.getReplies(parentID, {
+			id_lt: replies[3].id,
+			limit: 10,
+		});
 		wantIds = replies.slice(0, 3).map(m => m.id);
 		gotIds = response.messages.map(m => m.id);
-		expect(wantIds).to.eql(gotIds)
+		expect(wantIds).to.eql(gotIds);
 
-		response = await testChannel.getReplies(parentID, {id_lte: replies[3].id, limit: 10});
+		response = await testChannel.getReplies(parentID, {
+			id_lte: replies[3].id,
+			limit: 10,
+		});
 		wantIds = replies.slice(0, 4).map(m => m.id);
 		gotIds = response.messages.map(m => m.id);
-		expect(wantIds).to.eql(gotIds)
+		expect(wantIds).to.eql(gotIds);
 	});
 
 	it('Replies should not be in the main channel.messages', async () => {
@@ -331,4 +343,3 @@ describe('Threads and Replies', function() {
 		await expect(p).to.be.rejected;
 	});
 });
-
