@@ -24,6 +24,7 @@ function createTestWSConnection(wsURL) {
 		messageCallback: sinon.fake(),
 		recoverCallback: sinon.fake(),
 		eventCallback: sinon.fake(),
+		logger: () => {},
 	});
 	// disable the retry interval to speedup tests
 	conn._retryInterval = function() {
