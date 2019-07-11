@@ -412,7 +412,7 @@ export class Channel {
 
 		this._client.logger(
 			'info',
-			'channel:watch() - started watching channel ' + this.cid,
+			`channel:watch() - started watching channel ${this.cid}`,
 			{
 				tags: ['channel'],
 				channel: this,
@@ -434,7 +434,7 @@ export class Channel {
 
 		this._client.logger(
 			'info',
-			'channel:watch() - stopped watching channel ' + this.cid,
+			`channel:watch() - stopped watching channel ${this.cid}`,
 			{
 				tags: ['channel'],
 				channel: this,
@@ -658,6 +658,15 @@ export class Channel {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this._client.logger(
+			'info',
+			`Attaching listener for ${key} event on channel ${this.cid}`,
+			{
+				tags: ['event', 'channel'],
+				channel: this,
+			},
+		);
+
 		this.listeners[key].push(callback);
 	}
 
@@ -677,6 +686,11 @@ export class Channel {
 			this.listeners[key] = [];
 		}
 
+		this._client.logger(
+			'info',
+			`Removing listener for ${key} event from channel ${this.cid}`,
+			{ tags: ['event', 'channel'], channel: this },
+		);
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
 	}
 
@@ -684,10 +698,9 @@ export class Channel {
 		const channel = this;
 		this._client.logger(
 			'info',
-			'channel:_handleChannelEvent - Received event of type { ' +
-				event.type +
-				' } on ' +
-				this.cid,
+			`channel:_handleChannelEvent - Received event of type { ${event.type} } on ${
+				this.cid
+			}`,
 			{
 				tags: ['event', 'channel'],
 				channel: this,
@@ -832,7 +845,7 @@ export class Channel {
 	_disconnect() {
 		this._client.logger(
 			'info',
-			'channel:disconnect() - Disconnecting the channel ' + this.cid,
+			`channel:disconnect() - Disconnecting the channel ${this.cid}`,
 			{
 				tags: ['connection', 'channel'],
 				channel: this,

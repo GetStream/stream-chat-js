@@ -387,6 +387,9 @@ export class StreamChat {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this.logger('info', `Attaching listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key].push(callback);
 		return {
 			unsubscribe: () => {
@@ -410,11 +413,14 @@ export class StreamChat {
 			this.listeners[key] = [];
 		}
 
+		this.logger('info', `Removing listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
 	}
 
 	_logApiRequest(type, url, data, config) {
-		this.logger('info', 'client:' + type + ' - Request - ' + url, {
+		this.logger('info', `client: ${type} - Request - ${url}`, {
 			tags: ['api', 'api_request', 'client'],
 			url,
 			payload: data,
@@ -425,12 +431,7 @@ export class StreamChat {
 	_logApiResponse(type, url, response) {
 		this.logger(
 			'info',
-			'client:' +
-				type +
-				' - Response - url: ' +
-				url +
-				' > status ' +
-				response.status,
+			`client:${type} - Response - url: ${url} > status ${response.status}`,
 			{
 				tags: ['api', 'api_response', 'client'],
 				url,
@@ -602,7 +603,7 @@ export class StreamChat {
 		const client = this;
 		this.logger(
 			'info',
-			'client:_handleClientEvent - Received event of type { ' + event.type + ' }',
+			`client:_handleClientEvent - Received event of type { ${event.type} }`,
 			{
 				tags: ['event', 'client'],
 				event,
@@ -643,8 +644,9 @@ export class StreamChat {
 	recoverState = async () => {
 		this.logger(
 			'info',
-			'client:recoverState() - Begining of recoverState with connectionID' +
-				this.wsConnection.connectionID,
+			`client:recoverState() - Start of recoverState with connectionID ${
+				this.wsConnection.connectionID
+			}`,
 			{
 				tags: ['connection'],
 			},
@@ -663,9 +665,7 @@ export class StreamChat {
 		if (cids.length) {
 			this.logger(
 				'info',
-				'client:recoverState() - Starting the querying of ' +
-					cids.length +
-					' channels',
+				`client:recoverState() - Start the querying of ${cids.length} channels`,
 				{ tags: ['connection', 'client'] },
 			);
 

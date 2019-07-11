@@ -84,8 +84,7 @@ export class StableWSConnection {
 			this._startHealthCheck();
 			this.logger(
 				'info',
-				'connection:connect() - Established ws connection with healthcheck: ' +
-					healthCheck,
+				`connection:connect() - Established ws connection with healthcheck: ${healthCheck}`,
 				{
 					tags: ['connection'],
 				},
@@ -107,8 +106,9 @@ export class StableWSConnection {
 	disconnect() {
 		this.logger(
 			'info',
-			'connection:disconnect() - Closing the websocket connection for wsID ' +
-				this.wsID,
+			`connection:disconnect() - Closing the websocket connection for wsID ${
+				this.wsID
+			}`,
 			{
 				tags: ['connection'],
 			},
@@ -290,8 +290,9 @@ export class StableWSConnection {
 			// it's possible we didnt miss any messages, so this process is just expensive and not needed.
 			this.logger(
 				'info',
-				'connection:onlineStatusChanged() : Status changing to online. isHealthy: ' +
-					this.isHealthy,
+				`connection:onlineStatusChanged() : Status changing to online. isHealthy: ${
+					this.isHealthy
+				}`,
 				{
 					tags: ['connection'],
 				},
