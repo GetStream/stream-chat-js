@@ -3,7 +3,10 @@ import { StreamChat } from 'stream-chat';
 const apiKey = 'apiKey';
 const apiSecret = 'apiSecret';
 
-const client = new StreamChat(apiKey, null, { timeout: 3000 }); // $ExpectType StreamChat
+const client = new StreamChat(apiKey, null, {
+  timeout: 3000,
+  logger: (logLevel: string, msg: string, extraData: {}) => {},
+}); // $ExpectType StreamChat
 
 const devToken = client.devToken('joshua'); // $ExpectType string
 const userToken = client.createToken('james', 3600); // $ExpectType string

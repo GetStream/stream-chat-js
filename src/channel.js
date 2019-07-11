@@ -409,6 +409,15 @@ export class Channel {
 		this.initialized = true;
 		this._initializeState(state);
 		this.data = state.channel;
+
+		this._client.logger(
+			'info',
+			`channel:watch() - started watching channel ${this.cid}`,
+			{
+				tags: ['channel'],
+				channel: this,
+			},
+		);
 		return state;
 	}
 
@@ -421,6 +430,15 @@ export class Channel {
 		const response = await this.getClient().post(
 			this._channelURL() + '/stop-watching',
 			{},
+		);
+
+		this._client.logger(
+			'info',
+			`channel:watch() - stopped watching channel ${this.cid}`,
+			{
+				tags: ['channel'],
+				channel: this,
+			},
 		);
 
 		return response;
@@ -640,6 +658,15 @@ export class Channel {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this._client.logger(
+			'info',
+			`Attaching listener for ${key} event on channel ${this.cid}`,
+			{
+				tags: ['event', 'channel'],
+				channel: this,
+			},
+		);
+
 		this.listeners[key].push(callback);
 	}
 
@@ -659,11 +686,26 @@ export class Channel {
 			this.listeners[key] = [];
 		}
 
+		this._client.logger(
+			'info',
+			`Removing listener for ${key} event from channel ${this.cid}`,
+			{ tags: ['event', 'channel'], channel: this },
+		);
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
 	}
 
 	_handleChannelEvent(event) {
 		const channel = this;
+		this._client.logger(
+			'info',
+			`channel:_handleChannelEvent - Received event of type { ${event.type} } on ${
+				this.cid
+			}`,
+			{
+				tags: ['event', 'channel'],
+				channel: this,
+			},
+		);
 
 		const s = channel.state;
 		switch (event.type) {
@@ -801,6 +843,15 @@ export class Channel {
 	}
 
 	_disconnect() {
+		this._client.logger(
+			'info',
+			`channel:disconnect() - Disconnecting the channel ${this.cid}`,
+			{
+				tags: ['connection', 'channel'],
+				channel: this,
+			},
+		);
+
 		this.disconnected = true;
 	}
 }

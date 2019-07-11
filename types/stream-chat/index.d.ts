@@ -50,8 +50,43 @@ export interface Reaction {
   [propName: string]: any;
 }
 
+export interface StreamChatOptions {
+  /**
+   * extraData contains tags array attached to log message. Tags can have one/many of following values:
+   * 1. api
+   * 2. api_request
+   * 3. api_response
+   * 4. client
+   * 5. channel
+   * 6. connection
+   * 7. event
+   *
+   * It may also contains some extra data, some examples have been mentioned below:
+   * 1. {
+   * 		tags: ['api', 'api_request', 'client'],
+   * 		url: string,
+   * 		payload: object,
+   * 		config: object
+   * }
+   * 2. {
+   * 		tags: ['api', 'api_response', 'client'],
+   * 		url: string,
+   * 		response: object
+   * }
+   * 3. {
+   * 		tags: ['event', 'client'],
+   * 		event: object
+   * }
+   * 4. {
+   * 		tags: ['channel'],
+   * 		channel: object
+   * }
+   */
+  logger?(log_level: 'info' | 'error', message: string, extraData?: object): void;
+  [propName: string]: any;
+}
 export class StreamChat {
-  constructor(key: string, secretOrOptions?: string, options?: object);
+  constructor(key: string, secretOrOptions?: string, options?: StreamChatOptions);
 
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;

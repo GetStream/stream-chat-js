@@ -30,6 +30,15 @@ function isReadableStream(obj) {
 	);
 }
 
+function isFunction(value) {
+	return (
+		value &&
+		(Object.prototype.toString.call(value) === '[object Function]' ||
+			'function' === typeof value ||
+			value instanceof Function)
+	);
+}
+
 export class StreamChat {
 	constructor(key, secretOrOptions, options) {
 		// set the key
@@ -87,6 +96,50 @@ export class StreamChat {
 		this.configs = {};
 		this.anonymous = false;
 
+		/**
+		 * logger function should accept 3 parameters:
+		 * @param logLevel string
+		 * @param message   string
+		 * @param extraData object
+		 *
+		 * e.g.,
+		 * const client = new StreamChat('api_key', {}, {
+		 * 		logger = (logLevel, message, extraData) => {
+		 * 			console.log(message);
+		 * 		}
+		 * })
+		 *
+		 * extraData contains tags array attached to log message. Tags can have one/many of following values:
+		 * 1. api
+		 * 2. api_request
+		 * 3. api_response
+		 * 4. client
+		 * 5. channel
+		 * 6. connection
+		 * 7. event
+		 *
+		 * It may also contains some extra data, some examples have been mentioned below:
+		 * 1. {
+		 * 		tags: ['api', 'api_request', 'client'],
+		 * 		url: string,
+		 * 		payload: object,
+		 * 		config: object
+		 * }
+		 * 2. {
+		 * 		tags: ['api', 'api_response', 'client'],
+		 * 		url: string,
+		 * 		response: object
+		 * }
+		 * 3. {
+		 * 		tags: ['event', 'client'],
+		 * 		event: object
+		 * }
+		 * 4. {
+		 * 		tags: ['channel'],
+		 * 		channel: object
+		 * }
+		 */
+		this.logger = isFunction(options.logger) ? options.logger : () => {};
 		this._startCleaning();
 	}
 
@@ -231,6 +284,9 @@ export class StreamChat {
 	 * disconnect - closes the WS connection
 	 */
 	disconnect() {
+		this.logger('info', 'client:disconnect() - Disconnecting the client', {
+			tags: ['connection', 'client'],
+		});
 		// remove the user specific fields
 		delete this.user;
 		delete this._user;
@@ -331,6 +387,9 @@ export class StreamChat {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this.logger('info', `Attaching listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key].push(callback);
 		return {
 			unsubscribe: () => {
@@ -354,12 +413,39 @@ export class StreamChat {
 			this.listeners[key] = [];
 		}
 
+		this.logger('info', `Removing listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+	}
+
+	_logApiRequest(type, url, data, config) {
+		this.logger('info', `client: ${type} - Request - ${url}`, {
+			tags: ['api', 'api_request', 'client'],
+			url,
+			payload: data,
+			config,
+		});
+	}
+
+	_logApiResponse(type, url, response) {
+		this.logger(
+			'info',
+			`client:${type} - Response - url: ${url} > status ${response.status}`,
+			{
+				tags: ['api', 'api_response', 'client'],
+				url,
+				response,
+			},
+		);
 	}
 
 	async get(url, params) {
 		try {
+			this._logApiRequest('get', url, {}, this._addClientParams(params));
 			const response = await axios.get(url, this._addClientParams(params));
+			this._logApiResponse('get', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -373,7 +459,10 @@ export class StreamChat {
 	async put(url, data) {
 		let response;
 		try {
+			this._logApiRequest('put', url, data, this._addClientParams());
 			response = await axios.put(url, data, this._addClientParams());
+			this._logApiResponse('put', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -387,7 +476,10 @@ export class StreamChat {
 	async post(url, data) {
 		let response;
 		try {
+			this._logApiRequest('post', url, data, this._addClientParams());
 			response = await axios.post(url, data, this._addClientParams());
+			this._logApiResponse('post', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -401,7 +493,10 @@ export class StreamChat {
 	async patch(url, data) {
 		let response;
 		try {
+			this._logApiRequest('patch', url, data, this._addClientParams());
 			response = await axios.patch(url, data, this._addClientParams());
+			this._logApiResponse('patch', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -415,7 +510,10 @@ export class StreamChat {
 	async delete(url, params) {
 		let response;
 		try {
+			this._logApiRequest('delete', url, {}, this._addClientParams());
 			response = await axios.delete(url, this._addClientParams(params));
+			this._logApiResponse('delete', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
 			if (e.response) {
@@ -503,6 +601,14 @@ export class StreamChat {
 
 	_handleClientEvent(event) {
 		const client = this;
+		this.logger(
+			'info',
+			`client:_handleClientEvent - Received event of type { ${event.type} }`,
+			{
+				tags: ['event', 'client'],
+				event,
+			},
+		);
 
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
@@ -536,6 +642,15 @@ export class StreamChat {
 	}
 
 	recoverState = async () => {
+		this.logger(
+			'info',
+			`client:recoverState() - Start of recoverState with connectionID ${
+				this.wsConnection.connectionID
+			}`,
+			{
+				tags: ['connection'],
+			},
+		);
 		this.connectionID = this.wsConnection.connectionID;
 		const cids = Object.keys(this.activeChannels || {});
 		const lastMessageIDs = {};
@@ -548,11 +663,22 @@ export class StreamChat {
 			lastMessageIDs[c.cid] = lastMessageId;
 		}
 		if (cids.length) {
+			this.logger(
+				'info',
+				`client:recoverState() - Start the querying of ${cids.length} channels`,
+				{ tags: ['connection', 'client'] },
+			);
+
 			await this.queryChannels(
 				{ cid: { $in: cids } },
 				{ last_message_at: -1 },
 				{ limit: 30, recovery: true, last_message_ids: lastMessageIDs },
 			);
+
+			this.logger('info', 'client:recoverState() - Querying channels finished', {
+				tags: ['connection', 'client'],
+			});
+
 			this.dispatchEvent({
 				type: 'connection.recovered',
 			});
@@ -617,6 +743,7 @@ export class StreamChat {
 			recoverCallback: this.recoverState,
 			messageCallback: this.handleEvent,
 			eventCallback: this.dispatchEvent,
+			logger: this.logger,
 		});
 
 		const handshake = await this.wsConnection.connect();
@@ -1045,7 +1172,6 @@ export class StreamChat {
 				clonedMessage.user = { id: userId.id };
 			}
 		}
-
 		return await this.post(this.baseURL + `/messages/${message.id}`, {
 			message: clonedMessage,
 		});
