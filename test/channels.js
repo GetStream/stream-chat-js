@@ -660,14 +660,11 @@ describe.only('Query Channels and sort by unread', function() {
 
 	it('test "grouping"', async function() {
 		tommasoClient = await getTestClientForUser(tommaso);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
 
-		const msg1 =await channels[0].sendMessage({ text: 'hi' });
-		console.log('send msg',channels[0].cid)
-		console.log('send msg 2',channels[1].cid)
-		const msg2=await channels[1].sendMessage({ text: 'hi' });
 
-		console.log(msg1)
-		console.log(msg2)
+
 
 		let result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
@@ -732,6 +729,8 @@ describe.only('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
 
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
