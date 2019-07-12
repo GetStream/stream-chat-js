@@ -728,6 +728,11 @@ describe.only('Query Channels and sort by unread', function() {
 
 
 	it('limit results should work fine',async function () {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{
