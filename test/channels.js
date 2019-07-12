@@ -1,4 +1,6 @@
 import uuidv4 from 'uuid/v4';
+import { StreamChat } from '../src';
+
 import {
 	createUsers,
 	createUserToken,
@@ -495,7 +497,13 @@ describe.only('Query Channels and sort by unread', function() {
 		await createUsers([tommaso, thierry]);
 		const cidPrefix = uuidv4();
 		for (let i = 3; i >= 0; i--) {
-			const channel = thierryClient.channel('messaging', cidPrefix + i, {});
+			let color;
+			if (i%2==0){
+				color='blue'
+			}else{
+				color='red'
+			}
+			const channel = thierryClient.channel('messaging', cidPrefix + i, {color});
 			await channel.watch();
 			await channel.addMembers([tommaso, thierry]);
 			for (let j = 0; j < i + 1; j++) {
@@ -755,5 +763,25 @@ describe.only('Query Channels and sort by unread', function() {
 
 		expect(result.length).to.be.equal(1);
 		expect(result[0].cid).to.be.equal(channels[0].cid);
+	})
+
+	it('unread count with custom query should work', async function () {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
+
+		let result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] },color:'blue' },
+			{
+				unread_count: -1,
+				last_message_at: -1,
+			},
+		);
+
+		expect(result.length).to.be.equal(2);
+		expect(result[0].cid).to.be.equal(channels[1].cid);
 	})
 });
