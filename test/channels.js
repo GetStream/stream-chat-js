@@ -732,7 +732,7 @@ describe.only('Query Channels and sort by unread', function() {
 		await channels[0].sendMessage({ text: 'hi' });
 		await channels[1].sendMessage({ text: 'hi' });
 
-		const result = await tommasoClient.queryChannels(
+		let result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{
 				unread_count: -1,
@@ -743,5 +743,17 @@ describe.only('Query Channels and sort by unread', function() {
 
 		expect(result.length).to.be.equal(1);
 		expect(result[0].cid).to.be.equal(channels[1].cid);
+
+		 result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] } },
+			{
+				unread_count: -1,
+				last_message_at: 1,
+			},
+			{limit:1},
+		);
+
+		expect(result.length).to.be.equal(1);
+		expect(result[0].cid).to.be.equal(channels[0].cid);
 	})
 });
