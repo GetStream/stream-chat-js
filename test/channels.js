@@ -1,5 +1,4 @@
 import uuidv4 from 'uuid/v4';
-import { StreamChat } from '../src';
 
 import {
 	createUsers,
@@ -783,5 +782,7 @@ describe.only('Query Channels and sort by unread', function() {
 
 		expect(result.length).to.be.equal(2);
 		expect(result[0].cid).to.be.equal(channels[1].cid);
+		expect(result[0].data.color).to.be.equal('blue');
+		expect(result[1].data.color).to.be.equal('blue');
 	})
 });
