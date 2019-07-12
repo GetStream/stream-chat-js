@@ -764,7 +764,7 @@ describe.only('Query Channels and sort by unread', function() {
 		expect(result[0].cid).to.be.equal(channels[0].cid);
 	})
 
-	it('unread count with custom query should work', async function () {
+	it('unread count + custom query should work', async function () {
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
@@ -784,5 +784,28 @@ describe.only('Query Channels and sort by unread', function() {
 		expect(result[0].cid).to.be.equal(channels[1].cid);
 		expect(result[0].data.color).to.be.equal('blue');
 		expect(result[1].data.color).to.be.equal('blue');
+	})
+
+	it('unread count + custom query with limit should work', async function () {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
+
+		let result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] },color:'blue' },
+			{
+				unread_count: -1,
+				last_message_at: -1,
+			},
+			{
+				limit:1,
+			},
+		);
+		expect(result.length).to.be.equal(1);
+		expect(result[0].cid).to.be.equal(channels[1].cid);
+		expect(result[0].data.color).to.be.equal('blue');
 	})
 });
