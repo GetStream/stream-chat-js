@@ -31,13 +31,26 @@ client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', 'james'); // $ExpectType Pr
 const event = {
   cid: 'channelid',
   type: 'user.updated',
-  message: { text: 'Heloo' },
-  reaction: { type: 'like' },
+  message: {
+    text: 'Heloo',
+    type: 'system',
+    updated_at: '',
+    created_at: '',
+    html: 'Hello',
+  },
+  reaction: {
+    type: 'like',
+    message_id: '',
+    user: {
+      id: 'john',
+    },
+    created_at: '',
+  },
   member: { id: 'john' },
   user: { id: 'john' },
   me: { id: 'john' },
   unread_count: 3,
-  online: 10,
+  online: true,
 };
 client.dispatchEvent(event); // $ExpectType void
 client.handleEvent(event); // $ExpectType void
