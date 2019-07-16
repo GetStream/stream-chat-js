@@ -160,6 +160,7 @@ describe('GDPR endpoints', function() {
 			const state = await channel2.query();
 			expect(state.messages.length).to.equal(1);
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
+			expect(state.messages[0].type).to.be.equal('deleted');
 			expect(state.messages[0].text).to.equal('hi');
 		});
 	});
@@ -205,6 +206,7 @@ describe('GDPR endpoints', function() {
 			const state = await channel2.query();
 			expect(state.messages).to.be.ofSize(2);
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
+			expect(state.messages[0].type).to.be.equal('deleted');
 			expect(state.messages[1].id).to.be.equal(message.id);
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
@@ -292,6 +294,7 @@ describe('GDPR endpoints', function() {
 			//this one remains deleted
 			expect(state.messages[1].id).to.equal(deletedID);
 			expect(state.messages[1].deleted_at).to.not.be.undefined;
+			expect(state.messages[1].type).to.be.equal('deleted');
 
 			expect(state.messages[2].id).to.equal(message.id);
 			expect(state.messages[2].deleted_at).to.be.undefined;
@@ -390,6 +393,7 @@ describe('GDPR endpoints', function() {
 			const state = await channel2.query();
 			expect(state.messages.length).to.equal(1);
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
+			expect(state.messages[0].type).to.be.equal('deleted');
 			expect(state.messages[0].text).to.equal('hi');
 		});
 
@@ -453,6 +457,7 @@ describe('GDPR endpoints', function() {
 
 			// verify that the message is marked as deleted and the content is removed..
 			expect(deletedMessage.deleted_at).to.not.be.undefined;
+			expect(deletedMessage.type).to.be.equal('deleted');
 			expect(deletedMessage.text).to.equal('');
 		});
 	});

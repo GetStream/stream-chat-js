@@ -1080,6 +1080,7 @@ describe('Chat', function() {
 
 					channel.on('message.deleted', event => {
 						expect(event.message.deleted_at).to.not.be.null;
+						expect(event.message.type).to.be.equal('deleted');
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
