@@ -786,7 +786,7 @@ describe('hard delete messages', function() {
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		const channelResp = await channel.watch();
-		expect(channelResp.last_message_at).to.be.undefined;
+		expect(channelResp.channel.last_message_at).to.be.undefined;
 		expect(channelResp.messages.length).to.be.equal(0);
 	});
 
@@ -809,6 +809,22 @@ describe('hard delete messages', function() {
 		let channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
-		expect(theChannel.last_message_at).to.be.undefined;
+		expect(theChannel.data.last_message_at).to.be.undefined;
+	});
+
+	it('hard delete threads should work fine', async function() {
+		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		expect(channels.length).to.be.equal(1);
+		const theChannel = channels[0];
+		expect(theChannel.data.last_message_at).to.be.undefined;
+		const parent = await theChannel.sendMessage({ text: 'the parent' });
+		await theChannel.sendMessage({ text: 'the reply', parent_id: parent.message.id });
+		await ssclient.deleteMessage(parent.message.id, true);
+
+		const channels2 = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
+		expect(channels2.length).to.be.equal(1);
+		const resp = await channels2[0].watch();
+		expect(resp.last_message_at).to.be.undefined;
+		expect(channels2[0].data.last_message_at).to.be.undefined;
 	});
 });
