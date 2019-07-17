@@ -722,7 +722,7 @@ describe('Query Channels and sort by unread', function() {
 	});
 });
 
-describe.only('hard delete messages', function() {
+describe('hard delete messages', function() {
 	const channelID = uuidv4();
 	const user = uuidv4();
 	let client, ssclient;
@@ -769,7 +769,7 @@ describe.only('hard delete messages', function() {
 		);
 	});
 
-	it('hard delete the last message should update the channel last_message_at', async function() {
+	it('hard delete the third message should update the channel last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(thirdMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 		expect(resp.message.type).to.not.equal('deleted');
@@ -779,7 +779,7 @@ describe.only('hard delete messages', function() {
 		expect(channel.data.last_message_at).to.be.equal(firstMessage.message.created_at);
 	});
 
-	it('hard delete the only message in the channel should clear channel messages and last_message_at', async function() {
+	it('hard delete the last message in the channel should clear channel messages and last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(firstMessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 		expect(resp.message.type).to.not.equal('deleted');
@@ -803,5 +803,12 @@ describe.only('hard delete messages', function() {
 		const channelResp = await channel.watch();
 		expect(channelResp.last_message_at).to.be.undefined;
 		expect(channelResp.messages.length).to.be.equal(0);
+	});
+
+	it('query the channel should also return correct results', async function() {
+		let channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
+		expect(channels.length).to.be.equal(1);
+		const theChannel = channels[0];
+		expect(theChannel.last_message_at).to.be.undefined;
 	});
 });
