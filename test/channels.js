@@ -721,3 +721,87 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[1].cid);
 	});
 });
+
+describe.only('hard delete messages', function() {
+	const channelID = uuidv4();
+	const user = uuidv4();
+	let client, ssclient;
+	let channel;
+	let firstMessage;
+	let secondMeessage;
+	let thirdMeessage;
+
+	before(async function() {
+		client = await getTestClientForUser(user);
+		ssclient = await getTestClient(true);
+		channel = client.channel('messaging', channelID);
+		await channel.create();
+	});
+
+	it('send 3 messages to the channel', async function() {
+		firstMessage = await channel.sendMessage({ text: 'hi 1' });
+		secondMeessage = await channel.sendMessage({ text: 'hi 2' });
+		thirdMeessage = await channel.sendMessage({ text: 'hi 3' });
+	});
+
+	it('hard delete messages is not allowed client side', function() {
+		expect(client.deleteMessage(firstMessage.message.id, true)).to.be.rejectedWith(
+			'Error: StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
+		);
+	});
+
+	it('hard delete the second message should work and not update  channel.last_message_id', async function() {
+		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		await channel.watch();
+		console.log(channel);
+		expect(channel.data.last_message_at).to.be.equal(
+			thirdMeessage.message.created_at,
+		);
+
+		const resp = await ssclient.deleteMessage(secondMeessage.message.id, true);
+		expect(resp.message.deleted_at).to.not.be.undefined;
+		expect(resp.message.type).to.not.equal('deleted');
+
+		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		await channel.watch();
+		expect(channel.data.last_message_at).to.be.equal(
+			thirdMeessage.message.created_at,
+		);
+	});
+
+	it('hard delete the last message should update the channel last_message_at', async function() {
+		const resp = await ssclient.deleteMessage(thirdMeessage.message.id, true);
+		expect(resp.message.deleted_at).to.not.be.undefined;
+		expect(resp.message.type).to.not.equal('deleted');
+
+		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		await channel.watch();
+		expect(channel.data.last_message_at).to.be.equal(firstMessage.message.created_at);
+	});
+
+	it('hard delete the only message in the channel should clear channel messages and last_message_at', async function() {
+		const resp = await ssclient.deleteMessage(firstMessage.message.id, true);
+		expect(resp.message.deleted_at).to.not.be.undefined;
+		expect(resp.message.type).to.not.equal('deleted');
+
+		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		const channelResp = await channel.watch();
+		expect(channelResp.last_message_at).to.be.undefined;
+		expect(channelResp.messages.length).to.be.equal(0);
+	});
+
+	it('messages with reactions are hard deleted properly', async function() {
+		let channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		await channel.watch();
+
+		let resp = await channel.sendMessage({ text: 'hi', user_id: user });
+		await channel.sendReaction(resp.message.id, { type: 'love' }, user);
+		resp = await ssclient.deleteMessage(resp.message.id, true);
+		expect(resp.message.deleted_at).to.not.be.undefined;
+
+		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+		const channelResp = await channel.watch();
+		expect(channelResp.last_message_at).to.be.undefined;
+		expect(channelResp.messages.length).to.be.equal(0);
+	});
+});
