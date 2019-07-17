@@ -812,6 +812,56 @@ describe('hard delete messages', function() {
 		expect(theChannel.data.last_message_at).to.be.undefined;
 	});
 
+	it('validate channel.last_message_at correctly updated', async function() {
+		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		expect(channels.length).to.be.equal(1);
+		const theChannel = channels[0];
+		expect(theChannel.data.last_message_at).to.be.undefined;
+
+		let messages = [];
+		for (let i = 0; i < 10; i++) {
+			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
+		}
+
+		for (let i = 9; i >= 0; i--) {
+			await ssclient.deleteMessage(messages[i].message.id, true);
+			channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+			const channelResp = await channel.watch();
+			if (i == 0) {
+				expect(channelResp.channel.last_message_at).to.be.be.undefined;
+			} else {
+				expect(channelResp.channel.last_message_at).to.be.equal(
+					messages[i - 1].message.created_at,
+				);
+			}
+		}
+	});
+
+	it('validate first channel message', async function() {
+		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		expect(channels.length).to.be.equal(1);
+		const theChannel = channels[0];
+		expect(theChannel.data.last_message_at).to.be.undefined;
+
+		let messages = [];
+		for (let i = 0; i < 10; i++) {
+			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
+		}
+
+		for (let i = 0; i < 10; i++) {
+			await ssclient.deleteMessage(messages[i].message.id, true);
+			channel = ssclient.channel('messaging', channelID, { created_by_id: user });
+			const channelResp = await channel.watch();
+			//delete last message
+			if (i === 9) {
+				expect(channelResp.channel.last_message_at).to.be.be.undefined;
+			} else {
+				expect(channelResp.messages.length).to.be.equal(9 - i);
+				expect(channelResp.messages[0].text).to.be.equal('hi' + (i + 1));
+			}
+		}
+	});
+
 	it('hard delete threads should work fine', async function() {
 		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
