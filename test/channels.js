@@ -485,7 +485,7 @@ describe('Channels - Distinct channels', function() {
 	});
 });
 
-describe.only('Query Channels and sort by unread', function() {
+describe('Query Channels and sort by unread', function() {
 	const channels = [];
 	const tommaso = 'tommaso' + uuidv4();
 	const thierry = 'thierry' + uuidv4();
