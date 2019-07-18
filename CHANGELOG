@@ -1,3 +1,22 @@
+## July 18 2019 - 1.0.0
+
+- This library is stable and used in production already, bump to 1.0.0
+
+## July 18 2019 - 0.13.8
+
+- Avoid memory leaks server-side when client is created many times
+
+## July 11 2019 - 0.13.7
+
+- Track client version with WS
+- Add configurable logging
+- Bugfix: reconnection and threads' replies are now handled correctly
+- Bugfix: replies pagination now works with both ASC and DESC ordering
+
+## June 27 2019 - 0.13.6
+
+- Improve reconnection mechanism
+
 ## June 20th 2019 - 0.13.5
 
 - Added populated `channel.data` when calling `channel.watch()`
