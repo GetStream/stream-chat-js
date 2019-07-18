@@ -48,7 +48,6 @@ const event = {
   },
   member: { id: 'john' },
   user: { id: 'john' },
-  me: { id: 'john' },
   unread_count: 3,
   online: true,
 };
