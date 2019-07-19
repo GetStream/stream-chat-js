@@ -1,3 +1,7 @@
+## July 19, 2019 - 1.0.1
+
+- Fixing broken types in ts declaration file : [264ee9a87d6591d39f20b99d1d87381532b9957b](https://github.com/GetStream/stream-chat-js/commit/264ee9a87d6591d39f20b99d1d87381532b9957b)
+
 ## July 18 2019 - 1.0.0
 
 - This library is stable and used in production already, bump to 1.0.0
