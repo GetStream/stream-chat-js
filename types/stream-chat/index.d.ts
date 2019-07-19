@@ -63,6 +63,13 @@ export interface MessageResponse {
   [propName: string]: any;
 }
 
+export interface Member {
+  created_at: string;
+  role: string;
+  updated_at: string;
+  user: User;
+}
+
 export interface User {
   id: string;
   role?: string;
@@ -77,7 +84,6 @@ export interface UserResponse extends User {
   deactivated_at?: string;
   online: boolean;
 }
-
 export interface OwnUserResponse extends UserResponse {
   devices: Device[];
   unread_count: number;
@@ -104,6 +110,81 @@ export interface Event {
   watcher_count?: number;
   unread_count?: number;
   online?: boolean;
+}
+export interface UserPresenceChangedEvent extends Event {
+  type: 'user.presence.changed';
+}
+export interface UserWatchingStartEvent extends Event {
+  type: 'user.watching.start';
+}
+export interface UserWatchingStopEvent extends Event {
+  type: 'user.watching.stop';
+}
+export interface UserUpdatedEvent extends Event {
+  type: 'user.updated';
+}
+export interface TypingStartEvent extends Event {
+  type: 'typing.start';
+}
+export interface TypingStopEvent extends Event {
+  type: 'typing.stop';
+}
+export interface MessageNewEvent extends Event {
+  type: 'message.new';
+}
+export interface MessageUpdatedEvent extends Event {
+  type: 'message.updated';
+}
+export interface MessageDeletedEvent extends Event {
+  type: 'message.deleted';
+}
+export interface MessageReadEvent extends Event {
+  type: 'message.read';
+}
+export interface ReactionNewEvent extends Event {
+  type: 'reaction.new';
+}
+export interface ReactionDeletedEvent extends Event {
+  type: 'reaction.deleted';
+}
+export interface MemberAddedEvent extends Event {
+  type: 'member.added';
+}
+export interface MemberUpdatedEvent extends Event {
+  type: 'member.updated';
+}
+export interface MemberRemovedEvent extends Event {
+  type: 'member.removed';
+}
+export interface ChannelUpdatedEvent extends Event {
+  type: 'channel.updated';
+}
+export interface ChannelDeletedEvent extends Event {
+  type: 'channel.deleted';
+}
+export interface HealthCheckEvent extends Event {
+  type: 'health.check';
+}
+export interface NotificationNewMessageEvent extends Event {
+  type: 'notification.message_new';
+}
+export interface NotificationMarkReadEvent extends Event {
+  type: 'notification.mark_read';
+}
+export interface NotificationInvitedEvent extends Event {
+  type: 'notification.invited';
+}
+export interface NotificationInviteAcceptedEvent extends Event {
+  type: 'notification.invite_accepted';
+}
+export interface NotificationAddedToChannelEvent extends Event {
+  type: 'notification.added_to_channel';
+}
+export interface NotificationRemovedFromChannelEvent extends Event {
+  type: 'notification.removed_from_channel';
+}
+export interface NotificationMutesUpdatedEvent extends Event {
+  type: 'notification.mutes_updated';
 }
 
 export interface Reaction {
@@ -154,6 +235,14 @@ export interface StreamChatOptions {
 }
 export class StreamChat {
   constructor(key: string, secretOrOptions?: string, options?: StreamChatOptions);
+
+  key: string;
+  userToken?: string;
+  secret: string;
+  listeners: {
+    [key: string]: Array<(event: Event) => any>;
+  };
+  state: ClientState;
   user: OwnUserResponse;
 
   devToken(userID: string): string;
@@ -242,6 +331,21 @@ export class ClientState {
 
 export class Channel {
   constructor(client: StreamChat, type: string, id: string, data: object);
+  type: string;
+  id: string;
+  // used by the frontend, gets updated:
+  data: object;
+  cid: string; // `${type}:${id}`;
+  listeners: {
+    [key: string]: Array<(event: Event) => any>;
+  };
+  // perhaps the state variable should be private
+  initialized: boolean;
+  lastTypingEvent?: Date;
+  isTyping: boolean;
+  disconnected: boolean;
+  state: ChannelState;
+
   getConfig(): object;
   sendMessage(message: Message): Promise<APIResponse>;
   sendFile(
@@ -302,6 +406,19 @@ export class Channel {
 
 export class ChannelState {
   constructor(channel: Channel);
+  watcher_count: number;
+  typing: SeamlessImmutable.Immutable<{ [user_id: string]: TypingStartEvent }>;
+  read: SeamlessImmutable.Immutable<object>;
+  messages: SeamlessImmutable.Immutable<MessageResponse[]>;
+  threads: SeamlessImmutable.Immutable<{
+    [message_id: string]: MessageResponse[];
+  }>;
+  mutedUsers: SeamlessImmutable.Immutable<[]>;
+  watchers: SeamlessImmutable.Immutable<{
+    [user_id: string]: SeamlessImmutable.Immutable<UserResponse>;
+  }>;
+  members: SeamlessImmutable.Immutable<object>;
+  last_message_at: string;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
   messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
