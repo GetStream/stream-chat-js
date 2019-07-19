@@ -649,9 +649,7 @@ export class StreamChat {
 	recoverState = async () => {
 		this.logger(
 			'info',
-			`client:recoverState() - Start of recoverState with connectionID ${
-				this.wsConnection.connectionID
-			}`,
+			`client:recoverState() - Start of recoverState with connectionID ${this.wsConnection.connectionID}`,
 			{
 				tags: ['connection'],
 			},
