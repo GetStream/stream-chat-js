@@ -1,6 +1,7 @@
 // TypeScript Version: 2.2
 
 export as namespace stream;
+import * as SeamlessImmutable from 'seamless-immutable';
 
 export interface APIResponse {
   duration: string;
@@ -42,7 +43,10 @@ export interface Message {
   [propName: string]: any;
 }
 
-export interface MessageResponse extends Message {
+export interface MessageResponse {
+  text: string;
+  attachments?: Attachment[];
+  parent_id?: string;
   mentioned_users?: string[];
   command?: string;
   user?: User;
@@ -56,6 +60,7 @@ export interface MessageResponse extends Message {
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  [propName: string]: any;
 }
 
 export interface User {
@@ -95,7 +100,7 @@ export interface Event {
   member?: User;
   user?: User;
   user_id?: string;
-  me?: OwnUser;
+  me?: OwnUserResponse;
   watcher_count?: number;
   unread_count?: number;
   online?: boolean;
@@ -106,7 +111,6 @@ export interface Reaction {
   message_id: string;
   user_id?: string;
   user: User;
-  type: string;
   [propName: string]: any;
 }
 
@@ -300,7 +304,7 @@ export class ChannelState {
   constructor(channel: Channel);
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
-  messageToImmutable(message: Message): Immutable<Message>;
+  messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
   removeMessage(messageToRemove: Message): boolean;
   filterErrorMessages(): Message | [] | void;
   clean(): void;
@@ -312,7 +316,7 @@ export class StableWSConnection {
     clientID: string,
     userID: string,
     messageCallback: (event: object) => void,
-    recoverCallback: (open: Promise) => void,
+    recoverCallback: (open: Promise<object>) => void,
     eventCallback: (event: object) => void,
   );
   connect(): Promise<void>;
