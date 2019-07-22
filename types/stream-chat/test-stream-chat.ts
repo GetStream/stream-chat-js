@@ -53,6 +53,12 @@ client.dispatchEvent(event); // $ExpectType void
 client.handleEvent(event); // $ExpectType void
 client.recoverState(); // $ExpectType Promise<void>
 
+const channels = client.queryChannels({}, {}, {});
+channels.then(response => {
+  const type = response.channels[0].channel.type; // $ExpectType string
+  const cid = response.channels[0].channel.cid; // $ExpectType string
+});
+
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
 const channelState = channel.state; // $ExpectType ChannelState
 const member = channelState.members.someUser; // $ExpectType ImmutableObject<Member>

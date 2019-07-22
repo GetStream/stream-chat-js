@@ -3,11 +3,6 @@
 export as namespace stream;
 import * as SeamlessImmutable from 'seamless-immutable';
 
-export interface APIResponse {
-  duration: string;
-  [propName: string]: any;
-}
-
 export interface Action {
   name: string;
   text: string;
@@ -43,26 +38,6 @@ export interface Message {
   [propName: string]: any;
 }
 
-export interface MessageResponse {
-  text: string;
-  attachments?: Attachment[];
-  parent_id?: string;
-  mentioned_users?: string[];
-  command?: string;
-  user?: User;
-  html: string;
-  type: string;
-  latest_reactions?: ReactionResponse[];
-  own_reactions?: ReactionResponse[];
-  reaction_counts?: { [key: string]: number };
-  show_in_channel?: boolean;
-  reply_count?: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  [propName: string]: any;
-}
-
 export interface Member {
   created_at: string;
   role: string;
@@ -76,20 +51,6 @@ export interface User {
   [propName: string]: any;
 }
 
-export interface UserResponse extends User {
-  created_at?: string;
-  updated_at?: string;
-  last_active?: string;
-  deleted_at?: string;
-  deactivated_at?: string;
-  online: boolean;
-}
-export interface OwnUserResponse extends UserResponse {
-  devices: Device[];
-  unread_count: number;
-  total_unread_count: number;
-  unread_channels: number;
-}
 export interface Device {
   id: string;
   provider: string;
@@ -286,13 +247,17 @@ export class StreamChat {
     filterConditions: object,
     sort: object,
     options: object,
-  ): Promise<APIResponse>;
+  ): Promise<UsersAPIResponse>;
   queryChannels(
     filterConditions: object,
     sort: object,
     options: object,
-  ): Promise<APIResponse>;
-  search(filterConditions: object, query: object, options: object): Promise<APIResponse>;
+  ): Promise<ChannelsAPIResponse>;
+  search(
+    filterConditions: object,
+    query: object,
+    options: object,
+  ): Promise<SearchAPIResponse>;
 
   addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
   getDevices(userId: string): Promise<APIResponse>;
@@ -300,25 +265,31 @@ export class StreamChat {
 
   channel(channelType: string, channelID: string, custom: object): Channel;
 
-  updateUser(userObject: User): Promise<APIResponse>;
-  updateUsers(users: User[]): Promise<APIResponse>;
-  banUser(targetUserID: string, options: object): Promise<APIResponse>;
-  unbanUser(targetUserID: string, options: object): Promise<APIResponse>;
-  muteUser(targetUserID: string): Promise<APIResponse>;
-  unmuteUser(targetUserID: string): Promise<APIResponse>;
-  flagUser(userID: string): Promise<APIResponse>;
-  unflagUser(userID: string): Promise<APIResponse>;
-  flagMessage(messageID: string): Promise<APIResponse>;
-  unflagMessage(messageID: string): Promise<APIResponse>;
+  updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
+  updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
 
-  createChannelType(data: object): Promise<APIResponse>;
-  getChannelType(channelType: string, data: object): APIResponse;
-  updateChannelType(channelType: string, data: object): Promise<APIResponse>;
-  deleteChannelType(channelType: string): Promise<APIResponse>;
-  listChannelTypes(): Promise<APIResponse>;
+  banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
+  unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
 
-  updateMessage(message: Message, user: string | User): Promise<APIResponse>;
-  deleteMessage(messageID: string): Promise<APIResponse>;
+  muteUser(targetUserID: string): Promise<MuteAPIResponse>;
+  unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
+
+  flagUser(userID: string): Promise<FlagAPIResponse>;
+  unflagUser(userID: string): Promise<UnflagAPIResponse>;
+  flagMessage(messageID: string): Promise<FlagAPIResponse>;
+  unflagMessage(messageID: string): Promise<UnflagAPIResponse>;
+
+  createChannelType(data: object): Promise<CreateChannelTypeAPIResponse>;
+  getChannelType(channelType: string, data: object): Promise<GetChannelTypeAPIResponse>;
+  updateChannelType(
+    channelType: string,
+    data: object,
+  ): Promise<UpdateChannelTypeAPIResponse>;
+  deleteChannelType(channelType: string): Promise<DeleteChannelTypeAPIResponse>;
+  listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
+
+  updateMessage(message: Message, user: string | User): Promise<UpdateMessageAPIResponse>;
+  deleteMessage(messageID: string): Promise<DeleteMessageAPIResponse>;
   verifyWebHook(requestBody: object, xSignature: string): boolean;
 }
 
@@ -478,3 +449,203 @@ export function CheckSignature(body: any, secret: string, signature: string): bo
 export function isValidEventType(eventType: string): boolean;
 
 export function logChatPromiseExecution(promise: Promise<any>, name: string): void;
+
+export interface APIResponse {
+  duration: string;
+  [propName: string]: any;
+}
+
+export interface ChannelsAPIResponse extends APIResponse {
+  channels: Array<{
+    channel: ChannelResponse;
+    messages: MessageResponse[];
+    watcher_count?: number;
+    watchers: User[];
+    read: ReadResponse[];
+    members: ChannelMemberResponse[];
+  }>;
+}
+
+export interface UpdateUsersAPIResponse extends APIResponse {
+  users: {
+    [user_id: string]: UserResponse;
+  };
+}
+
+export interface UsersAPIResponse extends APIResponse {
+  users: Array<UserResponse>;
+}
+
+export interface SearchAPIResponse extends APIResponse {
+  results: {
+    message: MessageResponse;
+  }[];
+}
+
+export interface BanUserAPIResponse extends APIResponse {}
+export interface UnbanUserAPIResponse extends APIResponse {}
+
+export interface MuteAPIResponse extends APIResponse {
+  mute: MuteResponse;
+  own_user: OwnUserResponse;
+}
+
+export interface UnmuteAPIResponse extends APIResponse {}
+
+export interface FlagAPIResponse extends APIResponse {
+  flag: FlagResponse;
+}
+
+export interface UnflagAPIResponse extends APIResponse {
+  flag: FlagResponse;
+}
+
+export interface CreateChannelTypeAPIResponse extends ChannelConfig, APIResponse {
+  permissions: Permission[];
+}
+
+export interface GetChannelTypeAPIResponse extends ChannelConfig, APIResponse {
+  permissions: Permission[];
+}
+
+export interface UpdateChannelTypeAPIResponse extends ChannelConfig, APIResponse {
+  permissions: Permission[];
+}
+
+export interface DeleteChannelTypeAPIResponse extends APIResponse {}
+
+export interface ListChannelTypesAPIResponse extends APIResponse {
+  channel_types: {
+    [channel_type: string]: ChannelTypeConfig;
+  };
+}
+
+export interface MessageResponse {
+  text: string;
+  attachments?: Attachment[];
+  parent_id?: string;
+  mentioned_users?: string[];
+  command?: string;
+  user?: User;
+  html: string;
+  type: string;
+  latest_reactions?: ReactionResponse[];
+  own_reactions?: ReactionResponse[];
+  reaction_counts?: { [key: string]: number };
+  show_in_channel?: boolean;
+  reply_count?: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  [propName: string]: any;
+}
+export interface UserResponse extends User {
+  created_at?: string;
+  updated_at?: string;
+  last_active?: string;
+  deleted_at?: string;
+  deactivated_at?: string;
+  online: boolean;
+}
+export interface OwnUserResponse extends UserResponse {
+  devices: Device[];
+  unread_count: number;
+  total_unread_count: number;
+  unread_channels: number;
+}
+
+export interface UpdateMessageAPIResponse extends APIResponse {
+  message: MessageResponse;
+}
+
+export interface DeleteMessageAPIResponse extends APIResponse {
+  message: MessageResponse;
+}
+
+export type ChannelMemberResponse = {
+  user_id?: string;
+  user?: UserResponse;
+  is_moderator?: boolean;
+  invited?: boolean;
+  invite_accepted_at?: string;
+  invite_rejected_at?: string;
+  role?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ChannelResponse = {
+  cid: string;
+  id: string;
+  type: string;
+  last_message_at?: string;
+  created_by?: UserResponse;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
+  frozen: boolean;
+  member_count?: number;
+  invites?: string[];
+  config: ChannelConfig;
+};
+
+export type ReadResponse = {
+  user: UserResponse;
+  last_read: string;
+};
+
+export type MuteResponse = {
+  user: UserResponse;
+  target: UserResponse;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export interface FlagResponse {
+  created_by_automod: boolean;
+  user: UserResponse;
+  target_message_id: string;
+  target: UserResponse;
+  created_at: string;
+  updated_at: string;
+  reviewed_at: string;
+  reviewed_by: string;
+  approved_at: string;
+  rejected_at: string;
+}
+
+export interface ChannelConfigDBFields {
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChannelConfigFields {
+  name: string;
+  typing_events: boolean;
+  read_events: boolean;
+  connect_events: boolean;
+  reactions: boolean;
+  replies: boolean;
+  search: boolean;
+  mutes: boolean;
+  message_retention: string;
+  max_message_length: number;
+  automod: 'disabled' | 'simple' | 'AI';
+  automod_behavior: 'flag' | 'block';
+}
+
+export interface ChannelConfig extends ChannelConfigFields, ChannelConfigDBFields {
+  commands: CommandVariants[];
+}
+
+export interface ChannelTypeConfig extends ChannelConfig {}
+
+export type CommandVariants =
+  | 'all'
+  | 'fun_set'
+  | 'moderation_set'
+  | 'giphy'
+  | 'imgur'
+  | 'flag'
+  | 'ban'
+  | 'mute';
