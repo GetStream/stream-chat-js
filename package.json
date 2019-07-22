@@ -35,7 +35,7 @@
   ],
   "dependencies": {
     "@babel/runtime": "^7.3.1",
-    "@types/seamless-immutable": "6.1.2",
+    "@types/seamless-immutable": "7.1.10",
     "axios": "^0.18.1",
     "chai-arrays": "^2.0.0",
     "cross-fetch": "^3.0.0",

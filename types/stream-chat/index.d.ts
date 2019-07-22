@@ -1,4 +1,4 @@
-// TypeScript Version: 2.2
+// TypeScript Version: 2.8
 
 export as namespace stream;
 import * as SeamlessImmutable from 'seamless-immutable';
@@ -407,12 +407,14 @@ export class Channel {
 export class ChannelState {
   constructor(channel: Channel);
   watcher_count: number;
-  typing: SeamlessImmutable.Immutable<{ [user_id: string]: TypingStartEvent }>;
+  typing: SeamlessImmutable.Immutable<{
+    [user_id: string]: SeamlessImmutable.Immutable<TypingStartEvent>;
+  }>;
   read: SeamlessImmutable.Immutable<{
-    [user_id: string]: {
+    [user_id: string]: SeamlessImmutable.Immutable<{
       last_read: string;
       user: UserResponse;
-    };
+    }>;
   }>;
   messages: SeamlessImmutable.Immutable<MessageResponse[]>;
   threads: SeamlessImmutable.Immutable<{
@@ -423,7 +425,7 @@ export class ChannelState {
     [user_id: string]: SeamlessImmutable.Immutable<UserResponse>;
   }>;
   members: SeamlessImmutable.Immutable<{
-    [user_id: string]: Member;
+    [user_id: string]: SeamlessImmutable.Immutable<Member>;
   }>;
   last_message_at: string;
   addMessageSorted(newMessage: Message): void;

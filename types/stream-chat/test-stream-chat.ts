@@ -1,4 +1,5 @@
 import { StreamChat, Member } from 'stream-chat';
+import { ImmutableObject, Immutable } from 'seamless-immutable';
 
 const apiKey = 'apiKey';
 const apiSecret = 'apiSecret';
@@ -54,4 +55,6 @@ client.recoverState(); // $ExpectType Promise<void>
 
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
 const channelState = channel.state; // $ExpectType ChannelState
-const member = channelState.members.someUser; // $ExpectType Member
+const member = channelState.members.someUser; // $ExpectType ImmutableObject<Member>
+const response = channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
+const typingEvent = channelState.typing.someId; // $ExpectType ImmutableObject<TypingStartEvent>
