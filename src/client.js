@@ -1180,8 +1180,12 @@ export class StreamChat {
 		});
 	}
 
-	async deleteMessage(messageID) {
-		return await this.delete(this.baseURL + `/messages/${messageID}`);
+	async deleteMessage(messageID, hardDelete) {
+		let params = {};
+		if (hardDelete) {
+			params = { hard: true };
+		}
+		return await this.delete(this.baseURL + `/messages/${messageID}`, params);
 	}
 
 	async getMessage(messageID) {
