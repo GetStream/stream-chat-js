@@ -1,6 +1,6 @@
 ## July 22, 2019 - 1.0.2
 
-- support hard delete messages for server side auth
+- Support hard delete messages for server side auth
 
 
 ## July 19, 2019 - 1.0.1
