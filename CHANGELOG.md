@@ -1,3 +1,8 @@
+## July 22, 2019 - 1.0.2
+
+- support hard delete messages for server side auth
+
+
 ## July 19, 2019 - 1.0.1
 
 - Fixing broken types in ts declaration file : [264ee9a87d6591d39f20b99d1d87381532b9957b](https://github.com/GetStream/stream-chat-js/commit/264ee9a87d6591d39f20b99d1d87381532b9957b)
