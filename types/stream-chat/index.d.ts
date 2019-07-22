@@ -408,22 +408,29 @@ export class ChannelState {
   constructor(channel: Channel);
   watcher_count: number;
   typing: SeamlessImmutable.Immutable<{ [user_id: string]: TypingStartEvent }>;
-  read: SeamlessImmutable.Immutable<object>;
+  read: SeamlessImmutable.Immutable<{
+    [user_id: string]: {
+      last_read: string;
+      user: UserResponse;
+    };
+  }>;
   messages: SeamlessImmutable.Immutable<MessageResponse[]>;
   threads: SeamlessImmutable.Immutable<{
     [message_id: string]: MessageResponse[];
   }>;
-  mutedUsers: SeamlessImmutable.Immutable<[]>;
+  mutedUsers: SeamlessImmutable.Immutable<User[]>;
   watchers: SeamlessImmutable.Immutable<{
     [user_id: string]: SeamlessImmutable.Immutable<UserResponse>;
   }>;
-  members: SeamlessImmutable.Immutable<object>;
+  members: SeamlessImmutable.Immutable<{
+    [user_id: string]: Member;
+  }>;
   last_message_at: string;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
   messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
   removeMessage(messageToRemove: Message): boolean;
-  filterErrorMessages(): Message | [] | void;
+  filterErrorMessages(): SeamlessImmutable.Immutable<Message>;
   clean(): void;
 }
 

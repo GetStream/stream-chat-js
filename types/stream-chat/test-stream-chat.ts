@@ -1,12 +1,9 @@
-import { StreamChat } from 'stream-chat';
+import { StreamChat, Member } from 'stream-chat';
 
 const apiKey = 'apiKey';
 const apiSecret = 'apiSecret';
-
-const client = new StreamChat(apiKey, null, {
-  timeout: 3000,
-  logger: (logLevel: string, msg: string, extraData: {}) => {},
-}); // $ExpectType StreamChat
+// prettier-ignore
+const client = new StreamChat(apiKey, null, { timeout: 3000, logger: (logLevel: string, msg: string, extraData: {}) => {}}); // $ExpectType StreamChat
 
 const devToken = client.devToken('joshua'); // $ExpectType string
 const userToken = client.createToken('james', 3600); // $ExpectType string
@@ -15,7 +12,7 @@ const authType = client.getAuthType(); // $ExpectType string
 client.setBaseURL('https://chat-us-east-1.stream-io-api.com/'); // $ExpectType void
 client.updateAppSettings({}); // $ExpectType Promise<object>
 const currentSettings = client.getAppSettings(); // $ExpectType Promise<object>
-client.disconnect(); // $ExpectType void
+client.disconnect(); // $ExpectType Promise<void>
 
 client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<void>
 client.setAnonymousUser(); // $ExpectType Promise<void>
@@ -56,3 +53,5 @@ client.handleEvent(event); // $ExpectType void
 client.recoverState(); // $ExpectType Promise<void>
 
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
+const channelState = channel.state; // $ExpectType ChannelState
+const member = channelState.members.someUser; // $ExpectType Member
