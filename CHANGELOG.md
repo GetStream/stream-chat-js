@@ -1,7 +1,10 @@
+## July 23, 2019 - 1.0.3
+
+- Support $exists operator for queryChannels/queryUsers
+
 ## July 22, 2019 - 1.0.2
 
 - Support hard delete messages for server side auth
-
 
 ## July 19, 2019 - 1.0.1
 
