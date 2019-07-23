@@ -878,3 +878,136 @@ describe('hard delete messages', function() {
 		expect(channels2[0].data.last_message_at).to.be.undefined;
 	});
 });
+
+describe('query channels by field $exists', function() {
+	const creator = uuidv4();
+	const testID = uuidv4();
+	let client;
+
+	let channelCID = function(i) {
+		return 'messaging:' + i + '-' + testID;
+	};
+	//create 10 channels, even index contains even custom field and odd index contains odd custom field
+	before(async function() {
+		await createUsers([creator]);
+		client = await getTestClientForUser(creator);
+		for (let i = 0; i < 10; i++) {
+			let custom = {};
+			custom['field' + i] = i;
+			custom['testid'] = testID;
+			if (i % 2 === 0) {
+				custom['even'] = true;
+			} else {
+				custom['odd'] = true;
+			}
+
+			await client
+				.channel('messaging', i + '-' + testID, {
+					...custom,
+				})
+				.create();
+		}
+	});
+
+	it('only boolean values are allowed in $exists', async function() {
+		expect(
+			client.queryChannels({ testid: testID, even: { $exists: [] } }),
+		).to.be.rejectedWith(
+			'QueryChannels failed with error: "$exists operator only support boolean values"',
+		);
+	});
+
+	it('query $exists true on a custom field should work', async function() {
+		const resp = await client.queryChannels({
+			testid: testID,
+			even: { $exists: true },
+		});
+		expect(resp.length).to.be.equal(5);
+		expect(
+			resp.map(c => {
+				return c.cid;
+			}),
+		).to.be.eql([
+			channelCID(8),
+			channelCID(6),
+			channelCID(4),
+			channelCID(2),
+			channelCID(0),
+		]);
+	});
+
+	it('query $exists false on a custom field should work', async function() {
+		const resp = await client.queryChannels({
+			testid: testID,
+			even: { $exists: false },
+		});
+		expect(resp.length).to.be.equal(5);
+		expect(
+			resp.map(c => {
+				return c.cid;
+			}),
+		).to.be.eql([
+			channelCID(9),
+			channelCID(7),
+			channelCID(5),
+			channelCID(3),
+			channelCID(1),
+		]);
+	});
+
+	it('query $exists true on reserved field', async function() {
+		const resp = await client.queryChannels({
+			testid: testID,
+			cid: { $exists: true },
+		});
+		expect(resp.length).to.be.equal(10);
+		expect(
+			resp.map(c => {
+				return c.cid;
+			}),
+		).to.be.eql([
+			channelCID(9),
+			channelCID(8),
+			channelCID(7),
+			channelCID(6),
+			channelCID(5),
+			channelCID(4),
+			channelCID(3),
+			channelCID(2),
+			channelCID(1),
+			channelCID(0),
+		]);
+	});
+
+	it('query $exists false on reserved field should return 0 results', async function() {
+		const resp = await client.queryChannels({
+			testid: testID,
+			cid: { $exists: false },
+		});
+		expect(resp.length).to.be.equal(0);
+	});
+
+	it('combine multiple $exists should work', async function() {
+		const resp = await client.queryChannels({
+			testid: testID,
+			$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
+		});
+		expect(resp.length).to.be.equal(10);
+		expect(
+			resp.map(c => {
+				return c.cid;
+			}),
+		).to.be.eql([
+			channelCID(9),
+			channelCID(8),
+			channelCID(7),
+			channelCID(6),
+			channelCID(5),
+			channelCID(4),
+			channelCID(3),
+			channelCID(2),
+			channelCID(1),
+			channelCID(0),
+		]);
+	});
+});
