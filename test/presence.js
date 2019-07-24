@@ -424,9 +424,7 @@ describe('Count Anonymous users', function() {
 	before(async () => {
 		await createUsers([admin]);
 		await client.setUser({ id: admin }, createUserToken(admin));
-		channel = client.channel('livestream', channelID, {
-			created_by_id: admin,
-		});
+		channel = client.channel('livestream', channelID);
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
 			const client1 = await getTestClient(false);
