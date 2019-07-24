@@ -340,7 +340,6 @@ describe('Count watchers using events', function() {
 		await client.setUser({ id: users[0] }, createUserToken(users[0]));
 		channel = client.channel('messaging', channelID, {
 			members: users,
-			created_by_id: users[0],
 		});
 		await channel.watch();
 		watchers = 1;
