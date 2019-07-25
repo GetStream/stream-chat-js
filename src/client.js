@@ -140,7 +140,6 @@ export class StreamChat {
 		 * }
 		 */
 		this.logger = isFunction(options.logger) ? options.logger : () => {};
-		this._startCleaning();
 	}
 
 	devToken(userID) {
@@ -160,6 +159,7 @@ export class StreamChat {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
 		this.wsPromise = this.connect();
+		this._startCleaning();
 		return this.wsPromise;
 	}
 
@@ -291,6 +291,11 @@ export class StreamChat {
 		delete this.user;
 		delete this._user;
 		delete this.userID;
+
+		if (this.cleaningIntervalRef != null) {
+			clearInterval(this.cleaningIntervalRef);
+			this.cleaningIntervalRef = null;
+		}
 
 		this.anonymous = false;
 		this.userToken = null;
@@ -644,9 +649,7 @@ export class StreamChat {
 	recoverState = async () => {
 		this.logger(
 			'info',
-			`client:recoverState() - Start of recoverState with connectionID ${
-				this.wsConnection.connectionID
-			}`,
+			`client:recoverState() - Start of recoverState with connectionID ${this.wsConnection.connectionID}`,
 			{
 				tags: ['connection'],
 			},
@@ -1177,8 +1180,12 @@ export class StreamChat {
 		});
 	}
 
-	async deleteMessage(messageID) {
-		return await this.delete(this.baseURL + `/messages/${messageID}`);
+	async deleteMessage(messageID, hardDelete) {
+		let params = {};
+		if (hardDelete) {
+			params = { hard: true };
+		}
+		return await this.delete(this.baseURL + `/messages/${messageID}`, params);
 	}
 
 	async getMessage(messageID) {
@@ -1234,6 +1241,9 @@ export class StreamChat {
 
 	_startCleaning() {
 		const that = this;
+		if (this.cleaningIntervalRef != null) {
+			return;
+		}
 		this.cleaningIntervalRef = setInterval(() => {
 			// call clean on the channel, used for calling the stop.typing event etc.
 			for (const channel of Object.values(that.activeChannels)) {

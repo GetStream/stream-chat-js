@@ -1,3 +1,34 @@
+## July 23, 2019 - 1.0.3
+
+- Support $exists operator for queryChannels/queryUsers
+
+## July 22, 2019 - 1.0.2
+
+- Support hard delete messages for server side auth
+
+## July 19, 2019 - 1.0.1
+
+- Fixing broken types in ts declaration file : [264ee9a87d6591d39f20b99d1d87381532b9957b](https://github.com/GetStream/stream-chat-js/commit/264ee9a87d6591d39f20b99d1d87381532b9957b)
+
+## July 18 2019 - 1.0.0
+
+- This library is stable and used in production already, bump to 1.0.0
+
+## July 18 2019 - 0.13.8
+
+- Avoid memory leaks server-side when client is created many times
+
+## July 11 2019 - 0.13.7
+
+- Track client version with WS
+- Add configurable logging
+- Bugfix: reconnection and threads' replies are now handled correctly
+- Bugfix: replies pagination now works with both ASC and DESC ordering
+
+## June 27 2019 - 0.13.6
+
+- Improve reconnection mechanism
+
 ## June 20th 2019 - 0.13.5
 
 - Added populated `channel.data` when calling `channel.watch()`
