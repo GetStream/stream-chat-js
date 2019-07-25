@@ -1,4 +1,5 @@
 import uuidv4 from 'uuid/v4';
+
 import {
 	createUsers,
 	createUserToken,
@@ -495,7 +496,13 @@ describe('Query Channels and sort by unread', function() {
 		await createUsers([tommaso, thierry]);
 		const cidPrefix = uuidv4();
 		for (let i = 3; i >= 0; i--) {
-			const channel = thierryClient.channel('messaging', cidPrefix + i, {});
+			let color;
+			if (i % 2 == 0) {
+				color = 'blue';
+			} else {
+				color = 'red';
+			}
+			const channel = thierryClient.channel('messaging', cidPrefix + i, { color });
 			await channel.watch();
 			await channel.addMembers([tommaso, thierry]);
 			for (let j = 0; j < i + 1; j++) {
@@ -507,13 +514,9 @@ describe('Query Channels and sort by unread', function() {
 
 	it('sort by has_unread and last_message_at asc should work', async function() {
 		tommasoClient = await getTestClientForUser(tommaso);
-
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				has_unread: 1,
-				last_message_at: 1,
-			},
+			{ has_unread: 1, last_message_at: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -525,12 +528,9 @@ describe('Query Channels and sort by unread', function() {
 
 	it('sort by has_unread and last_message_at', async function() {
 		tommasoClient = await getTestClientForUser(tommaso);
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				has_unread: 1,
-				last_message_at: -1,
-			},
+			{ has_unread: 1, last_message_at: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -541,11 +541,9 @@ describe('Query Channels and sort by unread', function() {
 	});
 
 	it('sort by unread_count asc', async function() {
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: 1,
-			},
+			{ unread_count: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -556,11 +554,9 @@ describe('Query Channels and sort by unread', function() {
 	});
 
 	it('sort by unread_count desc', async function() {
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: -1,
-			},
+			{ unread_count: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -576,13 +572,9 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				has_unread: 1,
-				last_message_at: 1,
-			},
+			{ has_unread: 1, last_message_at: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -598,13 +590,9 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-
 		let result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				has_unread: 1,
-				last_message_at: -1,
-			},
+			{ has_unread: 1, last_message_at: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -620,13 +608,9 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: 1,
-				last_message_at: 1,
-			},
+			{ unread_count: 1, last_message_at: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -642,13 +626,9 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: 1,
-				last_message_at: -1,
-			},
+			{ unread_count: 1, last_message_at: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -660,16 +640,11 @@ describe('Query Channels and sort by unread', function() {
 
 	it('test "grouping"', async function() {
 		tommasoClient = await getTestClientForUser(tommaso);
-
 		await channels[0].sendMessage({ text: 'hi' });
 		await channels[1].sendMessage({ text: 'hi' });
-
 		let result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: -1,
-				last_message_at: -1,
-			},
+			{ unread_count: -1, last_message_at: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -680,10 +655,7 @@ describe('Query Channels and sort by unread', function() {
 
 		result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: -1,
-				last_message_at: 1,
-			},
+			{ unread_count: -1, last_message_at: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -694,10 +666,7 @@ describe('Query Channels and sort by unread', function() {
 
 		result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: 1,
-				last_message_at: -1,
-			},
+			{ unread_count: 1, last_message_at: -1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -708,10 +677,7 @@ describe('Query Channels and sort by unread', function() {
 
 		result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
-			{
-				unread_count: 1,
-				last_message_at: 1,
-			},
+			{ unread_count: 1, last_message_at: 1 },
 		);
 
 		expect(result.length).to.be.equal(4);
@@ -719,6 +685,67 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[1].cid).to.be.equal(channels[3].cid);
 		expect(result[2].cid).to.be.equal(channels[0].cid);
 		expect(result[3].cid).to.be.equal(channels[1].cid);
+	});
+
+	it('limit results should work fine', async function() {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
+		let result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] } },
+			{ unread_count: -1, last_message_at: -1 },
+			{ limit: 1 },
+		);
+
+		expect(result.length).to.be.equal(1);
+		expect(result[0].cid).to.be.equal(channels[1].cid);
+
+		result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] } },
+			{ unread_count: -1, last_message_at: 1 },
+			{ limit: 1 },
+		);
+
+		expect(result.length).to.be.equal(1);
+		expect(result[0].cid).to.be.equal(channels[0].cid);
+	});
+
+	it('unread count + custom query should work', async function() {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
+		const result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] }, color: 'blue' },
+			{ unread_count: -1, last_message_at: -1 },
+		);
+
+		expect(result.length).to.be.equal(2);
+		expect(result[0].cid).to.be.equal(channels[1].cid);
+		expect(result[0].data.color).to.be.equal('blue');
+		expect(result[1].data.color).to.be.equal('blue');
+	});
+
+	it('unread count + custom query with limit should work', async function() {
+		await tommasoClient.markAllRead();
+		tommasoClient = await getTestClientForUser(tommaso);
+		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+		await channels[0].sendMessage({ text: 'hi' });
+		await channels[1].sendMessage({ text: 'hi' });
+		const result = await tommasoClient.queryChannels(
+			{ members: { $in: [tommaso] }, color: 'blue' },
+			{ unread_count: -1, last_message_at: -1 },
+			{ limit: 1 },
+		);
+		expect(result.length).to.be.equal(1);
+		expect(result[0].cid).to.be.equal(channels[1].cid);
+		expect(result[0].data.color).to.be.equal('blue');
 	});
 });
 
