@@ -1,15 +1,37 @@
 // TypeScript Version: 2.2
 
 export as namespace stream;
+import * as SeamlessImmutable from 'seamless-immutable';
 
 export interface APIResponse {
   duration: string;
   [propName: string]: any;
 }
 
+export interface Action {
+  name: string;
+  text: string;
+  style?: 'default' | 'primary' | 'danger';
+  type: 'button' | 'select';
+  value?: string;
+}
+
 export interface Attachment {
-  type: string;
-  url: string;
+  type?: string;
+  fallback?: string;
+  pretext?: string;
+  autor_name?: string;
+  author_link?: string;
+  author_icon?: string;
+  title?: string;
+  title_link?: string;
+  text?: string;
+  image_url?: string;
+  thumb_url?: string;
+  footer?: string;
+  footer_icon?: string;
+  actions?: Action[];
+  og_scrape_url?: string;
   [propName: string]: any;
 }
 
@@ -17,15 +39,51 @@ export interface Message {
   text: string;
   attachments?: Attachment[];
   mentioned_users?: User[];
+  parent_id?: string;
+  [propName: string]: any;
+}
+
+export interface MessageResponse {
+  text: string;
+  attachments?: Attachment[];
+  parent_id?: string;
+  mentioned_users?: string[];
+  command?: string;
+  user?: User;
+  html: string;
+  type: string;
+  latest_reactions?: ReactionResponse[];
+  own_reactions?: ReactionResponse[];
+  reaction_counts?: { [key: string]: number };
+  show_in_channel?: boolean;
+  reply_count?: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
   [propName: string]: any;
 }
 
 export interface User {
   id: string;
-  name?: string;
+  role?: string;
   [propName: string]: any;
 }
 
+export interface UserResponse extends User {
+  created_at?: string;
+  updated_at?: string;
+  last_active?: string;
+  deleted_at?: string;
+  deactivated_at?: string;
+  online: boolean;
+}
+
+export interface OwnUserResponse extends UserResponse {
+  devices: Device[];
+  unread_count: number;
+  total_unread_count: number;
+  unread_channels: number;
+}
 export interface Device {
   id: string;
   provider: string;
@@ -36,22 +94,67 @@ export interface Device {
 export interface Event {
   cid: string;
   type: string;
-  message: Message;
-  reaction: Reaction;
-  member: User;
-  user: User;
-  me: User;
-  unread_count: number;
-  online: number;
+  message?: MessageResponse;
+  reaction?: ReactionResponse;
+  channel?: Channel;
+  member?: User;
+  user?: User;
+  user_id?: string;
+  me?: OwnUserResponse;
+  watcher_count?: number;
+  unread_count?: number;
+  online?: boolean;
 }
 
 export interface Reaction {
   type: string;
+  message_id: string;
+  user_id?: string;
+  user: User;
   [propName: string]: any;
 }
 
+export interface ReactionResponse extends Reaction {
+  created_at: string;
+}
+export interface StreamChatOptions {
+  /**
+   * extraData contains tags array attached to log message. Tags can have one/many of following values:
+   * 1. api
+   * 2. api_request
+   * 3. api_response
+   * 4. client
+   * 5. channel
+   * 6. connection
+   * 7. event
+   *
+   * It may also contains some extra data, some examples have been mentioned below:
+   * 1. {
+   * 		tags: ['api', 'api_request', 'client'],
+   * 		url: string,
+   * 		payload: object,
+   * 		config: object
+   * }
+   * 2. {
+   * 		tags: ['api', 'api_response', 'client'],
+   * 		url: string,
+   * 		response: object
+   * }
+   * 3. {
+   * 		tags: ['event', 'client'],
+   * 		event: object
+   * }
+   * 4. {
+   * 		tags: ['channel'],
+   * 		channel: object
+   * }
+   */
+  logger?(log_level: 'info' | 'error', message: string, extraData?: object): void;
+  [propName: string]: any;
+}
 export class StreamChat {
-  constructor(key: string, secretOrOptions?: string, options?: object);
+  constructor(key: string, secretOrOptions?: string, options?: StreamChatOptions);
+  user: OwnUserResponse;
 
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;
@@ -62,12 +165,12 @@ export class StreamChat {
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
-  disconnect(): void;
+  disconnect(): Promise<void>;
 
   setAnonymousUser(): Promise<void>;
   setGuestUser(user: User): Promise<void>;
 
-  on(callbackOrString: string, callbackOrNothing?: any): void;
+  on(callbackOrString: string, callbackOrNothing?: any): { unsubsribe(): void };
   off(callbackOrString: string, callbackOrNothing?: any): void;
 
   get(url: string, params: object): Promise<APIResponse>;
@@ -121,19 +224,20 @@ export class StreamChat {
 
   createChannelType(data: object): Promise<APIResponse>;
   getChannelType(channelType: string, data: object): APIResponse;
-  updateChannelType(channelType: string, data: object): object;
-  deleteChannelType(channelType: string): object;
-  listChannelTypes(): APIResponse;
+  updateChannelType(channelType: string, data: object): Promise<APIResponse>;
+  deleteChannelType(channelType: string): Promise<APIResponse>;
+  listChannelTypes(): Promise<APIResponse>;
 
   updateMessage(message: Message, user: string | User): Promise<APIResponse>;
-  deleteMessage(messageID: string): Promise<APIResponse>;
-
+  deleteMessage(messageID: string, hardDelete?: boolean): Promise<APIResponse>;
   verifyWebHook(requestBody: object, xSignature: string): boolean;
 }
 
 export class ClientState {
   constructor();
   updateUser(user: User): void;
+  updateUsers(users: User[]): void;
+  updateUserReference(user: User, channelID: string): void;
 }
 
 export class Channel {
@@ -156,7 +260,11 @@ export class Channel {
   deleteImage(url: string): Promise<APIResponse>;
 
   sendEvent(chatEvent: Event): Promise<APIResponse>;
-  sendReaction(messageID: string, reaction: Reaction): Promise<APIResponse>;
+  sendReaction(
+    messageID: string,
+    reaction: Reaction,
+    user_id: string,
+  ): Promise<APIResponse>;
 
   deleteReaction(
     messageID: string,
@@ -168,10 +276,10 @@ export class Channel {
   delete(): Promise<APIResponse>;
   acceptInvite(options: object): Promise<APIResponse>;
   rejectInvite(options: object): Promise<APIResponse>;
-  addMembers(members: User[]): Promise<APIResponse>;
-  addModerators(members: User[]): Promise<APIResponse>;
-  removeMembers(members: User[]): Promise<APIResponse>;
-  demoteModerators(members: User[]): Promise<User>;
+  addMembers(members: string[]): Promise<APIResponse>;
+  addModerators(members: string[]): Promise<APIResponse>;
+  removeMembers(members: string[]): Promise<APIResponse>;
+  demoteModerators(members: string[]): Promise<User>;
 
   sendAction(messageID: string, formData: object): Promise<APIResponse>;
   keystroke(): Promise<APIResponse>;
@@ -196,8 +304,9 @@ export class ChannelState {
   constructor(channel: Channel);
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
+  messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
   removeMessage(messageToRemove: Message): boolean;
-  filterErrorMessages(): object;
+  filterErrorMessages(): Message | [] | void;
   clean(): void;
 }
 
@@ -207,7 +316,7 @@ export class StableWSConnection {
     clientID: string,
     userID: string,
     messageCallback: (event: object) => void,
-    recoverCallback: (open: any) => void,
+    recoverCallback: (open: Promise<object>) => void,
     eventCallback: (event: object) => void,
   );
   connect(): Promise<void>;
