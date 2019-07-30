@@ -397,7 +397,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].text).to.equal('hi');
 		});
 
-		it('hard delete a user, their message and reactions', async function() {
+		it.only('hard delete a user, their message and reactions', async function() {
 			// setup
 			const userID = uuidv4();
 			const userID2 = uuidv4();
