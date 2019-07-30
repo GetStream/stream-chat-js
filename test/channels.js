@@ -773,7 +773,7 @@ describe('hard delete messages', function() {
 
 	it('hard delete messages is not allowed client side', function() {
 		expect(client.deleteMessage(firstMessage.message.id, true)).to.be.rejectedWith(
-			'Error: StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
+			'StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
 		);
 	});
 
