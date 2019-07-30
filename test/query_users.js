@@ -89,7 +89,7 @@ describe('Query Users', function() {
 			username: 'rover_curiosity',
 		});
 		const response = await client.queryUsers({
-			id: { $autocomplete: userID.slice(0, 10) },
+			id: { $autocomplete: userID.slice(0, 8) },
 		});
 		expect(response.users[0].id).to.equal(userID);
 		expect(response.users[0].username).to.equal('rover_curiosity');
