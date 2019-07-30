@@ -787,7 +787,7 @@ describe('hard delete messages', function() {
 
 		const resp = await ssclient.deleteMessage(secondMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
@@ -799,7 +799,7 @@ describe('hard delete messages', function() {
 	it('hard delete the third message should update the channel last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(thirdMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
@@ -809,7 +809,7 @@ describe('hard delete messages', function() {
 	it('hard delete the last message in the channel should clear channel messages and last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(firstMessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		const channelResp = await channel.watch();
