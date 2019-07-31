@@ -150,7 +150,7 @@ describe('Threads and Replies', function() {
 		expect(thread[0].user.id).to.equal('replytesting');
 		expect(thread[0].reaction_counts).to.eql({ love: 2 });
 		expect(thread[0].own_reactions).to.eql([reaction]);
-		expect(thread[0].latest_reactions).to.eql([reaction, serverReaction]);
+		expect(thread[0].latest_reactions).to.eql([serverReaction, reaction]);
 	});
 
 	it('Query replies should return the last x replies and support pagination', async () => {
