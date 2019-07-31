@@ -1,6 +1,10 @@
+## July 31, 2019 - 1.0.4
+
+- Added error logs for errors in API calls
+
 ## July 23, 2019 - 1.0.3
 
-- Support $exists operator for queryChannels/queryUsers
+- Support \$exists operator for queryChannels/queryUsers
 
 ## July 22, 2019 - 1.0.2
 
