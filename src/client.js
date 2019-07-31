@@ -131,10 +131,15 @@ export class StreamChat {
 		 * 		response: object
 		 * }
 		 * 3. {
+		 * 		tags: ['api', 'api_response', 'client'],
+		 * 		url: string,
+		 * 		error: object
+		 * }
+		 * 4. {
 		 * 		tags: ['event', 'client'],
 		 * 		event: object
 		 * }
-		 * 4. {
+		 * 5. {
 		 * 		tags: ['channel'],
 		 * 		channel: object
 		 * }
@@ -445,6 +450,14 @@ export class StreamChat {
 		);
 	}
 
+	_logApiError(type, url, error) {
+		this.logger('error', `client:${type} - Error - url: ${url}`, {
+			tags: ['api', 'api_response', 'client'],
+			url,
+			error,
+		});
+	}
+
 	async get(url, params) {
 		try {
 			this._logApiRequest('get', url, {}, this._addClientParams(params));
@@ -453,6 +466,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -470,6 +484,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -487,6 +502,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('post', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -504,6 +520,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('patch', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -521,6 +538,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('delete', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
