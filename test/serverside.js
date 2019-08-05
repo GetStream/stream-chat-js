@@ -1055,7 +1055,6 @@ describe('App configs', function() {
 			});
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
 			expect(firebaseMsg.notification).to.be.empty;
-			expect(firebaseMsg.data.stream).to.not.be.undefined;
 		});
 
 		it('Members in the template using helper', async function() {
@@ -1103,7 +1102,9 @@ describe('App configs', function() {
 
 			expect(response.general_errors).to.be.undefined;
 			expect(response.rendered_apn_template).to.eq(
-				`{"stuff": "${members[0].name}, ${members[1].name} en 1 anderen: ${msg.message.text}"}`,
+				`{"stuff": "${members[0].name}, ${members[1].name} en 1 anderen: ${
+					msg.message.text
+				}"}`,
 			);
 		});
 
