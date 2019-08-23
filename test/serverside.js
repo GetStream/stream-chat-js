@@ -804,6 +804,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: false,
+					development: false,
 					host: 'https://api.push.apple.com',
 				});
 			});
