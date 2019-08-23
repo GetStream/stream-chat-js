@@ -632,6 +632,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
+					development: false,
 					auth_type: 'certificate',
 					bundle_id: 'stream-test',
 					host: 'https://api.development.push.apple.com',
@@ -780,6 +781,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
+					development: true,
 					auth_type: 'token',
 					bundle_id: 'com.apple.test',
 					team_id: 'sfd',
