@@ -308,6 +308,56 @@ describe('Webhooks', function() {
 		expect(lastMessage.message.custom_stuff).to.eq('bananas');
 	});
 
+	it('moderation mute', async function() {
+		await Promise.all([client.muteUser(tommasoID, jaapID), lastMessagePromise]);
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.type).to.eq('user.muted');
+		expect(lastMessage.user).to.be.an('object');
+		expect(lastMessage.user.id).to.eq(jaapID);
+		expect(lastMessage.target_user).to.be.an('object');
+		expect(lastMessage.target_user.id).to.eq(tommasoID);
+	});
+
+	it('slash mute', async function() {
+		const text = `/mute ${tommasoID}`;
+		await Promise.all([
+			chan.sendMessage({ text, user_id: jaapID }),
+			lastMessagePromise,
+		]);
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.type).to.eq('user.muted');
+		expect(lastMessage.user).to.be.an('object');
+		expect(lastMessage.user.id).to.eq(jaapID);
+		expect(lastMessage.target_user).to.be.an('object');
+		expect(lastMessage.target_user.id).to.eq(tommasoID);
+	});
+
+	it('moderation unmute', async function() {
+		await Promise.all([client.unmuteUser(tommasoID, jaapID), lastMessagePromise]);
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.type).to.eq('user.unmuted');
+		expect(lastMessage.user).to.be.an('object');
+		expect(lastMessage.user.id).to.eq(jaapID);
+		expect(lastMessage.target_user).to.be.an('object');
+		expect(lastMessage.target_user.id).to.eq(tommasoID);
+	});
+
+	it('slash unmute', async function() {
+		let text = `/mute ${thierryID}`;
+		await chan.sendMessage({ text, user_id: jaapID });
+		text = `/unmute ${thierryID}`;
+		await Promise.all([
+			chan.sendMessage({ text, user_id: jaapID }),
+			lastMessagePromise,
+		]);
+		expect(lastMessage).to.not.be.null;
+		expect(lastMessage.type).to.eq('user.unmuted');
+		expect(lastMessage.user).to.be.an('object');
+		expect(lastMessage.user.id).to.eq(jaapID);
+		expect(lastMessage.target_user).to.be.an('object');
+		expect(lastMessage.target_user.id).to.eq(thierryID);
+	});
+
 	it('channel.deleted', async function() {
 		await Promise.all([chan.delete(), lastMessagePromise]);
 		expect(lastMessage).to.not.be.null;
