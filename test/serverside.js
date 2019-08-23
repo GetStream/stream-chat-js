@@ -782,7 +782,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
-					development: true,
+					development: false,
 					auth_type: 'token',
 					bundle_id: 'com.apple.test',
 					team_id: 'sfd',
