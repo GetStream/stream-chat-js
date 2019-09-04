@@ -105,4 +105,48 @@ describe('Query Users', function() {
 			'search is not enabled for field users.mycustomfield',
 		);
 	});
+
+	it('return mutes for server side client', async function() {
+		const client = getServerTestClient();
+		const userID = uuidv4();
+		const userID2 = uuidv4();
+		const userID3 = uuidv4();
+		const unique = uuidv4();
+
+		await client.updateUsers([
+			{
+				id: userID,
+				unique,
+				name: 'Curiosity Rover',
+			},
+			{
+				id: userID2,
+				unique,
+				name: 'Roxy',
+			},
+			{
+				id: userID3,
+				unique,
+				name: 'Roxanne',
+			},
+		]);
+
+		await client.muteUser(userID2, userID);
+		await client.muteUser(userID3, userID);
+
+		const response = await client.queryUsers({
+			id: { $eq: userID },
+		});
+
+		expect(response.users.length).eq(1);
+		expect(response.users[0].mutes.length).eq(2);
+
+		const mute1 = response.users[0].mutes[0];
+		const mute2 = response.users[0].mutes[1];
+
+		expect(mute1.user.id).eq(userID);
+		expect(mute2.user.id).eq(userID);
+		expect(mute1.target.id).eq(userID2);
+		expect(mute2.target.id).eq(userID3);
+	});
 });
