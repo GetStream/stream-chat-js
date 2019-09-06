@@ -451,9 +451,9 @@ describe('Count Anonymous users', function() {
 		//stop watching or disconnect should update the counters properly
 		for (let i = 0; i < nClients; i++) {
 			if (i % 2 === 0) {
-				clients[i].channel.stopWatching();
+				await clients[i].channel.stopWatching();
 			} else {
-				clients[i].client.disconnect();
+				await clients[i].client.disconnect();
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {
