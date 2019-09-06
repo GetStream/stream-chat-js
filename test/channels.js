@@ -780,7 +780,6 @@ describe('hard delete messages', function() {
 	it('hard delete the second message should work and not update  channel.last_message_id', async function() {
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
-		console.log(channel);
 		expect(channel.data.last_message_at).to.be.equal(
 			thirdMeessage.message.created_at,
 		);
