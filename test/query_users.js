@@ -146,6 +146,6 @@ describe('Query Users', function() {
 
 		expect(mute1.user.id).eq(userID);
 		expect(mute2.user.id).eq(userID);
-		expect([mute1.target.id,mute2.target.id]).to.have.members([userID2, userID3])
+		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
 	});
 });
