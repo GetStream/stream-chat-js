@@ -40,7 +40,7 @@ describe('Connection and reconnect behaviour', function() {
 
 		const channelID = uuidv4();
 		// user 1 connects...
-		const state = await user1
+		await user1
 			.channel('messaging', channelID, {
 				members: ['user-connection-1', 'user-connection-2'],
 			})
@@ -56,7 +56,7 @@ describe('Connection and reconnect behaviour', function() {
 
 		// setup handlers
 		const user1Channel = user1.channel('messaging', channelID);
-		const recoverPromise = new Promise(function(resolve, reject) {
+		const recoverPromise = new Promise(function(resolve) {
 			user1.on(e => {
 				// should have a recover event.
 				if (e.type === 'connection.recovered') {
@@ -66,7 +66,7 @@ describe('Connection and reconnect behaviour', function() {
 		});
 
 		// user 1 reconnects...
-		const healthCheck = await user1.wsConnection._reconnect();
+		await user1.wsConnection._reconnect();
 		await recoverPromise;
 
 		// verify that the state for user1 contains the last message..
@@ -86,20 +86,22 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Connect twice should fail', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		try {
-			const healthCheck2 = await conn.connect();
+			await conn.connect();
 			throw Error('second connect failed to raise an error');
-		} catch (e) {}
+		} catch (e) {
+			console.log(e);
+		}
 		expect(conn.isHealthy).to.equal(true);
 		expect(conn.isConnecting).to.equal(false);
 	});
 
 	it('Reconnect', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		conn.isHealthy = false;
-		const open2 = await conn._reconnect();
+		await conn._reconnect();
 		expect(conn.consecutiveFailures).to.equal(0);
 		expect(conn.totalFailures).to.equal(0);
 		expect(conn.wsID).to.equal(2);
@@ -111,13 +113,13 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Reconnect with a code bug should not trigger infinite loop', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		const original = conn._retryInterval;
 		conn._retryInterval = function() {
 			throw new Error('stuff is broken in the retry interval');
 		};
 		try {
-			const open2 = await conn._reconnect();
+			await conn._reconnect();
 			conn._retryInterval = original;
 			throw new Error('failed to propagate a code bug');
 		} catch (e) {
@@ -128,12 +130,12 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Reconnect with a code bug should not trigger infinite loop part 2', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		conn._connect = function() {
 			throw new Error('stuff is broken in the connect');
 		};
 		try {
-			const open2 = await conn._reconnect();
+			await conn._reconnect();
 			throw new Error('failed to propagate a code bug');
 		} catch (e) {
 			// this is good
@@ -142,7 +144,7 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Connection closed', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection closed... should trigger a reconnect...
 		conn.onclose(conn.wsID, { code: 4001 });
@@ -158,7 +160,7 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Connection error', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection error... should trigger a reconnect
 		conn.onerror(conn.wsID, { text: 'a test error' });
@@ -175,7 +177,7 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Health check failure', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a health check failure...
 		conn.lastEvent = new Date(2018, 11, 24, 10, 33, 30, 0);
@@ -190,7 +192,7 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Browser offline', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		conn.onlineStatusChanged({ type: 'offline' });
 		expect(conn.eventCallback.called).to.equal(true);
@@ -208,14 +210,14 @@ describe('Connection and reconnect behaviour', function() {
 	it('Connect auth error', function(done) {
 		const conn = createTestWSConnection(emptyAuthURL);
 		// this should fail since auth details are invalid
-		conn.connect().catch(e => {
+		conn.connect().catch(() => {
 			done();
 		});
 	});
 
 	it('Disconnect', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 
 		conn.disconnect();

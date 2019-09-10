@@ -4,7 +4,6 @@ import {
 	createUsers,
 	getTestClient,
 	createUserToken,
-	sleep,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';

@@ -40,7 +40,7 @@ describe('Channels - Create', function() {
 		expect(response.channel.members).to.equal(undefined);
 		expect(response.members.length).to.equal(1);
 
-		const queryResponse = await c.queryChannels({ cid }, undefined, {
+		await c.queryChannels({ cid }, undefined, {
 			state: true,
 			presence: true,
 		});
@@ -65,8 +65,7 @@ describe('Channels - members', function() {
 	const tommasoChannelEventQueue = [];
 	const thierryChannelEventQueue = [];
 	let tommasoPromise;
-	let thierryPromise1;
-	let thierryPromise2;
+	let thierryPromise;
 
 	let tommasoMessageID;
 
@@ -119,8 +118,8 @@ describe('Channels - members', function() {
 
 	it('thierry tries to join the channel', async function() {
 		thierryChannel = thierryClient.channel(channelGroup, channelId);
-		thierryPromise2 = new Promise(resolve2 => {
-			thierryPromise1 = new Promise(resolve1 => {
+		new Promise(resolve2 => {
+			thierryPromise = new Promise(resolve1 => {
 				thierryChannel.on(event => {
 					thierryChannelEventQueue.push(event);
 					if (thierryChannelEventQueue.length === 2) {
@@ -152,7 +151,7 @@ describe('Channels - members', function() {
 	});
 
 	it('thierry gets the new message from tommaso', async function() {
-		await thierryPromise1;
+		await thierryPromise;
 		const event = thierryChannelEventQueue.pop();
 		expect(event.type).to.eql('message.new');
 		tommasoMessageID = event.message.id;
@@ -263,11 +262,11 @@ describe('Channels - members', function() {
 		const channelId = `channel-messages-cache-${unique}`;
 		const channel2Id = `channel-messages-cache2-${unique}`;
 		const channel = tommasoClient.channel('messaging', channelId, {
-			unique: unique,
+			unique,
 		});
 		await channel.create();
 		const channel2 = tommasoClient.channel('messaging', channel2Id, {
-			unique: unique,
+			unique,
 		});
 		await channel2.create();
 
@@ -286,7 +285,7 @@ describe('Channels - members', function() {
 					last_message = msg2.message.created_at;
 				}
 				const channels = await tommasoClient.queryChannels(
-					{ unique: unique },
+					{ unique },
 					{ last_message_at: -1 },
 					{ state: true },
 				);
@@ -454,7 +453,7 @@ describe('Channels - Distinct channels', function() {
 	it('create a distinct channel with 2 members should succeed', async function() {
 		distinctChannel = thierryClient.channel(channelGroup, '', {
 			members: [tommasoID, thierryID],
-			unique: unique,
+			unique,
 		});
 		await distinctChannel.create();
 	});
@@ -462,7 +461,7 @@ describe('Channels - Distinct channels', function() {
 	it('query previous created distinct channel', async function() {
 		const channels = await thierryClient.queryChannels({
 			members: [tommasoID, thierryID],
-			unique: unique,
+			unique,
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].data.unique).to.be.equal(unique);
@@ -497,7 +496,7 @@ describe('Query Channels and sort by unread', function() {
 		const cidPrefix = uuidv4();
 		for (let i = 3; i >= 0; i--) {
 			let color;
-			if (i % 2 == 0) {
+			if (i % 2 === 0) {
 				color = 'blue';
 			} else {
 				color = 'red';
@@ -590,7 +589,7 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{ has_unread: 1, last_message_at: -1 },
 		);
@@ -832,19 +831,19 @@ describe('hard delete messages', function() {
 	});
 
 	it('query the channel should also return correct results', async function() {
-		let channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 	});
 
 	it('validate channel.last_message_at correctly updated', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 
-		let messages = [];
+		const messages = [];
 		for (let i = 0; i < 10; i++) {
 			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
 		}
@@ -853,7 +852,7 @@ describe('hard delete messages', function() {
 			await ssclient.deleteMessage(messages[i].message.id, true);
 			channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 			const channelResp = await channel.watch();
-			if (i == 0) {
+			if (i === 0) {
 				expect(channelResp.channel.last_message_at).to.be.be.undefined;
 			} else {
 				expect(channelResp.channel.last_message_at).to.be.equal(
@@ -864,12 +863,12 @@ describe('hard delete messages', function() {
 	});
 
 	it('validate first channel message', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 
-		let messages = [];
+		const messages = [];
 		for (let i = 0; i < 10; i++) {
 			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
 		}
@@ -889,7 +888,7 @@ describe('hard delete messages', function() {
 	});
 
 	it('hard delete threads should work fine', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
@@ -910,7 +909,7 @@ describe('query channels by field $exists', function() {
 	const testID = uuidv4();
 	let client;
 
-	let channelCID = function(i) {
+	const channelCID = function(i) {
 		return 'messaging:' + i + '-' + testID;
 	};
 	//create 10 channels, even index contains even custom field and odd index contains odd custom field
@@ -918,7 +917,7 @@ describe('query channels by field $exists', function() {
 		await createUsers([creator]);
 		client = await getTestClientForUser(creator);
 		for (let i = 0; i < 10; i++) {
-			let custom = {};
+			const custom = {};
 			custom['field' + i] = i;
 			custom['testid'] = testID;
 			if (i % 2 === 0) {
@@ -937,7 +936,7 @@ describe('query channels by field $exists', function() {
 
 	it('only boolean values are allowed in $exists', async function() {
 		expect(
-			client.queryChannels({ testid: testID, even: { $exists: [] } }),
+			await client.queryChannels({ testid: testID, even: { $exists: [] } }),
 		).to.be.rejectedWith(
 			'QueryChannels failed with error: "$exists operator only support boolean values"',
 		);
@@ -949,11 +948,7 @@ describe('query channels by field $exists', function() {
 			even: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(8),
 			channelCID(6),
 			channelCID(4),
@@ -968,11 +963,7 @@ describe('query channels by field $exists', function() {
 			even: { $exists: false },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(7),
 			channelCID(5),
@@ -987,11 +978,7 @@ describe('query channels by field $exists', function() {
 			cid: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),
@@ -1019,11 +1006,7 @@ describe('query channels by field $exists', function() {
 			$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),

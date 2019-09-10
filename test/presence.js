@@ -212,7 +212,7 @@ describe('Presence', function() {
 			});
 			// everyone except user1 should be offline
 			for (const m of stateResponse.members) {
-				const shouldBeOnline = m.user.id == user1Client.userID;
+				const shouldBeOnline = m.user.id === user1Client.userID;
 				expect(m.user.online).to.equal(shouldBeOnline);
 			}
 			expect(b.state.members[userID].user.online).to.equal(false);

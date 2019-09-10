@@ -264,7 +264,6 @@ describe('Mark Read All Server Side', function() {
 	const channelID = 'mark-read-ss-' + uuidv4();
 	const client = getTestClient(true);
 	let channel;
-	let message;
 
 	before(async () => {
 		await createUsers([markReadUser.id]);
@@ -273,8 +272,7 @@ describe('Mark Read All Server Side', function() {
 			created_by: channelCreator,
 		});
 		await channel.create();
-		const resp = await channel.sendMessage({ text: 'hi', user: channelCreator });
-		message = resp.message;
+		await channel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
 	it('mark read in server side auth require user or user_id', async function() {
@@ -326,7 +324,6 @@ describe('Send Event Server Side', function() {
 	const channelID = 'events-' + uuidv4();
 	const client = getTestClient(true);
 	let eventChannel;
-	let message;
 
 	before(async () => {
 		await createUsers([eventUser.id]);
@@ -335,8 +332,7 @@ describe('Send Event Server Side', function() {
 			created_by: channelCreator,
 		});
 		await eventChannel.create();
-		const resp = await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
-		message = resp.message;
+		await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
 	it('creating server side event require user or user_id', async function() {
@@ -521,14 +517,13 @@ describe('App configs', function() {
 	const userToken =
 		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZ3V5b24ifQ.c8ofzBnAuW1yVaznCDv0iGeoJQ-csme7kPpIMOjtkso';
 
-	let secretChannel;
 	let channel;
 
 	before(async function() {
 		channel = client.channel('messaging', 'secret-place', {
 			created_by: { id: `${createdById}` },
 		});
-		secretChannel = await channel.create();
+		await channel.create();
 	});
 
 	it('Empty request should not break', async function() {
@@ -1232,7 +1227,7 @@ describe('Devices', function() {
 		});
 
 		it('oldest device gets scrapped', async function() {
-			for (const _ of Array(maxDevices).keys()) {
+			for (let i = 0; i < maxDevices; i++) {
 				await client.addDevice(uuidv4(), 'apn', user.id);
 				await sleep(100);
 			}
@@ -1259,7 +1254,7 @@ describe('Devices', function() {
 		});
 
 		it('adding same device does not do anything', async function() {
-			for (const _ of Array(maxDevices).keys()) {
+			for (let i = 0; i < maxDevices; i++) {
 				await client.addDevice(uuidv4(), 'apn', user.id);
 				await sleep(100);
 			}
@@ -1617,7 +1612,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const response = await channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(response.message.html).to.equal(html);
@@ -1630,7 +1625,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const sendPromise = channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(sendPromise).to.be.rejectedWith('message.html');
@@ -1709,7 +1704,7 @@ describe('Import via Webhook compat', function() {
 
 		const userClient = await getTestClientForUser(userID);
 		const userChannel = userClient.channel('messaging', channelID);
-		const r = await userChannel.watch();
+		await userChannel.watch();
 		const unread = userChannel.countUnread();
 		expect(userClient.health.me.total_unread_count).to.equal(1);
 		expect(unread).to.equal(1);
@@ -2188,11 +2183,11 @@ describe('Channel types', function() {
 });
 
 describe('Unread counts are properly initialised', function() {
-	let userCreatedByConnect = `connect-${uuidv4()}`;
-	let userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
-	let userCreatedByCreateChannel = `channel-${uuidv4()}`;
+	const userCreatedByConnect = `connect-${uuidv4()}`;
+	const userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
+	const userCreatedByCreateChannel = `channel-${uuidv4()}`;
 	let serverSideClient;
-	let channelID = `group-${uuidv4()}`;
+	const channelID = `group-${uuidv4()}`;
 
 	before(async function() {
 		//create 3 user in 3 different ways
@@ -2219,7 +2214,7 @@ describe('Unread counts are properly initialised', function() {
 	it('validate unread counts', async function() {
 		//send a message with user created  by ws connect
 		let client = await getTestClientForUser(userCreatedByConnect);
-		let channel = client.channel('messaging', channelID);
+		const channel = client.channel('messaging', channelID);
 		await channel.sendMessage({ text: 'hi' });
 		//validate unread for user created by client.UpdateUser
 		client = await getTestClientForUser(userCreatedByUpdateUsers);

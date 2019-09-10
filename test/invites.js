@@ -63,7 +63,7 @@ describe('Member style server side', () => {
 			members: ['thierry', 'tommaso'],
 			created_by: { id: 'thierry', name: 'Thierry' },
 		});
-		const state2 = await c2.create();
+		await c2.create();
 		expect(c2.id).to.equal(c.id);
 		expect(c2.id.indexOf('!members-')).to.equal(0);
 	});
@@ -96,7 +96,7 @@ describe('Member style channel init', () => {
 			image: 'http://bit.ly/2O35mws',
 			members: ['thierry', 'tommaso'],
 		});
-		const state2 = await c2.create();
+		await c2.create();
 		expect(c2.id).to.equal(c.id);
 	});
 

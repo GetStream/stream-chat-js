@@ -157,6 +157,7 @@ function banUser(ctx, user, responseTest) {
 	};
 }
 
+// eslint-disable-next-line no-unused-vars
 function banUserCommand(ctx, user, responseTest) {
 	return function(done) {
 		setupUser(ctx, user, done, client => {
