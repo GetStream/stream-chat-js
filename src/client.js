@@ -613,6 +613,12 @@ export class StreamChat {
 		if (channel) {
 			channel._handleChannelEvent(event);
 		}
+
+		this._callClientListeners(event);
+
+		if (channel) {
+			channel._callChannelListeners(event);
+		}
 	};
 
 	handleEvent = messageEvent => {
@@ -649,7 +655,10 @@ export class StreamChat {
 		if (event.type === 'notification.message_new') {
 			this.configs[event.channel.type] = event.channel.config;
 		}
+	}
 
+	_callClientListeners = event => {
+		const client = this;
 		// gather and call the listeners
 		const listeners = [];
 		if (client.listeners.all) {
@@ -663,7 +672,7 @@ export class StreamChat {
 		for (const listener of listeners) {
 			listener(event);
 		}
-	}
+	};
 
 	recoverState = async () => {
 		this.logger(
