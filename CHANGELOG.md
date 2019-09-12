@@ -1,3 +1,7 @@
+## September 12, 2019 - 1.0.5
+
+- Improving event handling in js client. Earlier, event listeners on client were executed before channel could handle the event and update the state. This has been fixed by handling event completely on client and channel level first before executing any of the listeners on client or channel.
+
 ## July 31, 2019 - 1.0.4
 
 - Added error logs for errors in API calls
