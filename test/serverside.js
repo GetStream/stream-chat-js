@@ -2238,3 +2238,30 @@ describe('Unread counts are properly initialised', function() {
 		expect(client.health.me.unread_channels).to.be.equal(1);
 	});
 });
+
+describe('Delete channel type', function() {
+	it('Removes empty channel type', async function() {
+		const chType = `cht_${uuidv4()}`;
+		const client = await getTestClient(true);
+
+		await client.createChannelType({ name: chType });
+		await expect(client.deleteChannelType(chType)).to.be.not.rejected;
+	});
+
+	it('Rejects removing not empty channel type', async function() {
+		const chType = `cht_${uuidv4()}`;
+		const chanID = uuidv4();
+		const createdBy = uuidv4();
+
+		const client = await getTestClient(true);
+		await client.createChannelType({ name: chType });
+		const channel = await client.channel(chType, chanID, {
+			created_by_id: createdBy,
+		});
+
+		await channel.create();
+		await expect(client.deleteChannelType(chType)).to.be.rejected;
+		await channel.delete();
+		await expect(client.deleteChannelType(chType)).to.be.not.rejected;
+	});
+});
