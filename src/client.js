@@ -82,7 +82,7 @@ export class StreamChat {
 			delete this.options.httpsAgent;
 		}
 
-		this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
+		this.setBaseURL('https://chat-dublin-c1.stream-io-api.com');
 
 		if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
 			this.setBaseURL('http://localhost:3030');
