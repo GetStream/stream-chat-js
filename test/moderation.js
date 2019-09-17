@@ -77,4 +77,34 @@ describe('Moderation', function() {
 		expect(connectResponse.me.mutes.length).to.equal(1);
 		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
 	});
+
+	it('Unmute', async function() {
+		const user1 = uuidv4();
+		const user2 = uuidv4();
+		await createUsers([user1, user2]);
+		const client1 = await getTestClientForUser(user1);
+		await client1.muteUser(user2);
+
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('notification.mutes_updated', e => {
+				if (e.me.mutes.length === 0) {
+					resolve();
+				}
+			});
+		});
+
+		await client1.unmuteUser(user2);
+
+		// wait notification
+		await eventPromise;
+
+		// verify we return the right user mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(0);
+	});
 });
