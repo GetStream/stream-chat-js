@@ -289,7 +289,7 @@ export class StreamChat {
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
 
   updateMessage(message: Message, user: string | User): Promise<UpdateMessageAPIResponse>;
-  deleteMessage(messageID: string): Promise<DeleteMessageAPIResponse>;
+  deleteMessage(messageID: string, hardDelete?: boolean): Promise<DeleteMessageAPIResponse>;
   verifyWebHook(requestBody: object, xSignature: string): boolean;
 }
 

@@ -340,7 +340,6 @@ describe('Count watchers using events', function() {
 		await client.setUser({ id: users[0] }, createUserToken(users[0]));
 		channel = client.channel('messaging', channelID, {
 			members: users,
-			created_by_id: users[0],
 		});
 		await channel.watch();
 		watchers = 1;
@@ -425,9 +424,7 @@ describe('Count Anonymous users', function() {
 	before(async () => {
 		await createUsers([admin]);
 		await client.setUser({ id: admin }, createUserToken(admin));
-		channel = client.channel('livestream', channelID, {
-			created_by_id: admin,
-		});
+		channel = client.channel('livestream', channelID);
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
 			const client1 = await getTestClient(false);
@@ -454,9 +451,9 @@ describe('Count Anonymous users', function() {
 		//stop watching or disconnect should update the counters properly
 		for (let i = 0; i < nClients; i++) {
 			if (i % 2 === 0) {
-				clients[i].channel.stopWatching();
+				await clients[i].channel.stopWatching();
 			} else {
-				clients[i].client.disconnect();
+				await clients[i].client.disconnect();
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {
@@ -482,9 +479,7 @@ describe('Count Guest users using state', function() {
 	before(async () => {
 		await createUsers([admin]);
 		await client.setUser({ id: admin }, createUserToken(admin));
-		channel = client.channel('livestream', channelID, {
-			created_by_id: admin,
-		});
+		channel = client.channel('livestream', channelID);
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
 			const client1 = await getTestClient(false);
@@ -504,7 +499,7 @@ describe('Count Guest users using state', function() {
 		//stop watching or disconnect should update the counters properly
 		for (let i = 0; i < nClients; i++) {
 			if (i % 2 === 0) {
-				clients[i].channel.stopWatching();
+				await clients[i].channel.stopWatching();
 			} else {
 				clients[i].client.disconnect();
 			}

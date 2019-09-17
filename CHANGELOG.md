@@ -1,3 +1,19 @@
+## September 12, 2019 - 1.0.5
+
+- Improving event handling in js client. Earlier, event listeners on client were executed before channel could handle the event and update the state. This has been fixed by handling event completely on client and channel level first before executing any of the listeners on client or channel.
+
+## July 31, 2019 - 1.0.4
+
+- Added error logs for errors in API calls
+
+## July 23, 2019 - 1.0.3
+
+- Support \$exists operator for queryChannels/queryUsers
+
+## July 22, 2019 - 1.0.2
+
+- Support hard delete messages for server side auth
+
 ## July 19, 2019 - 1.0.1
 
 - Fixing broken types in ts declaration file : [264ee9a87d6591d39f20b99d1d87381532b9957b](https://github.com/GetStream/stream-chat-js/commit/264ee9a87d6591d39f20b99d1d87381532b9957b)

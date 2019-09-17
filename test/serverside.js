@@ -1,18 +1,18 @@
 import {
-	getTestClient,
 	createUsers,
 	createUserToken,
 	expectHTTPErrorCode,
+	getTestClient,
 	getTestClientForUser,
 	sleep,
 } from './utils';
 import {
+	Allow,
 	AllowAll,
-	DenyAll,
-	Permission,
 	AnyResource,
 	AnyRole,
-	Allow,
+	DenyAll,
+	Permission,
 } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
@@ -632,6 +632,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
+					development: false,
 					auth_type: 'certificate',
 					bundle_id: 'stream-test',
 					host: 'https://api.development.push.apple.com',
@@ -751,6 +752,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
+					development: false,
 					auth_type: 'token',
 					bundle_id: 'com.apple.test',
 					host: 'https://api.push.apple.com',
@@ -780,6 +782,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: true,
+					development: false,
 					auth_type: 'token',
 					bundle_id: 'com.apple.test',
 					team_id: 'sfd',
@@ -801,6 +804,7 @@ describe('App configs', function() {
 				delete response.app.push_notifications.apn.notification_template;
 				expect(response.app.push_notifications.apn).to.eql({
 					enabled: false,
+					development: false,
 					host: 'https://api.push.apple.com',
 				});
 			});
@@ -1055,7 +1059,6 @@ describe('App configs', function() {
 			});
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
 			expect(firebaseMsg.notification).to.be.empty;
-			expect(firebaseMsg.data.stream).to.not.be.undefined;
 		});
 
 		it('Members in the template using helper', async function() {
@@ -2181,5 +2184,57 @@ describe('Channel types', function() {
 		it('should fail to update', async function() {
 			await expectHTTPErrorCode(403, client2.updateChannelType('messaging', {}));
 		});
+	});
+});
+
+describe('Unread counts are properly initialised', function() {
+	let userCreatedByConnect = `connect-${uuidv4()}`;
+	let userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
+	let userCreatedByCreateChannel = `channel-${uuidv4()}`;
+	let serverSideClient;
+	let channelID = `group-${uuidv4()}`;
+
+	before(async function() {
+		//create 3 user in 3 different ways
+		//it is possible to create users by
+		//   * client.setUser
+		//   * client.updateUser
+		//   * client.sendMessage/channel.create
+		serverSideClient = await getTestClient(true);
+		await serverSideClient.updateUser({ id: userCreatedByUpdateUsers });
+		let channel = serverSideClient.channel('messaging', channelID, {
+			created_by_id: userCreatedByCreateChannel,
+		});
+		await channel.create();
+		await serverSideClient.setUser({ id: userCreatedByConnect });
+		serverSideClient = await getTestClient(true);
+		channel = serverSideClient.channel('messaging', channelID);
+		await channel.addMembers([
+			userCreatedByConnect,
+			userCreatedByUpdateUsers,
+			userCreatedByCreateChannel,
+		]);
+	});
+
+	it('validate unread counts', async function() {
+		//send a message with user created  by ws connect
+		let client = await getTestClientForUser(userCreatedByConnect);
+		let channel = client.channel('messaging', channelID);
+		await channel.sendMessage({ text: 'hi' });
+		//validate unread for user created by client.UpdateUser
+		client = await getTestClientForUser(userCreatedByUpdateUsers);
+		expect(client.health.me.total_unread_count).to.be.equal(1);
+		expect(client.health.me.unread_channels).to.be.equal(1);
+		await client.channel('messaging', channelID).sendMessage({ text: 'hello' });
+
+		//validate unread for user created by channel.created_by_id
+		client = await getTestClientForUser(userCreatedByCreateChannel);
+		expect(client.health.me.total_unread_count).to.be.equal(2);
+		expect(client.health.me.unread_channels).to.be.equal(1);
+
+		//validate unread for user created by ws connect
+		client = await getTestClientForUser(userCreatedByConnect);
+		expect(client.health.me.total_unread_count).to.be.equal(1);
+		expect(client.health.me.unread_channels).to.be.equal(1);
 	});
 });
