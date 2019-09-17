@@ -773,21 +773,20 @@ describe('hard delete messages', function() {
 
 	it('hard delete messages is not allowed client side', function() {
 		expect(client.deleteMessage(firstMessage.message.id, true)).to.be.rejectedWith(
-			'Error: StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
+			'StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
 		);
 	});
 
 	it('hard delete the second message should work and not update  channel.last_message_id', async function() {
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
-		console.log(channel);
 		expect(channel.data.last_message_at).to.be.equal(
 			thirdMeessage.message.created_at,
 		);
 
 		const resp = await ssclient.deleteMessage(secondMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
@@ -799,7 +798,7 @@ describe('hard delete messages', function() {
 	it('hard delete the third message should update the channel last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(thirdMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
@@ -809,7 +808,7 @@ describe('hard delete messages', function() {
 	it('hard delete the last message in the channel should clear channel messages and last_message_at', async function() {
 		const resp = await ssclient.deleteMessage(firstMessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
-		expect(resp.message.type).to.not.equal('deleted');
+		expect(resp.message.type).to.be.equal('deleted');
 
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		const channelResp = await channel.watch();

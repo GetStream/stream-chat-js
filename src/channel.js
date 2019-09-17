@@ -754,7 +754,10 @@ export class Channel {
 		if (event.watcher_count !== undefined) {
 			channel.state.watcher_count = event.watcher_count;
 		}
+	}
 
+	_callChannelListeners = event => {
+		const channel = this;
 		// gather and call the listeners
 		const listeners = [];
 		if (channel.listeners.all) {
@@ -768,7 +771,7 @@ export class Channel {
 		for (const listener of listeners) {
 			listener(event);
 		}
-	}
+	};
 
 	/**
 	 * _channelURL - Returns the channel url

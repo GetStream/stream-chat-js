@@ -24,9 +24,10 @@ import pkg from '../package.json';
 
 function isReadableStream(obj) {
 	return (
+		obj !== null &&
 		typeof obj === 'object' &&
-		typeof (obj._read === 'function') &&
-		typeof (obj._readableState === 'object')
+		typeof obj._read === 'function' &&
+		typeof obj._readableState === 'object'
 	);
 }
 
@@ -131,10 +132,15 @@ export class StreamChat {
 		 * 		response: object
 		 * }
 		 * 3. {
+		 * 		tags: ['api', 'api_response', 'client'],
+		 * 		url: string,
+		 * 		error: object
+		 * }
+		 * 4. {
 		 * 		tags: ['event', 'client'],
 		 * 		event: object
 		 * }
-		 * 4. {
+		 * 5. {
 		 * 		tags: ['channel'],
 		 * 		channel: object
 		 * }
@@ -445,6 +451,14 @@ export class StreamChat {
 		);
 	}
 
+	_logApiError(type, url, error) {
+		this.logger('error', `client:${type} - Error - url: ${url}`, {
+			tags: ['api', 'api_response', 'client'],
+			url,
+			error,
+		});
+	}
+
 	async get(url, params) {
 		try {
 			this._logApiRequest('get', url, {}, this._addClientParams(params));
@@ -453,6 +467,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -470,6 +485,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -487,6 +503,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('post', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -504,6 +521,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('patch', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -521,6 +539,7 @@ export class StreamChat {
 
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('delete', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -594,6 +613,12 @@ export class StreamChat {
 		if (channel) {
 			channel._handleChannelEvent(event);
 		}
+
+		this._callClientListeners(event);
+
+		if (channel) {
+			channel._callChannelListeners(event);
+		}
 	};
 
 	handleEvent = messageEvent => {
@@ -630,7 +655,10 @@ export class StreamChat {
 		if (event.type === 'notification.message_new') {
 			this.configs[event.channel.type] = event.channel.config;
 		}
+	}
 
+	_callClientListeners = event => {
+		const client = this;
 		// gather and call the listeners
 		const listeners = [];
 		if (client.listeners.all) {
@@ -644,7 +672,7 @@ export class StreamChat {
 		for (const listener of listeners) {
 			listener(event);
 		}
-	}
+	};
 
 	recoverState = async () => {
 		this.logger(

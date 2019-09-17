@@ -1080,6 +1080,7 @@ describe('Chat', function() {
 
 					channel.on('message.deleted', event => {
 						expect(event.message.deleted_at).to.not.be.null;
+						expect(event.message.type).to.be.equal('deleted');
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
@@ -1613,6 +1614,35 @@ describe('Chat', function() {
 			expect(Math.floor(c.state.last_message_at - lastMsg)).to.be.gt(0);
 		});
 
+		// This is to make sure event is handled on client and channel level before listeners are executed on them.
+		it.skip('Should update before event listeners are executed', function(done) {
+			async function runTest() {
+				const id = uuidv4();
+				const c = authClient.channel('messaging', id);
+				const messageTexts = [uuidv4(), uuidv4(), uuidv4()];
+				let numberOfMessages;
+
+				authClient.on('message.new', () => {
+					expect(c.state.messages.length).to.be.equal(numberOfMessages);
+					expect(
+						c.state.messages[c.state.messages.length - 1].text,
+					).to.be.equal(messageTexts[numberOfMessages - 1]);
+					numberOfMessages += 1;
+					if (numberOfMessages === messageTexts.length - 1) done();
+				});
+				await c.watch();
+
+				numberOfMessages = 1;
+				await c.sendMessage({ text: messageTexts[0] });
+				await c.sendMessage({ text: messageTexts[1] });
+				await c.sendMessage({ text: messageTexts[2] });
+			}
+
+			runTest().catch(exc => {
+				done(exc);
+			});
+		});
+
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
 			const message = { id: 1, text: 'my message' };
@@ -1755,24 +1785,25 @@ describe('Chat', function() {
 		let client;
 		let channel;
 		let serverChannel;
+		let channelID = uuidv4();
 		const owner = { id: uuidv4() };
 
 		it('Create an anonymous session', async function() {
 			client = getTestClient(false);
 			await client.setAnonymousUser();
-			serverChannel = serverAuthClient.channel('livestream', 'free4all2', {
+			serverChannel = serverAuthClient.channel('livestream', channelID, {
 				created_by: owner,
 			});
 			await serverChannel.create();
 		});
 
 		it('join a live stream channel', async function() {
-			channel = client.channel('livestream', 'free4all2');
+			channel = client.channel('livestream', channelID);
 			await channel.watch();
 		});
 
 		it('query channel should not show anon users', async function() {
-			channel = client.channel('livestream', 'free4all2');
+			channel = client.channel('livestream', channelID);
 			const response = await channel.query({ watchers: { limit: 10 } });
 			expect(response.watchers).to.not.eql({});
 			const fk = Object.keys(response.watchers)[0];
