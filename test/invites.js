@@ -221,33 +221,42 @@ describe('Query invites', function() {
 		expect(state.channel.id).to.be.equal(channelID);
 	});
 	it('Tommaso should have pending invites', async function() {
-		let channels = await tommasoClient.queryChannels({ $invited: true });
+		let channels = await tommasoClient.queryChannels({$invited: 'pending'});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
 	it('Josh should have pending invites', async function() {
-		let channels = await joshClient.queryChannels({ $invited: true });
+		let channels = await joshClient.queryChannels({$invited: 'pending'});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
 	it('Scott should have pending invites', async function() {
-		let channels = await scottClient.queryChannels({ $invited: true });
+		let channels = await scottClient.queryChannels({$invited: 'pending'});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
 	it('Tommaso accept the invite and pending invites go to zero', async function() {
-		let channels = await tommasoClient.queryChannels({ $invited: true });
+		let channels = await tommasoClient.queryChannels({$invited: 'pending'});
 		await channels[0].acceptInvite();
 
-		channels = await tommasoClient.queryChannels({ $invited: true });
+		channels = await tommasoClient.queryChannels({$invited: 'pending'});
+		expect(channels.length).to.be.equal(0);
+	});
+	it('Tommaso queries for accepted invites it should return one result', async function () {
+		let channels = await tommasoClient.queryChannels({$invited: 'accepted'});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].id).to.be.equal(channelID);
+	});
+	it('Tommaso queries for pending invites it should return one result', async function () {
+		let channels = await tommasoClient.queryChannels({$invited: 'pending'});
 		expect(channels.length).to.be.equal(0);
 	});
 	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop', async function() {
-		let channels = await joshClient.queryChannels({ $invited: true });
+		let channels = await joshClient.queryChannels({$invited: 'pending'});
 		await channels[0].rejectInvite();
 		await channels[0].stopWatching();
 
-		channels = await joshClient.queryChannels({ $invited: true });
+		channels = await joshClient.queryChannels({$invited: 'pending'});
 		expect(channels.length).to.be.equal(0);
 
 		let rejectedChannel = joshClient.channel('messaging', channelID);
@@ -261,7 +270,13 @@ describe('Query invites', function() {
 		await channel.watch({ presence: true });
 		await channel.sendMessage({ text: 'hi' });
 
-		await sleep(1500);
+		await sleep(1500); //todo improve this
 		expect(channelEventsReceived).to.be.equal(0);
+	});
+
+	it('Josh Reject should have rejected invites', async function () {
+		let channels = await joshClient.queryChannels({$invited: 'rejected'});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].id).to.be.equal(channelID);
 	});
 });
