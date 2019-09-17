@@ -51,7 +51,12 @@ export interface User {
   [propName: string]: any;
 }
 
-export interface Device {
+export interface DeviceFields {
+  push_providers: string;
+  id: string;
+}
+
+export interface Device extends DeviceFields {
   id: string;
   provider: string;
   user: User;
@@ -236,7 +241,7 @@ export class StreamChat {
     name: string,
     contentType: string,
     user: string,
-  ): Promise<APIResponse>;
+  ): Promise<FileUploadAPIResponse>;
 
   dispatchEvent(event: Event): void;
   handleEvent(messageEvent: Event): void;
@@ -260,7 +265,7 @@ export class StreamChat {
   ): Promise<SearchAPIResponse>;
 
   addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
-  getDevices(userId: string): Promise<APIResponse>;
+  getDevices(userId: string): Promise<GetDevicesAPIResponse>;
   removeDevice(deviceId: string): Promise<APIResponse>;
 
   channel(channelType: string, channelID: string, custom: object): Channel;
@@ -289,7 +294,10 @@ export class StreamChat {
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
 
   updateMessage(message: Message, user: string | User): Promise<UpdateMessageAPIResponse>;
-  deleteMessage(messageID: string, hardDelete?: boolean): Promise<DeleteMessageAPIResponse>;
+  deleteMessage(
+    messageID: string,
+    hardDelete?: boolean,
+  ): Promise<DeleteMessageAPIResponse>;
   verifyWebHook(requestBody: object, xSignature: string): boolean;
 }
 
@@ -318,59 +326,59 @@ export class Channel {
   state: ChannelState;
 
   getConfig(): object;
-  sendMessage(message: Message): Promise<APIResponse>;
+  sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
     uri: string,
     name: string,
     contentType: string,
     user: string,
-  ): Promise<APIResponse>;
+  ): Promise<FileUploadAPIResponse>;
   sendImage(
     uri: string,
     name: string,
     contentType: string,
     user: string,
-  ): Promise<APIResponse>;
-  deleteFile(url: string): Promise<APIResponse>;
-  deleteImage(url: string): Promise<APIResponse>;
+  ): Promise<FileUploadAPIResponse>;
+  deleteFile(url: string): Promise<DeleteFileAPIResponse>;
+  deleteImage(url: string): Promise<DeleteFileAPIResponse>;
 
-  sendEvent(chatEvent: Event): Promise<APIResponse>;
+  sendEvent(chatEvent: Event): Promise<SendEventAPIResponse>;
   sendReaction(
     messageID: string,
     reaction: Reaction,
     user_id: string,
-  ): Promise<APIResponse>;
+  ): Promise<SendReactionAPIResponce>;
 
   deleteReaction(
     messageID: string,
     reactionType: string,
     user_id?: string,
-  ): Promise<APIResponse>;
+  ): Promise<DeleteReactionAPIResponce>;
 
-  update(channelData: object, updateMessage: Message): Promise<APIResponse>;
-  delete(): Promise<APIResponse>;
-  acceptInvite(options: object): Promise<APIResponse>;
-  rejectInvite(options: object): Promise<APIResponse>;
-  addMembers(members: string[]): Promise<APIResponse>;
-  addModerators(members: string[]): Promise<APIResponse>;
-  removeMembers(members: string[]): Promise<APIResponse>;
-  demoteModerators(members: string[]): Promise<User>;
+  update(channelData: object, updateMessage: Message): Promise<UpdateChannelAPIResponse>;
+  delete(): Promise<DeleteChannelAPIResponse>;
+  acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
+  rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
+  addMembers(members: string[]): Promise<AddMembersAPIResponse>;
+  addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
+  removeMembers(members: string[]): Promise<RemoveMembersAPIResponse>;
+  demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
-  sendAction(messageID: string, formData: object): Promise<APIResponse>;
-  keystroke(): Promise<APIResponse>;
-  stopTyping(): Promise<APIResponse>;
+  sendAction(messageID: string, formData: object): Promise<SendMessageAPIResponse>;
+  keystroke(): Promise<void>;
+  stopTyping(): Promise<void>;
   lastMessage(): Message;
-  markRead(): Promise<void>;
+  markRead(): Promise<MarkReadAPIResponse>;
   clean(): void;
-  watch(options: object): Promise<APIResponse>;
-  stopWatching(): Promise<APIResponse>;
-  getReplies(parent_id: string, options: object): Promise<APIResponse>;
-  getReactions(message_id: string, options: object): Promise<APIResponse>;
+  watch(options: object): Promise<ChannelsAPIResponse>;
+  stopWatching(): Promise<StopWatchingAPIResponse>;
+  getReplies(parent_id: string, options: object): Promise<GetRepliesAPIResponse>;
+  getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
   countUnread(lastRead?: Date): number;
-  create(): Promise<APIResponse>;
-  query(options: object): Promise<APIResponse>;
-  banUser(targetUserID: string, options: object): Promise<APIResponse>;
-  unbanUser(targetUserID: string): Promise<APIResponse>;
+  create(): Promise<ChannelsAPIResponse>;
+  query(options: object): Promise<ChannelsAPIResponse>;
+  banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
+  unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
 }
@@ -473,13 +481,13 @@ export interface UpdateUsersAPIResponse extends APIResponse {
 }
 
 export interface UsersAPIResponse extends APIResponse {
-  users: Array<UserResponse>;
+  users: UserResponse[];
 }
 
 export interface SearchAPIResponse extends APIResponse {
-  results: {
+  results: Array<{
     message: MessageResponse;
-  }[];
+  }>;
 }
 
 export interface BanUserAPIResponse extends APIResponse {}
@@ -518,6 +526,63 @@ export interface ListChannelTypesAPIResponse extends APIResponse {
   channel_types: {
     [channel_type: string]: ChannelTypeConfig;
   };
+}
+
+export interface SendMessageAPIResponse extends APIResponse {
+  message: MessageResponse;
+}
+
+export interface FileUploadAPIResponse extends APIResponse {
+  file: string;
+}
+
+export interface DeleteFileAPIResponse extends APIResponse {}
+
+export interface SendEventAPIResponse extends APIResponse {
+  event: Event;
+}
+
+export interface SendReactionAPIResponce extends APIResponse {
+  message: MessageResponse;
+  reaction: ReactionResponse;
+}
+
+export interface DeleteReactionAPIResponce extends APIResponse {
+  message: MessageResponse;
+  reaction: ReactionResponse;
+}
+
+export interface UpdateChannelAPIResponse extends APIResponse {
+  channel: ChannelResponse;
+  message: MessageResponse;
+  members: ChannelMemberResponse[];
+}
+
+export interface DeleteChannelAPIResponse extends APIResponse {
+  channel: ChannelResponse;
+}
+
+export interface AcceptInviteAPIResponse extends UpdateChannelAPIResponse {}
+export interface RejectInviteAPIResponse extends UpdateChannelAPIResponse {}
+export interface AddMembersAPIResponse extends UpdateChannelAPIResponse {}
+export interface AddModeratorsAPIResponse extends UpdateChannelAPIResponse {}
+export interface RemoveMembersAPIResponse extends UpdateChannelAPIResponse {}
+export interface RemoteModeratorsAPIResponse extends UpdateChannelAPIResponse {}
+
+export interface MarkReadAPIResponse extends APIResponse {
+  event: Event;
+}
+
+export interface StopWatchingAPIResponse extends APIResponse {}
+export interface GetRepliesAPIResponse extends APIResponse {
+  messages: MessageResponse[];
+}
+export interface GetReactionsAPIResponse extends APIResponse {
+  reactions: ReactionResponse[];
+}
+
+export interface GetDevicesAPIResponse extends APIResponse {
+  devices: DeviceFields[];
 }
 
 export interface MessageResponse {
@@ -562,7 +627,7 @@ export interface DeleteMessageAPIResponse extends APIResponse {
   message: MessageResponse;
 }
 
-export type ChannelMemberResponse = {
+export interface ChannelMemberResponse {
   user_id?: string;
   user?: UserResponse;
   is_moderator?: boolean;
@@ -572,9 +637,9 @@ export type ChannelMemberResponse = {
   role?: string;
   created_at?: string;
   updated_at?: string;
-};
+}
 
-export type ChannelResponse = {
+export interface ChannelResponse {
   cid: string;
   id: string;
   type: string;
@@ -587,19 +652,19 @@ export type ChannelResponse = {
   member_count?: number;
   invites?: string[];
   config: ChannelConfig;
-};
+}
 
-export type ReadResponse = {
+export interface ReadResponse {
   user: UserResponse;
   last_read: string;
-};
+}
 
-export type MuteResponse = {
+export interface MuteResponse {
   user: UserResponse;
   target: UserResponse;
   created_at?: string;
   updated_at?: string;
-};
+}
 
 export interface FlagResponse {
   created_by_automod: boolean;
