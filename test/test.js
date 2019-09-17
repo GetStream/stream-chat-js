@@ -1291,7 +1291,7 @@ describe('Chat', function() {
 		});
 		it('search users', async function() {
 			const response = await authClient.queryUsers(
-				{id: 'user-query-' + unique + '-'},
+				{ id: 'user-query-' + unique + '-' },
 				{},
 				{ presence: false },
 			);
