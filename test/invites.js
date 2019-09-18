@@ -191,7 +191,7 @@ describe('Member style channel init', () => {
 	});
 });
 
-describe('Query invites', function() {
+describe('Query invites', function () {
 	let users = [
 		'thierry-' + uuidv4(),
 		'tommaso-' + uuidv4(),
@@ -287,7 +287,6 @@ describe('Query invites', function() {
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-
 	it('Mixing Queries should work fine', async function () {
 		let channels = await tommasoClient.queryChannels({
 			invite: 'pending',
@@ -296,7 +295,6 @@ describe('Query invites', function() {
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-
 	it('Mixing Queries should work fine II', async function () {
 		let channels = await tommasoClient.queryChannels({
 			invite: 'pending',
@@ -304,7 +302,6 @@ describe('Query invites', function() {
 		});
 		expect(channels.length).to.be.equal(0);
 	});
-
 	it('Josh should have pending invites', async function () {
 		let channels = await joshClient.queryChannels({invite: 'pending'});
 		expect(channels.length).to.be.equal(1);
@@ -331,28 +328,52 @@ describe('Query invites', function() {
 		let channels = await tommasoClient.queryChannels({invite: 'pending'});
 		expect(channels.length).to.be.equal(0);
 	});
-
-	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop', async function () {
+	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop for pending and rejected invites', async function () {
+		//reject invite
 		let channels = await joshClient.queryChannels({invite: 'pending'});
+		expect(channels.length).to.be.equal(1);
 		await channels[0].rejectInvite();
 		await channels[0].stopWatching();
 
 		channels = await joshClient.queryChannels({invite: 'pending'});
 		expect(channels.length).to.be.equal(0);
 
-		let rejectedChannel = joshClient.channel('messaging', channelID);
-		let resp = await rejectedChannel.watch({presence: true});
-		let channelEventsReceived = 0;
-		rejectedChannel.on(function (e) {
-			channelEventsReceived++;
+		// ensure that we dont deliver events on rejected invites
+		const rejectedChannelJosh = joshClient.channel('messaging', channelID);
+		rejectedChannelJosh.on(function (e) {
+			expect.fail("rejected or pending invites shouldn't receive msg.new events")
 		});
+		await rejectedChannelJosh.watch({watch: true, presence: true});
 
-		let channel = tommasoClient.channel('messaging', channelID);
-		await channel.watch({presence: true});
-		await channel.sendMessage({text: 'hi'});
+		// ensure that we dont deliver events on pending invites
+		const pendingChannelScott = scottClient.channel('messaging', channelID);
+		pendingChannelScott.on(function (e) {
+			expect.fail("pending invites shouldn't receive msg.new events")
+		});
+		await pendingChannelScott.watch({watch: true, presence: true});
 
-		await sleep(1500); //todo improve this
-		expect(channelEventsReceived).to.be.equal(0);
+		let doneCallback;
+		const allEventsReceived = new Promise(resolve => {
+			doneCallback = resolve;
+		});
+		let numberEvents = 0;
+
+		// ensure that we deliver events on accepted invites
+		let acceptedChannel = tommasoClient.channel('messaging', channelID);
+		acceptedChannel.on('message.new', function (e) {
+			numberEvents++;
+			if (numberEvents === 3) {
+				expect(e.message.text).to.be.equal('hi 3');
+				doneCallback()
+			}
+		});
+		await acceptedChannel.watch({watch: true, presence: true});
+		//send 3 messages
+		await acceptedChannel.sendMessage({text: 'hi 1'});
+		await acceptedChannel.sendMessage({text: 'hi 2'});
+		await acceptedChannel.sendMessage({text: 'hi 3'});
+
+		await allEventsReceived
 	});
 
 	it('Josh Reject should have rejected invites', async function () {
