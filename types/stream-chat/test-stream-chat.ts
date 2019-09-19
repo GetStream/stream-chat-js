@@ -1,4 +1,4 @@
-import { StreamChat, Member } from 'stream-chat';
+import { StreamChat, Member, AcceptInviteAPIResponse } from 'stream-chat';
 import { ImmutableObject, Immutable } from 'seamless-immutable';
 
 const apiKey = 'apiKey';
@@ -24,7 +24,7 @@ client.put('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectTy
 client.post('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 client.delete('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 
-client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', 'james'); // $ExpectType Promise<APIResponse>
+client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', 'james'); // $ExpectType Promise<FileUploadAPIResponse>
 
 const event = {
   cid: 'channelid',
@@ -55,12 +55,16 @@ client.recoverState(); // $ExpectType Promise<void>
 
 const channels = client.queryChannels({}, {}, {});
 channels.then(response => {
-  const type = response.channels[0].channel.type; // $ExpectType string
-  const cid = response.channels[0].channel.cid; // $ExpectType string
+  const type = response[0].type; // $ExpectType string
+  const cid = response[0].cid; // $ExpectType string
 });
 
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
 const channelState = channel.state; // $ExpectType ChannelState
 const member = channelState.members.someUser; // $ExpectType ImmutableObject<Member>
 const response = channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
-const typingEvent = channelState.typing.someId; // $ExpectType ImmutableObject<TypingStartEvent>
+// const typingEvent = channelState.typing.someId; // $ExpectType string
+const acceptInvite = channel.acceptInvite({}); // $ExpectType Promise<AcceptInviteAPIResponse>
+acceptInvite.then(value => {
+  const response = value; // $ExpectType AcceptInviteAPIResponse
+});

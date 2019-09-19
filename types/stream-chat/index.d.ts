@@ -63,9 +63,9 @@ export interface Device extends DeviceFields {
   [propName: string]: any;
 }
 
-export interface Event {
+export interface Event<T = string> {
   cid: string;
-  type: string;
+  type: T;
   message?: MessageResponse;
   reaction?: ReactionResponse;
   channel?: Channel;
@@ -76,82 +76,34 @@ export interface Event {
   watcher_count?: number;
   unread_count?: number;
   online?: boolean;
+  created_at?: string;
+  [propName: string]: any;
 }
-export interface UserPresenceChangedEvent extends Event {
-  type: 'user.presence.changed';
-}
-export interface UserWatchingStartEvent extends Event {
-  type: 'user.watching.start';
-}
-export interface UserWatchingStopEvent extends Event {
-  type: 'user.watching.stop';
-}
-export interface UserUpdatedEvent extends Event {
-  type: 'user.updated';
-}
-export interface TypingStartEvent extends Event {
-  type: 'typing.start';
-}
-export interface TypingStopEvent extends Event {
-  type: 'typing.stop';
-}
-export interface MessageNewEvent extends Event {
-  type: 'message.new';
-}
-export interface MessageUpdatedEvent extends Event {
-  type: 'message.updated';
-}
-export interface MessageDeletedEvent extends Event {
-  type: 'message.deleted';
-}
-export interface MessageReadEvent extends Event {
-  type: 'message.read';
-}
-export interface ReactionNewEvent extends Event {
-  type: 'reaction.new';
-}
-export interface ReactionDeletedEvent extends Event {
-  type: 'reaction.deleted';
-}
-export interface MemberAddedEvent extends Event {
-  type: 'member.added';
-}
-export interface MemberUpdatedEvent extends Event {
-  type: 'member.updated';
-}
-export interface MemberRemovedEvent extends Event {
-  type: 'member.removed';
-}
-export interface ChannelUpdatedEvent extends Event {
-  type: 'channel.updated';
-}
-export interface ChannelDeletedEvent extends Event {
-  type: 'channel.deleted';
-}
-export interface HealthCheckEvent extends Event {
-  type: 'health.check';
-}
-export interface NotificationNewMessageEvent extends Event {
-  type: 'notification.message_new';
-}
-export interface NotificationMarkReadEvent extends Event {
-  type: 'notification.mark_read';
-}
-export interface NotificationInvitedEvent extends Event {
-  type: 'notification.invited';
-}
-export interface NotificationInviteAcceptedEvent extends Event {
-  type: 'notification.invite_accepted';
-}
-export interface NotificationAddedToChannelEvent extends Event {
-  type: 'notification.added_to_channel';
-}
-export interface NotificationRemovedFromChannelEvent extends Event {
-  type: 'notification.removed_from_channel';
-}
-export interface NotificationMutesUpdatedEvent extends Event {
-  type: 'notification.mutes_updated';
-}
+export type UserPresenceChangedEvent = 'user.presence.changed';
+export type UserWatchingStartEvent = 'user.watching.start';
+export type UserWatchingStopEvent = 'user.watching.stop';
+export type UserUpdatedEvent = 'user.updated';
+export type TypingStartEvent = 'typing.start';
+export type TypingStopEvent = 'typing.stop';
+export type MessageNewEvent = 'message.new';
+export type MessageUpdatedEvent = 'message.updated';
+export type MessageDeletedEvent = 'message.deleted';
+export type MessageReadEvent = 'message.read';
+export type ReactionNewEvent = 'reaction.new';
+export type ReactionDeletedEvent = 'reaction.deleted';
+export type MemberAddedEvent = 'member.added';
+export type MemberUpdatedEvent = 'member.updated';
+export type MemberRemovedEvent = 'member.removed';
+export type ChannelUpdatedEvent = 'channel.updated';
+export type ChannelDeletedEvent = 'channel.deleted';
+export type HealthCheckEvent = 'health.check';
+export type NotificationNewMessageEvent = 'notification.message_new';
+export type NotificationMarkReadEvent = 'notification.mark_read';
+export type NotificationInvitedEvent = 'notification.invited';
+export type NotificationInviteAcceptedEvent = 'notification.invite_accepted';
+export type NotificationAddedToChannelEvent = 'notification.added_to_channel';
+export type NotificationRemovedFromChannelEvent = 'notification.removed_from_channel';
+export type NotificationMutesUpdatedEvent = 'notification.mutes_updated';
 
 export interface Reaction {
   type: string;
@@ -257,7 +209,7 @@ export class StreamChat {
     filterConditions: object,
     sort: object,
     options: object,
-  ): Promise<ChannelsAPIResponse>;
+  ): Promise<Channel[]>;
   search(
     filterConditions: object,
     query: object,
@@ -342,13 +294,13 @@ export class Channel {
   deleteFile(url: string): Promise<DeleteFileAPIResponse>;
   deleteImage(url: string): Promise<DeleteFileAPIResponse>;
 
-  sendEvent(chatEvent: Event): Promise<SendEventAPIResponse>;
+  sendEvent<T = string>(chatEvent: Event<T>): Promise<SendEventAPIResponse<T>>;
   sendReaction(
     messageID: string,
     reaction: Reaction,
     user_id: string,
-  ): Promise<SendReactionAPIResponce>;
-
+  ): Promise<SendReactionAPIResponse>;
+  getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
   deleteReaction(
     messageID: string,
     reactionType: string,
@@ -357,26 +309,30 @@ export class Channel {
 
   update(channelData: object, updateMessage: Message): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
+
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
+
   addMembers(members: string[]): Promise<AddMembersAPIResponse>;
   addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
   removeMembers(members: string[]): Promise<RemoveMembersAPIResponse>;
+  // TODO: Add test
   demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
   sendAction(messageID: string, formData: object): Promise<SendMessageAPIResponse>;
+
   keystroke(): Promise<void>;
   stopTyping(): Promise<void>;
+
   lastMessage(): Message;
   markRead(): Promise<MarkReadAPIResponse>;
   clean(): void;
-  watch(options: object): Promise<ChannelsAPIResponse>;
+  watch(options: object): Promise<ChannelAPIResponse>;
+  query(options: object): Promise<ChannelAPIResponse>;
   stopWatching(): Promise<StopWatchingAPIResponse>;
   getReplies(parent_id: string, options: object): Promise<GetRepliesAPIResponse>;
-  getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
   countUnread(lastRead?: Date): number;
-  create(): Promise<ChannelsAPIResponse>;
-  query(options: object): Promise<ChannelsAPIResponse>;
+  create(): Promise<ChannelAPIResponse>;
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
@@ -463,15 +419,13 @@ export interface APIResponse {
   [propName: string]: any;
 }
 
-export interface ChannelsAPIResponse extends APIResponse {
-  channels: Array<{
-    channel: ChannelResponse;
-    messages: MessageResponse[];
-    watcher_count?: number;
-    watchers: User[];
-    read: ReadResponse[];
-    members: ChannelMemberResponse[];
-  }>;
+export interface ChannelAPIResponse extends APIResponse {
+  channel: ChannelResponse;
+  messages: MessageResponse[];
+  watcher_count?: number;
+  watchers?: User[];
+  read?: ReadResponse[];
+  members: ChannelMemberResponse[];
 }
 
 export interface UpdateUsersAPIResponse extends APIResponse {
@@ -512,7 +466,7 @@ export interface CreateChannelTypeAPIResponse extends ChannelConfig, APIResponse
   permissions: Permission[];
 }
 
-export interface GetChannelTypeAPIResponse extends ChannelConfig, APIResponse {
+export interface GetChannelTypeAPIResponse extends ChannelConfigWithInfo, APIResponse {
   permissions: Permission[];
 }
 
@@ -538,11 +492,11 @@ export interface FileUploadAPIResponse extends APIResponse {
 
 export interface DeleteFileAPIResponse extends APIResponse {}
 
-export interface SendEventAPIResponse extends APIResponse {
-  event: Event;
+export interface SendEventAPIResponse<T = string> extends APIResponse {
+  event: Event<T>;
 }
 
-export interface SendReactionAPIResponce extends APIResponse {
+export interface SendReactionAPIResponse extends APIResponse {
   message: MessageResponse;
   reaction: ReactionResponse;
 }
@@ -554,7 +508,7 @@ export interface DeleteReactionAPIResponce extends APIResponse {
 
 export interface UpdateChannelAPIResponse extends APIResponse {
   channel: ChannelResponse;
-  message: MessageResponse;
+  message?: MessageResponse;
   members: ChannelMemberResponse[];
 }
 
@@ -570,7 +524,7 @@ export interface RemoveMembersAPIResponse extends UpdateChannelAPIResponse {}
 export interface RemoteModeratorsAPIResponse extends UpdateChannelAPIResponse {}
 
 export interface MarkReadAPIResponse extends APIResponse {
-  event: Event;
+  event: Event<MessageReadEvent>;
 }
 
 export interface StopWatchingAPIResponse extends APIResponse {}
@@ -589,7 +543,7 @@ export interface MessageResponse {
   text: string;
   attachments?: Attachment[];
   parent_id?: string;
-  mentioned_users?: string[];
+  mentioned_users?: UserResponse[];
   command?: string;
   user?: User;
   html: string;
@@ -651,7 +605,9 @@ export interface ChannelResponse {
   frozen: boolean;
   member_count?: number;
   invites?: string[];
-  config: ChannelConfig;
+  config: ChannelConfigWithInfo;
+  // Additional properties defined on channel
+  [propName: string]: any;
 }
 
 export interface ReadResponse {
@@ -668,15 +624,22 @@ export interface MuteResponse {
 
 export interface FlagResponse {
   created_by_automod: boolean;
-  user: UserResponse;
-  target_message_id: string;
-  target: UserResponse;
+  user?: UserResponse;
+  target_message_id?: string;
+  target_user?: UserResponse;
   created_at: string;
   updated_at: string;
   reviewed_at: string;
   reviewed_by: string;
   approved_at: string;
   rejected_at: string;
+}
+
+export interface CommandResponse {
+  name: string;
+  description: string;
+  args: string;
+  set: string;
 }
 
 export interface ChannelConfigDBFields {
@@ -703,7 +666,15 @@ export interface ChannelConfig extends ChannelConfigFields, ChannelConfigDBField
   commands: CommandVariants[];
 }
 
-export interface ChannelTypeConfig extends ChannelConfig {}
+export interface ChannelConfigWithInfo
+  extends ChannelConfigFields,
+    ChannelConfigDBFields {
+  commands: CommandResponse[];
+}
+
+export interface ChannelTypeConfig extends ChannelConfigWithInfo {
+  permissions: Permission[];
+}
 
 export type CommandVariants =
   | 'all'
@@ -713,4 +684,6 @@ export type CommandVariants =
   | 'imgur'
   | 'flag'
   | 'ban'
-  | 'mute';
+  | 'unban'
+  | 'mute'
+  | 'unmute';
