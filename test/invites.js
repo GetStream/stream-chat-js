@@ -1,14 +1,7 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 
-import {
-	createUsers,
-	expectHTTPErrorCode,
-	getServerTestClient,
-	getTestClient,
-	getTestClientForUser,
-	sleep,
-} from './utils';
+import {createUsers, expectHTTPErrorCode, getServerTestClient, getTestClient, getTestClientForUser,} from './utils';
 import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
@@ -132,23 +125,18 @@ describe('Member style channel init', () => {
 	});
 
 	it('Accept an invite', async () => {
-		const c = await createTestInviteChannel();
 		const nickC = await getTestClientForUser('nick');
+		const c = await createTestInviteChannel();
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
-		const messageReceived = new Promise(resolve => {
-			nickChannel.on('message.new', e => {
-				expect(e.message.text).to.equal('Nick accepted the chat invite.');
-				resolve();
-			});
-		});
+
 		const notificationReceived = new Promise(resolve => {
 			nickC.on('notification.invite_accepted', e => {
 				expect(e.channel).to.be.an('object');
 				resolve();
 			});
 		});
-		await nickChannel.watch();
+
 		const response = await nickChannel.acceptInvite({
 			message: {text: 'Nick accepted the chat invite.'},
 		});
@@ -156,7 +144,6 @@ describe('Member style channel init', () => {
 		expect(response.message.text).to.equal('Nick accepted the chat invite.');
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
-		await messageReceived;
 		await notificationReceived;
 		// second time should fail...
 		await expectHTTPErrorCode(
@@ -170,17 +157,19 @@ describe('Member style channel init', () => {
 	it('Reject an invite', async () => {
 		const c = await createTestInviteChannel();
 		const nickC = await getTestClientForUser('nick');
+		const thierryC = await getTestClientForUser('thierry');
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
+		const thierryChannel = thierryC.channel('messaging', c.id);
 		const updateReceived = new Promise(resolve => {
-			nickChannel.on(e => {
+			thierryC.on(e => {
 				if (e.type === 'member.updated') {
 					expect(e.member.invite_rejected_at).to.not.equal(null);
 					resolve();
 				}
 			});
 		});
-
+		await thierryChannel.watch();
 		await nickChannel.watch();
 		const response = await nickChannel.rejectInvite();
 		expect(response.members[1].user.id).to.equal('nick');
