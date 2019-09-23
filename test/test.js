@@ -2106,8 +2106,8 @@ describe('Chat', function() {
 		});
 
 		it('Query channels allows you to list hidden channels', async function() {
-			const channels = await client.queryChannels({ hidden: true });
-			expect(channels).to.have.length(0);
+			const channels = await client.queryChannels({ id: channelID, hidden: true });
+			expect(channels).to.have.length(1);
 		});
 
 		it('When a new message is sent to the hidden channel', async function() {
