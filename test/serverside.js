@@ -472,6 +472,30 @@ describe('Managing users', function() {
 		expect(response.users[0].os).to.eql('gnu/linux');
 	});
 
+	it('do partial update', async function() {
+		await client.updateUser({ id: user.id, field: 'value' });
+		const response = await client.queryUsers(
+			{ id: user.id },
+			{},
+			{ presence: false },
+		);
+		expect(response.users[0].id).to.eql(user.id);
+		expect(response.users[0].role).to.eql(user.role);
+		expect(response.users[0].field).to.eql('value');
+	});
+
+	it('allows remove custom fields', async function() {
+		await client.updateUser({ id: user.id, field: 'value' });
+		await client.updateUser({ id: user.id, field: null });
+		const response = await client.queryUsers(
+			{ id: user.id },
+			{},
+			{ presence: false },
+		);
+		expect(response.users[0].id).to.eql(user.id);
+		expect(response.users[0].field).to.be.undefined;
+	});
+
 	it('change user role', async function() {
 		user.role = 'admin';
 		await client.updateUser(user);
