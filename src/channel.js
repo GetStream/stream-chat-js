@@ -724,9 +724,7 @@ export class Channel {
 		const channel = this;
 		this._client.logger(
 			'info',
-			`channel:_handleChannelEvent - Received event of type { ${event.type} } on ${
-				this.cid
-			}`,
+			`channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
 			{
 				tags: ['event', 'channel'],
 				channel: this,
@@ -817,9 +815,7 @@ export class Channel {
 	_checkInitialized() {
 		if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
 			throw Error(
-				`Channel ${
-					this.cid
-				} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
+				`Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
 			);
 		}
 	}
