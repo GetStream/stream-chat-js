@@ -2085,6 +2085,51 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Hiding channels', function() {
+		let client, channel;
+		const userID = uuidv4();
+		const channelID = uuidv4();
+
+		before(async () => {
+			client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			channel = client.channel('team', channelID);
+			await channel.watch();
+		});
+
+		it('Hide a channel for a user', async function() {
+			await channel.hide();
+		});
+
+		it('Hidden channel should not be in query channels results', async function() {
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(0);
+		});
+
+		it('Query channels allows you to list hidden channels', async function() {
+			const channels = await client.queryChannels({ hidden: true });
+			expect(channels).to.have.length(0);
+		});
+
+		it('When a new message is sent to the hidden channel', async function() {
+			serverAuthClient = getTestClient(true);
+			await createUsers([uuidv4()]);
+			const channel2 = serverAuthClient.channel('team', channelID);
+			await channel2.sendMessage({ text: 'wake up!', user_id: userID });
+		});
+
+		it('Should be listed by the query channels', async function() {
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(1);
+		});
+
+		it('Show/Hide a channel', async function() {
+			await channel.hide();
+			await channel.show();
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(1);
+		});
+	});
+
 	describe('Moderation', function() {
 		serverAuthClient = getTestClient(true);
 
