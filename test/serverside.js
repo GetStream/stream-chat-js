@@ -856,6 +856,7 @@ describe('App configs', function() {
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
 				delete response.app.push_notifications.firebase.notification_template;
+				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
 					enabled: true,
 				});
@@ -872,6 +873,7 @@ describe('App configs', function() {
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
 				delete response.app.push_notifications.firebase.notification_template;
+				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
 					enabled: false,
 				});
