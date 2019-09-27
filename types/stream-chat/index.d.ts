@@ -316,7 +316,6 @@ export class Channel {
   addMembers(members: string[]): Promise<AddMembersAPIResponse>;
   addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
   removeMembers(members: string[]): Promise<RemoveMembersAPIResponse>;
-  // TODO: Add test
   demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
   sendAction(messageID: string, formData: object): Promise<SendMessageAPIResponse>;
@@ -337,6 +336,8 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
+  hide(userId?: string): Promise<APIResponse>;
+  show(userId?: string): Promise<APIResponse>;
 }
 
 export class ChannelState {
@@ -360,7 +361,7 @@ export class ChannelState {
     [user_id: string]: SeamlessImmutable.Immutable<UserResponse>;
   }>;
   members: SeamlessImmutable.Immutable<{
-    [user_id: string]: SeamlessImmutable.Immutable<Member>;
+    [user_id: string]: SeamlessImmutable.Immutable<ChannelMemberResponse>;
   }>;
   last_message_at: string;
   addMessageSorted(newMessage: Message): void;
