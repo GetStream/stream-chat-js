@@ -3,6 +3,8 @@
   "strictFunctionTypes": true,
   "rules": {
     "indent": [true, "spaces"],
-    "no-unnecessary-class": false
+    "no-unnecessary-class": false,
+    "no-empty-interface": false,
+    "no-relative-import-in-test": false
   }
 }
