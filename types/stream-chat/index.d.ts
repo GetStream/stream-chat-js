@@ -38,13 +38,6 @@ export interface Message {
   [propName: string]: any;
 }
 
-export interface Member {
-  created_at: string;
-  role: string;
-  updated_at: string;
-  user: User;
-}
-
 export interface User {
   id: string;
   role?: string;
@@ -594,6 +587,8 @@ export interface ChannelMemberResponse {
   updated_at?: string;
 }
 
+// @deprecated - Please use ChannelMemberResponse
+export interface Member extends ChannelMemberResponse {}
 export interface ChannelResponse {
   cid: string;
   id: string;
