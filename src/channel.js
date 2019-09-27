@@ -623,6 +623,32 @@ export class Channel {
 	}
 
 	/**
+	 * hides the channel from queryChannels for the user until a message is added
+	 *
+	 * @param userId
+	 * @returns {Promise<*>}
+	 */
+	async hide(userId = null) {
+		this._checkInitialized();
+		return await this.getClient().post(`${this._channelURL()}/hide`, {
+			user_id: userId,
+		});
+	}
+
+	/**
+	 * removes the hidden status for a channel
+	 *
+	 * @param userId
+	 * @returns {Promise<*>}
+	 */
+	async show(userId = null) {
+		this._checkInitialized();
+		return await this.getClient().post(`${this._channelURL()}/show`, {
+			user_id: userId,
+		});
+	}
+
+	/**
 	 * banUser - Removes the bans for a user on a channel
 	 *
 	 * @param targetUserID
