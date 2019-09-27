@@ -16,6 +16,12 @@ export interface Action {
   value?: string;
 }
 
+export interface Span {
+  start?: string;
+  until?: string;
+  cid: string;
+}
+
 export interface Attachment {
   type?: string;
   fallback?: string;
@@ -231,6 +237,11 @@ export class StreamChat {
   updateMessage(message: Message, user: string | User): Promise<APIResponse>;
   deleteMessage(messageID: string, hardDelete?: boolean): Promise<APIResponse>;
   verifyWebHook(requestBody: object, xSignature: string): boolean;
+
+  syncChannels(
+    onMsgs: (messages: MessageResponse[]) => boolean,
+    spans: Span[],
+  ): Promise<void>;
 }
 
 export class ClientState {
@@ -298,7 +309,15 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<APIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
+
+  sync(
+    onMsgs: (messages: MessageResponse[]) => boolean,
+    start?: string,
+    until?: string,
+  ): Promise<void>;
 }
+
+export function onMessagesReceived(messages: Message[]): boolean;
 
 export class ChannelState {
   constructor(channel: Channel);

@@ -663,6 +663,19 @@ export class Channel {
 	}
 
 	/**
+	 * sync -
+	 * @param onMsgs callback
+	 * @param since
+	 * @param until
+	 * @returns {Promise<*>}
+	 */
+	async sync(onMsgs, since, until) {
+		await this.getClient().syncChannels(onMsgs, [
+			{ after: since, until, channelId: this.cid },
+		]);
+	}
+
+	/**
 	 * on - Listen to events on this channel.
 	 *
 	 * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})

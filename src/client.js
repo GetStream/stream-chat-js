@@ -10,11 +10,11 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 
 import {
+	CheckSignature,
+	DevToken,
 	JWTServerToken,
 	JWTUserToken,
 	UserFromToken,
-	DevToken,
-	CheckSignature,
 } from './signing';
 import http from 'http';
 import https from 'https';
@@ -265,6 +265,13 @@ export class StreamChat {
 	}
 
 	/**
+	 * catchup - todo docs
+	 */
+	async catchup(spans) {
+		return await this.post(this.baseURL + '/catchup', spans);
+	}
+
+	/**
 	 * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
 	 *
 	 * @param {string} userID User ID. If user has no devices, it will error
@@ -357,6 +364,24 @@ export class StreamChat {
 			...guestUser
 		} = response.user;
 		return await this.setUser(guestUser, response.access_token);
+	}
+
+	/**
+	 * syncChannels - todo docs
+	 *
+	 * @param {array} spans
+	 *
+	 * @return {promise} Returns a promise that resolves when all data is synchronised
+	 */
+	async syncChannels(onMsg, spans) {
+		let remaining = spans;
+		do {
+			const resp = await this.catchup({ spans: remaining });
+			remaining = resp.remaining;
+			if (onMsg(resp.messages) === false) {
+				break;
+			}
+		} while (remaining.length > 0);
 	}
 
 	/**
