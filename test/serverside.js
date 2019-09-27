@@ -473,27 +473,21 @@ describe('Managing users', function() {
 	});
 
 	it('do partial update', async function() {
-		await client.updateUser({ id: user.id, field: 'value' });
-		const response = await client.queryUsers(
-			{ id: user.id },
-			{},
-			{ presence: false },
-		);
-		expect(response.users[0].id).to.eql(user.id);
-		expect(response.users[0].role).to.eql(user.role);
-		expect(response.users[0].field).to.eql('value');
-	});
+		await client.partialUpdateUser({
+			id: user.id,
+			set: {
+				field: { text: 'value' },
+				'field.path': 'test',
+				'field.path2': { help: 'yes' },
+			},
+		});
 
-	it('allows remove custom fields', async function() {
-		await client.updateUser({ id: user.id, field: 'value' });
-		await client.updateUser({ id: user.id, field: null });
-		const response = await client.queryUsers(
-			{ id: user.id },
-			{},
-			{ presence: false },
-		);
-		expect(response.users[0].id).to.eql(user.id);
-		expect(response.users[0].field).to.be.undefined;
+		const response = await client.partialUpdateUser({
+			id: user.id,
+			unset: ['field.path2'],
+		});
+
+		expect(response.users[user.id].field).to.eql({ text: 'value', path: 'test' });
 	});
 
 	it('change user role', async function() {
