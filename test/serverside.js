@@ -575,6 +575,23 @@ describe('Managing users', function() {
 				}),
 			);
 		});
+
+		it("doesn't allow start or end with dot in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { '.test.test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { 'test.test.': '111' },
+				}),
+			);
+		});
 	});
 
 	it('change user role', async function() {
