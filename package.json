@@ -30,7 +30,7 @@
   ],
   "files": [
     "/dist",
-    "/types",
+    "/types/stream-chat/index.d.ts",
     "readme.md"
   ],
   "dependencies": {
