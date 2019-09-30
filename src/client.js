@@ -1013,6 +1013,18 @@ export class StreamChat {
 	}
 
 	/**
+	 * partialUpdateUser - Update the given user object
+	 *
+	 * @param {object} Object which should contain id and any of "set" or "unset" params;
+	 * example: {id: "user1", set:{field: value}, unset:["field2"]}
+	 *
+	 * @return {object} list of updated users
+	 */
+	async partialUpdateUser(userObject) {
+		return await this.partialUpdateUsers([userObject]);
+	}
+
+	/**
 	 * updateUsers - Batch update the list of users
 	 *
 	 * @param {array} A list of users
@@ -1030,6 +1042,25 @@ export class StreamChat {
 
 		return await this.post(this.baseURL + '/users', {
 			users: userMap,
+		});
+	}
+
+	/**
+	 * updateUsers - Batch partial update of users
+	 *
+	 * @param {array} A list of partial update requests
+	 *
+	 * @return {object}
+	 */
+	async partialUpdateUsers(users) {
+		for (const userObject of users) {
+			if (!userObject.id) {
+				throw Error('User ID is required when updating a user');
+			}
+		}
+
+		return await this.patch(this.baseURL + '/users', {
+			users,
 		});
 	}
 

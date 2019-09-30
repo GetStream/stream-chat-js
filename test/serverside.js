@@ -472,6 +472,128 @@ describe('Managing users', function() {
 		expect(response.users[0].os).to.eql('gnu/linux');
 	});
 
+	describe('partial update', function() {
+		it('change user role', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				set: {
+					role: 'admin',
+				},
+			});
+
+			expect(res.users[user.id].role).to.eql('admin');
+		});
+
+		it('change custom field', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				set: {
+					fields: {
+						subfield1: 'value1',
+						subfield2: 'value2',
+					},
+				},
+			});
+
+			expect(res.users[user.id].fields).to.eql({
+				subfield1: 'value1',
+				subfield2: 'value2',
+			});
+		});
+
+		it('removes custom fields', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				unset: ['fields.subfield1'],
+			});
+
+			expect(res.users[user.id].fields).to.eql({
+				subfield2: 'value2',
+			});
+		});
+
+		it("doesn't allow .. in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { 'test..test': '111' },
+				}),
+			);
+
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: ['test..test'],
+				}),
+			);
+		});
+
+		it("doesn't allow spaces in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test.test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test. test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test.test ': '111' },
+				}),
+			);
+
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test.test'],
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test. test'],
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test.test '],
+				}),
+			);
+		});
+
+		it("doesn't allow start or end with dot in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { '.test.test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { 'test.test.': '111' },
+				}),
+			);
+		});
+	});
+
 	it('change user role', async function() {
 		user.role = 'admin';
 		await client.updateUser(user);
