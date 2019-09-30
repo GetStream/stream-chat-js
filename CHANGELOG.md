@@ -1,3 +1,7 @@
+## September 30, 2019 - 1.1.2
+
+- Moving @types to devDependencies
+
 ## September 27, 2019 - 1.1.1
 
 - Syncing and improving the typescript declaration file
