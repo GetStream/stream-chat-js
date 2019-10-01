@@ -738,14 +738,14 @@ describe('Chat', function() {
 					400,
 					authClient.partialUpdateUser({
 						id: user.id,
-						set: { ' test. test': '111' },
+						set: { 'test. test': '111' },
 					}),
 				);
 				await expectHTTPErrorCode(
 					400,
 					authClient.partialUpdateUser({
 						id: user.id,
-						set: { ' test.test ': '111' },
+						set: { 'test.test ': '111' },
 					}),
 				);
 
