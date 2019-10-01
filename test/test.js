@@ -686,7 +686,7 @@ describe('Chat', function() {
 				});
 			});
 
-			it('sends user.updated event', async function() {
+			it.skip('sends user.updated event', async function() {
 				// subscribe to user presence
 				await authClient.queryUsers(
 					{ id: { $in: [user.id] } },
