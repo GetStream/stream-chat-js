@@ -114,6 +114,36 @@ describe('Chat', function() {
 				});
 			});
 		});
+
+		it('should update client user', async () => {
+			await serverAuthClient.updateUser({
+				id: 'thierry2',
+				name: 'Theirry',
+			});
+
+			// subscribe to user presence
+			const response = await authClient.queryUsers(
+				{ id: { $in: ['thierry2'] } },
+				{},
+				{ presence: true },
+			);
+
+			expect(response.users.length).to.equal(1);
+
+			// this update should trigger the user.updated event..
+			await new Promise(resolve => {
+				authClient.on('user.updated', event => {
+					expect(event.user.id).to.equal('thierry2');
+					expect(event.user.name).to.equal('New Theiry');
+					expect(authClient.user.name).equal('New Theiry');
+					resolve();
+				});
+				serverAuthClient.updateUser({
+					id: 'thierry2',
+					name: 'New Theiry',
+				});
+			});
+		});
 	});
 
 	describe('Failures', function() {

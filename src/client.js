@@ -642,6 +642,10 @@ export class StreamChat {
 
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+			if (event.user.id === this.userID) {
+				this.user = { ...event.user };
+				this._user = { ...event.user };
+			}
 			client.state.updateUser(event.user);
 			client._updateUserReferences(event.user);
 		}
