@@ -396,9 +396,8 @@ describe('Channels - Members are update correctly', function() {
 		expect(resp.members.length).to.be.equal(3);
 		const channelState = await channel.watch();
 		expect(channelState.members.length).to.be.equal(3);
-		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
-		expect(channelState.members[1].user.id).to.be.equal(members[1].id);
-		expect(channelState.members[2].user.id).to.be.equal(members[2].id);
+		const memberIDs = channelState.members.map(m => m.user.id);
+		expect(memberIDs).to.deep.members(members.map(m => m.id));
 	});
 
 	it('channel state must be updated after removing multiple members', async function() {
