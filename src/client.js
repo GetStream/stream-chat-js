@@ -1001,6 +1001,35 @@ export class StreamChat {
 		return channel;
 	}
 
+	/*
+	 * getOrCreateUser returns user object. If user doesn't exist it will be created
+	 *
+	 * @param {object} user object
+	 *
+	 * @return {object} user object from API
+	 */
+	async getOrCreateUser(userObject) {
+		const response = await this.getOrCreateUsers([userObject]);
+		return response.users[userObject.id];
+	}
+
+	/*
+	 * getOrCreateUsers returns list of users; if user doesn't exist it will be created
+	 *
+	 * @param {array} A list of user objects
+	 *
+	 * @return {object}
+	 */
+	async getOrCreateUsers(users) {
+		for (const userObject of users) {
+			if (!userObject.id) {
+				throw Error('User ID is required for user object');
+			}
+		}
+
+		return await this.put(this.baseURL + '/users', { users });
+	}
+
 	/**
 	 * updateUser - Update or Create the given user object
 	 *

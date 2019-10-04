@@ -5,6 +5,7 @@ import {
 	getTestClient,
 	getTestClientForUser,
 	sleep,
+	userInputValidation,
 } from './utils';
 import {
 	Allow,
@@ -2360,5 +2361,71 @@ describe('Unread counts are properly initialised', function() {
 		client = await getTestClientForUser(userCreatedByConnect);
 		expect(client.health.me.total_unread_count).to.be.equal(1);
 		expect(client.health.me.unread_channels).to.be.equal(1);
+	});
+});
+
+describe('GetOrCreate users', function() {
+	describe('validation', function() {
+		it('should return error for client-side auth', async function() {
+			const user = { id: uuidv4() };
+			const client = await getTestClientForUser(user.id);
+
+			await expectHTTPErrorCode(403, client.getOrCreateUsers([user]));
+		});
+
+		it('should return error when no users', async function() {
+			const client = await getTestClient(true);
+			await expectHTTPErrorCode(400, client.getOrCreateUsers([]));
+		});
+
+		userInputValidation(async function(user) {
+			const client = await getTestClient(true);
+			return await client.getOrCreateUsers([user]);
+		});
+	});
+
+	describe('Workflow', function() {
+		let user = { id: uuidv4() };
+		let client;
+
+		before(async function() {
+			client = await getTestClient(true);
+			const resp = await client.updateUser(user);
+			user = resp.users[user.id];
+		});
+
+		describe('when no user exists', function() {
+			const users = [{ id: uuidv4() }, { id: uuidv4() }];
+
+			it('should create users', async function() {
+				let resp = await client.getOrCreateUsers(users);
+
+				expect(Object.keys(resp.users)).to.have.members(users.map(u => u.id));
+
+				resp = await client.queryUsers({ id: { $in: users.map(u => u.id) } });
+				expect(resp.users.map(u => u.id)).to.have.members(users.map(u => u.id));
+			});
+		});
+
+		describe('when one of users not exists', function() {
+			const users = [{ id: user.id, updated: true }, { id: uuidv4() }];
+			let resp;
+
+			before(async function() {
+				resp = await client.getOrCreateUsers(users);
+			});
+
+			it('should return users', async function() {
+				expect(Object.keys(resp.users)).to.have.members(users.map(u => u.id));
+
+				resp = await client.queryUsers({ id: { $in: users.map(u => u.id) } });
+				expect(resp.users.map(u => u.id)).to.have.members(users.map(u => u.id));
+			});
+
+			it('should not update existing user', async function() {
+				const resp = await client.queryUsers({ id: { $eq: user.id } });
+				expect(resp.users[0]).to.deep.eq(user);
+			});
+		});
 	});
 });
