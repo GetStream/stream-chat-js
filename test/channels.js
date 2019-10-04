@@ -1036,3 +1036,38 @@ describe('query channels by field $exists', function() {
 		]);
 	});
 });
+
+describe('query channels members $nin', function() {
+	let creator = uuidv4();
+	let membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	let client;
+
+	before(async function() {
+		await createUsers(membersIdS);
+		await createUsers(creator);
+		client = await getTestClientForUser(creator);
+		for (let i = 0; i < membersIdS.length; i++) {
+			const memberId = membersIdS[i];
+			await client
+				.channel('messaging', memberId, {
+					members: [creator, memberId],
+				})
+				.create();
+		}
+	});
+
+	it('query $in/$nin', async function() {
+		const resp = await client.queryChannels({
+			$and: [
+				{ members: { $in: [creator] } },
+				{ members: { $nin: [membersIdS[0]] } },
+			],
+		});
+
+		//expect channel id membersIdS[0] to be excluded from result
+		for (let i = 0; i < resp.length; i++) {
+			expect(resp[i].id).not.be.equal(membersIdS[0]);
+			expect(membersIdS.indexOf(resp[i].id)).not.be.equal(-1);
+		}
+	});
+});
