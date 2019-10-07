@@ -553,7 +553,7 @@ export class StreamChat {
 		let fileField;
 
 		const params = this._addClientParams();
-		if (isReadableStream(uri)) {
+		if (isReadableStream(uri) || uri instanceof File) {
 			fileField = uri;
 		} else {
 			fileField = {
