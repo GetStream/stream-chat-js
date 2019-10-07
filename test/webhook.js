@@ -131,37 +131,39 @@ describe('Webhooks', function() {
 	});
 
 	it('should receive new message event with thread participants', async function() {
-		await Promise.all([chan.addMembers([horatiuID]), lastMessagePromise]);
+		await chan.addMembers([horatiuID]);
 
-		const messageResponse = (await Promise.all([
-			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
-			lastMessagePromise,
-		]))[0];
-		await Promise.all([
-			chan.sendMessage({
-				text: uuidv4(),
-				user: { id: thierryID },
-				parent_id: messageResponse.message.id,
-			}),
-			lastMessagePromise,
+		const eventsPromise = promises.waitForEvents('message.new', 3);
+
+		const parent = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+
+		await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: thierryID },
+			parent_id: parent.message.id,
+		});
+
+		await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: horatiuID },
+			parent_id: parent.message.id,
+		});
+
+		const events = await eventsPromise;
+
+		expect(events[0].thread_participants).to.be.undefined; // no thread participant for parent
+		expect(events[1].thread_participants.map(u => u.id)).to.have.members([
+			thierryID,
+			tommasoID,
 		]);
-		await Promise.all([
-			chan.sendMessage({
-				text: uuidv4(),
-				user: { id: tommasoID },
-				parent_id: messageResponse.message.id,
-			}),
-			lastMessagePromise,
+		expect(events[2].thread_participants.map(u => u.id)).to.have.members([
+			thierryID,
+			tommasoID,
+			horatiuID,
 		]);
-		expect(lastMessage).to.not.be.null;
-		expect(lastMessage.type).to.eq('message.new');
-		expect(lastMessage.thread_participants).to.not.be.null;
-		expect(lastMessage.thread_participants).to.be.an('array');
-		expect(lastMessage.thread_participants).to.have.length(2);
-		expect(lastMessage.members[0].user).to.be.an('object');
-		expect(lastMessage.members[0].user.id).to.eq(thierryID);
-		expect(lastMessage.members[1].user).to.be.an('object');
-		expect(lastMessage.members[1].user.id).to.eq(tommasoID);
 	});
 
 	let messageResponse;
