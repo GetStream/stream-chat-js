@@ -24,10 +24,9 @@ import pkg from '../package.json';
 
 function isReadableStream(obj) {
 	return (
-		obj !== null &&
 		typeof obj === 'object' &&
-		typeof obj._read === 'function' &&
-		typeof obj._readableState === 'object'
+		typeof (obj._read === 'function') &&
+		typeof (obj._readableState === 'object')
 	);
 }
 
@@ -677,7 +676,9 @@ export class StreamChat {
 	recoverState = async () => {
 		this.logger(
 			'info',
-			`client:recoverState() - Start of recoverState with connectionID ${this.wsConnection.connectionID}`,
+			`client:recoverState() - Start of recoverState with connectionID ${
+				this.wsConnection.connectionID
+			}`,
 			{
 				tags: ['connection'],
 			},
