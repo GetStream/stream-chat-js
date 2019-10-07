@@ -333,6 +333,30 @@ describe('Chat', function() {
 					await expectHTTPErrorCode(404, client.removeDevice('totes fake'));
 				});
 			});
+
+			describe('Moving device to new user', function() {
+				const deviceID = uuidv4();
+				let newClient;
+
+				before(async function() {
+					newClient = await getTestClientForUser(uuidv4());
+
+					await client.addDevice(deviceID, 'apn');
+					await newClient.addDevice(deviceID, 'apn');
+				});
+
+				it('removes device from old user', async function() {
+					const response = await client.getDevices();
+					expect(response.devices.map(d => d.id)).to.not.have.members([
+						deviceID,
+					]);
+				});
+
+				it('adds device to new user', async function() {
+					const response = await newClient.getDevices();
+					expect(response.devices.map(d => d.id)).to.have.members([deviceID]);
+				});
+			});
 		});
 	});
 
