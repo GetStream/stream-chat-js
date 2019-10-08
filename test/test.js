@@ -115,15 +115,22 @@ describe('Chat', function() {
 			});
 		});
 
+		// If user.updated event corresponds to current user of client, then updated data of user should reflect in user set on client as well.
 		it('should update client user', async () => {
+			const u1 = uuidv4();
+			const authClient = getTestClient(true);
+			const serverAuthClient = getTestClient(true);
+
 			await serverAuthClient.updateUser({
-				id: 'thierry2',
-				name: 'Theirry',
+				id: u1,
+				name: 'Awesome user',
 			});
+
+			await authClient.setUser({ id: u1 });
 
 			// subscribe to user presence
 			const response = await authClient.queryUsers(
-				{ id: { $in: ['thierry2'] } },
+				{ id: { $in: [u1] } },
 				{},
 				{ presence: true },
 			);
@@ -133,14 +140,14 @@ describe('Chat', function() {
 			// this update should trigger the user.updated event..
 			await new Promise(resolve => {
 				authClient.on('user.updated', event => {
-					expect(event.user.id).to.equal('thierry2');
-					expect(event.user.name).to.equal('New Theiry');
-					expect(authClient.user.name).equal('New Theiry');
+					expect(event.user.id).to.equal(u1);
+					expect(event.user.name).to.equal('Not so awesome');
+					expect(authClient.user.name).equal('Not so awesome');
 					resolve();
 				});
 				serverAuthClient.updateUser({
-					id: 'thierry2',
-					name: 'New Theiry',
+					id: u1,
+					name: 'Not so awesome',
 				});
 			});
 		});
