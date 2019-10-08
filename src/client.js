@@ -244,6 +244,7 @@ export class StreamChat {
 				"firebase_config": {
 					"server_key": "server key from fcm",
 					"notification_template": "notification handlebars template"
+					"data_template": "data handlebars template"
 				},
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
@@ -273,6 +274,7 @@ export class StreamChat {
 				  messageID: 'id-of-message',//will error if message does not exist
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
 			}
 	 */
 	async testPushSettings(userID, data = {}) {
@@ -282,6 +284,9 @@ export class StreamChat {
 			...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
 			...(data.firebaseTemplate
 				? { firebase_template: data.firebaseTemplate }
+				: {}),
+			...(data.firebaseDataTemplate
+				? { firebase_data_template: data.firebaseDataTemplate }
 				: {}),
 		});
 	}
