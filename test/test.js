@@ -1374,10 +1374,10 @@ describe('Chat', function() {
 
 	describe('Slash Commands', () => {
 		describe('Custom commands', () => {
-			const cmdName = 'testcmd';
+			const cmdName = 'hello';
 
 			it(`call unknown "${cmdName}" command should fail`, async function() {
-				const text = '/testcmd';
+				const text = '/' + cmdName;
 				const response = await channel.sendMessage({ text });
 				expect(response.message.command).to.equal('unknown');
 				expect(response.message.type).to.equal('error');
@@ -1468,7 +1468,7 @@ describe('Chat', function() {
 				}
 			});
 
-			it(`update "${cmdName}" command name to "${cmdName}-3 should fail`, async function() {
+			it(`"${cmdName}" command should renamed to "${cmdName}-3`, async function() {
 				const response = await authClient.updateCommand(cmdName, {
 					name: cmdName + '-3',
 				});
@@ -1479,7 +1479,7 @@ describe('Chat', function() {
 			it(`get "${cmdName}" command should not exist anymore`, async function() {
 				try {
 					await authClient.getCommand(cmdName);
-					expect().fail('cant get unexisting command');
+					expect().fail('cant get unexciting command');
 				} catch (e) {
 					expect(e).not.to.be.null;
 				}
@@ -1493,6 +1493,100 @@ describe('Chat', function() {
 
 			it(`"${cmdName}-2" should deleted`, async function() {
 				await authClient.deleteCommand(cmdName);
+			});
+
+			it(`"${cmdName}-3" command should renamed to back to "${cmdName}`, async function() {
+				const response = await authClient.updateCommand(cmdName + '-3', {
+					name: cmdName,
+				});
+				expect(response.name).to.equal(cmdName);
+			});
+
+			it(`call "${cmdName}" command without an argument should fail`, async function() {
+				const text = '/' + cmdName;
+				try {
+					await channel.sendMessage({ text });
+					expect().fail('cant call a command without arg');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			let messageID;
+
+			it(`call "${cmdName}" command with argument should return actions`, async function() {
+				const text = '/' + cmdName + ' max';
+				const response = await channel.sendMessage({ text });
+
+				expect(response.message.text).to.equal('hi, max!');
+				expect(response.message.attachments[0].actions[0].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[0].value).to.equal('left');
+				expect(response.message.attachments[0].actions[1].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[1].value).to.equal(
+					'right',
+				);
+				expect(response.message.attachments.length).equal(1);
+				expect(response.message.attachments[0].actions.length).equal(2);
+				messageID = response.message.id;
+			});
+
+			it(`call "unknown" action name should fail`, async function() {
+				try {
+					await channel.sendAction(messageID, {
+						unknown: 'blah',
+					});
+					expect().fail('should fail');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`call "unknown" action value should fail`, async function() {
+				try {
+					await channel.sendAction(messageID, {
+						action: 'unknown',
+					});
+					expect().fail('should fail');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`call "left" action should return more actions`, async function() {
+				const response = await channel.sendAction(messageID, {
+					action: 'left',
+				});
+
+				expect(response.message.text).to.equal(
+					'you see a monster. Your actions?',
+				);
+				expect(response.message.attachments[0].actions[0].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[0].value).to.equal(
+					'attack',
+				);
+				expect(response.message.attachments[0].actions[1].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[1].value).to.equal(
+					'trade',
+				);
+				expect(response.message.attachments.length).equal(1);
+				expect(response.message.attachments[0].actions.length).equal(2);
+			});
+
+			it(`call "right" action should return message without actions`, async function() {
+				const response = await channel.sendAction(messageID, {
+					action: 'left',
+				});
+
+				expect(response.message.text).to.equal('You died.');
+				expect(response.message.attachments.length).equal(0);
 			});
 		});
 
