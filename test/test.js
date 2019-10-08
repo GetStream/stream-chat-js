@@ -156,6 +156,7 @@ describe('Chat', function() {
 				const text = 'helloworld :world: rocks 123';
 				await channel.sendMessage({ text, customfield: '123' });
 			}
+
 			runtest().catch(exc => {
 				done(exc);
 			});
@@ -810,6 +811,7 @@ describe('Chat', function() {
 					}
 					done();
 				}
+
 				runtest().catch(exc => {
 					done(exc);
 				});
@@ -1237,6 +1239,7 @@ describe('Chat', function() {
 					);
 					expect(deleteResponse.message.deleted_at).to.not.be.null;
 				}
+
 				runTest().catch(exc => {
 					done(exc);
 				});
@@ -1370,6 +1373,129 @@ describe('Chat', function() {
 	});
 
 	describe('Slash Commands', () => {
+		describe('Custom commands', () => {
+			const cmdName = 'testcmd';
+
+			it(`call unknown "${cmdName}" command should fail`, async function() {
+				const text = '/testcmd';
+				const response = await channel.sendMessage({ text });
+				expect(response.message.command).to.equal('unknown');
+				expect(response.message.type).to.equal('error');
+			});
+
+			it(`get "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await authClient.getCommand(cmdName);
+					expect().fail('cannot get unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`update "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await authClient.updateCommand(cmdName, { name: 'new' });
+					expect().fail('cannot update unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`delete "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await authClient.deleteCommand(cmdName);
+					expect().fail('cannot delete unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`create "${cmdName}" command`, async function() {
+				const response = await authClient.createCommand({
+					name: cmdName,
+					description: 'desc',
+				});
+
+				expect(response.name).to.equal(cmdName);
+			});
+
+			it(`create "${cmdName}" command with same name should fail`, async function() {
+				let response;
+				try {
+					response = await authClient.createCommand({
+						name: cmdName,
+						description: 'desc',
+					});
+					expect().fail('cannot create command with same name');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`get "${cmdName}" command should return it`, async function() {
+				const response = await authClient.getCommand(cmdName);
+				expect(response.name).to.equal(cmdName);
+				expect(response.description).to.equal('desc');
+			});
+
+			it(`update "${cmdName}" command description`, async function() {
+				const response = await authClient.updateCommand(cmdName, {
+					description: 'newdesc',
+				});
+				expect(response.name).to.equal(cmdName);
+				expect(response.description).to.equal('desc');
+			});
+
+			it(`"${cmdName}" command description should be updated`, async function() {
+				const response = await authClient.getCommand(cmdName);
+				expect(response.description).to.equal('newdesc');
+			});
+
+			it(`create "${cmdName}-2" command`, async function() {
+				const response = await authClient.createCommand({
+					name: cmdName + '-2',
+					description: 'desc2',
+				});
+				expect(response.name).to.equal(cmdName);
+			});
+
+			it(`update "${cmdName}" command name to "${cmdName}-2 should fail`, async function() {
+				try {
+					await authClient.updateCommand(cmdName, { name: cmdName + '-2' });
+					expect().fail('cannot rename command name to already exist one');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`update "${cmdName}" command name to "${cmdName}-3 should fail`, async function() {
+				const response = await authClient.updateCommand(cmdName, {
+					name: cmdName + '-3',
+				});
+				expect(response.name).to.equal(cmdName + '-3');
+				expect(response.description).to.equal('newdesc');
+			});
+
+			it(`get "${cmdName}" command should not exist anymore`, async function() {
+				try {
+					await authClient.getCommand(cmdName);
+					expect().fail('cant get unexisting command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`get "${cmdName}-3" command should return it`, async function() {
+				const response = await authClient.getCommand(cmdName + '-3');
+				expect(response.name).to.equal(cmdName);
+				expect(response.description).to.equal('newdesc');
+			});
+
+			it(`"${cmdName}-2" should deleted`, async function() {
+				await authClient.deleteCommand(cmdName);
+			});
+		});
+
 		describe('Success', () => {
 			it('Giphy Integration', async function() {
 				const text = '/giphy rock';
@@ -1602,6 +1728,7 @@ describe('Chat', function() {
 				expect(response.channel.color).to.equal('green');
 				expect(response.channel.name).to.equal('myspecialchannel');
 			}
+
 			runTest().catch(exc => {
 				done(exc);
 			});
@@ -1654,6 +1781,7 @@ describe('Chat', function() {
 					type: 'typing.stop',
 				});
 			}
+
 			runTest().catch(exc => {
 				done(exc);
 			});

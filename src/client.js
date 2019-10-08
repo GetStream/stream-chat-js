@@ -717,9 +717,9 @@ export class StreamChat {
 	};
 
 	/*
-	_updateUserReferences updates the members and watchers of the currently active channels
-	that contain this user
-	*/
+  _updateUserReferences updates the members and watchers of the currently active channels
+  that contain this user
+  */
 	_updateUserReferences(user) {
 		const refMap = this.state.userChannelReferences[user.id] || {};
 		const refs = Object.keys(refMap);
@@ -1191,6 +1191,26 @@ export class StreamChat {
 
 	listChannelTypes() {
 		return this.get(this.baseURL + `/channeltypes`);
+	}
+
+	createCommand(data) {
+		return this.post(this.baseURL + '/commands');
+	}
+
+	updateCommand(name, data) {
+		return this.put(this.baseURL + `/commands/${name}`, data);
+	}
+
+	getCommand(name) {
+		return this.get(this.baseURL + `/commands/${name}`);
+	}
+
+	deleteCommand(name) {
+		return this.delete(this.baseURL + `/commands/${name}`);
+	}
+
+	listCommands() {
+		return this.get(this.baseURL + '/commands');
 	}
 
 	/**
