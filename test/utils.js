@@ -91,3 +91,19 @@ export async function createUsers(userIDs) {
 	const response = await serverClient.updateUsers(users);
 	return response;
 }
+
+export function newEventPromise(client, event, count = 1) {
+	let currentCount = 0;
+	const events = [];
+
+	return new Promise(resolve => {
+		client.on(event, function(data) {
+			events.push(data);
+			currentCount += 1;
+			if (currentCount >= count) {
+				client.off(event);
+				resolve(events);
+			}
+		});
+	});
+}
