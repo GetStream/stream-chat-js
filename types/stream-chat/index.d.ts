@@ -2,7 +2,7 @@
 
 export as namespace stream;
 import * as SeamlessImmutable from 'seamless-immutable';
-
+import * as WebSocket from 'ws';
 export interface Action {
   name: string;
   text: string;
@@ -98,6 +98,16 @@ export type NotificationAddedToChannelEvent = 'notification.added_to_channel';
 export type NotificationRemovedFromChannelEvent = 'notification.removed_from_channel';
 export type NotificationMutesUpdatedEvent = 'notification.mutes_updated';
 
+export interface OnlineStatusEvent {
+  type: 'online' | 'offline';
+  [key: string]: any;
+}
+
+export interface ConnctionChangeEvent {
+  type: 'connection.changed' | 'connection.recovered';
+  online?: boolean;
+}
+
 export interface Reaction {
   type: string;
   message_id: string;
@@ -155,7 +165,8 @@ export class StreamChat {
   };
   state: ClientState;
   user: OwnUserResponse;
-
+  browser: string;
+  wsConnection: StableWSConnection;
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;
   getAuthType(): string;
@@ -183,9 +194,9 @@ export class StreamChat {
   sendFile(
     url: string,
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
 
   dispatchEvent(event: Event): void;
@@ -211,7 +222,7 @@ export class StreamChat {
 
   addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
-  removeDevice(deviceId: string): Promise<APIResponse>;
+  removeDevice(deviceId: string, userID?: string): Promise<APIResponse>;
 
   channel(channelType: string, channelID: string, custom: ChannelData): Channel;
 
@@ -274,15 +285,15 @@ export class Channel {
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
   deleteFile(url: string): Promise<DeleteFileAPIResponse>;
   deleteImage(url: string): Promise<DeleteFileAPIResponse>;
@@ -379,12 +390,17 @@ export class StableWSConnection {
     wsURL: string,
     clientID: string,
     userID: string,
-    messageCallback: (event: object) => void,
+    messageCallback: (event: WebSocket.OpenEvent) => void,
     recoverCallback: (open: Promise<object>) => void,
-    eventCallback: (event: object) => void,
+    eventCallback: (event: ConnctionChangeEvent) => void,
   );
   connect(): Promise<void>;
   disconnect(): void;
+  onlineStatusChanged(event: OnlineStatusEvent): void;
+  onopen(wsID: number): void;
+  onmessage(wsID: number, event: WebSocket.MessageEvent): void;
+  onclose(wsID: number, event: WebSocket.CloseEvent): void;
+  onerror(wsID: number, event: WebSocket.ErrorEvent): void;
 }
 
 export class Permission {
@@ -397,6 +413,9 @@ export class Permission {
     action: string,
   );
 }
+
+export const AllowAll: Permission;
+export const DenyAll: Permission;
 
 export function JWTUserToken(
   apiSecret: string,
