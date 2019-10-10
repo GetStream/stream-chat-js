@@ -1,3 +1,15 @@
+## October 10, 2019 - 1.1.5
+
+- Fix for issue [#133](https://github.com/GetStream/stream-chat-js/issues/133) - Updating user object in client, when `user.updated` is received corresponding to user of client
+- Adding types for ChannelData object
+- Fixing tests
+
+## October 07, 2019 - 1.1.4
+
+## October 07, 2019 - 1.1.3
+
+- File upload issue fix - Allowing File object as valid uri in sendFile function in client.
+
 ## September 30, 2019 - 1.1.2
 
 - Moving @types to devDependencies
