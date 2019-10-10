@@ -1964,47 +1964,18 @@ describe('Channel types', function() {
 			});
 		});
 
-		it('role should map to * if not provided', async function() {
+		it('missing role should raise an error', async function () {
 			const name = uuidv4();
 			const permissions = [
 				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
 				new Permission(uuidv4(), 32, AnyResource, null, false, Allow),
 				new Permission(uuidv4(), 2, AnyResource, null, false, Allow),
 			];
-			const newChanType = await client.createChannelType({
+			await expectHTTPErrorCode(400,client.createChannelType({
 				name,
 				permissions,
 				commands: ['all'],
-			});
-			await sleep(500);
-
-			permissions.forEach(function(p) {
-				//expect role to be set to *
-				p.roles = ['*'];
-			});
-
-			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
-
-			const expectedData = {
-				automod: 'disabled',
-				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
-				connect_events: true,
-				max_message_length: 5000,
-				message_retention: 'infinite',
-				mutes: true,
-				name: `${name}`,
-				reactions: true,
-				replies: true,
-				search: true,
-				read_events: true,
-				typing_events: true,
-				permissions,
-			};
-			expect(newChanType).like(expectedData);
-			expect(newChanType.permissions).to.be.sortedBy('priority', {
-				descending: true,
-			});
+			}));
 		});
 	});
 
