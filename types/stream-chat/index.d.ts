@@ -213,7 +213,7 @@ export class StreamChat {
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
   removeDevice(deviceId: string): Promise<APIResponse>;
 
-  channel(channelType: string, channelID: string, custom: object): Channel;
+  channel(channelType: string, channelID: string, custom: ChannelData): Channel;
 
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
@@ -229,11 +229,11 @@ export class StreamChat {
   flagMessage(messageID: string): Promise<FlagAPIResponse>;
   unflagMessage(messageID: string): Promise<UnflagAPIResponse>;
 
-  createChannelType(data: object): Promise<CreateChannelTypeAPIResponse>;
-  getChannelType(channelType: string, data: object): Promise<GetChannelTypeAPIResponse>;
+  createChannelType(data: ChannelData): Promise<CreateChannelTypeAPIResponse>;
+  getChannelType(channelType: string): Promise<GetChannelTypeAPIResponse>;
   updateChannelType(
     channelType: string,
-    data: object,
+    data: ChannelData,
   ): Promise<UpdateChannelTypeAPIResponse>;
   deleteChannelType(channelType: string): Promise<DeleteChannelTypeAPIResponse>;
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
@@ -254,11 +254,11 @@ export class ClientState {
 }
 
 export class Channel {
-  constructor(client: StreamChat, type: string, id: string, data: object);
+  constructor(client: StreamChat, type: string, id: string, data: ChannelData);
   type: string;
   id: string;
   // used by the frontend, gets updated:
-  data: object;
+  data: ChannelResponse;
   cid: string; // `${type}:${id}`;
   listeners: {
     [key: string]: Array<(event: Event) => any>;
@@ -300,7 +300,10 @@ export class Channel {
     user_id?: string,
   ): Promise<DeleteReactionAPIResponce>;
 
-  update(channelData: object, updateMessage: Message): Promise<UpdateChannelAPIResponse>;
+  update(
+    channelData: ChannelData,
+    updateMessage: Message,
+  ): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
 
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
@@ -365,6 +368,12 @@ export class ChannelState {
   clean(): void;
 }
 
+export interface ChannelData {
+  name?: string;
+  image?: string;
+  members?: string[];
+  [key: string]: any;
+}
 export class StableWSConnection {
   constructor(
     wsURL: string,
@@ -592,6 +601,8 @@ export interface Member extends ChannelMemberResponse {}
 export interface ChannelResponse {
   cid: string;
   id: string;
+  name?: string;
+  image?: string;
   type: string;
   last_message_at?: string;
   created_by?: UserResponse;
@@ -599,9 +610,10 @@ export interface ChannelResponse {
   updated_at?: string;
   deleted_at?: string;
   frozen: boolean;
+  members?: ChannelMemberResponse[];
   member_count?: number;
   invites?: string[];
-  config: ChannelConfigWithInfo;
+  config?: ChannelConfigWithInfo;
   // Additional properties defined on channel
   [propName: string]: any;
 }
