@@ -553,7 +553,7 @@ export class StreamChat {
 		let fileField;
 
 		const params = this._addClientParams();
-		if (isReadableStream(uri)) {
+		if (isReadableStream(uri) || uri instanceof File) {
 			fileField = uri;
 		} else {
 			fileField = {
@@ -642,6 +642,15 @@ export class StreamChat {
 
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+			if (event.user.id === this.userID) {
+				this.user = { ...this.user, ...event.user };
+				// Updating only available properties in _user object.
+				Object.keys(event.user).forEach(function(key) {
+					if (key in client._user) {
+						client._user[key] = event.user[key];
+					}
+				});
+			}
 			client.state.updateUser(event.user);
 			client._updateUserReferences(event.user);
 		}
@@ -1013,6 +1022,18 @@ export class StreamChat {
 	}
 
 	/**
+	 * partialUpdateUser - Update the given user object
+	 *
+	 * @param {object} Object which should contain id and any of "set" or "unset" params;
+	 * example: {id: "user1", set:{field: value}, unset:["field2"]}
+	 *
+	 * @return {object} list of updated users
+	 */
+	async partialUpdateUser(userObject) {
+		return await this.partialUpdateUsers([userObject]);
+	}
+
+	/**
 	 * updateUsers - Batch update the list of users
 	 *
 	 * @param {array} A list of users
@@ -1030,6 +1051,25 @@ export class StreamChat {
 
 		return await this.post(this.baseURL + '/users', {
 			users: userMap,
+		});
+	}
+
+	/**
+	 * updateUsers - Batch partial update of users
+	 *
+	 * @param {array} A list of partial update requests
+	 *
+	 * @return {object}
+	 */
+	async partialUpdateUsers(users) {
+		for (const userObject of users) {
+			if (!userObject.id) {
+				throw Error('User ID is required when updating a user');
+			}
+		}
+
+		return await this.patch(this.baseURL + '/users', {
+			users,
 		});
 	}
 

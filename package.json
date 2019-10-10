@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "1.1.0",
+  "version": "1.1.4",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -30,13 +30,11 @@
   ],
   "files": [
     "/dist",
-    "/types",
+    "/types/stream-chat/index.d.ts",
     "readme.md"
   ],
   "dependencies": {
     "@babel/runtime": "^7.3.1",
-    "@types/seamless-immutable": "7.1.10",
-    "@types/uuid": "^3.4.5",
     "axios": "^0.18.1",
     "chai-arrays": "^2.0.0",
     "cross-fetch": "^3.0.0",
@@ -58,6 +56,8 @@
     "@babel/preset-env": "^7.1.6",
     "@babel/register": "^7.0.0",
     "@types/ws": "^6.0.3",
+    "@types/seamless-immutable": "7.1.10",
+    "@types/uuid": "^3.4.5",
     "babel-eslint": "^10.0.1",
     "bluebird": "^3.5.3",
     "chai": "^4.2.0",

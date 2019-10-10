@@ -114,6 +114,43 @@ describe('Chat', function() {
 				});
 			});
 		});
+
+		// If user.updated event corresponds to current user of client, then updated data of user should reflect in user set on client as well.
+		it('should update client user', async () => {
+			const u1 = uuidv4();
+			const authClient = getTestClient(true);
+			const serverAuthClient = getTestClient(true);
+
+			await serverAuthClient.updateUser({
+				id: u1,
+				name: 'Awesome user',
+			});
+
+			await authClient.setUser({ id: u1 });
+
+			// subscribe to user presence
+			const response = await authClient.queryUsers(
+				{ id: { $in: [u1] } },
+				{},
+				{ presence: true },
+			);
+
+			expect(response.users.length).to.equal(1);
+
+			// this update should trigger the user.updated event..
+			await new Promise(resolve => {
+				authClient.on('user.updated', event => {
+					expect(event.user.id).to.equal(u1);
+					expect(event.user.name).to.equal('Not so awesome');
+					expect(authClient.user.name).equal('Not so awesome');
+					resolve();
+				});
+				serverAuthClient.updateUser({
+					id: u1,
+					name: 'Not so awesome',
+				});
+			});
+		});
 	});
 
 	describe('Failures', function() {
@@ -639,6 +676,155 @@ describe('Chat', function() {
 			authClient.setUser({ id: 'thierry', name: 't' }, 'myusertoken');
 			// verify the update propagates
 			expect(state.messages[state.messages.length - 1].user.name).to.equal('t');
+		});
+
+		describe('partial update', function() {
+			const user = {
+				id: 'thierry2',
+			};
+
+			it('not changing user role', async function() {
+				await expectHTTPErrorCode(
+					403,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: {
+							role: 'admin',
+						},
+					}),
+				);
+			});
+
+			it('change custom field', async function() {
+				const res = await authClient.partialUpdateUser({
+					id: user.id,
+					set: {
+						fields: {
+							subfield1: 'value1',
+							subfield2: 'value2',
+						},
+					},
+				});
+
+				expect(res.users[user.id].fields).to.eql({
+					subfield1: 'value1',
+					subfield2: 'value2',
+				});
+			});
+
+			it('removes custom fields', async function() {
+				const res = await authClient.partialUpdateUser({
+					id: user.id,
+					unset: ['fields.subfield1'],
+				});
+
+				expect(res.users[user.id].fields).to.eql({
+					subfield2: 'value2',
+				});
+			});
+
+			it.skip('sends user.updated event', async function() {
+				// subscribe to user presence
+				await authClient.queryUsers(
+					{ id: { $in: [user.id] } },
+					{},
+					{ presence: true },
+				);
+
+				await new Promise(resolve => {
+					authClient.on('user.updated', event => {
+						expect(event.user.id).to.equal(user.id);
+						resolve();
+					});
+
+					authClient.updateUser({
+						id: user.id,
+						role: 'admin',
+						set: { test: 'true' },
+					});
+				});
+			});
+
+			it("doesn't allow .. in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test..test': '111' },
+					}),
+				);
+
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: ['test..test'],
+					}),
+				);
+			});
+
+			it("doesn't allow spaces in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { ' test.test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test. test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test.test ': '111' },
+					}),
+				);
+
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test.test'],
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test. test'],
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test.test '],
+					}),
+				);
+			});
+
+			it("doesn't allow start or end with dot in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { '.test.test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test.test.': '111' },
+					}),
+				);
+			});
 		});
 	});
 

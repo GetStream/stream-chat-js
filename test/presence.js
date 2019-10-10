@@ -14,6 +14,7 @@ import {
 	runAndLogPromise,
 	sleep,
 	getServerTestClient,
+	newEventPromise,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -212,7 +213,7 @@ describe('Presence', function() {
 			});
 			// everyone except user1 should be offline
 			for (const m of stateResponse.members) {
-				const shouldBeOnline = m.user.id == user1Client.userID;
+				const shouldBeOnline = m.user.id === user1Client.userID;
 				expect(m.user.online).to.equal(shouldBeOnline);
 			}
 			expect(b.state.members[userID].user.online).to.equal(false);
@@ -327,88 +328,110 @@ describe('Presence', function() {
 	});
 });
 
-describe('Count watchers using events', function() {
+describe('Watchers count', function() {
+	const client = getTestClient(false);
+
 	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
 	const channelID = uuidv4();
-	const clients = {};
 	let channel;
-	const client = getTestClient(false);
-	let watchers;
 
-	before(async () => {
+	before(async function() {
 		await createUsers(users);
 		await client.setUser({ id: users[0] }, createUserToken(users[0]));
 		channel = client.channel('messaging', channelID, {
 			members: users,
 		});
-		await channel.watch();
-		watchers = 1;
-		for (let i = 0; i < users.length; i++) {
-			//create 3 clients for each user
-			clients[users[i]] = [];
-			const client1 = await getTestClientForUser(users[i]);
-			const channel1 = client1.channel('messaging', channelID);
-			clients[users[i]].push({ client: client1, channel: channel1 });
-			const client2 = await getTestClientForUser(users[i]);
-			const channel2 = client2.channel('messaging', channelID);
-			clients[users[i]].push({ client: client2, channel: channel2 });
-			const client3 = await getTestClientForUser(users[i]);
-			const channel3 = client3.channel('messaging', channelID);
-			clients[users[i]].push({ client: client3, channel: channel3 });
-		}
 	});
-	it('should track correctly using channel.stopWatching', async function() {
-		let lastevent;
 
-		let eventNumber = 0;
-		const allEventsReceived = new Promise(resolve => {
-			channel.on('all', function(e) {
-				eventNumber++;
+	context('When watch is called', function() {
+		const watchStartEvent = newEventPromise(client, 'user.watching.start');
 
-				if (e.type === 'user.watching.start') {
-					watchers++;
-					lastevent = e;
-				}
-				if (e.type === 'user.watching.stop') {
-					watchers--;
-					lastevent = e;
-				}
-				if (eventNumber === 4) {
-					resolve();
-				}
+		it('increase watcher count', async function() {
+			const resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(1);
+		});
+
+		it('sends watch event', function() {
+			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[0]);
+				expect(events[0].watcher_count).to.eq(1);
+			});
+		});
+	});
+
+	context('When new client is connected', function() {
+		let newClient;
+		let newClientChannel;
+
+		let watchStartEvent;
+
+		before(async function() {
+			newClient = await getTestClientForUser(users[1]);
+			newClientChannel = await newClient.channel('messaging', channelID);
+			watchStartEvent = newEventPromise(client, 'user.watching.start');
+			await newClientChannel.watch();
+		});
+
+		it('sends user.watching.start event', function() {
+			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[1]);
+				expect(events[0].watcher_count).to.eq(2);
 			});
 		});
 
-		let promises = [];
-		//connect all the clients
-		for (let u = 0; u < users.length; u++) {
-			for (let i = 0; i < 3; i++) {
-				const client = clients[users[u]][i];
-				promises.push(client.channel.watch());
-			}
-		}
-		await Promise.all(promises);
-		expect(watchers).to.be.equal(3);
+		it('increase watcher count', async function() {
+			let resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(2);
+			resp = await newClientChannel.watch();
+			expect(resp.watcher_count).to.eq(2);
+		});
 
-		promises = [];
+		context('When client calls stopWatching', function() {
+			const watchingStopEvent = newEventPromise(client, 'user.watching.stop');
 
-		//stop watching or disconnect should update the counters properly
-		for (let u = 0; u < users.length; u++) {
-			for (let i = 0; i < 3; i++) {
-				const client = clients[users[u]][i];
-				if (i % 2 === 0) {
-					promises.push(client.channel.stopWatching());
-				} else {
-					promises.push(client.client.disconnect());
-				}
-			}
-		}
+			before(async function() {
+				await newClientChannel.stopWatching();
+			});
 
-		promises.push(allEventsReceived);
-		await Promise.all(promises);
+			it('decrease watcher count', async function() {
+				const resp = await channel.watch();
+				expect(resp.watcher_count).to.eq(1);
+			});
 
-		expect(watchers).to.be.equal(1);
-		expect(lastevent.watcher_count).to.be.equal(1);
+			it('sends user.watching.stop event', function() {
+				return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+					expect(events[0].user.id).to.eq(users[1]);
+					expect(events[0].watcher_count).to.eq(1);
+				});
+			});
+		});
+	});
+
+	context('When new client is disconnected', function() {
+		let newClient, newClientChannel, watchingStopEvent;
+
+		before(async function() {
+			newClient = await getTestClientForUser(users[2]);
+			newClientChannel = await newClient.channel('messaging', channelID);
+			watchingStopEvent = newEventPromise(client, 'user.watching.stop');
+
+			const resp = await newClientChannel.watch();
+			expect(resp.watcher_count).to.eq(2);
+
+			await newClient.disconnect();
+		});
+
+		it('decrease watcher count', async function() {
+			const resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(1);
+		});
+
+		it('sends user.watching.stop event', function() {
+			return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[2]);
+				expect(events[0].watcher_count).to.eq(1);
+			});
+		});
 	});
 });
 
