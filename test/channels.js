@@ -215,45 +215,68 @@ describe('Channels - members', function() {
 		expect(resp.channel.member_count).to.be.equal(4);
 	});
 
-	it('member list is correctly returned', async function() {
-		const newMembers = ['member1', 'member2'];
-		await createUsers(newMembers);
+	describe('Channel members', function() {
 		const channelId = `test-member-cache-${uuidv4()}`;
 		const initialMembers = [tommasoID, thierryID];
-		const channel = tommasoClient.channel('messaging', channelId);
-		await channel.create();
-		await channel.addMembers([initialMembers[0]]);
-		await channel.addMembers([initialMembers[1]]);
-		let resp = await channel.watch();
+		const newMembers = [uuidv4(), uuidv4()];
 
-		expect(resp.members.length).to.be.equal(initialMembers.length);
-		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
-		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+		let channel;
 
-		for (let i = 0; i < 3; i++) {
-			const op1 = channel.sendMessage({ text: 'new message' });
-			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
-			const op3 = channel.addMembers(newMembers);
-			await Promise.all([op1, op2, op3]);
-		}
-		resp = await channel.watch();
-		expect(resp.members.length).to.be.equal(4);
-		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
-		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
-		expect(resp.members[2].user.id).to.be.equal(newMembers[0]);
-		expect(resp.members[3].user.id).to.be.equal(newMembers[1]);
+		before(async function() {
+			await createUsers(newMembers);
+			channel = tommasoClient.channel('messaging', channelId);
+		});
 
-		for (let i = 0; i < 3; i++) {
-			const op1 = channel.removeMembers(newMembers);
-			const op2 = channel.update({ color: 'blue' }, { text: 'got new message!' });
-			const op3 = channel.sendMessage({ text: 'new message' });
-			await Promise.all([op1, op2, op3]);
-		}
+		describe('When creating channel', function() {
+			before(async function() {
+				await channel.create();
+			});
 
-		resp = await channel.watch();
-		expect(resp.members.length).to.be.equal(2);
-		expect(resp.members[0].user.id).to.be.equal(initialMembers[0]);
-		expect(resp.members[1].user.id).to.be.equal(initialMembers[1]);
+			it('returns empty channel members list', async function() {
+				const resp = await channel.watch();
+
+				expect(resp.members.length).to.be.equal(0);
+			});
+		});
+
+		describe('When adding members to new channel', function() {
+			before(async function() {
+				await channel.addMembers(initialMembers);
+			});
+
+			it('returns channel members', async function() {
+				const resp = await channel.watch();
+
+				expect(resp.members.length).to.be.equal(initialMembers.length);
+				expect(resp.members.map(m => m.user.id)).to.have.members(initialMembers);
+			});
+		});
+
+		describe('When adding members to existing channel', function() {
+			before(async function() {
+				await channel.addMembers(newMembers);
+			});
+
+			it('returns existing members and new ones', async function() {
+				const resp = await channel.watch();
+				expect(resp.members.length).to.be.equal(4);
+				expect(resp.members.map(m => m.user.id)).to.have.members(
+					initialMembers.concat(newMembers),
+				);
+			});
+		});
+
+		describe('When removing members', function() {
+			before(async function() {
+				await channel.removeMembers(newMembers);
+			});
+
+			it('returns members without deleted', async function() {
+				const resp = await channel.watch();
+				expect(resp.members.length).to.be.equal(2);
+				expect(resp.members.map(m => m.user.id)).to.have.members(initialMembers);
+			});
+		});
 	});
 
 	it('channel messages and last_message_at are correctly returned', async function() {
@@ -396,9 +419,8 @@ describe('Channels - Members are update correctly', function() {
 		expect(resp.members.length).to.be.equal(3);
 		const channelState = await channel.watch();
 		expect(channelState.members.length).to.be.equal(3);
-		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
-		expect(channelState.members[1].user.id).to.be.equal(members[1].id);
-		expect(channelState.members[2].user.id).to.be.equal(members[2].id);
+		const memberIDs = channelState.members.map(m => m.user.id);
+		expect(memberIDs).to.deep.members(members.map(m => m.id));
 	});
 
 	it('channel state must be updated after removing multiple members', async function() {
@@ -1035,5 +1057,40 @@ describe('query channels by field $exists', function() {
 			channelCID(1),
 			channelCID(0),
 		]);
+	});
+});
+
+describe('query channels members $nin', function() {
+	let creator = uuidv4();
+	let membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	let client;
+
+	before(async function() {
+		await createUsers(membersIdS);
+		await createUsers(creator);
+		client = await getTestClientForUser(creator);
+		for (let i = 0; i < membersIdS.length; i++) {
+			const memberId = membersIdS[i];
+			await client
+				.channel('messaging', memberId, {
+					members: [creator, memberId],
+				})
+				.create();
+		}
+	});
+
+	it('query $in/$nin', async function() {
+		const resp = await client.queryChannels({
+			$and: [
+				{ members: { $in: [creator] } },
+				{ members: { $nin: [membersIdS[0]] } },
+			],
+		});
+
+		//expect channel id membersIdS[0] to be excluded from result
+		for (let i = 0; i < resp.length; i++) {
+			expect(resp[i].id).not.be.equal(membersIdS[0]);
+			expect(membersIdS.indexOf(resp[i].id)).not.be.equal(-1);
+		}
 	});
 });
