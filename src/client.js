@@ -1194,7 +1194,7 @@ export class StreamChat {
 	}
 
 	createCommand(data) {
-		return this.post(this.baseURL + '/commands');
+		return this.post(this.baseURL + '/commands', data);
 	}
 
 	updateCommand(name, data) {

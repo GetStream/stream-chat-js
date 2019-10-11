@@ -7,6 +7,7 @@ import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
+import commandSrv from './http_mock';
 
 import {
 	createUserToken,
@@ -1373,19 +1374,38 @@ describe('Chat', function() {
 	});
 
 	describe('Slash Commands', () => {
+		before(function() {
+			commandSrv.start();
+		});
+
 		describe('Custom commands', () => {
+			const client = getTestClient(true);
+			// let channel;
+			const channelID = uuidv4();
+
+			const channelCreator = {
+				id: uuidv4(),
+				name: 'creator',
+				role: 'user',
+			};
+			const messageOwner = {
+				id: uuidv4(),
+				name: 'message-owner',
+				role: 'user',
+			};
+
 			const cmdName = 'hello';
 
 			it(`call unknown "${cmdName}" command should fail`, async function() {
 				const text = '/' + cmdName;
 				const response = await channel.sendMessage({ text });
-				expect(response.message.command).to.equal('unknown');
+				expect(response.message.command).to.equal(cmdName);
 				expect(response.message.type).to.equal('error');
 			});
 
 			it(`get "${cmdName}" unknown command should fail`, async function() {
 				try {
-					await authClient.getCommand(cmdName);
+					await client.getCommand(cmdName);
 					expect().fail('cannot get unknown command');
 				} catch (e) {
 					expect(e).not.to.be.null;
@@ -1394,7 +1414,7 @@ describe('Chat', function() {
 
 			it(`update "${cmdName}" unknown command should fail`, async function() {
 				try {
-					await authClient.updateCommand(cmdName, { name: 'new' });
+					await client.updateCommand(cmdName, { name: 'new' });
 					expect().fail('cannot update unknown command');
 				} catch (e) {
 					expect(e).not.to.be.null;
@@ -1403,7 +1423,7 @@ describe('Chat', function() {
 
 			it(`delete "${cmdName}" unknown command should fail`, async function() {
 				try {
-					await authClient.deleteCommand(cmdName);
+					await client.deleteCommand(cmdName);
 					expect().fail('cannot delete unknown command');
 				} catch (e) {
 					expect(e).not.to.be.null;
@@ -1411,18 +1431,18 @@ describe('Chat', function() {
 			});
 
 			it(`create "${cmdName}" command`, async function() {
-				const response = await authClient.createCommand({
+				const response = await client.createCommand({
 					name: cmdName,
 					description: 'desc',
 				});
 
-				expect(response.name).to.equal(cmdName);
+				expect(response.command.name).to.equal(cmdName);
 			});
 
 			it(`create "${cmdName}" command with same name should fail`, async function() {
 				let response;
 				try {
-					response = await authClient.createCommand({
+					response = await client.createCommand({
 						name: cmdName,
 						description: 'desc',
 					});
@@ -1433,52 +1453,52 @@ describe('Chat', function() {
 			});
 
 			it(`get "${cmdName}" command should return it`, async function() {
-				const response = await authClient.getCommand(cmdName);
+				const response = await client.getCommand(cmdName);
 				expect(response.name).to.equal(cmdName);
 				expect(response.description).to.equal('desc');
 			});
 
 			it(`update "${cmdName}" command description`, async function() {
-				const response = await authClient.updateCommand(cmdName, {
+				const response = await client.updateCommand(cmdName, {
 					description: 'newdesc',
 				});
-				expect(response.name).to.equal(cmdName);
-				expect(response.description).to.equal('desc');
+				expect(response.command.name).to.equal(cmdName);
+				expect(response.command.description).to.equal('newdesc');
 			});
 
 			it(`"${cmdName}" command description should be updated`, async function() {
-				const response = await authClient.getCommand(cmdName);
+				const response = await client.getCommand(cmdName);
 				expect(response.description).to.equal('newdesc');
 			});
 
 			it(`create "${cmdName}-2" command`, async function() {
-				const response = await authClient.createCommand({
+				const response = await client.createCommand({
 					name: cmdName + '-2',
 					description: 'desc2',
 				});
-				expect(response.name).to.equal(cmdName);
+				expect(response.command.name).to.equal(cmdName + '-2');
 			});
 
 			it(`update "${cmdName}" command name to "${cmdName}-2 should fail`, async function() {
 				try {
-					await authClient.updateCommand(cmdName, { name: cmdName + '-2' });
+					await client.updateCommand(cmdName, { name: cmdName + '-2' });
 					expect().fail('cannot rename command name to already exist one');
 				} catch (e) {
 					expect(e).not.to.be.null;
 				}
 			});
 
-			it(`"${cmdName}" command should renamed to "${cmdName}-3`, async function() {
-				const response = await authClient.updateCommand(cmdName, {
+			it(`"${cmdName}" command should be renamed to "${cmdName}-3`, async function() {
+				const response = await client.updateCommand(cmdName, {
 					name: cmdName + '-3',
 				});
-				expect(response.name).to.equal(cmdName + '-3');
-				expect(response.description).to.equal('newdesc');
+				expect(response.command.name).to.equal(cmdName + '-3');
+				expect(response.command.description).to.equal('');
 			});
 
 			it(`get "${cmdName}" command should not exist anymore`, async function() {
 				try {
-					await authClient.getCommand(cmdName);
+					await client.getCommand(cmdName);
 					expect().fail('cant get unexciting command');
 				} catch (e) {
 					expect(e).not.to.be.null;
@@ -1486,20 +1506,20 @@ describe('Chat', function() {
 			});
 
 			it(`get "${cmdName}-3" command should return it`, async function() {
-				const response = await authClient.getCommand(cmdName + '-3');
-				expect(response.name).to.equal(cmdName);
-				expect(response.description).to.equal('newdesc');
+				const response = await client.getCommand(cmdName + '-3');
+				expect(response.name).to.equal(cmdName + '-3');
+				expect(response.description).to.equal('');
 			});
 
-			it(`"${cmdName}-2" should deleted`, async function() {
-				await authClient.deleteCommand(cmdName);
+			it(`"${cmdName}-2" should be deleted`, async function() {
+				await client.deleteCommand(cmdName + '-2');
 			});
 
-			it(`"${cmdName}-3" command should renamed to back to "${cmdName}`, async function() {
-				const response = await authClient.updateCommand(cmdName + '-3', {
+			it(`"${cmdName}-3" command should be renamed back to "${cmdName}`, async function() {
+				const response = await client.updateCommand(cmdName + '-3', {
 					name: cmdName,
 				});
-				expect(response.name).to.equal(cmdName);
+				expect(response.command.name).to.equal(cmdName);
 			});
 
 			it(`call "${cmdName}" command without an argument should fail`, async function() {
@@ -1515,10 +1535,10 @@ describe('Chat', function() {
 			let messageID;
 
 			it(`call "${cmdName}" command with argument should return actions`, async function() {
-				const text = '/' + cmdName + ' max';
+				const text = '/' + cmdName + ' Max';
 				const response = await channel.sendMessage({ text });
 
-				expect(response.message.text).to.equal('hi, max!');
+				expect(response.message.text).to.equal('hi, Max!');
 				expect(response.message.attachments[0].actions[0].name).to.equal(
 					'action',
 				);
@@ -1582,7 +1602,7 @@ describe('Chat', function() {
 
 			it(`call "right" action should return message without actions`, async function() {
 				const response = await channel.sendAction(messageID, {
-					action: 'left',
+					action: 'right',
 				});
 
 				expect(response.message.text).to.equal('You died.');
