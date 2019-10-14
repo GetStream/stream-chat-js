@@ -23,6 +23,7 @@ const externalPackages = [
 	'lodash',
 	'seamless-immutable',
 	'uuid/v4',
+	'jsonwebtoken',
 	'@babel/runtime/regenerator',
 	'@babel/runtime/helpers/asyncToGenerator',
 	'@babel/runtime/helpers/objectWithoutProperties',
@@ -71,7 +72,7 @@ const normalBundle = {
 			sourcemap: true,
 		},
 	],
-	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
+	external: externalPackages.concat(['http', 'https', 'crypto']),
 	plugins: [
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
