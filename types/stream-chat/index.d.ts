@@ -103,7 +103,7 @@ export interface OnlineStatusEvent {
   [key: string]: any;
 }
 
-export interface ConnctionChangeEvent {
+export interface ConnectionChangeEvent {
   type: 'connection.changed' | 'connection.recovered';
   online?: boolean;
 }
@@ -165,7 +165,7 @@ export class StreamChat {
   };
   state: ClientState;
   user: OwnUserResponse;
-  browser: string;
+  browser: boolean;
   wsConnection: StableWSConnection;
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;
@@ -392,7 +392,7 @@ export class StableWSConnection {
     userID: string,
     messageCallback: (event: WebSocket.OpenEvent) => void,
     recoverCallback: (open: Promise<object>) => void,
-    eventCallback: (event: ConnctionChangeEvent) => void,
+    eventCallback: (event: ConnectionChangeEvent) => void,
   );
   connect(): Promise<void>;
   disconnect(): void;
