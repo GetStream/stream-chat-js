@@ -1963,6 +1963,20 @@ describe('Channel types', function() {
 				descending: true,
 			});
 		});
+
+		it('missing role should raise an error', async function () {
+			const name = uuidv4();
+			const permissions = [
+				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 32, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 2, AnyResource, null, false, Allow),
+			];
+			await expectHTTPErrorCode(400,client.createChannelType({
+				name,
+				permissions,
+				commands: ['all'],
+			}));
+		});
 	});
 
 	describe('Updating channel types', function() {
