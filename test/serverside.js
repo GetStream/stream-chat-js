@@ -1900,7 +1900,16 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: [
+					'giphy',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+					'mml',
+					'zork',
+				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -1945,7 +1954,16 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: [
+					'giphy',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+					'mml',
+					'zork',
+				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2000,6 +2018,13 @@ describe('Channel types', function() {
 						name: 'ban',
 						set: 'moderation_set',
 					},
+					{
+						args: 'name',
+						description: 'start Zork',
+						name: 'zork',
+						id: 1,
+						set: '',
+					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
@@ -2035,6 +2060,12 @@ describe('Channel types', function() {
 						description: 'Ban a user',
 						name: 'ban',
 						set: 'moderation_set',
+					},
+					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
 					},
 				],
 				connect_events: true,
@@ -2078,14 +2109,14 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
-			expect(response.commands).to.have.length(6);
+			expect(response.commands).to.have.length(8);
 		});
 
 		it('changing commands to fun_set', async function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['fun_set'],
 			});
-			expect(response.commands).to.have.length(1);
+			expect(response.commands).to.have.length(2);
 		});
 
 		it('changing the name should fail', async function() {
@@ -2200,6 +2231,18 @@ describe('Channel types', function() {
 						name: 'unmute',
 						set: 'moderation_set',
 					},
+					{
+						args: '[@test_name]',
+						description: 'Display an mml test',
+						name: 'mml',
+						set: 'dev_set',
+					},
+					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
@@ -2273,6 +2316,18 @@ describe('Channel types', function() {
 						description: 'Unmute a user',
 						name: 'unmute',
 						set: 'moderation_set',
+					},
+					{
+						args: '[@test_name]',
+						description: 'Display an mml test',
+						name: 'mml',
+						set: 'dev_set',
+					},
+					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
 					},
 				],
 				connect_events: true,
