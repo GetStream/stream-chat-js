@@ -1194,7 +1194,7 @@ describe('Chat', function() {
 				);
 			});
 
-			it('Add a Chat message with a URL and edit it', async function() {
+			it.skip('Add a Chat message with a URL and edit it', async function() {
 				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
 				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
