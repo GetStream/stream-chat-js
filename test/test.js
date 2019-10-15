@@ -1364,40 +1364,6 @@ describe('Chat', function() {
 				expect(a.asset_url).to.equal('https://www.youtube.com/embed/Q0CbN8sfihY');
 				expect(a.type).to.equal('video');
 			});
-
-			it('Upload a file', async function() {
-				const file = fs.createReadStream('./helloworld.txt');
-				const data = await channel.sendFile(file, 'hello_world.txt');
-			});
-
-			it('Upload an image', async function() {
-				const file = fs.createReadStream('./helloworld.jpg');
-				const data = await channel.sendImage(file, 'hello_world.jpg');
-			});
-
-			it('File upload entire flow', async function() {
-				const promises = [
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world1.jpg',
-					),
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world2.jpg',
-					),
-				];
-				const results = await Promise.all(promises);
-				const attachments = results.map(response => ({
-					type: 'image',
-					thumb_url: response.file,
-					asset_url: response.file,
-				}));
-				const response = await channel.sendMessage({
-					text: 'Check out what i uploaded in parallel',
-					attachments,
-				});
-				expect(response.message.attachments).to.deep.equal(attachments);
-			});
 		});
 
 		describe('Fail', () => {
@@ -2481,6 +2447,99 @@ describe('Chat', function() {
 				'80% off Loutis Vuitton Handbags Save up to 80% off ! Free shipping! Right Now ! Snap it up 2.vadsv.uk';
 			const data = await aiChannel.sendMessage({ text });
 			expect(data.message.type).to.equal('error');
+		});
+	});
+
+	describe('Upload', function() {
+		context('When channel type has uploads enabled', function() {
+			const channelType = uuidv4();
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: true,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Upload a file', async function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				const data = await channel.sendFile(file, 'hello_world.txt');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('Upload an image', async function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				const data = await channel.sendImage(file, 'hello_world.jpg');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('File upload entire flow', async function() {
+				const promises = [
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world1.jpg',
+					),
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world2.jpg',
+					),
+				];
+				const results = await Promise.all(promises);
+				const attachments = results.map(response => ({
+					type: 'image',
+					thumb_url: response.file,
+					asset_url: response.file,
+				}));
+				const response = await channel.sendMessage({
+					text: 'Check out what i uploaded in parallel',
+					attachments,
+				});
+				expect(response.message.attachments).to.deep.equal(attachments);
+			});
+		});
+
+		context('When channel type has uploads disabled', function() {
+			const channelType = uuidv4();
+			const errorMessage = new RegExp(
+				`channel type ${channelType} has upload disabled`,
+			);
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: false,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Do not upload a file', function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				return expect(
+					channel.sendFile(file, 'hello_world.txt'),
+				).to.be.rejectedWith(errorMessage);
+			});
+
+			it('Do not upload an image', function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				return expect(
+					channel.sendImage(file, 'hello_world.jpg'),
+				).to.be.rejectedWith(errorMessage);
+			});
 		});
 	});
 });
