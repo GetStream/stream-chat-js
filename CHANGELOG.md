@@ -1,3 +1,7 @@
+## October 15, 2019 - 1.1.6
+
+- Fixing types for client and connection in typescript declaration file.
+
 ## October 10, 2019 - 1.1.5
 
 - Fix for issue [#133](https://github.com/GetStream/stream-chat-js/issues/133) - Updating user object in client, when `user.updated` is received corresponding to user of client
