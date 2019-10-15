@@ -288,6 +288,50 @@ describe('Chat', function() {
 			expect(updatedUser.favorite_color).to.equal(undefined);
 			expect(updatedUser.book).to.equal('dune');
 		});
+
+		context('When user is banned', function() {
+			const banned = uuidv4();
+			const token = createUserToken(banned);
+			const client = getTestClient(false);
+
+			before(async function() {
+				const admin = { id: uuidv4(), role: 'admin' };
+				const serverClient = getTestClient(true);
+
+				await serverClient.updateUsers([{ id: banned }, admin]);
+				await serverClient.banUser(banned, { user_id: admin.id });
+			});
+
+			it('returns banned field on setUser', async function() {
+				const response = await client.setUser(
+					{ id: banned, role: 'user', favorite_color: 'green' },
+					token,
+				);
+				expect(response.me.banned).to.eq(true);
+			});
+		});
+
+		context('When ban is expired', function() {
+			const banned = uuidv4();
+			const token = createUserToken(banned);
+			const client = getTestClient(false);
+
+			before(async function() {
+				const admin = { id: uuidv4(), role: 'admin' };
+				const serverClient = getTestClient(true);
+
+				await serverClient.updateUsers([{ id: banned }, admin]);
+				await serverClient.banUser(banned, { timeout: -1, user_id: admin.id });
+			});
+
+			it('banned is not set', async function() {
+				const response = await client.setUser(
+					{ id: banned, role: 'user', favorite_color: 'green' },
+					token,
+				);
+				expect(response.me.banned).to.be.undefined;
+			});
+		});
 	});
 
 	describe('Devices', function() {
@@ -1995,7 +2039,7 @@ describe('Chat', function() {
 		let client;
 		let channel;
 		let serverChannel;
-		let channelID = uuidv4();
+		const channelID = uuidv4();
 		const owner = { id: uuidv4() };
 
 		it('Create an anonymous session', async function() {
