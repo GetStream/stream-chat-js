@@ -7,6 +7,7 @@ import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
+const mockServer = require('mockttp').getLocal();
 
 import {
 	createUserToken,
@@ -1437,6 +1438,63 @@ describe('Chat', function() {
 				});
 				await expectHTTPErrorCode(400, authClient.updateMessage(newMsg));
 			});
+		});
+	});
+
+	describe('Opengraph', () => {
+		it('og link should be processed by Opengraph parser', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://imgur.com/gallery/jj1QKWc',
+			});
+			const exp = {
+				author_name: 'Imgur',
+				image_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				og_scrape_url: 'https://imgur.com/gallery/jj1QKWc',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				title: 'Fat cat almost gets stuck in door',
+				title_link: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		it('direct image link should be attached', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://i.imgur.com/jj1QKWc.gif',
+			});
+			const exp = {
+				image_url: 'https://i.imgur.com/jj1QKWc.gif',
+				og_scrape_url: 'https://i.imgur.com/jj1QKWc.gif',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		beforeEach(() => mockServer.start());
+		afterEach(() => mockServer.stop());
+		// mockServer.enableDebug();
+
+		it('direct link on image with wrong content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image.jpg')
+				.thenReply(200, ':/', { 'content-type': 'fake' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
+		});
+
+		it('direct link on fake image with right content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image2.jpg')
+				.thenReply(200, ':/', { 'content-type': 'image/gif' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image2.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
 		});
 	});
 
