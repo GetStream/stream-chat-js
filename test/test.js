@@ -1737,6 +1737,10 @@ describe('Chat', function() {
 				expect(response.message.text).to.equal('You died.');
 				expect(response.message.attachments.length).equal(0);
 			});
+
+			it(`"${cmdName}" should be deleted`, async function() {
+				await client.deleteCommand(cmdName);
+			});
 		});
 
 		describe('Success', () => {
