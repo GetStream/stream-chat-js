@@ -553,7 +553,7 @@ export class StreamChat {
 		let fileField;
 
 		const params = this._addClientParams();
-		if (isReadableStream(uri)) {
+		if (isReadableStream(uri) || uri instanceof File) {
 			fileField = uri;
 		} else {
 			fileField = {
@@ -642,6 +642,15 @@ export class StreamChat {
 
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+			if (event.user.id === this.userID) {
+				this.user = { ...this.user, ...event.user };
+				// Updating only available properties in _user object.
+				Object.keys(event.user).forEach(function(key) {
+					if (key in client._user) {
+						client._user[key] = event.user[key];
+					}
+				});
+			}
 			client.state.updateUser(event.user);
 			client._updateUserReferences(event.user);
 		}

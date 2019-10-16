@@ -29,7 +29,7 @@ client.put('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectTy
 client.post('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 client.delete('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 
-client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', 'james'); // $ExpectType Promise<FileUploadAPIResponse>
+client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', { id: 'james' }); // $ExpectType Promise<FileUploadAPIResponse>
 
 const event = {
   cid: 'channelid',

@@ -16,6 +16,7 @@ export const EVENT_MAP = {
 	'member.removed': true,
 	'channel.updated': true,
 	'channel.deleted': true,
+	'channel.truncated': true,
 	'health.check': true,
 	'notification.message_new': true,
 	'notification.mark_read': true,
@@ -24,6 +25,8 @@ export const EVENT_MAP = {
 	'notification.added_to_channel': true,
 	'notification.removed_from_channel': true,
 	'notification.mutes_updated': true,
+	'notification.channel_deleted': true,
+	'notification.channel_truncated': true,
 	// local events
 	'connection.changed': true,
 	'connection.recovered': true,

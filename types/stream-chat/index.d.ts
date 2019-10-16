@@ -2,7 +2,7 @@
 
 export as namespace stream;
 import * as SeamlessImmutable from 'seamless-immutable';
-
+import * as WebSocket from 'ws';
 export interface Action {
   name: string;
   text: string;
@@ -98,6 +98,16 @@ export type NotificationAddedToChannelEvent = 'notification.added_to_channel';
 export type NotificationRemovedFromChannelEvent = 'notification.removed_from_channel';
 export type NotificationMutesUpdatedEvent = 'notification.mutes_updated';
 
+export interface OnlineStatusEvent {
+  type: 'online' | 'offline';
+  [key: string]: any;
+}
+
+export interface ConnectionChangeEvent {
+  type: 'connection.changed' | 'connection.recovered';
+  online?: boolean;
+}
+
 export interface Reaction {
   type: string;
   message_id: string;
@@ -155,7 +165,8 @@ export class StreamChat {
   };
   state: ClientState;
   user: OwnUserResponse;
-
+  browser: boolean;
+  wsConnection: StableWSConnection;
   devToken(userID: string): string;
   createToken(userID: string, exp: number): string;
   getAuthType(): string;
@@ -183,9 +194,9 @@ export class StreamChat {
   sendFile(
     url: string,
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
 
   dispatchEvent(event: Event): void;
@@ -211,9 +222,9 @@ export class StreamChat {
 
   addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
-  removeDevice(deviceId: string): Promise<APIResponse>;
+  removeDevice(deviceId: string, userID?: string): Promise<APIResponse>;
 
-  channel(channelType: string, channelID: string, custom: object): Channel;
+  channel(channelType: string, channelID: string, custom: ChannelData): Channel;
 
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
@@ -229,11 +240,11 @@ export class StreamChat {
   flagMessage(messageID: string): Promise<FlagAPIResponse>;
   unflagMessage(messageID: string): Promise<UnflagAPIResponse>;
 
-  createChannelType(data: object): Promise<CreateChannelTypeAPIResponse>;
-  getChannelType(channelType: string, data: object): Promise<GetChannelTypeAPIResponse>;
+  createChannelType(data: ChannelData): Promise<CreateChannelTypeAPIResponse>;
+  getChannelType(channelType: string): Promise<GetChannelTypeAPIResponse>;
   updateChannelType(
     channelType: string,
-    data: object,
+    data: ChannelData,
   ): Promise<UpdateChannelTypeAPIResponse>;
   deleteChannelType(channelType: string): Promise<DeleteChannelTypeAPIResponse>;
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
@@ -254,11 +265,11 @@ export class ClientState {
 }
 
 export class Channel {
-  constructor(client: StreamChat, type: string, id: string, data: object);
+  constructor(client: StreamChat, type: string, id: string, data: ChannelData);
   type: string;
   id: string;
   // used by the frontend, gets updated:
-  data: object;
+  data: ChannelResponse;
   cid: string; // `${type}:${id}`;
   listeners: {
     [key: string]: Array<(event: Event) => any>;
@@ -274,15 +285,15 @@ export class Channel {
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
     uri: string,
-    name: string,
-    contentType: string,
-    user: string,
+    name?: string,
+    contentType?: string,
+    user?: User,
   ): Promise<FileUploadAPIResponse>;
   deleteFile(url: string): Promise<DeleteFileAPIResponse>;
   deleteImage(url: string): Promise<DeleteFileAPIResponse>;
@@ -300,7 +311,10 @@ export class Channel {
     user_id?: string,
   ): Promise<DeleteReactionAPIResponce>;
 
-  update(channelData: object, updateMessage: Message): Promise<UpdateChannelAPIResponse>;
+  update(
+    channelData: ChannelData,
+    updateMessage: Message,
+  ): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
 
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
@@ -365,17 +379,28 @@ export class ChannelState {
   clean(): void;
 }
 
+export interface ChannelData {
+  name?: string;
+  image?: string;
+  members?: string[];
+  [key: string]: any;
+}
 export class StableWSConnection {
   constructor(
     wsURL: string,
     clientID: string,
     userID: string,
-    messageCallback: (event: object) => void,
+    messageCallback: (event: WebSocket.OpenEvent) => void,
     recoverCallback: (open: Promise<object>) => void,
-    eventCallback: (event: object) => void,
+    eventCallback: (event: ConnectionChangeEvent) => void,
   );
   connect(): Promise<void>;
   disconnect(): void;
+  onlineStatusChanged(event: OnlineStatusEvent): void;
+  onopen(wsID: number): void;
+  onmessage(wsID: number, event: WebSocket.MessageEvent): void;
+  onclose(wsID: number, event: WebSocket.CloseEvent): void;
+  onerror(wsID: number, event: WebSocket.ErrorEvent): void;
 }
 
 export class Permission {
@@ -388,6 +413,9 @@ export class Permission {
     action: string,
   );
 }
+
+export const AllowAll: Permission;
+export const DenyAll: Permission;
 
 export function JWTUserToken(
   apiSecret: string,
@@ -592,6 +620,8 @@ export interface Member extends ChannelMemberResponse {}
 export interface ChannelResponse {
   cid: string;
   id: string;
+  name?: string;
+  image?: string;
   type: string;
   last_message_at?: string;
   created_by?: UserResponse;
@@ -599,9 +629,10 @@ export interface ChannelResponse {
   updated_at?: string;
   deleted_at?: string;
   frozen: boolean;
+  members?: ChannelMemberResponse[];
   member_count?: number;
   invites?: string[];
-  config: ChannelConfigWithInfo;
+  config?: ChannelConfigWithInfo;
   // Additional properties defined on channel
   [propName: string]: any;
 }

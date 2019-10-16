@@ -1914,6 +1914,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${newType}`,
 				reactions: true,
 				replies: true,
@@ -1968,6 +1969,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${name}`,
 				reactions: true,
 				replies: true,
@@ -1980,6 +1982,23 @@ describe('Channel types', function() {
 			expect(newChanType.permissions).to.be.sortedBy('priority', {
 				descending: true,
 			});
+		});
+
+		it('missing role should raise an error', async function() {
+			const name = uuidv4();
+			const permissions = [
+				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 32, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 2, AnyResource, null, false, Allow),
+			];
+			await expectHTTPErrorCode(
+				400,
+				client.createChannelType({
+					name,
+					permissions,
+					commands: ['all'],
+				}),
+			);
 		});
 	});
 
@@ -2030,6 +2049,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${channelTypeName}`,
 				reactions: true,
 				replies: true,
@@ -2072,6 +2092,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${channelTypeName}`,
 				reactions: true,
 				replies: false,
@@ -2248,6 +2269,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: 'messaging',
 				reactions: true,
 				replies: true,
@@ -2334,6 +2356,7 @@ describe('Channel types', function() {
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: 'messaging',
 				reactions: true,
 				replies: true,
