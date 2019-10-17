@@ -382,3 +382,48 @@ describe('Query invites', function() {
 		expect(channels.length).to.be.equal(0);
 	});
 });
+
+describe('update channel - invites', function() {
+	let channel;
+	let client;
+	let creatorId = uuidv4();
+	let invitedId = uuidv4();
+	before(async function() {
+		await createUsers([creatorId, invitedId]);
+		client = await getTestClientForUser(creatorId);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [creatorId],
+		});
+		await channel.create();
+	});
+
+	it('invite after channel creation', async function() {
+		const inviteResp = await channel.inviteMembers([invitedId]);
+		expect(inviteResp.members.length).to.be.equal(2);
+		expect(inviteResp.members[0].user_id).to.be.equal(creatorId);
+		expect(inviteResp.members[0].invited).to.be.undefined;
+		expect(inviteResp.members[1].user_id).to.be.equal(invitedId);
+		expect(inviteResp.members[1].invited).to.be.equal(true);
+	});
+
+	it('accept the invite', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'pending' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(1);
+		await invites[0].acceptInvite();
+	});
+
+	it('query for accepted invites', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'accepted' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(1);
+	});
+});

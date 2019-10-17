@@ -322,6 +322,7 @@ export class Channel {
 
   addMembers(members: string[]): Promise<AddMembersAPIResponse>;
   addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
+  inviteMembers(members: string[]): Promise<AddModeratorsAPIResponse>;
   removeMembers(members: string[]): Promise<RemoveMembersAPIResponse>;
   demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
