@@ -1963,6 +1963,46 @@ describe('Channel types', function() {
 				descending: true,
 			});
 		});
+
+		context('When roles are empty', function() {
+			const name = uuidv4();
+			let permissions = [
+				new Permission(uuidv4(), 20, AnyResource, [], false, Allow),
+				new Permission(uuidv4(), 32, AnyResource, [], false, Allow),
+				new Permission(uuidv4(), 2, AnyResource, null, false, Allow),
+			];
+
+			it('raise an error', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.createChannelType({
+						name,
+						permissions,
+						commands: ['all'],
+					}),
+				);
+			});
+
+			context('when owner is true', function() {
+				before(function() {
+					permissions = [
+						new Permission(uuidv4(), 20, AnyResource, [], true, Allow),
+						new Permission(uuidv4(), 32, AnyResource, null, true, Allow),
+						new Permission(uuidv4(), 2, AnyResource, null, true, Allow),
+					];
+				});
+
+				it("doesn't raise error", function() {
+					return expect(
+						client.createChannelType({
+							name,
+							permissions,
+							commands: ['all'],
+						}),
+					).to.be.fulfilled;
+				});
+			});
+		});
 	});
 
 	describe('Updating channel types', function() {
