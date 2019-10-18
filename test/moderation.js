@@ -5,6 +5,7 @@ import {
 	getTestClient,
 	createUserToken,
 	sleep,
+	getServerTestClient,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -106,5 +107,63 @@ describe('Moderation', function() {
 			createUserToken(user1),
 		);
 		expect(connectResponse.me.mutes.length).to.equal(0);
+	});
+
+	const channelType = uuidv4();
+
+	let client;
+	let channel;
+
+	before(async function() {
+		const serverClient = getServerTestClient();
+		const newChannelType = await serverClient.createChannelType({
+			name: channelType,
+			commands: ['all'],
+			uploads: true,
+		});
+		client = await getTestClientForUser(uuidv4(), 'hi', { role: 'admin' });
+		console.log(client);
+		channel = await client.channel(channelType, uuidv4());
+		await channel.watch();
+	});
+
+	it('Ban', async function() {
+		const user1 = uuidv4();
+		const user2 = uuidv4();
+		await createUsers([user1, user2]);
+		const client1 = await getTestClientForUser(user1);
+
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('user.banned', e => {
+				console.log(e);
+				resolve();
+			});
+		});
+
+		console.log(user1, user2);
+		const response = await channel.banUser(user1);
+		console.log(response);
+		await eventPromise;
+	});
+
+	it('Unban', async function() {
+		const user1 = uuidv4();
+		const user2 = uuidv4();
+		await createUsers([user1, user2]);
+		const client1 = await getTestClientForUser(user1);
+
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('user.unbanned', e => {
+				console.log(e);
+				resolve();
+			});
+		});
+
+		const response = await channel.unbanUser(user1);
+		console.log(response);
+
+		await eventPromise;
 	});
 });

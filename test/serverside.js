@@ -607,13 +607,84 @@ describe('Managing users', function() {
 	});
 
 	it('ban user', async function() {
+		const client1 = await getTestClientForUser(evilUser);
+		let s;
+		const eventPromise = new Promise(resolve => {
+			s = client1.on('user.banned', e => {
+				expect(e.reason).to.equal('reason');
+				expect(e.expiration).to.exist;
+				resolve();
+			});
+		});
+
 		await client.banUser(evilUser, {
 			user_id: user.id,
+			reason: 'reason',
+			timeout: 123,
 		});
+
+		await eventPromise;
+		s.unsubscribe();
 	});
 
 	it('remove ban', async function() {
+		const client1 = await getTestClientForUser(evilUser);
+		let s;
+		const eventPromise = new Promise(resolve => {
+			s = client1.on('user.unbanned', () => {
+				resolve();
+			});
+		});
+
 		await client.unbanUser(evilUser);
+
+		await eventPromise;
+		s.unsubscribe();
+	});
+
+	it('ban user in channel', async function() {
+		const channelId = uuidv4();
+		const createdById = uuidv4();
+		const client = getTestClient(true);
+		let s;
+		const channel = client.channel('messaging', channelId, {
+			created_by: { id: createdById },
+		});
+		await channel.create();
+
+		const client1 = await getTestClientForUser(evilUser);
+		const eventPromise = new Promise(resolve => {
+			s = client1.on('user.banned', e => {
+				expect(e.reason).to.equal('reason');
+				expect(e.channel_id).to.equal(channelId);
+				expect(e.expiration).to.exist;
+				resolve();
+			});
+		});
+
+		await channel.banUser(evilUser, {
+			user_id: user.id,
+			reason: 'reason',
+			timeout: 123,
+		});
+
+		await eventPromise;
+		s.unsubscribe();
+	});
+
+	it('remove ban again', async function() {
+		const client1 = await getTestClientForUser(evilUser);
+		let s;
+		const eventPromise = new Promise(resolve => {
+			s = client1.on('user.unbanned', () => {
+				resolve();
+			});
+		});
+
+		await client.unbanUser(evilUser);
+
+		await eventPromise;
+		s.unsubscribe();
 	});
 });
 

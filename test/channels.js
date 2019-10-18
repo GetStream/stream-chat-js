@@ -197,6 +197,41 @@ describe('Channels - members', function() {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
 	});
 
+	it('thierry bans tommaso', async function() {
+		let s;
+		const eventPromise = new Promise(resolve => {
+			s = tommasoClient.on('user.banned', e => {
+				expect(e.reason).to.equal('somereason');
+				expect(e.channel_id).to.equal(channelId);
+				expect(e.expiration).to.exist;
+				resolve();
+			});
+		});
+
+		await thierryChannel.sendMessage({
+			text: `/ban @${tommasoID} somereason`,
+		});
+
+		await eventPromise;
+		s.unsubscribe();
+	});
+
+	it('thierry unbans tommaso', async function() {
+		let s;
+		const eventPromise = new Promise(resolve => {
+			s = tommasoClient.on('user.unbanned', () => {
+				resolve();
+			});
+		});
+
+		await thierryChannel.sendMessage({
+			text: `/unban @${tommasoID}`,
+		});
+
+		await eventPromise;
+		s.unsubscribe();
+	});
+
 	it('correct member count', async function() {
 		const members = [uuidv4(), uuidv4()];
 		await createUsers(members);
