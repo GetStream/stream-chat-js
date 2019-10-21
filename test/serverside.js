@@ -1966,7 +1966,7 @@ describe('Channel types', function() {
 			});
 		});
 
-		it('role should map to * if not provided', async function() {
+		it('missing role should be handled correctly', async function() {
 			const name = uuidv4();
 			const permissions = [
 				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
@@ -1981,8 +1981,7 @@ describe('Channel types', function() {
 			await sleep(500);
 
 			permissions.forEach(function(p) {
-				//expect role to be set to *
-				p.roles = ['*'];
+				p.roles = [];
 			});
 
 			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
