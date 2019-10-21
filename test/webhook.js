@@ -423,6 +423,58 @@ describe('Webhooks', function() {
 		expect(event.target_user.id).to.eq(thierryID);
 	});
 
+	it('moderation ban', async function() {
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			client.banUser(tommasoID, {
+				user_id: jaapID,
+				reason: 'reason',
+				timeout: 123,
+			}),
+		]);
+		const event = events[0];
+		expect(event.reason).to.equal('reason');
+		expect(event.user.id).to.equal(tommasoID);
+		expect(event.expiration).to.exist;
+	});
+
+	it('moderation unban', async function() {
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.unbanned'),
+			client.unbanUser(tommasoID, {
+				user_id: jaapID,
+			}),
+		]);
+		const event = events[0];
+		expect(event.user.id).to.equal(tommasoID);
+	});
+
+	it('slash ban', async function() {
+		const text = `/ban ${tommasoID} reason`;
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			chan.sendMessage({ text, user_id: jaapID }),
+		]);
+		const event = events[0];
+		expect(event.reason).to.equal('reason');
+		expect(event.channel_id).to.equal(chan.id);
+		expect(event.channel_type).to.equal(chan.type);
+		expect(event.expiration).to.exist;
+		expect(event.user.id).to.equal(tommasoID);
+	});
+
+	it('slash unban', async function() {
+		const text = `/unban ${tommasoID}`;
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.unbanned'),
+			chan.sendMessage({ text, user_id: jaapID }),
+		]);
+		const event = events[0];
+		expect(event.channel_id).to.equal(chan.id);
+		expect(event.channel_type).to.equal(chan.type);
+		expect(event.user.id).to.equal(tommasoID);
+	});
+
 	it('channel.deleted', async function() {
 		await Promise.all([promises.waitForEvents('channel.deleted'), chan.delete()]);
 	});
