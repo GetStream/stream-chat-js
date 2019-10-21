@@ -220,6 +220,12 @@ export class StreamChat {
     options: object,
   ): Promise<SearchAPIResponse>;
 
+  createCommand(command: CommandRequest): Promise<CreateCommandAPIResponse>;
+  updateCommand(name: string, command: CommandRequest): Promise<UpdateCommandAPIResponse>;
+  getCommand(name: string): Promise<GetCommandAPIResponse>;
+  deleteCommand(name: string): Promise<DeleteCommandAPIResponse>;
+  listCommands(): Promise<ListCommandsAPIResponse>;
+
   addDevice(id: string, push_provider: string, userID: string): Promise<APIResponse>;
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
   removeDevice(deviceId: string, userID?: string): Promise<APIResponse>;
@@ -309,7 +315,7 @@ export class Channel {
     messageID: string,
     reactionType: string,
     user_id?: string,
-  ): Promise<DeleteReactionAPIResponce>;
+  ): Promise<DeleteReactionAPIResponse>;
 
   update(
     channelData: ChannelData,
@@ -523,7 +529,7 @@ export interface SendReactionAPIResponse extends APIResponse {
   reaction: ReactionResponse;
 }
 
-export interface DeleteReactionAPIResponce extends APIResponse {
+export interface DeleteReactionAPIResponse extends APIResponse {
   message: MessageResponse;
   reaction: ReactionResponse;
 }
@@ -536,6 +542,24 @@ export interface UpdateChannelAPIResponse extends APIResponse {
 
 export interface DeleteChannelAPIResponse extends APIResponse {
   channel: ChannelResponse;
+}
+
+export interface CreateCommandAPIResponse extends APIResponse {
+  command: CommandResponse;
+}
+
+export interface UpdateCommandAPIResponse extends APIResponse {
+  command: CommandRequest;
+}
+
+export interface GetCommandAPIResponse extends CommandResponse, APIResponse {}
+
+export interface DeleteCommandAPIResponse extends APIResponse {
+  name: string;
+}
+
+export interface ListCommandsAPIResponse extends APIResponse {
+  commands: CommandResponse[];
 }
 
 export interface AcceptInviteAPIResponse extends UpdateChannelAPIResponse {}
@@ -662,10 +686,24 @@ export interface FlagResponse {
   rejected_at: string;
 }
 
+export interface CommandRequest {
+  name: string;
+  description?: string;
+  args?: string;
+}
+
+export interface CreateCommandRequest extends CommandRequest {}
+export interface UpdateCommandRequest extends CommandRequest {}
+
 export interface CommandResponse {
+  id: number;
+  created_at: string;
+  updated_at?: string;
   name: string;
   description: string;
+  app_pk: number;
   args: string;
+  custom: boolean;
   set: string;
 }
 

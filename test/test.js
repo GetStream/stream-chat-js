@@ -1640,6 +1640,38 @@ describe('Chat', function() {
 				expect(response.description).to.equal('');
 			});
 
+			it(`list commands`, async function() {
+				const resp = await client.listCommands();
+
+				const exp = {
+					commands: [
+						{
+							name: 'hello-2',
+							description: 'desc2',
+							app_pk: 31264,
+							args: '',
+							set: '',
+						},
+						{
+							name: 'hello-3',
+							description: '',
+							app_pk: 31264,
+							args: '',
+							set: '',
+						},
+						{
+							name: 'zork',
+							description: 'start Zork',
+							app_pk: 31264,
+							args: 'name',
+							set: '',
+						},
+					],
+				};
+
+				expect(resp).like(exp);
+			});
+
 			it(`"${cmdName}-2" should be deleted`, async function() {
 				await client.deleteCommand(cmdName + '-2');
 			});

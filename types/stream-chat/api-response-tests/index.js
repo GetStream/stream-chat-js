@@ -47,6 +47,11 @@ const executables = [
 	{ f: rg.create, type: 'ChannelAPIResponse' },
 	{ f: rg.stopWatching, type: 'StopWatchingAPIResponse' },
 	{ f: rg.getReplies, type: 'GetRepliesAPIResponse' },
+	{ f: rg.createCommand, type: 'CreateCommandAPIResponse' },
+	{ f: rg.updateCommand, type: 'UpdateCommandAPIResponse' },
+	{ f: rg.getCommand, type: 'GetCommandAPIResponse' },
+	{ f: rg.deleteCommand, type: 'DeleteCommandAPIResponse' },
+	{ f: rg.listCommands, type: 'ListCommandsAPIResponse' },
 ];
 
 let imports = '';
