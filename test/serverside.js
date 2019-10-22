@@ -953,6 +953,27 @@ describe('App configs', function() {
 					}),
 				);
 			});
+			it('Adding bad data template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
+						firebase_config: {
+							data_template: '{ {{ } }',
+						},
+					}),
+				);
+			});
+
+			it('Adding invalid json data template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
+						apn_config: {
+							data_template: '{{ message.id }}',
+						},
+					}),
+				);
+			});
 			it('Adding invalid server key', async function() {
 				await expectHTTPErrorCode(
 					400,
@@ -1080,6 +1101,18 @@ describe('App configs', function() {
 			);
 		});
 
+		it('No Firebase + firebase data template', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
+			await expect(p).to.be.rejectedWith(
+				`Firebase data template provided, but app doesn't have firebase push notifcations configured`,
+			);
+		});
+
 		it('Bad message id', async function() {
 			await client.updateAppSettings({
 				apn_config,
@@ -1172,6 +1205,48 @@ describe('App configs', function() {
 			]);
 		});
 
+		it('Bad firebase data template error gets returned in response', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{{}',
+			});
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response.general_errors).to.have.length(1);
+			expect(response.general_errors).to.have.members([
+				'Firebase template is invalid: data_template is not a valid handlebars template',
+			]);
+		});
+
+		it('Good notification template', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{}',
+			});
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+		});
+
+		it('Good data template', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{}',
+			});
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+		});
+
 		it('All good', async function() {
 			await client.updateAppSettings({
 				firebase_config,
@@ -1180,6 +1255,7 @@ describe('App configs', function() {
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
+				firebaseDataTemplate: '{}',
 			});
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
 			expect(firebaseMsg.notification).to.be.empty;
@@ -1449,6 +1525,17 @@ describe('Devices', function() {
 			await client.updateAppSettings({
 				firebase_config: {
 					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing firebase notification data does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'firebase', userID);
+			await client.updateAppSettings({
+				firebase_config: {
+					data_template: '{ "key": {{ foo }} }',
 				},
 			});
 			const { devices } = await client.getDevices(userID);
