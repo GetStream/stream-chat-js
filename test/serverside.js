@@ -725,7 +725,7 @@ describe('App configs', function() {
 	});
 
 	describe('Push notifications', function() {
-		describe.only('APN', function() {
+		describe('APN', function() {
 			context('When using certificate', function() {
 				context('When adding bad certificate', function() {
 					it('returns 400 error code', function() {
@@ -742,20 +742,17 @@ describe('App configs', function() {
 				});
 
 				context('When adding good apn certificate', function() {
-					const apnConfig = {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-						bundle_id: 'stream-test',
-					};
-
 					context('When development is true', function() {
 						before(async function() {
-							apnConfig.development = true;
-
 							await client.updateAppSettings({
-								apn_config: apnConfig,
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: true,
+								},
 							});
 						});
 
@@ -771,6 +768,36 @@ describe('App configs', function() {
 								auth_type: 'certificate',
 								bundle_id: 'stream-test',
 								host: 'https://api.development.push.apple.com',
+							});
+						});
+					});
+
+					context('When development is false', function() {
+						before(async function() {
+							await client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: false,
+								},
+							});
+						});
+
+						it('App contains valid details', async function() {
+							const response = await client.getAppSettings();
+							expect(response.app).to.be.an('object');
+							expect(response.app.push_notifications).to.be.an('object');
+							delete response
+								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.apn).to.eql({
+								enabled: true,
+								development: false,
+								auth_type: 'certificate',
+								bundle_id: 'stream-test',
+								host: 'https://api.push.apple.com',
 							});
 						});
 					});
