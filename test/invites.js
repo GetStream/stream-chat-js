@@ -426,4 +426,28 @@ describe('update channel - invites', function() {
 		);
 		expect(invites.length).to.be.equal(1);
 	});
+
+	it('query for rejected invites should return 0', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'rejected' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(0);
+	});
+
+	it('invite on distinct channel is not allowed', async function() {
+		const initialMembers = [uuidv4(), uuidv4()];
+		const invited = uuidv4();
+		await createUsers(initialMembers);
+		const client = await getTestClientForUser(initialMembers[0]);
+		let distinctChannel = client.channel('messaging', '', {
+			members: initialMembers,
+		});
+		await distinctChannel.create();
+		await expect(distinctChannel.inviteMembers([invited])).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members',
+		);
+	});
 });
