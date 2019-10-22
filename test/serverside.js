@@ -964,7 +964,7 @@ describe('App configs', function() {
 				);
 			});
 
-			it('Adding invalid json data template', async function() {
+			it.skip('Adding invalid json data template', async function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
