@@ -2365,67 +2365,76 @@ describe('Unread counts are properly initialised', function() {
 });
 
 describe('GetOrCreate users', function() {
-	describe('validation', function() {
-		it('should return error for client-side auth', async function() {
+	let serverClient;
+
+	before(async function() {
+		serverClient = await getTestClient(true);
+	});
+
+	context('When client-side auth', function() {
+		it('should return 403 error code', async function() {
 			const user = { id: uuidv4() };
 			const client = await getTestClientForUser(user.id);
 
-			await expectHTTPErrorCode(403, client.getOrCreateUsers([user]));
-		});
-
-		it('should return error when no users', async function() {
-			const client = await getTestClient(true);
-			await expectHTTPErrorCode(400, client.getOrCreateUsers([]));
-		});
-
-		userInputValidation(async function(user) {
-			const client = await getTestClient(true);
-			return await client.getOrCreateUsers([user]);
+			return expectHTTPErrorCode(403, client.getOrCreateUsers([user]));
 		});
 	});
 
-	describe('Workflow', function() {
-		let user = { id: uuidv4() };
-		let client;
+	context('When no users was passed', function() {
+		it('should return 400 error code', function() {
+			return expectHTTPErrorCode(400, serverClient.getOrCreateUsers([]));
+		});
+	});
 
+	context('When user was passed with wrong input', function() {
+		userInputValidation(function(user) {
+			return serverClient.getOrCreateUsers([user]);
+		});
+	});
+
+	context("When user doesn't exists", function() {
+		const users = [{ id: uuidv4() }, { id: uuidv4() }];
+
+		it('should create users', async function() {
+			let resp = await serverClient.getOrCreateUsers(users);
+
+			expect(Object.keys(resp.users)).to.have.members(users.map(u => u.id));
+
+			resp = await serverClient.queryUsers({ id: { $in: users.map(u => u.id) } });
+			expect(resp.users.map(u => u.id)).to.have.members(users.map(u => u.id));
+		});
+	});
+
+	context('When one of users does not exists', function() {
+		const user = { id: uuidv4() };
+		const newUser = { id: uuidv4() };
+
+		let response, queryResponse;
 		before(async function() {
-			client = await getTestClient(true);
-			const resp = await client.updateUser(user);
-			user = resp.users[user.id];
-		});
+			await serverClient.updateUser(user);
 
-		describe('when no user exists', function() {
-			const users = [{ id: uuidv4() }, { id: uuidv4() }];
+			user.updated = true;
 
-			it('should create users', async function() {
-				let resp = await client.getOrCreateUsers(users);
-
-				expect(Object.keys(resp.users)).to.have.members(users.map(u => u.id));
-
-				resp = await client.queryUsers({ id: { $in: users.map(u => u.id) } });
-				expect(resp.users.map(u => u.id)).to.have.members(users.map(u => u.id));
+			response = await serverClient.getOrCreateUsers([user, newUser]);
+			queryResponse = await serverClient.queryUsers({
+				id: { $in: [user.id, newUser.id] },
 			});
 		});
 
-		describe('when one of users not exists', function() {
-			const users = [{ id: user.id, updated: true }, { id: uuidv4() }];
-			let resp;
+		it('should return users', function() {
+			expect(Object.keys(response.users)).to.have.members([user.id, newUser.id]);
+		});
 
-			before(async function() {
-				resp = await client.getOrCreateUsers(users);
-			});
+		it('should create missing users', function() {
+			expect(queryResponse.users.map(u => u.id)).to.have.members([
+				user.id,
+				newUser.id,
+			]);
+		});
 
-			it('should return users', async function() {
-				expect(Object.keys(resp.users)).to.have.members(users.map(u => u.id));
-
-				resp = await client.queryUsers({ id: { $in: users.map(u => u.id) } });
-				expect(resp.users.map(u => u.id)).to.have.members(users.map(u => u.id));
-			});
-
-			it('should not update existing user', async function() {
-				const resp = await client.queryUsers({ id: { $eq: user.id } });
-				expect(resp.users[0]).to.deep.eq(user);
-			});
+		it('should not update existing user', function() {
+			const userFromResponse = queryResponse.users.find(u => u.id === user.id);
+			expect(userFromResponse.updated).to.be.undefined;
 		});
 	});
 });

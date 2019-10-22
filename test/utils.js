@@ -92,24 +92,28 @@ export async function createUsers(userIDs) {
 	return response;
 }
 
-export function userInputValidation(cb) {
-	describe('UserInput validation', function() {
-		it('should not allow to override PK', async function() {
-			await expectHTTPErrorCode(400, cb({ pk: 1234, id: 'tomasso' }));
+export function userInputValidation(callback) {
+	context('When PK is set', function() {
+		it('should return 400 error code', function() {
+			return expectHTTPErrorCode(400, callback({ pk: 1234, id: 'tomasso' }));
 		});
+	});
 
-		it('should not allow to override AppPK', async function() {
-			await expectHTTPErrorCode(400, cb({ app_pk: 1234, id: 'tomasso' }));
+	context('When AppPK is set', function() {
+		it('should return 400 error code', function() {
+			return expectHTTPErrorCode(400, callback({ app_pk: 1234, id: 'tomasso' }));
 		});
+	});
 
-		it('should not allow to pass empty user id', function() {
-			expect(async function() {
-				await cb({ id: '' });
-			}).to.throw;
+	context('When UsedID is empty', function() {
+		it('should fail', function() {
+			return expect(callback({ id: '' })).to.be.rejectedWith(/User ID is required/);
 		});
+	});
 
-		it('should not allow to set invalid role', async function() {
-			await expectHTTPErrorCode(400, cb({ id: 'tomasso', role: 'test' }));
+	context('When role is invalid', function() {
+		it('should return 400 error code', async function() {
+			return expectHTTPErrorCode(400, callback({ id: 'tomasso', role: 'test' }));
 		});
 	});
 }
