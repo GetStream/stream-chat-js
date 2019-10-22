@@ -168,7 +168,7 @@ export class StreamChat {
   browser: boolean;
   wsConnection: StableWSConnection;
   devToken(userID: string): string;
-  createToken(userID: string, exp: number): string;
+  createToken(userID: string, exp?: number): string;
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
