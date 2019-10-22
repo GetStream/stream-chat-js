@@ -1101,7 +1101,7 @@ describe('App configs', function() {
 			);
 		});
 
-		it('No Firebase + firebase data template', async function() {
+		it.skip('No Firebase + firebase data template', async function() {
 			await client.updateAppSettings({
 				apn_config,
 			});
@@ -1205,7 +1205,7 @@ describe('App configs', function() {
 			]);
 		});
 
-		it('Bad firebase data template error gets returned in response', async function() {
+		it.skip('Bad firebase data template error gets returned in response', async function() {
 			await client.updateAppSettings({
 				firebase_config,
 			});
