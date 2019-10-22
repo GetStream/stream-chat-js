@@ -450,4 +450,32 @@ describe('update channel - invites', function() {
 			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members',
 		);
 	});
+
+	it('invited members are present in channel.updated event', async function() {
+		let channel;
+		let client;
+		let creatorId = uuidv4();
+		let invitedId = uuidv4();
+
+		await createUsers([creatorId, invitedId]);
+		client = await getTestClientForUser(creatorId);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [creatorId],
+		});
+		await channel.watch();
+
+		const evtReceived = new Promise(resolve => {
+			channel.on('channel.updated', function(e) {
+				expect(e.channel.members.length).to.be.equal(2);
+				expect(e.channel.member_count).to.be.equal(2);
+				expect(e.channel.members[0].user_id).to.be.equal(creatorId);
+				expect(e.channel.members[0].invited).to.be.undefined;
+				expect(e.channel.members[1].user_id).to.be.equal(invitedId);
+				expect(e.channel.members[1].invited).to.be.equal(true);
+				resolve();
+			});
+		});
+
+		await Promise.all([channel.inviteMembers([invitedId]), evtReceived]);
+	});
 });
