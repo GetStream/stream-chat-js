@@ -1161,7 +1161,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`APN template provided, but app doesn't have APN push notifcations configured`,
+				`APN template provided, but app doesn't have APN push notifications configured`,
 			);
 		});
 
@@ -1173,7 +1173,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`Firebase template provided, but app doesn't have firebase push notifcations configured`,
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
 			);
 		});
 
@@ -1185,7 +1185,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				/Firebase data template provided, but app doesn't have firebase push notifcations configured/,
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
 			);
 		});
 
@@ -1293,7 +1293,7 @@ describe('App configs', function() {
 			expect(response).to.not.have.property('rendered_firebase_template');
 			expect(response.general_errors).to.have.length(1);
 			expect(response.general_errors).to.have.members([
-				'Firebase template is invalid: data_template is not a valid handlebars template',
+				'Firebase data template is invalid: data_template is not a valid handlebars template',
 			]);
 		});
 
