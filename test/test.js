@@ -1646,6 +1646,13 @@ describe('Chat', function() {
 				const exp = {
 					commands: [
 						{
+							name: 'zork',
+							description: 'start Zork',
+							app_pk: 31264,
+							args: 'name',
+							set: '',
+						},
+						{
 							name: 'hello-2',
 							description: 'desc2',
 							app_pk: 31264,
@@ -1657,13 +1664,6 @@ describe('Chat', function() {
 							description: '',
 							app_pk: 31264,
 							args: '',
-							set: '',
-						},
-						{
-							name: 'zork',
-							description: 'start Zork',
-							app_pk: 31264,
-							args: 'name',
 							set: '',
 						},
 					],
