@@ -1185,7 +1185,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`Firebase data template provided, but app doesn't have firebase push notifcations configured`,
+				/Firebase data template provided, but app doesn't have firebase push notifcations configured/,
 			);
 		});
 
