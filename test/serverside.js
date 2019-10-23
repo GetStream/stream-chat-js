@@ -1023,7 +1023,7 @@ describe('App configs', function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
-						apn_config: {
+						firebase_config: {
 							notification_template: '{{ message.id }}',
 						},
 					}),
@@ -1044,7 +1044,7 @@ describe('App configs', function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
-						apn_config: {
+						firebase_config: {
 							data_template: '{{ message.id }}',
 						},
 					}),
