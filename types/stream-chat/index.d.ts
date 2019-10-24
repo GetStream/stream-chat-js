@@ -254,7 +254,7 @@ export class StreamChat {
     messageID: string,
     hardDelete?: boolean,
   ): Promise<DeleteMessageAPIResponse>;
-  verifyWebHook(requestBody: object, xSignature: string): boolean;
+  verifyWebhook(requestBody: object, xSignature: string): boolean;
 }
 
 export class ClientState {
