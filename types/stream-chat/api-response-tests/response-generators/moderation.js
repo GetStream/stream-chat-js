@@ -161,7 +161,7 @@ async function flagMessage() {
 	// await isn't needed but makes testing a bit easier
 	await authClient.setUser(thierry);
 
-	const channel = authClient.channel('livestream', 'ninja', {
+	const channel = authClient.channel('livestream', `ninja-${uuidv4()}`, {
 		mysearchablefield: 'hi',
 	});
 
@@ -204,7 +204,7 @@ async function unflagMessage() {
 	// await isn't needed but makes testing a bit easier
 	await authClient.setUser(thierry);
 
-	const channel = authClient.channel('livestream', 'ninja', {
+	const channel = authClient.channel('livestream', `ninja-${uuidv4()}`, {
 		mysearchablefield: 'hi',
 	});
 
