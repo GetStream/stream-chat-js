@@ -1037,7 +1037,7 @@ describe('query channels by field $exists', function() {
 	});
 });
 
-describe.skip('query channels members $nin', function() {
+describe('query channels members $nin', function() {
 	let creator = uuidv4();
 	let membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
 	let client;
