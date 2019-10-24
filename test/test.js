@@ -2384,6 +2384,11 @@ describe('Chat', function() {
 			expect(channels).to.have.length(0);
 		});
 
+		it('Hidden channel should not be in query channels results when hidden false', async function() {
+			const channels = await client.queryChannels({ id: channelID, hidden: false });
+			expect(channels).to.have.length(0);
+		});
+
 		it('Query channels allows you to list hidden channels', async function() {
 			const channels = await client.queryChannels({ id: channelID, hidden: true });
 			expect(channels).to.have.length(1);
