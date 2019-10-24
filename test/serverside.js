@@ -726,211 +726,287 @@ describe('App configs', function() {
 
 	describe('Push notifications', function() {
 		describe('APN', function() {
-			it('Adding bad apn certificate config', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: 'boogus',
-						},
-					}),
-				);
-			});
-			it('Adding good apn certificate config', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-					},
+			context('When using certificate', function() {
+				context('When adding bad certificate', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: 'boogus',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When adding good apn certificate', function() {
+					context('When development is true', function() {
+						before(async function() {
+							await client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: true,
+								},
+							});
+						});
+
+						it('App contains valid details', async function() {
+							const response = await client.getAppSettings();
+							expect(response.app).to.be.an('object');
+							expect(response.app.push_notifications).to.be.an('object');
+							delete response
+								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.apn).to.eql({
+								enabled: true,
+								development: true,
+								auth_type: 'certificate',
+								bundle_id: 'stream-test',
+								host: 'https://api.development.push.apple.com',
+							});
+						});
+					});
+
+					context('When development is false', function() {
+						before(async function() {
+							await client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: false,
+								},
+							});
+						});
+
+						it('App contains valid details', async function() {
+							const response = await client.getAppSettings();
+							expect(response.app).to.be.an('object');
+							expect(response.app.push_notifications).to.be.an('object');
+							delete response
+								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.apn).to.eql({
+								enabled: true,
+								development: false,
+								auth_type: 'certificate',
+								bundle_id: 'stream-test',
+								host: 'https://api.push.apple.com',
+							});
+						});
+					});
 				});
 			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					development: false,
-					auth_type: 'certificate',
-					bundle_id: 'stream-test',
-					host: 'https://api.development.push.apple.com',
+
+			context('When using apn token', function() {
+				context('When token is bad', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									bundle_id: 'com.apple.test',
+									auth_key: 'supersecret',
+									key_id: 'keykey',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
 				});
-			});
-			it('Adding bad apn invalid template', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: fs.readFileSync(
-								'./test/push_test/stream-push-test.p12',
-							),
-							notification_template: '{ {{ } }',
-						},
-					}),
-				);
-			});
-			it('Adding bad apn message is not a valid JSON', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: fs.readFileSync(
-								'./test/push_test/stream-push-test.p12',
-							),
-							notification_template: '{{ message.id }}',
-						},
-					}),
-				);
-			});
-			it('Adding bad apn token', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
+
+				context('When token without bundle_id', function() {
+					it('return 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									team_id: 'sfd',
+									bundle_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without key_id', function() {
+					it('return 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: '',
+									bundle_id: 'bundly',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without team', function() {
+					it('return 400 error code', async function() {
+						await expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									bundle_id: 'sfd',
+									team_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When good production apn token', function() {
+					let app;
+					before(async function() {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								development: false,
+								team_id: 'sfd',
+							},
+						});
+
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						app = response.app;
+					});
+
+					it('returns correct app settings', function() {
+						expect(app.push_notifications).to.be.an('object');
+						delete app.push_notifications.apn.notification_template;
+						expect(app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: false,
 							auth_type: 'token',
 							bundle_id: 'com.apple.test',
-							auth_key: 'supersecret',
-							key_id: 'keykey',
+							host: 'https://api.push.apple.com',
 							team_id: 'sfd',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no bundle_id', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
 							key_id: 'keykey',
-							team_id: 'sfd',
-							bundle_id: '',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no key_id', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
+						});
+					});
+				});
+
+				context('When good development apn token', function() {
+					before(async function() {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								team_id: 'sfd',
+								development: true,
+							},
+						});
+					});
+
+					it('returns correct app settings', async function() {
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						expect(response.app.push_notifications).to.be.an('object');
+						delete response.app.push_notifications.apn.notification_template;
+						expect(response.app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: true,
 							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
-							key_id: '',
-							bundle_id: 'bundly',
+							bundle_id: 'com.apple.test',
 							team_id: 'sfd',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no team', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
 							key_id: 'keykey',
-							bundle_id: 'sfd',
-							team_id: '',
+							host: 'https://api.development.push.apple.com',
+						});
+					});
+				});
+			});
+
+			context('When adding bad apn template', function() {
+				it('returns 400 error code', function() {
+					return expectHTTPErrorCode(
+						400,
+						client.updateAppSettings({
+							apn_config: {
+								auth_type: 'certificate',
+								p12_cert: fs.readFileSync(
+									'./test/push_test/stream-push-test.p12',
+								),
+								notification_template: '{ {{ } }',
+							},
+						}),
+					);
+				});
+
+				context('When template is valid but not json', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									notification_template: '{{ message.id }}',
+								},
+							}),
+						);
+					});
+				});
+			});
+
+			context('When APN is disabled', function() {
+				before(async function() {
+					await client.updateAppSettings({
+						apn_config: {
+							disabled: true,
 						},
-					}),
-				);
-			});
-			it('Adding good apn token', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-					},
+					});
 				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					development: false,
-					auth_type: 'token',
-					bundle_id: 'com.apple.test',
-					host: 'https://api.push.apple.com',
-					team_id: 'sfd',
-					key_id: 'keykey',
-				});
-			});
-			it('Adding good apn token in dev mode', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-						development: true,
-					},
-				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					development: false,
-					auth_type: 'token',
-					bundle_id: 'com.apple.test',
-					team_id: 'sfd',
-					key_id: 'keykey',
-					host: 'https://api.development.push.apple.com',
-				});
-			});
-			it('Disable APN', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						disabled: true,
-					},
-				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: false,
-					development: false,
-					host: 'https://api.push.apple.com',
+
+				it('Returns app settings with disabled mode', async function() {
+					const response = await client.getAppSettings();
+					expect(response.app).to.be.an('object');
+					expect(response.app.push_notifications).to.be.an('object');
+					delete response.app.push_notifications.apn.notification_template;
+					expect(response.app.push_notifications.apn.enabled).to.be.false;
 				});
 			});
 		});
+
 		describe('Firebase', function() {
 			it('Adding bad template', async function() {
 				await expectHTTPErrorCode(
@@ -947,7 +1023,7 @@ describe('App configs', function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
-						apn_config: {
+						firebase_config: {
 							notification_template: '{{ message.id }}',
 						},
 					}),
@@ -964,11 +1040,11 @@ describe('App configs', function() {
 				);
 			});
 
-			it.skip('Adding invalid json data template', async function() {
+			it('Adding invalid json data template', async function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
-						apn_config: {
+						firebase_config: {
 							data_template: '{{ message.id }}',
 						},
 					}),
@@ -1085,7 +1161,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`APN template provided, but app doesn't have APN push notifcations configured`,
+				`APN template provided, but app doesn't have APN push notifications configured`,
 			);
 		});
 
@@ -1097,11 +1173,11 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`Firebase template provided, but app doesn't have firebase push notifcations configured`,
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
 			);
 		});
 
-		it.skip('No Firebase + firebase data template', async function() {
+		it('No Firebase + firebase data template', async function() {
 			await client.updateAppSettings({
 				apn_config,
 			});
@@ -1109,7 +1185,7 @@ describe('App configs', function() {
 
 			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`Firebase data template provided, but app doesn't have firebase push notifcations configured`,
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
 			);
 		});
 
@@ -1205,7 +1281,7 @@ describe('App configs', function() {
 			]);
 		});
 
-		it.skip('Bad firebase data template error gets returned in response', async function() {
+		it('Bad firebase data template error gets returned in response', async function() {
 			await client.updateAppSettings({
 				firebase_config,
 			});
@@ -1217,7 +1293,7 @@ describe('App configs', function() {
 			expect(response).to.not.have.property('rendered_firebase_template');
 			expect(response.general_errors).to.have.length(1);
 			expect(response.general_errors).to.have.members([
-				'Firebase template is invalid: data_template is not a valid handlebars template',
+				'Firebase data template is invalid: data_template is not a valid handlebars template',
 			]);
 		});
 
