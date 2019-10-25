@@ -310,6 +310,21 @@ describe('Chat', function() {
 				);
 				expect(response.me.banned).to.eq(true);
 			});
+
+			it('query for banned', async function f() {
+				const bannedUsers = await client.queryUsers(
+					{ banned: true },
+					{ updated_at: -1 },
+					{},
+				);
+				let bannedUserFound = false;
+				bannedUsers.users.forEach(function(user) {
+					if (user.id === banned) {
+						bannedUserFound = true;
+					}
+				});
+				expect(bannedUserFound).to.be.true;
+			});
 		});
 
 		context('When ban is expired', function() {
