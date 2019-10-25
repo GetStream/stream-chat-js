@@ -2514,44 +2514,6 @@ describe('Chat', function() {
 		});
 	});
 
-	describe('unread counts for messages send by muted users', function() {
-		let user1 = uuidv4();
-		let user2 = uuidv4(); //muted by user 1
-		let user3 = uuidv4();
-		let channel;
-		let client1, client2, client3;
-
-		//create a channel with 3 users
-		before(async function() {
-			await createUsers([user1, user2, user3]);
-			client1 = await getTestClientForUser(user1);
-			client2 = await getTestClientForUser(user2);
-			client3 = await getTestClientForUser(user3);
-			channel = client1.channel('messaging', uuidv4(), {
-				members: [user1, user2, user3],
-			});
-			await channel.create();
-		});
-		it('user1 mute user2', async function() {
-			await client1.muteUser(user2);
-		});
-		it('messages sent by user2 dont increase unread counts for user 1', async function() {
-			const ch = client2.channel(channel.type, channel.id);
-			await ch.sendMessage({
-				text: 'this message should only increase unread counts for user 3',
-			});
-			client1 = await getTestClientForUser(user1);
-			expect(client1.health.me.total_unread_count).to.be.equal(0);
-			expect(client1.health.me.unread_channels).to.be.equal(0);
-			client2 = await getTestClientForUser(user2);
-			expect(client2.health.me.total_unread_count).to.be.equal(0);
-			expect(client2.health.me.unread_channels).to.be.equal(0);
-			client3 = await getTestClientForUser(user3);
-			expect(client3.health.me.total_unread_count).to.be.equal(1);
-			expect(client3.health.me.unread_channels).to.be.equal(1);
-		});
-	});
-
 	describe('Upload', function() {
 		context('When channel type has uploads enabled', function() {
 			const channelType = uuidv4();
