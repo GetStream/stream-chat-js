@@ -1,3 +1,7 @@
+## October 25, 2019 - 1.1.5
+
+- Add support for member invites after channel creation.
+
 ## October 15, 2019 - 1.1.6
 
 - Fixing types for client and connection in typescript declaration file.
