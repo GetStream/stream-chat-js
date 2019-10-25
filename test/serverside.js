@@ -1901,14 +1901,14 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				automod_behavior: 'flag',
 				commands: [
+					'zork',
 					'giphy',
+					'imgur',
 					'flag',
 					'ban',
 					'unban',
 					'mute',
 					'unmute',
-					'mml',
-					'zork',
 				],
 				connect_events: true,
 				max_message_length: 5000,
@@ -1956,14 +1956,14 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				automod_behavior: 'flag',
 				commands: [
+					'zork',
 					'giphy',
+					'imgur',
 					'flag',
 					'ban',
 					'unban',
 					'mute',
 					'unmute',
-					'mml',
-					'zork',
 				],
 				connect_events: true,
 				max_message_length: 5000,
@@ -2032,17 +2032,15 @@ describe('Channel types', function() {
 				automod_behavior: 'flag',
 				commands: [
 					{
-						args: '[@username] [text]',
-						description: 'Ban a user',
-						name: 'ban',
-						set: 'moderation_set',
-					},
-					{
 						args: 'name',
 						description: 'start Zork',
 						name: 'zork',
 						id: 1,
-						set: '',
+					},
+					{
+						args: '[@username] [text]',
+						description: 'Ban a user',
+						name: 'ban',
 					},
 				],
 				connect_events: true,
@@ -2076,16 +2074,15 @@ describe('Channel types', function() {
 				automod_behavior: 'flag',
 				commands: [
 					{
-						args: '[@username] [text]',
-						description: 'Ban a user',
-						name: 'ban',
-						set: 'moderation_set',
-					},
-					{
 						args: 'name',
 						description: 'start Zork',
 						id: 1,
 						name: 'zork',
+					},
+					{
+						args: '[@username] [text]',
+						description: 'Ban a user',
+						name: 'ban',
 					},
 				],
 				connect_events: true,
@@ -2137,7 +2134,7 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['fun_set'],
 			});
-			expect(response.commands).to.have.length(2);
+			expect(response.commands).to.have.length(3);
 		});
 
 		it('changing the name should fail', async function() {
@@ -2217,52 +2214,45 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
+					{
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
+					},
+					{
+						args: '[text]',
+						description: 'Post image from imgur',
+						name: 'imgur',
 					},
 					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unban a user',
 						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Mute a user',
 						name: 'mute',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unmute a user',
 						name: 'unmute',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@test_name]',
-						description: 'Display an mml test',
-						name: 'mml',
-						set: 'dev_set',
-					},
-					{
-						args: 'name',
-						description: 'start Zork',
-						id: 1,
-						name: 'zork',
 					},
 				],
 				connect_events: true,
@@ -2304,52 +2294,45 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
+					{
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
+					},
+					{
+						args: '[text]',
+						description: 'Post image from imgur',
+						name: 'imgur',
 					},
 					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unban a user',
 						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Mute a user',
 						name: 'mute',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unmute a user',
 						name: 'unmute',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@test_name]',
-						description: 'Display an mml test',
-						name: 'mml',
-						set: 'dev_set',
-					},
-					{
-						args: 'name',
-						description: 'start Zork',
-						id: 1,
-						name: 'zork',
 					},
 				],
 				connect_events: true,

@@ -1650,21 +1650,53 @@ describe('Chat', function() {
 							description: 'start Zork',
 							app_pk: 31264,
 							args: 'name',
-							set: '',
+						},
+						{
+							args: '[text]',
+							description: 'Post a random gif to the channel',
+							name: 'giphy',
+						},
+						{
+							args: '[text]',
+							description: 'Post image from imgur',
+							name: 'imgur',
+						},
+						{
+							args: '[@username]',
+							description: 'Flag a user',
+							name: 'flag',
+						},
+						{
+							args: '[@username] [text]',
+							description: 'Ban a user',
+							name: 'ban',
+						},
+						{
+							args: '[@username]',
+							description: 'Unban a user',
+							name: 'unban',
+						},
+						{
+							args: '[@username]',
+							description: 'Mute a user',
+							name: 'mute',
+						},
+						{
+							args: '[@username]',
+							description: 'Unmute a user',
+							name: 'unmute',
 						},
 						{
 							name: 'hello-2',
 							description: 'desc2',
 							app_pk: 31264,
 							args: '',
-							set: '',
 						},
 						{
 							name: 'hello-3',
 							description: '',
 							app_pk: 31264,
 							args: '',
-							set: '',
 						},
 					],
 				};
