@@ -257,6 +257,14 @@ export class Channel {
 		return data;
 	}
 
+	async inviteMembers(members) {
+		const data = await this.getClient().post(this._channelURL(), {
+			invites: members,
+		});
+		this.data = data.channel;
+		return data;
+	}
+
 	async removeMembers(members) {
 		const data = await this.getClient().post(this._channelURL(), {
 			remove_members: members,
