@@ -6,7 +6,7 @@ const johnID = `john-${uuid4()}`;
 
 async function sendReaction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -15,7 +15,7 @@ async function sendReaction() {
 
 async function deleteReaction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -26,7 +26,7 @@ async function deleteReaction() {
 
 async function getReactions() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const text = 'testing reactions list';
 	const data = await channel.sendMessage({ text });

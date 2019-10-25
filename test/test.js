@@ -7,6 +7,7 @@ import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
+const mockServer = require('mockttp').getLocal();
 
 import {
 	createUserToken,
@@ -308,6 +309,21 @@ describe('Chat', function() {
 					token,
 				);
 				expect(response.me.banned).to.eq(true);
+			});
+
+			it('query for banned', async function f() {
+				const bannedUsers = await client.queryUsers(
+					{ banned: true },
+					{ updated_at: -1 },
+					{},
+				);
+				let bannedUserFound = false;
+				bannedUsers.users.forEach(function(user) {
+					if (user.id === banned) {
+						bannedUserFound = true;
+					}
+				});
+				expect(bannedUserFound).to.be.true;
 			});
 		});
 
@@ -1238,7 +1254,7 @@ describe('Chat', function() {
 				);
 			});
 
-			it('Add a Chat message with a URL and edit it', async function() {
+			it.skip('Add a Chat message with a URL and edit it', async function() {
 				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
 				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
@@ -1364,40 +1380,6 @@ describe('Chat', function() {
 				expect(a.asset_url).to.equal('https://www.youtube.com/embed/Q0CbN8sfihY');
 				expect(a.type).to.equal('video');
 			});
-
-			it('Upload a file', async function() {
-				const file = fs.createReadStream('./helloworld.txt');
-				const data = await channel.sendFile(file, 'hello_world.txt');
-			});
-
-			it('Upload an image', async function() {
-				const file = fs.createReadStream('./helloworld.jpg');
-				const data = await channel.sendImage(file, 'hello_world.jpg');
-			});
-
-			it('File upload entire flow', async function() {
-				const promises = [
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world1.jpg',
-					),
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world2.jpg',
-					),
-				];
-				const results = await Promise.all(promises);
-				const attachments = results.map(response => ({
-					type: 'image',
-					thumb_url: response.file,
-					asset_url: response.file,
-				}));
-				const response = await channel.sendMessage({
-					text: 'Check out what i uploaded in parallel',
-					attachments,
-				});
-				expect(response.message.attachments).to.deep.equal(attachments);
-			});
 		});
 
 		describe('Fail', () => {
@@ -1474,6 +1456,63 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Opengraph', () => {
+		it('og link should be processed by Opengraph parser', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://imgur.com/gallery/jj1QKWc',
+			});
+			const exp = {
+				author_name: 'Imgur',
+				image_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				og_scrape_url: 'https://imgur.com/gallery/jj1QKWc',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				title: 'Fat cat almost gets stuck in door',
+				title_link: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		it('direct image link should be attached', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://i.imgur.com/jj1QKWc.gif',
+			});
+			const exp = {
+				image_url: 'https://i.imgur.com/jj1QKWc.gif',
+				og_scrape_url: 'https://i.imgur.com/jj1QKWc.gif',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		beforeEach(() => mockServer.start());
+		afterEach(() => mockServer.stop());
+		// mockServer.enableDebug();
+
+		it('direct link on image with wrong content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image.jpg')
+				.thenReply(200, ':/', { 'content-type': 'fake' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
+		});
+
+		it('direct link on fake image with right content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image2.jpg')
+				.thenReply(200, ':/', { 'content-type': 'image/gif' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image2.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
+		});
+	});
+
 	describe('Slash Commands', () => {
 		describe('Success', () => {
 			it('Giphy Integration', async function() {
@@ -1543,7 +1582,8 @@ describe('Chat', function() {
 				userMap[username(i)] = users[i];
 			}
 		});
-		it('search users', async function() {
+		it.skip('search users', async function() {
+			//todo adjust to use $autocomplete
 			const response = await authClient.queryUsers(
 				{ id: 'user-query-' + unique + '-' },
 				{},
@@ -2359,6 +2399,11 @@ describe('Chat', function() {
 			expect(channels).to.have.length(0);
 		});
 
+		it('Hidden channel should not be in query channels results when hidden false', async function() {
+			const channels = await client.queryChannels({ id: channelID, hidden: false });
+			expect(channels).to.have.length(0);
+		});
+
 		it('Query channels allows you to list hidden channels', async function() {
 			const channels = await client.queryChannels({ id: channelID, hidden: true });
 			expect(channels).to.have.length(1);
@@ -2481,6 +2526,137 @@ describe('Chat', function() {
 				'80% off Loutis Vuitton Handbags Save up to 80% off ! Free shipping! Right Now ! Snap it up 2.vadsv.uk';
 			const data = await aiChannel.sendMessage({ text });
 			expect(data.message.type).to.equal('error');
+		});
+	});
+
+	describe('unread counts for messages send by muted users', function() {
+		let user1 = uuidv4();
+		let user2 = uuidv4(); //muted by user 1
+		let user3 = uuidv4();
+		let channel;
+		let client1, client2, client3;
+
+		//create a channel with 3 users
+		before(async function() {
+			await createUsers([user1, user2, user3]);
+			client1 = await getTestClientForUser(user1);
+			client2 = await getTestClientForUser(user2);
+			client3 = await getTestClientForUser(user3);
+			channel = client1.channel('messaging', uuidv4(), {
+				members: [user1, user2, user3],
+			});
+			await channel.create();
+		});
+		it('user1 mute user2', async function() {
+			await client1.muteUser(user2);
+		});
+		it('messages sent by user2 dont increase unread counts for user 1', async function() {
+			const ch = client2.channel(channel.type, channel.id);
+			await ch.sendMessage({
+				text: 'this message should only increase unread counts for user 3',
+			});
+			client1 = await getTestClientForUser(user1);
+			expect(client1.health.me.total_unread_count).to.be.equal(0);
+			expect(client1.health.me.unread_channels).to.be.equal(0);
+			client2 = await getTestClientForUser(user2);
+			expect(client2.health.me.total_unread_count).to.be.equal(0);
+			expect(client2.health.me.unread_channels).to.be.equal(0);
+			client3 = await getTestClientForUser(user3);
+			expect(client3.health.me.total_unread_count).to.be.equal(1);
+			expect(client3.health.me.unread_channels).to.be.equal(1);
+		});
+	});
+
+	describe('Upload', function() {
+		context('When channel type has uploads enabled', function() {
+			const channelType = uuidv4();
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: true,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Upload a file', async function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				const data = await channel.sendFile(file, 'hello_world.txt');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('Upload an image', async function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				const data = await channel.sendImage(file, 'hello_world.jpg');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('File upload entire flow', async function() {
+				const promises = [
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world1.jpg',
+					),
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world2.jpg',
+					),
+				];
+				const results = await Promise.all(promises);
+				const attachments = results.map(response => ({
+					type: 'image',
+					thumb_url: response.file,
+					asset_url: response.file,
+				}));
+				const response = await channel.sendMessage({
+					text: 'Check out what i uploaded in parallel',
+					attachments,
+				});
+				expect(response.message.attachments).to.deep.equal(attachments);
+			});
+		});
+
+		context('When channel type has uploads disabled', function() {
+			const channelType = uuidv4();
+			const errorMessage = new RegExp(
+				`channel type ${channelType} has upload disabled`,
+			);
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: false,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Do not upload a file', function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				return expect(
+					channel.sendFile(file, 'hello_world.txt'),
+				).to.be.rejectedWith(errorMessage);
+			});
+
+			it('Do not upload an image', function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				return expect(
+					channel.sendImage(file, 'hello_world.jpg'),
+				).to.be.rejectedWith(errorMessage);
+			});
 		});
 	});
 });

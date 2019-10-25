@@ -38,12 +38,6 @@ export interface Message {
   [propName: string]: any;
 }
 
-export interface User {
-  id: string;
-  role?: string;
-  [propName: string]: any;
-}
-
 export interface DeviceFields {
   push_providers: string;
   id: string;
@@ -70,6 +64,7 @@ export interface Event<T = string> {
   unread_count?: number;
   online?: boolean;
   created_at?: string;
+  connection_id?: string;
   [propName: string]: any;
 }
 export type UserPresenceChangedEvent = 'user.presence.changed';
@@ -168,7 +163,7 @@ export class StreamChat {
   browser: boolean;
   wsConnection: StableWSConnection;
   devToken(userID: string): string;
-  createToken(userID: string, exp: number): string;
+  createToken(userID: string, exp?: number): string;
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
@@ -254,7 +249,7 @@ export class StreamChat {
     messageID: string,
     hardDelete?: boolean,
   ): Promise<DeleteMessageAPIResponse>;
-  verifyWebHook(requestBody: object, xSignature: string): boolean;
+  verifyWebhook(requestBody: object, xSignature: string): boolean;
 }
 
 export class ClientState {
@@ -581,6 +576,13 @@ export interface MessageResponse {
   deleted_at?: string;
   [propName: string]: any;
 }
+
+export interface User {
+  id: string;
+  role?: string;
+  [propName: string]: any;
+}
+
 export interface UserResponse extends User {
   created_at?: string;
   updated_at?: string;
@@ -594,8 +596,15 @@ export interface OwnUserResponse extends UserResponse {
   unread_count: number;
   total_unread_count: number;
   unread_channels: number;
+  mutes: Mute[];
 }
 
+export interface Mute {
+  user: UserResponse;
+  target: UserResponse;
+  created_at: string;
+  updated_at: string;
+}
 export interface UpdateMessageAPIResponse extends APIResponse {
   message: MessageResponse;
 }
@@ -603,6 +612,8 @@ export interface UpdateMessageAPIResponse extends APIResponse {
 export interface DeleteMessageAPIResponse extends APIResponse {
   message: MessageResponse;
 }
+
+export interface ConnectAPIReponse extends Event<HealthCheckEvent> {}
 
 export interface ChannelMemberResponse {
   user_id?: string;
@@ -686,6 +697,7 @@ export interface ChannelConfigFields {
   mutes: boolean;
   message_retention: string;
   max_message_length: number;
+  uploads: boolean;
   automod: 'disabled' | 'simple' | 'AI';
   automod_behavior: 'flag' | 'block';
 }
