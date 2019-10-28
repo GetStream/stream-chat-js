@@ -2170,7 +2170,16 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: [
+					'zork',
+					'giphy',
+					'imgur',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
