@@ -382,3 +382,100 @@ describe('Query invites', function() {
 		expect(channels.length).to.be.equal(0);
 	});
 });
+
+describe('update channel - invites', function() {
+	let channel;
+	let client;
+	let creatorId = uuidv4();
+	let invitedId = uuidv4();
+	before(async function() {
+		await createUsers([creatorId, invitedId]);
+		client = await getTestClientForUser(creatorId);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [creatorId],
+		});
+		await channel.create();
+	});
+
+	it('invite after channel creation', async function() {
+		const inviteResp = await channel.inviteMembers([invitedId]);
+		expect(inviteResp.members.length).to.be.equal(2);
+		expect(inviteResp.members[0].user_id).to.be.equal(creatorId);
+		expect(inviteResp.members[0].invited).to.be.undefined;
+		expect(inviteResp.members[1].user_id).to.be.equal(invitedId);
+		expect(inviteResp.members[1].invited).to.be.equal(true);
+	});
+
+	it('accept the invite', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'pending' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(1);
+		await invites[0].acceptInvite();
+	});
+
+	it('query for accepted invites', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'accepted' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(1);
+	});
+
+	it('query for rejected invites should return 0', async function() {
+		const invitedUserClient = await getTestClientForUser(invitedId);
+		const invites = await invitedUserClient.queryChannels(
+			{ invite: 'rejected' },
+			{},
+			{},
+		);
+		expect(invites.length).to.be.equal(0);
+	});
+
+	it('invite on distinct channel is not allowed', async function() {
+		const initialMembers = [uuidv4(), uuidv4()];
+		const invited = uuidv4();
+		await createUsers(initialMembers);
+		const client = await getTestClientForUser(initialMembers[0]);
+		let distinctChannel = client.channel('messaging', '', {
+			members: initialMembers,
+		});
+		await distinctChannel.create();
+		await expect(distinctChannel.inviteMembers([invited])).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members',
+		);
+	});
+
+	it('invited members are present in channel.updated event', async function() {
+		let channel;
+		let client;
+		let creatorId = uuidv4();
+		let invitedId = uuidv4();
+
+		await createUsers([creatorId, invitedId]);
+		client = await getTestClientForUser(creatorId);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [creatorId],
+		});
+		await channel.watch();
+
+		const evtReceived = new Promise(resolve => {
+			channel.on('channel.updated', function(e) {
+				expect(e.channel.members.length).to.be.equal(2);
+				expect(e.channel.member_count).to.be.equal(2);
+				expect(e.channel.members[0].user_id).to.be.equal(creatorId);
+				expect(e.channel.members[0].invited).to.be.undefined;
+				expect(e.channel.members[1].user_id).to.be.equal(invitedId);
+				expect(e.channel.members[1].invited).to.be.equal(true);
+				resolve();
+			});
+		});
+
+		await Promise.all([channel.inviteMembers([invitedId]), evtReceived]);
+	});
+});

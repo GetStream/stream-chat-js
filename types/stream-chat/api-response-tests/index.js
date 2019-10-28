@@ -7,6 +7,7 @@ const rg = require('./response-generators/index');
 let countExecutables = 0;
 
 const executables = [
+	{ f: rg.setUser, type: 'ConnectAPIReponse' },
 	{ f: rg.channelSearch, type: 'SearchAPIResponse' },
 	{ f: rg.updateUsers, type: 'UpdateUsersAPIResponse' },
 	{ f: rg.banUsers, type: 'BanUserAPIResponse' },
@@ -92,23 +93,28 @@ executables.forEach(i => {
 });
 
 function executeAndWrite(func, name, type) {
-	func().then(response => {
-		fs.appendFile(
-			tsFileName,
-			`export const ${func.name}Response: ${type} = ${JSON.stringify(
-				response,
-			)}; \n`,
-			function(err) {
-				if (err) {
-					return console.log(err);
-				}
+	func().then(
+		response => {
+			fs.appendFile(
+				tsFileName,
+				`export const ${func.name}Response: ${type} = ${JSON.stringify(
+					response,
+				)}; \n`,
+				function(err) {
+					if (err) {
+						return console.log(err);
+					}
 
-				console.log(`✅ ${func.name}`);
-				countExecutables++;
-				checkIfComplete();
-			},
-		);
-	});
+					console.log(`✅ ${func.name}`);
+					countExecutables++;
+					checkIfComplete();
+				},
+			);
+		},
+		error => {
+			console.log(`${func.name} failed with error: `, error);
+		},
+	);
 }
 
 function checkIfComplete() {

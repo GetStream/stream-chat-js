@@ -7,5 +7,6 @@ module.exports = {
 	...require('./event'),
 	...require('./reaction'),
 	...require('./channel'),
+	...require('./client'),
 	...require('./command'),
 };

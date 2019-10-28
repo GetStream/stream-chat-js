@@ -6,7 +6,7 @@ const johnID = `john-${uuidv4()}`;
 
 async function updateMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 	await authClient.updateMessage({
@@ -17,14 +17,14 @@ async function updateMessage() {
 
 async function sendMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	return await channel.sendMessage({ text: `Test message` });
 }
 
 async function deleteMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -33,7 +33,7 @@ async function deleteMessage() {
 
 async function sendAction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', 'poppins');
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `/giphy wave` });
 

@@ -312,6 +312,21 @@ describe('Chat', function() {
 				);
 				expect(response.me.banned).to.eq(true);
 			});
+
+			it('query for banned', async function f() {
+				const bannedUsers = await client.queryUsers(
+					{ banned: true },
+					{ updated_at: -1 },
+					{},
+				);
+				let bannedUserFound = false;
+				bannedUsers.users.forEach(function(user) {
+					if (user.id === banned) {
+						bannedUserFound = true;
+					}
+				});
+				expect(bannedUserFound).to.be.true;
+			});
 		});
 
 		context('When ban is expired', function() {
@@ -1875,7 +1890,8 @@ describe('Chat', function() {
 				userMap[username(i)] = users[i];
 			}
 		});
-		it('search users', async function() {
+		it.skip('search users', async function() {
+			//todo adjust to use $autocomplete
 			const response = await authClient.queryUsers(
 				{ id: 'user-query-' + unique + '-' },
 				{},
@@ -2693,6 +2709,11 @@ describe('Chat', function() {
 			expect(channels).to.have.length(0);
 		});
 
+		it('Hidden channel should not be in query channels results when hidden false', async function() {
+			const channels = await client.queryChannels({ id: channelID, hidden: false });
+			expect(channels).to.have.length(0);
+		});
+
 		it('Query channels allows you to list hidden channels', async function() {
 			const channels = await client.queryChannels({ id: channelID, hidden: true });
 			expect(channels).to.have.length(1);
@@ -2815,6 +2836,44 @@ describe('Chat', function() {
 				'80% off Loutis Vuitton Handbags Save up to 80% off ! Free shipping! Right Now ! Snap it up 2.vadsv.uk';
 			const data = await aiChannel.sendMessage({ text });
 			expect(data.message.type).to.equal('error');
+		});
+	});
+
+	describe('unread counts for messages send by muted users', function() {
+		let user1 = uuidv4();
+		let user2 = uuidv4(); //muted by user 1
+		let user3 = uuidv4();
+		let channel;
+		let client1, client2, client3;
+
+		//create a channel with 3 users
+		before(async function() {
+			await createUsers([user1, user2, user3]);
+			client1 = await getTestClientForUser(user1);
+			client2 = await getTestClientForUser(user2);
+			client3 = await getTestClientForUser(user3);
+			channel = client1.channel('messaging', uuidv4(), {
+				members: [user1, user2, user3],
+			});
+			await channel.create();
+		});
+		it('user1 mute user2', async function() {
+			await client1.muteUser(user2);
+		});
+		it('messages sent by user2 dont increase unread counts for user 1', async function() {
+			const ch = client2.channel(channel.type, channel.id);
+			await ch.sendMessage({
+				text: 'this message should only increase unread counts for user 3',
+			});
+			client1 = await getTestClientForUser(user1);
+			expect(client1.health.me.total_unread_count).to.be.equal(0);
+			expect(client1.health.me.unread_channels).to.be.equal(0);
+			client2 = await getTestClientForUser(user2);
+			expect(client2.health.me.total_unread_count).to.be.equal(0);
+			expect(client2.health.me.unread_channels).to.be.equal(0);
+			client3 = await getTestClientForUser(user3);
+			expect(client3.health.me.total_unread_count).to.be.equal(1);
+			expect(client3.health.me.unread_channels).to.be.equal(1);
 		});
 	});
 
