@@ -894,12 +894,22 @@ export class StreamChat {
 	}
 
 	async search(filterConditions, query, options = {}) {
-		// Return a list of channels
-		const payload = {
-			filter_conditions: filterConditions,
-			query,
-			...options,
-		};
+		const filters = {};
+
+		if ('channel' in filterConditions || 'message' in filterConditions) {
+			if ('channel' in filterConditions) {
+				filters['filter_conditions'] = filterConditions.channel;
+			}
+			if ('message' in filterConditions) {
+				filters['message_filter'] = filterConditions.message;
+			}
+		} else {
+			filters.filter_conditions = filterConditions;
+		}
+
+		filters.query = query;
+
+		const payload = { ...filters, ...options };
 
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.wsPromise;
