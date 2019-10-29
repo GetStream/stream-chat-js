@@ -241,9 +241,10 @@ export class Channel {
 		return data;
 	}
 
-	async addMembers(members) {
+	async addMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_members: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
@@ -265,9 +266,10 @@ export class Channel {
 		return data;
 	}
 
-	async removeMembers(members) {
+	async removeMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			remove_members: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
