@@ -899,7 +899,7 @@ export class StreamChat {
 		};
 
 		if (typeof query === 'object') {
-			filters['message_filter'] = query;
+			filters['message_filters'] = query;
 		} else {
 			filters['query'] = query;
 		}
