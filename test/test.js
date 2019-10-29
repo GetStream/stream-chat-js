@@ -510,6 +510,35 @@ describe('Chat', function() {
 				'Fulltext search is not enabled for message field "mycustomfield"',
 			);
 		});
+
+		it('Query using $q and custom prop', async function() {
+			// add a very special message
+			const channel = authClient.channel('messaging', 'search', {
+				members: ['thierry', 'tommaso'],
+			});
+			await channel.create();
+			const keyword = 'supercalifragilisticexpialidocious';
+			await channel.sendMessage({ text: `${keyword} 1`, color: 'green' });
+			await channel.sendMessage({ text: `2 ${keyword} 2`, color: 'blue' });
+			await channel.sendMessage({ text: `3 ${keyword}`, color: 'red' });
+			await channel.sendMessage({ text: `hidden`, color: 'green' });
+
+			const response = await authClient.search(
+				{
+					type: 'messaging',
+					members: { $in: ['tommaso'] },
+				},
+				{
+					text: { $q: keyword },
+					color: { $eq: ['green', 'blue'] },
+				},
+				{ limit: 2, offset: 0 },
+			);
+			expect(response.results.length).to.equal(2);
+			expect(response.results[0].message.text).to.contain(
+				'supercalifragilisticexpialidocious',
+			);
+		});
 	});
 
 	describe('Server Side Integration', function() {

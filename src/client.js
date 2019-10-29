@@ -894,20 +894,15 @@ export class StreamChat {
 	}
 
 	async search(filterConditions, query, options = {}) {
-		const filters = {};
+		const filters = {
+			filter_conditions: filterConditions,
+		};
 
-		if ('channel' in filterConditions || 'message' in filterConditions) {
-			if ('channel' in filterConditions) {
-				filters['filter_conditions'] = filterConditions.channel;
-			}
-			if ('message' in filterConditions) {
-				filters['message_filter'] = filterConditions.message;
-			}
+		if (typeof query === 'object') {
+			filters['message_filter'] = query;
 		} else {
-			filters.filter_conditions = filterConditions;
+			filters['query'] = query;
 		}
-
-		filters.query = query;
 
 		const payload = { ...filters, ...options };
 
