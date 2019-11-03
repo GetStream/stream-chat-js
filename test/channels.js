@@ -1094,3 +1094,52 @@ describe('query channels members $nin', function() {
 		}
 	});
 });
+
+describe('Channel members as objects', async function() {
+	const members = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	const tommasoID = `tommaso-${uuidv4()}`;
+	const tommasoToken = createUserToken(tommasoID);
+	const tommasoClient = getTestClient();
+	let channel;
+
+	before(async () => {
+		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
+	});
+	await createUsers(members);
+
+	it('creates a channel with custom color members', async function() {
+		const tommasoClient = await getTestClientForUser(tommasoID);
+		const channelId = uuidv4();
+		channel = tommasoClient.channel('messaging', channelId, {
+			color: 'green',
+			members: [
+				{ id: members[0], color: 'blue' },
+				{ id: members[1], color: 'green' },
+			],
+		});
+
+		const response = await channel.create();
+		expect(response.members[0]['color']).to.equal('blue');
+		expect(response.members[1]['color']).to.equal('green');
+	});
+
+	it('add red and yellow color members', async function() {
+		await channel.addMembers([
+			{ id: members[2], color: 'red' },
+			{ id: members[2], color: 'yelow' },
+		]);
+	});
+
+	it('search members by color', async function() {
+		const filters = {
+			type: 'messaging',
+			members: { color: { $in: ['red', 'blue', 'orange', 'yellow'] } },
+		};
+		const response = await tommasoClient.search(filters);
+
+		expect(response.results.length).to.equal(3);
+		expect(response.results[0].message.color).to.equal('blue');
+		expect(response.results[0].message.color).to.equal('green');
+		expect(response.results[0].message.color).to.equal('yellow');
+	});
+});
