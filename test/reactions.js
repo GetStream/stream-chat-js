@@ -309,4 +309,84 @@ describe('Reactions', function() {
 			disabledChannel.getReactions(messageID, { limit: 3 }),
 		);
 	});
+
+	context('When reaction score is present', function() {
+		let message, reply;
+
+		before(async function() {
+			message = await getTestMessage('reaction with score', channel);
+			reply = await channel.sendReaction(message.id, {
+				type: 'love',
+				score: 5,
+			});
+		});
+
+		it('adds reaction to reaction_count', function() {
+			expect(reply.message.reaction_counts).to.deep.equal({ love: 1 });
+		});
+
+		it('adds reaction score to reaction_scores', function() {
+			expect(reply.message.reaction_scores).to.deep.equal({ love: 5 });
+		});
+
+		context('When there is also reaction without score', function() {
+			before(async function() {
+				reply = await channel.sendReaction(message.id, {
+					type: 'love2',
+				});
+			});
+
+			it('adds new reaction to reaction_counts', function() {
+				expect(reply.message.reaction_counts).to.deep.equal({
+					love: 1,
+					love2: 1,
+				});
+			});
+
+			it('adds new reaction to reaction_scores with score=1', function() {
+				expect(reply.message.reaction_scores).to.deep.equal({
+					love: 5,
+					love2: 1,
+				});
+			});
+		});
+
+		context('When sending same reaction again with different score', function() {
+			before(async function() {
+				reply = await channel.sendReaction(message.id, {
+					type: 'love2',
+					score: 10,
+				});
+			});
+
+			it("doesn't change reaction_counts", function() {
+				expect(reply.message.reaction_counts).to.deep.equal({
+					love: 1,
+					love2: 1,
+				});
+			});
+
+			it('set new score to reaction_scores', function() {
+				expect(reply.message.reaction_scores).to.deep.equal({
+					love: 5,
+					love2: 10,
+				});
+			});
+		});
+
+		context('When removing reaction', function() {
+			before(async function() {
+				await channel.deleteReaction(message.id, 'love2');
+				reply = await reactionClient.getMessage(message.id);
+			});
+
+			it('removing it from reaction_counts', function() {
+				expect(reply.message.reaction_counts).to.deep.equal({ love: 1 });
+			});
+
+			it('removing it from reaction_scores', function() {
+				expect(reply.message.reaction_scores).to.deep.equal({ love: 5 });
+			});
+		});
+	});
 });
