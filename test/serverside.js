@@ -631,7 +631,7 @@ describe('Managing users', function() {
 		const client1 = await getTestClientForUser(evilUser);
 		let s;
 		const eventPromise = new Promise(resolve => {
-			s = client1.on('user.unbanned', () => {
+			s = client1.on('user.unbanned', e => {
 				resolve();
 			});
 		});

@@ -203,6 +203,7 @@ describe('Channels - members', function() {
 			s = tommasoClient.on('user.banned', e => {
 				expect(e.reason).to.equal('somereason');
 				expect(e.channel_id).to.equal(channelId);
+				expect(e.channel_type).to.equal(channelGroup);
 				expect(e.expiration).to.exist;
 				resolve();
 			});
@@ -219,7 +220,9 @@ describe('Channels - members', function() {
 	it('thierry unbans tommaso', async function() {
 		let s;
 		const eventPromise = new Promise(resolve => {
-			s = tommasoClient.on('user.unbanned', () => {
+			s = tommasoClient.on('user.unbanned', e => {
+				expect(e.channel_id).to.equal(channelId);
+				expect(e.channel_type).to.equal(channelGroup);
 				resolve();
 			});
 		});
