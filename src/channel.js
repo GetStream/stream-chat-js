@@ -224,7 +224,7 @@ export class Channel {
 	}
 
 	/**
-	 * acceptInvite - accept invitation to channel
+	 * acceptInvite - accept invitation to the channel
 	 *
 	 * @param {object} options The object to update the custom properties of this channel with
 	 *
@@ -240,7 +240,7 @@ export class Channel {
 	}
 
 	/**
-	 * acceptInvite - reject invitation to channel
+	 * acceptInvite - reject invitation to the channel
 	 *
 	 * @param {object} options The object to update the custom properties of this channel with
 	 *
@@ -256,7 +256,7 @@ export class Channel {
 	}
 
 	/**
-	 * addMembers - add members to channel
+	 * addMembers - add members to the channel
 	 *
 	 * @param {array} members An array of member identifiers
 	 * @param {object} message Optional message object for channel members notification
@@ -272,7 +272,7 @@ export class Channel {
 	}
 
 	/**
-	 * addModerators - add moderators to channel
+	 * addModerators - add moderators to the channel
 	 *
 	 * @param {array} members An array of member identifiers
 	 * @return {type} The server response
@@ -286,7 +286,7 @@ export class Channel {
 	}
 
 	/**
-	 * inviteMembers - invite members to channel
+	 * inviteMembers - invite members to the channel
 	 *
 	 * @param {array} members An array of member identifiers
 	 * @return {type} The server response
