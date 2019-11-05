@@ -190,8 +190,8 @@ export class Channel {
 	/**
 	 * update - Edit the channel's custom properties
 	 *
-	 * @param {object} custom The object to update the custom properties of this channel with
-	 *
+	 * @param {object} channelData The object to update the custom properties of this channel with
+	 * @param {object} updateMessage Optional message object for channel members notification
 	 * @return {type} The server response
 	 */
 	async update(channelData, updateMessage) {
@@ -204,7 +204,7 @@ export class Channel {
 	}
 
 	/**
-	 * delete - Delete the channel.. Messages are permanently removed.
+	 * delete - Delete the channel. Messages are permanently removed.
 	 *
 	 * @return {object} The server response
 	 */
@@ -223,6 +223,13 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * acceptInvite - accept invitation to channel
+	 *
+	 * @param {object} options The object to update the custom properties of this channel with
+	 *
+	 * @return {type} The server response
+	 */
 	async acceptInvite(options = {}) {
 		const data = await this.getClient().post(this._channelURL(), {
 			accept_invite: true,
@@ -232,6 +239,13 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * acceptInvite - reject invitation to channel
+	 *
+	 * @param {object} options The object to update the custom properties of this channel with
+	 *
+	 * @return {type} The server response
+	 */
 	async rejectInvite(options = {}) {
 		const data = await this.getClient().post(this._channelURL(), {
 			reject_invite: true,
@@ -241,6 +255,13 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * addMembers - add members to channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
 	async addMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_members: members,
@@ -250,6 +271,12 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * addModerators - add moderators to channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @return {type} The server response
+	 */
 	async addModerators(members) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_moderators: members,
@@ -258,6 +285,12 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * inviteMembers - invite members to channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @return {type} The server response
+	 */
 	async inviteMembers(members) {
 		const data = await this.getClient().post(this._channelURL(), {
 			invites: members,
@@ -266,6 +299,13 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * removeMembers - remove members from channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
 	async removeMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			remove_members: members,
@@ -275,6 +315,12 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * demoteModerators - remove moderator role from channel members
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @return {type} The server response
+	 */
 	async demoteModerators(members) {
 		const data = await this.getClient().post(this._channelURL(), {
 			demote_moderators: members,
