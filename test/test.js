@@ -1948,8 +1948,9 @@ describe('Chat', function() {
 		 * - Message History?
 		 * - Maybe GraphQL?
 		 */
-		it.skip('Pagination on Messages', async function() {
-			const paginationChannel = authClient.channel('livestream', 'pagination');
+		it('Pagination on Messages', async function() {
+			const id = uuidv4();
+			const paginationChannel = authClient.channel('livestream', id);
 			await paginationChannel.create();
 
 			// add 5 messages so we can test pagination
@@ -1958,26 +1959,40 @@ describe('Chat', function() {
 				await p;
 			}
 			// read the first page
-			const result = await paginationChannel.query({
+			let result = await paginationChannel.query({
 				messages: { limit: 2, offset: 0 },
 			});
 			expect(result.messages.length).to.equal(2);
 			// read the second page
 			const oldestMessage = result.messages[0];
-			const result2 = await paginationChannel.query({
-				messages: { limit: 2, id_lt: oldestMessage },
+			result = await paginationChannel.query({
+				messages: { limit: 2, id_lt: oldestMessage.id },
 			});
-			expect(result2.messages.length).to.equal(2);
+			expect(result.messages.length).to.equal(2);
 			// verify that the id lte filter works
-			for (const m of result2.messages) {
+			for (const m of result.messages) {
 				expect(m.created_at).to.be.below(oldestMessage.created_at);
 			}
 			// the state should have 4 messages
 			expect(paginationChannel.state.messages.length).to.equal(4);
+
+			// read non-existing page
+			result = await paginationChannel.query({
+				messages: { limit: 2, offset: 6 },
+			});
+
+			expect(result.messages.length).to.equal(0);
 		});
-		it.skip('Pagination on Members', async function() {
+		it('Pagination on Members', async function() {
+			const id = uuidv4();
+			await serverAuthClient.updateUsers([
+				{ id: 'wendy' },
+				{ id: 'helen' },
+				{ id: 'marty' },
+				{ id: 'charlotte' },
+			]);
 			// add 4 members so we can test pagination
-			const c = authClient.channel('commerce', 'ozark-cast', {
+			const c = authClient.channel('commerce', id, {
 				members: ['wendy', 'helen', 'marty', 'charlotte'],
 				moderators: [],
 				admins: [],
@@ -1986,8 +2001,15 @@ describe('Chat', function() {
 			await c.watch();
 
 			// read the first page
-			const result = await c.query({ members: { limit: 2, offset: 0 } });
+			let result = await c.query({ members: { limit: 2, offset: 0 } });
 			expect(result.members.length).to.equal(2);
+
+			// read non-existing page
+			result = await c.query({
+				members: { limit: 2, offset: 6 },
+			});
+
+			expect(result.members.length).to.equal(0);
 		});
 	});
 

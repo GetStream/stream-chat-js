@@ -108,11 +108,13 @@ export interface Reaction {
   message_id: string;
   user_id?: string;
   user: User;
+  score: number;
   [propName: string]: any;
 }
 
 export interface ReactionResponse extends Reaction {
   created_at: string;
+  updated_at: string;
 }
 export interface StreamChatOptions {
   /**
@@ -593,6 +595,7 @@ export interface MessageResponse {
   latest_reactions?: ReactionResponse[];
   own_reactions?: ReactionResponse[];
   reaction_counts?: { [key: string]: number };
+  reaction_scores?: { [key: string]: number };
   show_in_channel?: boolean;
   reply_count?: number;
   created_at: string;

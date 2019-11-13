@@ -659,11 +659,9 @@ export class StreamChat {
 			client.state.updateUser(event.user);
 			client._updateUserReferences(event.user);
 		}
-		if (event.type === 'health.check') {
-			if (event.me) {
-				client.user = event.me;
-				client.state.updateUser(event.me);
-			}
+		if (event.type === 'health.check' && event.me) {
+			client.user = event.me;
+			client.state.updateUser(event.me);
 		}
 
 		if (event.type === 'notification.message_new') {
@@ -904,11 +902,9 @@ export class StreamChat {
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.wsPromise;
 
-		const data = await this.get(this.baseURL + '/search', {
+		return await this.get(this.baseURL + '/search', {
 			payload,
 		});
-
-		return data;
 	}
 
 	/**
@@ -974,15 +970,14 @@ export class StreamChat {
 		}
 		if (~channelType.indexOf(':')) {
 			throw Error(
-				`Invalid channel group ${channelType}, cant contain the : character`,
+				`Invalid channel group ${channelType}, can't contain the : character`,
 			);
 		}
 
 		if (typeof channelID === 'string') {
-			channelID = channelID + '';
 			if (~channelID.indexOf(':')) {
 				throw Error(
-					`Invalid channel id ${channelID}, cant contain the : character`,
+					`Invalid channel id ${channelID}, can't contain the : character`,
 				);
 			}
 		} else {
@@ -991,26 +986,22 @@ export class StreamChat {
 			channelID = undefined;
 		}
 
-		// there are two ways of solving this,
-		// a. only allow 1 channel object per cid
-		// b. broadcast events to all channels
-		// the first option seems less likely to trip up devs
-		let channel;
-		if (channelID) {
-			const cid = `${channelType}:${channelID}`;
-			if (cid in this.activeChannels) {
-				channel = this.activeChannels[cid];
-				if (Object.keys(custom).length > 0) {
-					channel.data = custom;
-					channel._data = custom;
-				}
-			} else {
-				channel = new Channel(this, channelType, channelID, custom);
-				this.activeChannels[channel.cid] = channel;
-			}
-		} else {
-			channel = new Channel(this, channelType, undefined, custom);
+		if (!channelID) {
+			return new Channel(this, channelType, undefined, custom);
 		}
+
+		// only allow 1 channel object per cid
+		const cid = `${channelType}:${channelID}`;
+		if (cid in this.activeChannels) {
+			const channel = this.activeChannels[cid];
+			if (Object.keys(custom).length > 0) {
+				channel.data = custom;
+				channel._data = custom;
+			}
+			return channel;
+		}
+		const channel = new Channel(this, channelType, channelID, custom);
+		this.activeChannels[channel.cid] = channel;
 
 		return channel;
 	}
@@ -1294,11 +1285,7 @@ export class StreamChat {
 	/**
 	 * _isUsingServerAuth - Returns true if we're using server side auth
 	 */
-	_isUsingServerAuth = () => {
-		// returns if were in server side mode or not...
-		const serverAuth = !!this.secret;
-		return serverAuth;
-	};
+	_isUsingServerAuth = () => !!this.secret;
 
 	_addClientParams(params = {}) {
 		const token = this._getToken();

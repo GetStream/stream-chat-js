@@ -2263,6 +2263,14 @@ describe('Channel types', function() {
 			await sleep(1000);
 		});
 
+		it('flip url_enrichment config to false', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				url_enrichment: false,
+			});
+			expect(response.url_enrichment).to.be.false;
+			await sleep(1000);
+		});
+
 		it('new configs should be returned from channel.query', async function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
@@ -2463,6 +2471,7 @@ describe('Channel types', function() {
 				search: true,
 				read_events: true,
 				typing_events: true,
+				url_enrichment: true,
 			};
 			expect(channelData).like(expectedData);
 		});
@@ -2543,6 +2552,7 @@ describe('Channel types', function() {
 				search: true,
 				read_events: true,
 				typing_events: true,
+				url_enrichment: true,
 			};
 			expect(channelTypes.channel_types.messaging).like(expectedData);
 		});
@@ -2570,11 +2580,11 @@ describe('Channel types', function() {
 });
 
 describe('Unread counts are properly initialised', function() {
-	let userCreatedByConnect = `connect-${uuidv4()}`;
-	let userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
-	let userCreatedByCreateChannel = `channel-${uuidv4()}`;
+	const userCreatedByConnect = `connect-${uuidv4()}`;
+	const userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
+	const userCreatedByCreateChannel = `channel-${uuidv4()}`;
 	let serverSideClient;
-	let channelID = `group-${uuidv4()}`;
+	const channelID = `group-${uuidv4()}`;
 
 	before(async function() {
 		//create 3 user in 3 different ways
@@ -2601,7 +2611,7 @@ describe('Unread counts are properly initialised', function() {
 	it('validate unread counts', async function() {
 		//send a message with user created  by ws connect
 		let client = await getTestClientForUser(userCreatedByConnect);
-		let channel = client.channel('messaging', channelID);
+		const channel = client.channel('messaging', channelID);
 		await channel.sendMessage({ text: 'hi' });
 		//validate unread for user created by client.UpdateUser
 		client = await getTestClientForUser(userCreatedByUpdateUsers);
