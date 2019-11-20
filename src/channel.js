@@ -275,11 +275,13 @@ export class Channel {
 	 * addModerators - add moderators to the channel
 	 *
 	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
 	 * @return {type} The server response
 	 */
-	async addModerators(members) {
+	async addModerators(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_moderators: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
@@ -289,11 +291,13 @@ export class Channel {
 	 * inviteMembers - invite members to the channel
 	 *
 	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
 	 * @return {type} The server response
 	 */
-	async inviteMembers(members) {
+	async inviteMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			invites: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
@@ -319,11 +323,13 @@ export class Channel {
 	 * demoteModerators - remove moderator role from channel members
 	 *
 	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
 	 * @return {type} The server response
 	 */
-	async demoteModerators(members) {
+	async demoteModerators(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			demote_moderators: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
