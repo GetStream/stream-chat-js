@@ -14,6 +14,7 @@ import {
 	createUsers,
 	runAndLogPromise,
 	sleep,
+	expectHTTPErrorCode,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -395,6 +396,27 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
 			expect(state.messages[0].type).to.be.equal('deleted');
 			expect(state.messages[0].text).to.equal('hi');
+		});
+
+		it('hard delete a user without specifying mark_messages_deleted shoud fail', async function() {
+			// setup
+			const userID = uuidv4();
+			const creatorID = uuidv4();
+			const channelID = uuidv4();
+			const channel = serverClient.channel('livestream', channelID, {
+				created_by: { id: creatorID },
+			});
+			await channel.create();
+
+			// delete the user
+			await expectHTTPErrorCode(
+				400,
+				serverClient.deleteUser(userID, {
+					mark_messages_deleted: false,
+					hard_delete: true,
+				}),
+				'StreamChat error code 4: DeleteUser failed with error: "mark_messages_deleted must be specified with hard_delete"',
+			);
 		});
 
 		it('hard delete a user, their message and reactions', async function() {
