@@ -630,6 +630,7 @@ export class StreamChat {
 	};
 
 	handleEvent = messageEvent => {
+		console.log(messageEvent);
 		// dispatch the event to the channel listeners
 		const jsonString = messageEvent.data;
 		const event = JSON.parse(jsonString);
