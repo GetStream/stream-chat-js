@@ -415,7 +415,7 @@ describe('GDPR endpoints', function() {
 					mark_messages_deleted: false,
 					hard_delete: true,
 				}),
-				'StreamChat error code 4: DeleteUser failed with error: "mark_messages_deleted must be specified with hard_delete"',
+				'StreamChat error code 4: DeleteUser failed with error: "mark_messages_deleted must be set together with hard_delete"',
 			);
 		});
 
