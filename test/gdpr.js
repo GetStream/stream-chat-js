@@ -398,7 +398,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].text).to.equal('hi');
 		});
 
-		it('hard delete a user without specifying mark_messages_deleted shoud fail', async function() {
+		it('hard delete a user without specifying mark_messages_deleted should fail', async function() {
 			// setup
 			const userID = uuidv4();
 			const creatorID = uuidv4();
