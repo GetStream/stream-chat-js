@@ -510,6 +510,31 @@ describe('Chat', function() {
 				'Fulltext search is not enabled for message field "mycustomfield"',
 			);
 		});
+
+		it('Query members and check for channel', async function() {
+			const id = uuidv4();
+			const channel = authClient.channel('messaging', id, {
+				members: ['thierry', 'tommaso'],
+			});
+			await channel.create();
+			const keyword = 'supercalifragilisticexpialidocious';
+			await channel.sendMessage({ text: `${keyword} 1`, color: 'green' });
+			await channel.sendMessage({ text: `2 ${keyword} 2`, color: 'green' });
+			await channel.sendMessage({ text: `3 ${keyword}`, color: 'red' });
+			await channel.sendMessage({ text: `hidden`, color: 'green' });
+
+			const response = await authClient.search(
+				{
+					type: 'messaging',
+					id,
+					members: { $in: ['tommaso'] },
+				},
+				keyword,
+			);
+
+			expect(response.results.length).to.equal(3);
+			expect(response.results[0].message.channel.cid).to.contain('messaging:' + id);
+		});
 	});
 
 	describe('Server Side Integration', function() {
