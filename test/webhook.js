@@ -364,16 +364,18 @@ describe('Webhooks', function() {
 	});
 
 	it('channel.created', async function() {
-		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
+		let chan2 = client.channel('messaging', uuidv4(), {
+			created_by: { id: tommasoID },
+		});
 		const [events] = await Promise.all([
 			promises.waitForEvents('channel.created'),
-			chan.create(),
+			chan2.create(),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('channel.created');
-		expect(event.channel_type).to.eq(chan.type);
-		expect(event.channel_id).to.eq(chan.id);
+		expect(event.channel_type).to.eq(chan2.type);
+		expect(event.channel_id).to.eq(chan2.id);
 	});
 
 	it('moderation mute', async function() {
