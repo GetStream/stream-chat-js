@@ -478,7 +478,22 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax', async function() {
+		it('Query with spaces', async function() {
+			// add a very special message
+			const channel = authClient.channel('messaging', 'poppins');
+			await channel.create();
+			const keyword = '    this    is  a query    ';
+			await channel.sendMessage({ text: `words ${keyword} what?` });
+			await channel.sendMessage({ text: `great movie because of ${keyword}` });
+			await channel.sendMessage({ text: keyword });
+
+			const filters = { type: 'messaging' };
+			const response = await authClient.search(filters, keyword);
+			expect(response.results.length).to.equal(3);
+			expect(response.results[0].message.text).to.contain(keyword);
+		});
+
+		it('Basic Query using $q syntax', async function() {
 			// TODO: we didn't add support for this just yet...
 			// add a very special message
 			const channel = authClient.channel('messaging', 'poppins');
@@ -499,7 +514,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax on a field thats not supported', function() {
+		it('Basic Query using $q syntax on a field that is not supported', function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
@@ -509,6 +524,27 @@ describe('Chat', function() {
 			expect(searchPromise).to.be.rejectedWith(
 				'Fulltext search is not enabled for message field "mycustomfield"',
 			);
+		});
+
+		it('Query with no results', async function() {
+			// add a very special message
+			const channel = authClient.channel('messaging', 'poppins');
+			await channel.create();
+			const keyword = 'noresults';
+			await channel.sendMessage({ text: `words ${keyword} what?` });
+			await channel.sendMessage({ text: `great movie because of ${keyword}` });
+
+			const filters = { type: 'messaging' };
+			try {
+				const response = await authClient.search(filters, {
+					text: { $q: 'nonexistentquery' },
+				});
+
+				expect(response.results.length).to.equal(0);
+			} catch (e) {
+				console.log(e);
+				throw e;
+			}
 		});
 
 		it('Query using $q and custom prop', async function() {

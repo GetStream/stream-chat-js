@@ -893,15 +893,17 @@ export class StreamChat {
 		return channels;
 	}
 
-	async search(filterConditions, query, options = {}) {
+	async search(channelFilters, messageFilters, options = {}) {
 		const filters = {
-			filter_conditions: filterConditions,
+			filter_conditions: channelFilters,
 		};
 
-		if (typeof query === 'object') {
-			filters['message_filters'] = query;
+		// back compatibility. We can pass string to simple query
+		// or we can pass object with advanced message filters
+		if (typeof messageFilters === 'object') {
+			filters['message_filters'] = messageFilters;
 		} else {
-			filters['query'] = query;
+			filters['query'] = messageFilters;
 		}
 
 		const payload = { ...filters, ...options };

@@ -210,8 +210,8 @@ export class StreamChat {
     options: object,
   ): Promise<Channel[]>;
   search(
-    filterConditions: object,
-    query: object,
+    channelFilters: object,
+    messageFilters: object | string,
     options: object,
   ): Promise<SearchAPIResponse>;
 
