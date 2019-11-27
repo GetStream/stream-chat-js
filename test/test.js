@@ -342,12 +342,12 @@ describe('Chat', function() {
 				await serverClient.banUser(banned, { timeout: -1, user_id: admin.id });
 			});
 
-			it('banned is not set', async function() {
+			it('banned is set to false', async function() {
 				const response = await client.setUser(
 					{ id: banned, role: 'user', favorite_color: 'green' },
 					token,
 				);
-				expect(response.me.banned).to.be.undefined;
+				expect(response.me.banned).to.eq(false);
 			});
 		});
 	});
@@ -2511,6 +2511,16 @@ describe('Chat', function() {
 
 		it('should be included on message.new events', function(done) {
 			done();
+		});
+
+		it('setUser should not remove custom fields', async function() {
+			userClient = getTestClient(false);
+			let response = await userClient.setUser(
+				{ id: userData.id, new_field: 'yes' },
+				createUserToken(userData.id),
+			);
+			expect(response.me.knows_klingon).to.eq(true);
+			expect(response.me.new_field).to.eq('yes');
 		});
 	});
 
