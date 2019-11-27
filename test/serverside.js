@@ -619,15 +619,17 @@ describe('Managing users', function() {
 	it('ban user in channel and check system message', async function() {
 		const channelId = uuidv4();
 		const createdById = uuidv4();
+		const evcl = await getTestClientForUser(evilUser);
 		const client = getTestClient(true);
 		let s;
+
 		const channel = client.channel('messaging', channelId, {
 			created_by: { id: createdById },
 		});
 		await channel.watch();
 
 		const eventPromise = new Promise(resolve => {
-			s = channel.on('message.updated', e => {
+			s = evcl.on('message.new', e => {
 				expect(e.message.text).to.be.equal('goodbye');
 				resolve();
 			});
@@ -638,6 +640,36 @@ describe('Managing users', function() {
 			reason: 'reason',
 			timeout: 123,
 			message: { text: 'goodbye' },
+		});
+
+		await eventPromise;
+		s.unsubscribe();
+	});
+
+	it('unban user in channel and check system message', async function() {
+		const channelId = uuidv4();
+		const createdById = uuidv4();
+		const evcl = await getTestClientForUser(evilUser);
+		const client = getTestClient(true);
+		let s;
+
+		const channel = client.channel('messaging', channelId, {
+			created_by: { id: createdById },
+		});
+		await channel.watch();
+
+		const eventPromise = new Promise(resolve => {
+			s = evcl.on('message.new', e => {
+				expect(e.message.text).to.be.equal('hello');
+				resolve();
+			});
+		});
+
+		await channel.banUser(evilUser, {
+			user_id: user.id,
+			reason: 'reason',
+			timeout: 123,
+			message: { text: 'hello' },
 		});
 
 		await eventPromise;
