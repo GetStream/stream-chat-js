@@ -2351,8 +2351,21 @@ describe('Channel types', function() {
 				await tClient.channel(typeName, 'general').watch();
 			});
 
-			it('create a channel of the new type', async function() {
-				await expectHTTPErrorCode(400, client.deleteChannelType(typeName));
+			it('delete a channel type with existing channels should fail', async function() {
+				await client.channel(typeName, 'general').delete();
+			});
+
+			it('delete the channel', async function() {
+				await client.deleteChannelType(typeName);
+			});
+
+			it('query should be empty', async function() {
+				const resp = await client.queryChannels(
+					{ type: typeName },
+					{},
+					{ watch: false },
+				);
+				console.log(resp);
 			});
 		});
 	});
