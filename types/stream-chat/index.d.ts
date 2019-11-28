@@ -318,13 +318,10 @@ export class Channel {
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
 
   addMembers(members: string[], message?: Message): Promise<AddMembersAPIResponse>;
-  addModerators(members: string[], message?: Message): Promise<AddModeratorsAPIResponse>;
-  inviteMembers(members: string[], message?: Message): Promise<AddMembersAPIResponse>;
+  addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
+  inviteMembers(members: string[]): Promise<AddMembersAPIResponse>;
   removeMembers(members: string[], message?: Message): Promise<RemoveMembersAPIResponse>;
-  demoteModerators(
-    members: string[],
-    message?: Message,
-  ): Promise<RemoteModeratorsAPIResponse>;
+  demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
   sendAction(messageID: string, formData: object): Promise<SendMessageAPIResponse>;
 
