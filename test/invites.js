@@ -478,30 +478,4 @@ describe('update channel - invites', function() {
 
 		await Promise.all([channel.inviteMembers([invitedId]), evtReceived]);
 	});
-
-	it('system message on invite', async function() {
-		let channel;
-		let client;
-		let creatorId = uuidv4();
-		let invitedId = uuidv4();
-
-		await createUsers([creatorId, invitedId]);
-		client = await getTestClientForUser(creatorId);
-		channel = client.channel('messaging', uuidv4(), {
-			members: [creatorId],
-		});
-		await channel.watch();
-
-		const evtReceived = new Promise(resolve => {
-			channel.on('channel.updated', function(e) {
-				expect(e.message.text).to.be.equal('welcome');
-				resolve();
-			});
-		});
-
-		await Promise.all([
-			channel.inviteMembers([invitedId], { text: 'welcome' }),
-			evtReceived,
-		]);
-	});
 });
