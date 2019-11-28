@@ -374,6 +374,9 @@ export class StreamChat {
 	 * @return {string} Returns a token
 	 */
 	createToken(userID, exp) {
+		if (this.secret == null) {
+			throw Error(`tokens can only be created server-side using the API Secret`);
+		}
 		const extra = {};
 		if (exp != null) {
 			extra.exp = exp;
