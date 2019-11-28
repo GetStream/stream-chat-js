@@ -1,3 +1,7 @@
+## October 25, 2019 - 1.2.0
+
+- Improve client.channel signature, support short-hand with only type and object as well as null or undefined ID (instead of only "") 
+
 ## October 25, 2019 - 1.1.5
 
 - Add support for member invites after channel creation.
