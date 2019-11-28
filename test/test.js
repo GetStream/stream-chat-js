@@ -7,6 +7,8 @@ import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
+import commandSrv from './http_mock';
+const mockServer = require('mockttp').getLocal();
 
 import {
 	createUserToken,
@@ -114,6 +116,43 @@ describe('Chat', function() {
 				});
 			});
 		});
+
+		// If user.updated event corresponds to current user of client, then updated data of user should reflect in user set on client as well.
+		it('should update client user', async () => {
+			const u1 = uuidv4();
+			const authClient = getTestClient(true);
+			const serverAuthClient = getTestClient(true);
+
+			await serverAuthClient.updateUser({
+				id: u1,
+				name: 'Awesome user',
+			});
+
+			await authClient.setUser({ id: u1 });
+
+			// subscribe to user presence
+			const response = await authClient.queryUsers(
+				{ id: { $in: [u1] } },
+				{},
+				{ presence: true },
+			);
+
+			expect(response.users.length).to.equal(1);
+
+			// this update should trigger the user.updated event..
+			await new Promise(resolve => {
+				authClient.on('user.updated', event => {
+					expect(event.user.id).to.equal(u1);
+					expect(event.user.name).to.equal('Not so awesome');
+					expect(authClient.user.name).equal('Not so awesome');
+					resolve();
+				});
+				serverAuthClient.updateUser({
+					id: u1,
+					name: 'Not so awesome',
+				});
+			});
+		});
 	});
 
 	describe('Failures', function() {
@@ -156,6 +195,7 @@ describe('Chat', function() {
 				const text = 'helloworld :world: rocks 123';
 				await channel.sendMessage({ text, customfield: '123' });
 			}
+
 			runtest().catch(exc => {
 				done(exc);
 			});
@@ -251,6 +291,65 @@ describe('Chat', function() {
 			expect(updatedUser.favorite_color).to.equal(undefined);
 			expect(updatedUser.book).to.equal('dune');
 		});
+
+		context('When user is banned', function() {
+			const banned = uuidv4();
+			const token = createUserToken(banned);
+			const client = getTestClient(false);
+
+			before(async function() {
+				const admin = { id: uuidv4(), role: 'admin' };
+				const serverClient = getTestClient(true);
+
+				await serverClient.updateUsers([{ id: banned }, admin]);
+				await serverClient.banUser(banned, { user_id: admin.id });
+			});
+
+			it('returns banned field on setUser', async function() {
+				const response = await client.setUser(
+					{ id: banned, role: 'user', favorite_color: 'green' },
+					token,
+				);
+				expect(response.me.banned).to.eq(true);
+			});
+
+			it('query for banned', async function f() {
+				const bannedUsers = await client.queryUsers(
+					{ banned: true },
+					{ updated_at: -1 },
+					{},
+				);
+				let bannedUserFound = false;
+				bannedUsers.users.forEach(function(user) {
+					if (user.id === banned) {
+						bannedUserFound = true;
+					}
+				});
+				expect(bannedUserFound).to.be.true;
+			});
+		});
+
+		context('When ban is expired', function() {
+			const banned = uuidv4();
+			const token = createUserToken(banned);
+			const client = getTestClient(false);
+
+			before(async function() {
+				const admin = { id: uuidv4(), role: 'admin' };
+				const serverClient = getTestClient(true);
+
+				await serverClient.updateUsers([{ id: banned }, admin]);
+				await serverClient.banUser(banned, { timeout: -1, user_id: admin.id });
+			});
+
+			it('banned is set to false', async function() {
+				const response = await client.setUser(
+					{ id: banned, role: 'user', favorite_color: 'green' },
+					token,
+				);
+				expect(response.me.banned).to.eq(false);
+			});
+		});
 	});
 
 	describe('Devices', function() {
@@ -331,6 +430,30 @@ describe('Chat', function() {
 				});
 				it(`can't delete devices with bogus ids`, async function() {
 					await expectHTTPErrorCode(404, client.removeDevice('totes fake'));
+				});
+			});
+
+			describe('Moving device to new user', function() {
+				const deviceID = uuidv4();
+				let newClient;
+
+				before(async function() {
+					newClient = await getTestClientForUser(uuidv4());
+
+					await client.addDevice(deviceID, 'apn');
+					await newClient.addDevice(deviceID, 'apn');
+				});
+
+				it('removes device from old user', async function() {
+					const response = await client.getDevices();
+					expect(response.devices.map(d => d.id)).to.not.have.members([
+						deviceID,
+					]);
+				});
+
+				it('adds device to new user', async function() {
+					const response = await newClient.getDevices();
+					expect(response.devices.map(d => d.id)).to.have.members([deviceID]);
 				});
 			});
 		});
@@ -640,6 +763,155 @@ describe('Chat', function() {
 			// verify the update propagates
 			expect(state.messages[state.messages.length - 1].user.name).to.equal('t');
 		});
+
+		describe('partial update', function() {
+			const user = {
+				id: 'thierry2',
+			};
+
+			it('not changing user role', async function() {
+				await expectHTTPErrorCode(
+					403,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: {
+							role: 'admin',
+						},
+					}),
+				);
+			});
+
+			it('change custom field', async function() {
+				const res = await authClient.partialUpdateUser({
+					id: user.id,
+					set: {
+						fields: {
+							subfield1: 'value1',
+							subfield2: 'value2',
+						},
+					},
+				});
+
+				expect(res.users[user.id].fields).to.eql({
+					subfield1: 'value1',
+					subfield2: 'value2',
+				});
+			});
+
+			it('removes custom fields', async function() {
+				const res = await authClient.partialUpdateUser({
+					id: user.id,
+					unset: ['fields.subfield1'],
+				});
+
+				expect(res.users[user.id].fields).to.eql({
+					subfield2: 'value2',
+				});
+			});
+
+			it.skip('sends user.updated event', async function() {
+				// subscribe to user presence
+				await authClient.queryUsers(
+					{ id: { $in: [user.id] } },
+					{},
+					{ presence: true },
+				);
+
+				await new Promise(resolve => {
+					authClient.on('user.updated', event => {
+						expect(event.user.id).to.equal(user.id);
+						resolve();
+					});
+
+					authClient.updateUser({
+						id: user.id,
+						role: 'admin',
+						set: { test: 'true' },
+					});
+				});
+			});
+
+			it("doesn't allow .. in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test..test': '111' },
+					}),
+				);
+
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: ['test..test'],
+					}),
+				);
+			});
+
+			it("doesn't allow spaces in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { ' test.test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test. test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test.test ': '111' },
+					}),
+				);
+
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test.test'],
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test. test'],
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						unset: [' test.test '],
+					}),
+				);
+			});
+
+			it("doesn't allow start or end with dot in key names", async function() {
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { '.test.test': '111' },
+					}),
+				);
+				await expectHTTPErrorCode(
+					400,
+					authClient.partialUpdateUser({
+						id: user.id,
+						set: { 'test.test.': '111' },
+					}),
+				);
+			});
+		});
 	});
 
 	describe('Messages', () => {
@@ -661,6 +933,7 @@ describe('Chat', function() {
 					}
 					done();
 				}
+
 				runtest().catch(exc => {
 					done(exc);
 				});
@@ -984,7 +1257,7 @@ describe('Chat', function() {
 				);
 			});
 
-			it('Add a Chat message with a URL and edit it', async function() {
+			it.skip('Add a Chat message with a URL and edit it', async function() {
 				const url = 'https://unsplash.com/photos/kGSapVfg8Kw';
 				const text = `check this one :) ${url}`;
 				const response = await channel.sendMessage({ text });
@@ -1080,6 +1353,7 @@ describe('Chat', function() {
 
 					channel.on('message.deleted', event => {
 						expect(event.message.deleted_at).to.not.be.null;
+						expect(event.message.type).to.be.equal('deleted');
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
@@ -1087,6 +1361,7 @@ describe('Chat', function() {
 					);
 					expect(deleteResponse.message.deleted_at).to.not.be.null;
 				}
+
 				runTest().catch(exc => {
 					done(exc);
 				});
@@ -1108,40 +1383,6 @@ describe('Chat', function() {
 				);
 				expect(a.asset_url).to.equal('https://www.youtube.com/embed/Q0CbN8sfihY');
 				expect(a.type).to.equal('video');
-			});
-
-			it('Upload a file', async function() {
-				const file = fs.createReadStream('./helloworld.txt');
-				const data = await channel.sendFile(file, 'hello_world.txt');
-			});
-
-			it('Upload an image', async function() {
-				const file = fs.createReadStream('./helloworld.jpg');
-				const data = await channel.sendImage(file, 'hello_world.jpg');
-			});
-
-			it('File upload entire flow', async function() {
-				const promises = [
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world1.jpg',
-					),
-					channel.sendImage(
-						fs.createReadStream('./helloworld.jpg'),
-						'hello_world2.jpg',
-					),
-				];
-				const results = await Promise.all(promises);
-				const attachments = results.map(response => ({
-					type: 'image',
-					thumb_url: response.file,
-					asset_url: response.file,
-				}));
-				const response = await channel.sendMessage({
-					text: 'Check out what i uploaded in parallel',
-					attachments,
-				});
-				expect(response.message.attachments).to.deep.equal(attachments);
 			});
 		});
 
@@ -1219,7 +1460,368 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Opengraph', () => {
+		it('og link should be processed by Opengraph parser', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://imgur.com/gallery/jj1QKWc',
+			});
+			const exp = {
+				author_name: 'Imgur',
+				image_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				og_scrape_url: 'https://imgur.com/gallery/jj1QKWc',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				title: 'Fat cat almost gets stuck in door',
+				title_link: 'https://i.imgur.com/jj1QKWc.gif?noredirect',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		it('direct image link should be attached', async function() {
+			const data = await channel.sendMessage({
+				text: 'https://i.imgur.com/jj1QKWc.gif',
+			});
+			const exp = {
+				image_url: 'https://i.imgur.com/jj1QKWc.gif',
+				og_scrape_url: 'https://i.imgur.com/jj1QKWc.gif',
+				thumb_url: 'https://i.imgur.com/jj1QKWc.gif',
+				type: 'image',
+			};
+			expect(data.message.attachments[0]).like(exp);
+		});
+
+		beforeEach(() => mockServer.start());
+		afterEach(() => mockServer.stop());
+		// mockServer.enableDebug();
+
+		it('direct link on image with wrong content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image.jpg')
+				.thenReply(200, ':/', { 'content-type': 'fake' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
+		});
+
+		it('direct link on fake image with right content-type should not be attached', async function() {
+			await mockServer
+				.get('/fake-image2.jpg')
+				.thenReply(200, ':/', { 'content-type': 'image/gif' });
+
+			const data = await channel.sendMessage({
+				text: mockServer.urlFor('/fake-image2.jpg'),
+			});
+			expect(data.message.attachments.length).to.equal(0);
+		});
+	});
+
 	describe('Slash Commands', () => {
+		before(function() {
+			commandSrv.start();
+		});
+
+		describe('Custom commands', () => {
+			const client = getTestClient(true);
+			// let channel;
+			const channelID = uuidv4();
+
+			const channelCreator = {
+				id: uuidv4(),
+				name: 'creator',
+				role: 'user',
+			};
+			const messageOwner = {
+				id: uuidv4(),
+				name: 'message-owner',
+				role: 'user',
+			};
+
+			const cmdName = 'hello';
+
+			it(`call unknown "${cmdName}" command should fail`, async function() {
+				const text = '/' + cmdName;
+				const response = await channel.sendMessage({ text });
+				expect(response.message.command).to.equal(cmdName);
+				expect(response.message.type).to.equal('error');
+			});
+
+			it(`get "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await client.getCommand(cmdName);
+					expect().fail('cannot get unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`update "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await client.updateCommand(cmdName, { name: 'new' });
+					expect().fail('cannot update unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`delete "${cmdName}" unknown command should fail`, async function() {
+				try {
+					await client.deleteCommand(cmdName);
+					expect().fail('cannot delete unknown command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`create "${cmdName}" command`, async function() {
+				const response = await client.createCommand({
+					name: cmdName,
+					description: 'desc',
+				});
+
+				expect(response.command.name).to.equal(cmdName);
+			});
+
+			it(`create "${cmdName}" command with same name should fail`, async function() {
+				let response;
+				try {
+					response = await client.createCommand({
+						name: cmdName,
+						description: 'desc',
+					});
+					expect().fail('cannot create command with same name');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`get "${cmdName}" command should return it`, async function() {
+				const response = await client.getCommand(cmdName);
+				expect(response.name).to.equal(cmdName);
+				expect(response.description).to.equal('desc');
+			});
+
+			it(`update "${cmdName}" command description`, async function() {
+				const response = await client.updateCommand(cmdName, {
+					description: 'newdesc',
+				});
+				expect(response.command.name).to.equal(cmdName);
+				expect(response.command.description).to.equal('newdesc');
+			});
+
+			it(`"${cmdName}" command description should be updated`, async function() {
+				const response = await client.getCommand(cmdName);
+				expect(response.description).to.equal('newdesc');
+			});
+
+			it(`create "${cmdName}-2" command`, async function() {
+				const response = await client.createCommand({
+					name: cmdName + '-2',
+					description: 'desc2',
+				});
+				expect(response.command.name).to.equal(cmdName + '-2');
+			});
+
+			it(`update "${cmdName}" command name to "${cmdName}-2 should fail`, async function() {
+				try {
+					await client.updateCommand(cmdName, { name: cmdName + '-2' });
+					expect().fail('cannot rename command name to already exist one');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`"${cmdName}" command should be renamed to "${cmdName}-3`, async function() {
+				const response = await client.updateCommand(cmdName, {
+					name: cmdName + '-3',
+				});
+				expect(response.command.name).to.equal(cmdName + '-3');
+				expect(response.command.description).to.equal('');
+			});
+
+			it(`get "${cmdName}" command should not exist anymore`, async function() {
+				try {
+					await client.getCommand(cmdName);
+					expect().fail('cant get unexciting command');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`get "${cmdName}-3" command should return it`, async function() {
+				const response = await client.getCommand(cmdName + '-3');
+				expect(response.name).to.equal(cmdName + '-3');
+				expect(response.description).to.equal('');
+			});
+
+			it(`list commands`, async function() {
+				const resp = await client.listCommands();
+
+				const exp = {
+					commands: [
+						{
+							name: 'zork',
+							description: 'start Zork',
+							app_pk: 31264,
+							args: 'name',
+						},
+						{
+							args: '[text]',
+							description: 'Post a random gif to the channel',
+							name: 'giphy',
+						},
+						{
+							args: '[text]',
+							description: 'Post image from imgur',
+							name: 'imgur',
+						},
+						{
+							args: '[@username]',
+							description: 'Flag a user',
+							name: 'flag',
+						},
+						{
+							args: '[@username] [text]',
+							description: 'Ban a user',
+							name: 'ban',
+						},
+						{
+							args: '[@username]',
+							description: 'Unban a user',
+							name: 'unban',
+						},
+						{
+							args: '[@username]',
+							description: 'Mute a user',
+							name: 'mute',
+						},
+						{
+							args: '[@username]',
+							description: 'Unmute a user',
+							name: 'unmute',
+						},
+						{
+							name: 'hello-2',
+							description: 'desc2',
+							app_pk: 31264,
+							args: '',
+						},
+						{
+							name: 'hello-3',
+							description: '',
+							app_pk: 31264,
+							args: '',
+						},
+					],
+				};
+
+				expect(resp).like(exp);
+			});
+
+			it(`"${cmdName}-2" should be deleted`, async function() {
+				await client.deleteCommand(cmdName + '-2');
+			});
+
+			it(`"${cmdName}-3" command should be renamed back to "${cmdName}`, async function() {
+				const response = await client.updateCommand(cmdName + '-3', {
+					name: cmdName,
+				});
+				expect(response.command.name).to.equal(cmdName);
+			});
+
+			it(`call "${cmdName}" command without an argument should fail`, async function() {
+				const text = '/' + cmdName;
+				try {
+					await channel.sendMessage({ text });
+					expect().fail('cant call a command without arg');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			let messageID;
+
+			it(`call "${cmdName}" command with argument should return actions`, async function() {
+				const text = '/' + cmdName + ' Max';
+				const response = await channel.sendMessage({ text });
+
+				expect(response.message.text).to.equal('hi, Max!');
+				expect(response.message.attachments[0].actions[0].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[0].value).to.equal('left');
+				expect(response.message.attachments[0].actions[1].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[1].value).to.equal(
+					'right',
+				);
+				expect(response.message.attachments.length).equal(1);
+				expect(response.message.attachments[0].actions.length).equal(2);
+				messageID = response.message.id;
+			});
+
+			it(`call "unknown" action name should fail`, async function() {
+				try {
+					await channel.sendAction(messageID, {
+						unknown: 'blah',
+					});
+					expect().fail('should fail');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`call "unknown" action value should fail`, async function() {
+				try {
+					await channel.sendAction(messageID, {
+						action: 'unknown',
+					});
+					expect().fail('should fail');
+				} catch (e) {
+					expect(e).not.to.be.null;
+				}
+			});
+
+			it(`call "left" action should return more actions`, async function() {
+				const response = await channel.sendAction(messageID, {
+					action: 'left',
+				});
+
+				expect(response.message.text).to.equal(
+					'you see a monster. Your actions?',
+				);
+				expect(response.message.attachments[0].actions[0].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[0].value).to.equal(
+					'attack',
+				);
+				expect(response.message.attachments[0].actions[1].name).to.equal(
+					'action',
+				);
+				expect(response.message.attachments[0].actions[1].value).to.equal(
+					'trade',
+				);
+				expect(response.message.attachments.length).equal(1);
+				expect(response.message.attachments[0].actions.length).equal(2);
+			});
+
+			it(`call "right" action should return message without actions`, async function() {
+				const response = await channel.sendAction(messageID, {
+					action: 'right',
+				});
+
+				expect(response.message.text).to.equal('You died.');
+				expect(response.message.attachments.length).equal(0);
+			});
+
+			it(`"${cmdName}" should be deleted`, async function() {
+				await client.deleteCommand(cmdName);
+			});
+		});
+
 		describe('Success', () => {
 			it('Giphy Integration', async function() {
 				const text = '/giphy rock';
@@ -1288,7 +1890,8 @@ describe('Chat', function() {
 				userMap[username(i)] = users[i];
 			}
 		});
-		it('search users', async function() {
+		it.skip('search users', async function() {
+			//todo adjust to use $autocomplete
 			const response = await authClient.queryUsers(
 				{ id: 'user-query-' + unique + '-' },
 				{},
@@ -1345,8 +1948,9 @@ describe('Chat', function() {
 		 * - Message History?
 		 * - Maybe GraphQL?
 		 */
-		it.skip('Pagination on Messages', async function() {
-			const paginationChannel = authClient.channel('livestream', 'pagination');
+		it('Pagination on Messages', async function() {
+			const id = uuidv4();
+			const paginationChannel = authClient.channel('livestream', id);
 			await paginationChannel.create();
 
 			// add 5 messages so we can test pagination
@@ -1355,26 +1959,40 @@ describe('Chat', function() {
 				await p;
 			}
 			// read the first page
-			const result = await paginationChannel.query({
+			let result = await paginationChannel.query({
 				messages: { limit: 2, offset: 0 },
 			});
 			expect(result.messages.length).to.equal(2);
 			// read the second page
 			const oldestMessage = result.messages[0];
-			const result2 = await paginationChannel.query({
-				messages: { limit: 2, id_lt: oldestMessage },
+			result = await paginationChannel.query({
+				messages: { limit: 2, id_lt: oldestMessage.id },
 			});
-			expect(result2.messages.length).to.equal(2);
+			expect(result.messages.length).to.equal(2);
 			// verify that the id lte filter works
-			for (const m of result2.messages) {
+			for (const m of result.messages) {
 				expect(m.created_at).to.be.below(oldestMessage.created_at);
 			}
 			// the state should have 4 messages
 			expect(paginationChannel.state.messages.length).to.equal(4);
+
+			// read non-existing page
+			result = await paginationChannel.query({
+				messages: { limit: 2, offset: 6 },
+			});
+
+			expect(result.messages.length).to.equal(0);
 		});
-		it.skip('Pagination on Members', async function() {
+		it('Pagination on Members', async function() {
+			const id = uuidv4();
+			await serverAuthClient.updateUsers([
+				{ id: 'wendy' },
+				{ id: 'helen' },
+				{ id: 'marty' },
+				{ id: 'charlotte' },
+			]);
 			// add 4 members so we can test pagination
-			const c = authClient.channel('commerce', 'ozark-cast', {
+			const c = authClient.channel('commerce', id, {
 				members: ['wendy', 'helen', 'marty', 'charlotte'],
 				moderators: [],
 				admins: [],
@@ -1383,8 +2001,15 @@ describe('Chat', function() {
 			await c.watch();
 
 			// read the first page
-			const result = await c.query({ members: { limit: 2, offset: 0 } });
+			let result = await c.query({ members: { limit: 2, offset: 0 } });
 			expect(result.members.length).to.equal(2);
+
+			// read non-existing page
+			result = await c.query({
+				members: { limit: 2, offset: 6 },
+			});
+
+			expect(result.members.length).to.equal(0);
 		});
 	});
 
@@ -1452,6 +2077,7 @@ describe('Chat', function() {
 				expect(response.channel.color).to.equal('green');
 				expect(response.channel.name).to.equal('myspecialchannel');
 			}
+
 			runTest().catch(exc => {
 				done(exc);
 			});
@@ -1504,6 +2130,7 @@ describe('Chat', function() {
 					type: 'typing.stop',
 				});
 			}
+
 			runTest().catch(exc => {
 				done(exc);
 			});
@@ -1580,6 +2207,68 @@ describe('Chat', function() {
 	});
 
 	describe('Channel State', function() {
+		it('Should include last_message_at', async function() {
+			const c = authClient.channel('messaging', uuidv4());
+			await c.query();
+			expect(c.state.last_message_at).to.be.null;
+		});
+
+		it('Should include last_message_at', async function() {
+			const id = uuidv4();
+			let c = authClient.channel('messaging', id);
+			await c.create({ created_by: { id: uuidv4() } });
+			await c.sendMessage({ text: uuidv4() });
+			c = authClient.channel('messaging', id);
+			await c.query();
+			expect(c.state.last_message_at).to.be.not.null;
+		});
+
+		it('Should update last_message_at', async function() {
+			const id = uuidv4();
+			let c = authClient.channel('messaging', id);
+			await c.create({ created_by: { id: uuidv4() } });
+			await c.sendMessage({ text: uuidv4() });
+			c = authClient.channel('messaging', id);
+			await c.query({ watch: true });
+			const lastMsg = c.state.last_message_at;
+			expect(c.state.last_message_at).to.be.not.null;
+			await sleep(1000);
+			await c.sendMessage({ text: uuidv4() });
+			await sleep(2000);
+			expect(c.state.last_message_at).to.be.not.null;
+			expect(c.state.last_message_at).to.be.not.eq(lastMsg);
+			expect(Math.floor(c.state.last_message_at - lastMsg)).to.be.gt(0);
+		});
+
+		// This is to make sure event is handled on client and channel level before listeners are executed on them.
+		it.skip('Should update before event listeners are executed', function(done) {
+			async function runTest() {
+				const id = uuidv4();
+				const c = authClient.channel('messaging', id);
+				const messageTexts = [uuidv4(), uuidv4(), uuidv4()];
+				let numberOfMessages;
+
+				authClient.on('message.new', () => {
+					expect(c.state.messages.length).to.be.equal(numberOfMessages);
+					expect(
+						c.state.messages[c.state.messages.length - 1].text,
+					).to.be.equal(messageTexts[numberOfMessages - 1]);
+					numberOfMessages += 1;
+					if (numberOfMessages === messageTexts.length - 1) done();
+				});
+				await c.watch();
+
+				numberOfMessages = 1;
+				await c.sendMessage({ text: messageTexts[0] });
+				await c.sendMessage({ text: messageTexts[1] });
+				await c.sendMessage({ text: messageTexts[2] });
+			}
+
+			runTest().catch(exc => {
+				done(exc);
+			});
+		});
+
 		it('Remove Message', function() {
 			const c = authClient.channel('twitch', 'state');
 			const message = { id: 1, text: 'my message' };
@@ -1722,28 +2411,29 @@ describe('Chat', function() {
 		let client;
 		let channel;
 		let serverChannel;
+		const channelID = uuidv4();
 		const owner = { id: uuidv4() };
 
 		it('Create an anonymous session', async function() {
 			client = getTestClient(false);
 			await client.setAnonymousUser();
-			serverChannel = serverAuthClient.channel('livestream', 'free4all2', {
+			serverChannel = serverAuthClient.channel('livestream', channelID, {
 				created_by: owner,
 			});
 			await serverChannel.create();
 		});
 
 		it('join a live stream channel', async function() {
-			channel = client.channel('livestream', 'free4all2');
+			channel = client.channel('livestream', channelID);
 			await channel.watch();
 		});
 
 		it('query channel should not show anon users', async function() {
-			channel = client.channel('livestream', 'free4all2');
+			channel = client.channel('livestream', channelID);
 			const response = await channel.query({ watchers: { limit: 10 } });
 			expect(response.watchers).to.not.eql({});
 			const fk = Object.keys(response.watchers)[0];
-			expect(response.watchers[fk].id).to.eql('!anon');
+			expect(response.watchers[fk].id.slice(0, 5)).to.eql('!anon');
 			expect(response.watchers[fk].role).to.eql('anonymous');
 		});
 
@@ -1821,6 +2511,16 @@ describe('Chat', function() {
 
 		it('should be included on message.new events', function(done) {
 			done();
+		});
+
+		it('setUser should not remove custom fields', async function() {
+			userClient = getTestClient(false);
+			let response = await userClient.setUser(
+				{ id: userData.id, new_field: 'yes' },
+				createUserToken(userData.id),
+			);
+			expect(response.me.knows_klingon).to.eq(true);
+			expect(response.me.new_field).to.eq('yes');
 		});
 	});
 
@@ -2021,6 +2721,56 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('Hiding channels', function() {
+		let client, channel;
+		const userID = uuidv4();
+		const channelID = uuidv4();
+
+		before(async () => {
+			client = await getTestClientForUser(userID, 'test', { color: 'green' });
+			channel = client.channel('team', channelID);
+			await channel.watch();
+		});
+
+		it('Hide a channel for a user', async function() {
+			await channel.hide();
+		});
+
+		it('Hidden channel should not be in query channels results', async function() {
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(0);
+		});
+
+		it('Hidden channel should not be in query channels results when hidden false', async function() {
+			const channels = await client.queryChannels({ id: channelID, hidden: false });
+			expect(channels).to.have.length(0);
+		});
+
+		it('Query channels allows you to list hidden channels', async function() {
+			const channels = await client.queryChannels({ id: channelID, hidden: true });
+			expect(channels).to.have.length(1);
+		});
+
+		it('When a new message is sent to the hidden channel', async function() {
+			serverAuthClient = getTestClient(true);
+			await createUsers([uuidv4()]);
+			const channel2 = serverAuthClient.channel('team', channelID);
+			await channel2.sendMessage({ text: 'wake up!', user_id: userID });
+		});
+
+		it('Should be listed by the query channels', async function() {
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(1);
+		});
+
+		it('Show/Hide a channel', async function() {
+			await channel.hide();
+			await channel.show();
+			const channels = await client.queryChannels({ id: channelID });
+			expect(channels).to.have.length(1);
+		});
+	});
+
 	describe('Moderation', function() {
 		serverAuthClient = getTestClient(true);
 
@@ -2118,6 +2868,137 @@ describe('Chat', function() {
 				'80% off Loutis Vuitton Handbags Save up to 80% off ! Free shipping! Right Now ! Snap it up 2.vadsv.uk';
 			const data = await aiChannel.sendMessage({ text });
 			expect(data.message.type).to.equal('error');
+		});
+	});
+
+	describe('unread counts for messages send by muted users', function() {
+		let user1 = uuidv4();
+		let user2 = uuidv4(); //muted by user 1
+		let user3 = uuidv4();
+		let channel;
+		let client1, client2, client3;
+
+		//create a channel with 3 users
+		before(async function() {
+			await createUsers([user1, user2, user3]);
+			client1 = await getTestClientForUser(user1);
+			client2 = await getTestClientForUser(user2);
+			client3 = await getTestClientForUser(user3);
+			channel = client1.channel('messaging', uuidv4(), {
+				members: [user1, user2, user3],
+			});
+			await channel.create();
+		});
+		it('user1 mute user2', async function() {
+			await client1.muteUser(user2);
+		});
+		it('messages sent by user2 dont increase unread counts for user 1', async function() {
+			const ch = client2.channel(channel.type, channel.id);
+			await ch.sendMessage({
+				text: 'this message should only increase unread counts for user 3',
+			});
+			client1 = await getTestClientForUser(user1);
+			expect(client1.health.me.total_unread_count).to.be.equal(0);
+			expect(client1.health.me.unread_channels).to.be.equal(0);
+			client2 = await getTestClientForUser(user2);
+			expect(client2.health.me.total_unread_count).to.be.equal(0);
+			expect(client2.health.me.unread_channels).to.be.equal(0);
+			client3 = await getTestClientForUser(user3);
+			expect(client3.health.me.total_unread_count).to.be.equal(1);
+			expect(client3.health.me.unread_channels).to.be.equal(1);
+		});
+	});
+
+	describe('Upload', function() {
+		context('When channel type has uploads enabled', function() {
+			const channelType = uuidv4();
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: true,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Upload a file', async function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				const data = await channel.sendFile(file, 'hello_world.txt');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('Upload an image', async function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				const data = await channel.sendImage(file, 'hello_world.jpg');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('File upload entire flow', async function() {
+				const promises = [
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world1.jpg',
+					),
+					channel.sendImage(
+						fs.createReadStream('./helloworld.jpg'),
+						'hello_world2.jpg',
+					),
+				];
+				const results = await Promise.all(promises);
+				const attachments = results.map(response => ({
+					type: 'image',
+					thumb_url: response.file,
+					asset_url: response.file,
+				}));
+				const response = await channel.sendMessage({
+					text: 'Check out what i uploaded in parallel',
+					attachments,
+				});
+				expect(response.message.attachments).to.deep.equal(attachments);
+			});
+		});
+
+		context('When channel type has uploads disabled', function() {
+			const channelType = uuidv4();
+			const errorMessage = new RegExp(
+				`channel type ${channelType} has upload disabled`,
+			);
+
+			let client;
+			let channel;
+
+			before(async function() {
+				const serverClient = getServerTestClient();
+				const newChannelType = await serverClient.createChannelType({
+					name: channelType,
+					commands: ['all'],
+					uploads: false,
+				});
+				client = await getTestClientForUser(uuidv4());
+				channel = await client.channel(channelType, uuidv4());
+				await channel.watch();
+			});
+
+			it('Do not upload a file', function() {
+				const file = fs.createReadStream('./helloworld.txt');
+				return expect(
+					channel.sendFile(file, 'hello_world.txt'),
+				).to.be.rejectedWith(errorMessage);
+			});
+
+			it('Do not upload an image', function() {
+				const file = fs.createReadStream('./helloworld.jpg');
+				return expect(
+					channel.sendImage(file, 'hello_world.jpg'),
+				).to.be.rejectedWith(errorMessage);
+			});
 		});
 	});
 });

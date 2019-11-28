@@ -1,18 +1,18 @@
 import {
-	getTestClient,
 	createUsers,
 	createUserToken,
 	expectHTTPErrorCode,
+	getTestClient,
 	getTestClientForUser,
 	sleep,
 } from './utils';
 import {
+	Allow,
 	AllowAll,
-	DenyAll,
-	Permission,
 	AnyResource,
 	AnyRole,
-	Allow,
+	DenyAll,
+	Permission,
 } from '../src/permissions';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
@@ -472,6 +472,128 @@ describe('Managing users', function() {
 		expect(response.users[0].os).to.eql('gnu/linux');
 	});
 
+	describe('partial update', function() {
+		it('change user role', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				set: {
+					role: 'admin',
+				},
+			});
+
+			expect(res.users[user.id].role).to.eql('admin');
+		});
+
+		it('change custom field', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				set: {
+					fields: {
+						subfield1: 'value1',
+						subfield2: 'value2',
+					},
+				},
+			});
+
+			expect(res.users[user.id].fields).to.eql({
+				subfield1: 'value1',
+				subfield2: 'value2',
+			});
+		});
+
+		it('removes custom fields', async function() {
+			const res = await client.partialUpdateUser({
+				id: user.id,
+				unset: ['fields.subfield1'],
+			});
+
+			expect(res.users[user.id].fields).to.eql({
+				subfield2: 'value2',
+			});
+		});
+
+		it("doesn't allow .. in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { 'test..test': '111' },
+				}),
+			);
+
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: ['test..test'],
+				}),
+			);
+		});
+
+		it("doesn't allow spaces in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test.test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test. test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { ' test.test ': '111' },
+				}),
+			);
+
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test.test'],
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test. test'],
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					unset: [' test.test '],
+				}),
+			);
+		});
+
+		it("doesn't allow start or end with dot in key names", async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { '.test.test': '111' },
+				}),
+			);
+			await expectHTTPErrorCode(
+				400,
+				client.partialUpdateUser({
+					id: user.id,
+					set: { 'test.test.': '111' },
+				}),
+			);
+		});
+	});
+
 	it('change user role', async function() {
 		user.role = 'admin';
 		await client.updateUser(user);
@@ -604,207 +726,287 @@ describe('App configs', function() {
 
 	describe('Push notifications', function() {
 		describe('APN', function() {
-			it('Adding bad apn certificate config', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: 'boogus',
-						},
-					}),
-				);
-			});
-			it('Adding good apn certificate config', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'certificate',
-						p12_cert: fs.readFileSync(
-							'./test/push_test/stream-push-test.p12',
-						),
-					},
+			context('When using certificate', function() {
+				context('When adding bad certificate', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: 'boogus',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When adding good apn certificate', function() {
+					context('When development is true', function() {
+						before(async function() {
+							await client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: true,
+								},
+							});
+						});
+
+						it('App contains valid details', async function() {
+							const response = await client.getAppSettings();
+							expect(response.app).to.be.an('object');
+							expect(response.app.push_notifications).to.be.an('object');
+							delete response
+								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.apn).to.eql({
+								enabled: true,
+								development: true,
+								auth_type: 'certificate',
+								bundle_id: 'stream-test',
+								host: 'https://api.development.push.apple.com',
+							});
+						});
+					});
+
+					context('When development is false', function() {
+						before(async function() {
+							await client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'stream-test',
+									development: false,
+								},
+							});
+						});
+
+						it('App contains valid details', async function() {
+							const response = await client.getAppSettings();
+							expect(response.app).to.be.an('object');
+							expect(response.app.push_notifications).to.be.an('object');
+							delete response
+								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.apn).to.eql({
+								enabled: true,
+								development: false,
+								auth_type: 'certificate',
+								bundle_id: 'stream-test',
+								host: 'https://api.push.apple.com',
+							});
+						});
+					});
 				});
 			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					auth_type: 'certificate',
-					bundle_id: 'stream-test',
-					host: 'https://api.development.push.apple.com',
+
+			context('When using apn token', function() {
+				context('When token is bad', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									bundle_id: 'com.apple.test',
+									auth_key: 'supersecret',
+									key_id: 'keykey',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
 				});
-			});
-			it('Adding bad apn invalid template', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: fs.readFileSync(
-								'./test/push_test/stream-push-test.p12',
-							),
-							notification_template: '{ {{ } }',
-						},
-					}),
-				);
-			});
-			it('Adding bad apn message is not a valid JSON', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'certificate',
-							p12_cert: fs.readFileSync(
-								'./test/push_test/stream-push-test.p12',
-							),
-							notification_template: '{{ message.id }}',
-						},
-					}),
-				);
-			});
-			it('Adding bad apn token', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
+
+				context('When token without bundle_id', function() {
+					it('return 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									team_id: 'sfd',
+									bundle_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without key_id', function() {
+					it('return 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: '',
+									bundle_id: 'bundly',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without team', function() {
+					it('return 400 error code', async function() {
+						await expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									bundle_id: 'sfd',
+									team_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When good production apn token', function() {
+					let app;
+					before(async function() {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								development: false,
+								team_id: 'sfd',
+							},
+						});
+
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						app = response.app;
+					});
+
+					it('returns correct app settings', function() {
+						expect(app.push_notifications).to.be.an('object');
+						delete app.push_notifications.apn.notification_template;
+						expect(app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: false,
 							auth_type: 'token',
 							bundle_id: 'com.apple.test',
-							auth_key: 'supersecret',
-							key_id: 'keykey',
+							host: 'https://api.push.apple.com',
 							team_id: 'sfd',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no bundle_id', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
 							key_id: 'keykey',
-							team_id: 'sfd',
-							bundle_id: '',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no key_id', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
+						});
+					});
+				});
+
+				context('When good development apn token', function() {
+					before(async function() {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								team_id: 'sfd',
+								development: true,
+							},
+						});
+					});
+
+					it('returns correct app settings', async function() {
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						expect(response.app.push_notifications).to.be.an('object');
+						delete response.app.push_notifications.apn.notification_template;
+						expect(response.app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: true,
 							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
-							key_id: '',
-							bundle_id: 'bundly',
+							bundle_id: 'com.apple.test',
 							team_id: 'sfd',
-						},
-					}),
-				);
-			});
-			it('Adding incomplete token data: no team', async function() {
-				await expectHTTPErrorCode(
-					400,
-					client.updateAppSettings({
-						apn_config: {
-							auth_type: 'token',
-							auth_key: fs.readFileSync(
-								'./test/push_test/push-test-auth-key.p8',
-								'utf-8',
-							),
 							key_id: 'keykey',
-							bundle_id: 'sfd',
-							team_id: '',
+							host: 'https://api.development.push.apple.com',
+						});
+					});
+				});
+			});
+
+			context('When adding bad apn template', function() {
+				it('returns 400 error code', function() {
+					return expectHTTPErrorCode(
+						400,
+						client.updateAppSettings({
+							apn_config: {
+								auth_type: 'certificate',
+								p12_cert: fs.readFileSync(
+									'./test/push_test/stream-push-test.p12',
+								),
+								notification_template: '{ {{ } }',
+							},
+						}),
+					);
+				});
+
+				context('When template is valid but not json', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test.p12',
+									),
+									notification_template: '{{ message.id }}',
+								},
+							}),
+						);
+					});
+				});
+			});
+
+			context('When APN is disabled', function() {
+				before(async function() {
+					await client.updateAppSettings({
+						apn_config: {
+							disabled: true,
 						},
-					}),
-				);
-			});
-			it('Adding good apn token', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-					},
+					});
 				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					auth_type: 'token',
-					bundle_id: 'com.apple.test',
-					host: 'https://api.push.apple.com',
-					team_id: 'sfd',
-					key_id: 'keykey',
-				});
-			});
-			it('Adding good apn token in dev mode', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						auth_type: 'token',
-						auth_key: fs.readFileSync(
-							'./test/push_test/push-test-auth-key.p8',
-							'utf-8',
-						),
-						key_id: 'keykey',
-						bundle_id: 'com.apple.test',
-						team_id: 'sfd',
-						development: true,
-					},
-				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: true,
-					auth_type: 'token',
-					bundle_id: 'com.apple.test',
-					team_id: 'sfd',
-					key_id: 'keykey',
-					host: 'https://api.development.push.apple.com',
-				});
-			});
-			it('Disable APN', async function() {
-				await client.updateAppSettings({
-					apn_config: {
-						disabled: true,
-					},
-				});
-			});
-			it('Describe app settings', async function() {
-				const response = await client.getAppSettings();
-				expect(response.app).to.be.an('object');
-				expect(response.app.push_notifications).to.be.an('object');
-				delete response.app.push_notifications.apn.notification_template;
-				expect(response.app.push_notifications.apn).to.eql({
-					enabled: false,
-					host: 'https://api.push.apple.com',
+
+				it('Returns app settings with disabled mode', async function() {
+					const response = await client.getAppSettings();
+					expect(response.app).to.be.an('object');
+					expect(response.app.push_notifications).to.be.an('object');
+					delete response.app.push_notifications.apn.notification_template;
+					expect(response.app.push_notifications.apn.enabled).to.be.false;
 				});
 			});
 		});
+
 		describe('Firebase', function() {
 			it('Adding bad template', async function() {
 				await expectHTTPErrorCode(
@@ -821,8 +1023,29 @@ describe('App configs', function() {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
-						apn_config: {
+						firebase_config: {
 							notification_template: '{{ message.id }}',
+						},
+					}),
+				);
+			});
+			it('Adding bad data template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
+						firebase_config: {
+							data_template: '{ {{ } }',
+						},
+					}),
+				);
+			});
+
+			it('Adding invalid json data template', async function() {
+				await expectHTTPErrorCode(
+					400,
+					client.updateAppSettings({
+						firebase_config: {
+							data_template: '{{ message.id }}',
 						},
 					}),
 				);
@@ -852,6 +1075,7 @@ describe('App configs', function() {
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
 				delete response.app.push_notifications.firebase.notification_template;
+				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
 					enabled: true,
 				});
@@ -868,6 +1092,7 @@ describe('App configs', function() {
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
 				delete response.app.push_notifications.firebase.notification_template;
+				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
 					enabled: false,
 				});
@@ -879,14 +1104,14 @@ describe('App configs', function() {
 		const deviceID = uuidv4();
 		const userID = uuidv4();
 		let user = {};
-		const apnConfig = {
+		const apn_config = {
 			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
 			key_id: 'whatever',
 			team_id: 'stream',
 			bundle_id: 'bundle',
 			auth_type: 'token',
 		};
-		const firebaseConfig = {
+		const firebase_config = {
 			server_key:
 				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 		};
@@ -914,10 +1139,11 @@ describe('App configs', function() {
 		});
 
 		it('User has no devices', async function() {
-			await client.removeDevice(deviceID, userID);
+			await client.updateAppSettings({
+				firebase_config,
+			});
 			const p = client.testPushSettings(userID);
 			await expect(p).to.be.rejectedWith(`User has no devices associated`);
-			await client.addDevice(deviceID, 'apn', userID);
 		});
 
 		it('App has push disabled', async function() {
@@ -929,30 +1155,45 @@ describe('App configs', function() {
 
 		it('No APN + APN template', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`APN template provided, but app doesn't have APN push notifcations configured`,
+				`APN template provided, but app doesn't have APN push notifications configured`,
 			);
 		});
 
 		it('No Firebase + firebase template', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
-				`Firebase template provided, but app doesn't have firebase push notifcations configured`,
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
+			);
+		});
+
+		it('No Firebase + firebase data template', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
+			await expect(p).to.be.rejectedWith(
+				`Firebase template provided, but app doesn't have firebase push notifications configured`,
 			);
 		});
 
 		it('Bad message id', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 			const msgID = uuidv4();
 			const p = client.testPushSettings(userID, { messageID: msgID });
 			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
@@ -960,8 +1201,9 @@ describe('App configs', function() {
 
 		it('Random message', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -982,8 +1224,9 @@ describe('App configs', function() {
 
 		it('Specific message', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1008,8 +1251,9 @@ describe('App configs', function() {
 
 		it('Bad apn template error gets returned in response', async function() {
 			await client.updateAppSettings({
-				apn_config: apnConfig,
+				apn_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				apnTemplate: '{{}',
@@ -1023,8 +1267,9 @@ describe('App configs', function() {
 
 		it('Bad firebase template error gets returned in response', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{{}',
@@ -1036,15 +1281,165 @@ describe('App configs', function() {
 			]);
 		});
 
-		it('All good', async function() {
+		it('Bad firebase data template error gets returned in response', async function() {
 			await client.updateAppSettings({
-				firebase_config: firebaseConfig,
+				firebase_config,
 			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{{}',
+			});
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response.general_errors).to.have.length(1);
+			expect(response.general_errors).to.have.members([
+				'Firebase data template is invalid: data_template is not a valid handlebars template',
+			]);
+		});
+
+		it('Good notification template', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
 			});
-			expect(response.rendered_firebase_template).to.eq('{}');
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+		});
+
+		it('Good data template', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{}',
+			});
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+		});
+
+		it('All good', async function() {
+			await client.updateAppSettings({
+				firebase_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{}',
+				firebaseDataTemplate: '{}',
+			});
+			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
+			expect(firebaseMsg.notification).to.be.empty;
+		});
+
+		it('Members in the template using helper', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{implodeMembers otherMembers limit=2 suffixFmt="en %d anderen"}}: {{ message.text }}"}',
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[0].name}, ${members[1].name} en 1 anderen: ${msg.message.text}"}`,
+			);
+		});
+
+		it('Members in the template using handlebars', async function() {
+			await client.updateAppSettings({
+				apn_config,
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.updateUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: `{"stuff": "
+					{{~#each otherMembers}}
+						{{#ifLte @index 0}}
+							{{~this.name}}{{#ifLt @index 0 }}, {{/ifLt~}}
+						{{~else if @last~}}
+								{{{ " " }}} en {{remainder otherMembers 1}} anderen: {{message.text}}
+						{{~/ifLte~}}
+					{{/each~}}
+					"}`,
+				messageID: msg.message.id,
+			});
+
+			expect(response.general_errors).to.be.undefined;
+			expect(response.rendered_apn_template).to.eq(
+				`{"stuff": "${members[0].name} en 2 anderen: ${msg.message.text}"}`,
+			);
 		});
 	});
 });
@@ -1097,6 +1492,328 @@ describe('Devices', function() {
 
 		const result = await client.getDevices(user.id);
 		expect(result.devices).to.have.length(1);
+	});
+
+	describe('device limit', function() {
+		const maxDevices = 25;
+		let user;
+
+		beforeEach(async function() {
+			user = {
+				id: uuidv4(),
+				name: 'bob',
+				hobby: 'painting',
+			};
+			await client.updateUser(user);
+		});
+
+		it('oldest device gets scrapped', async function() {
+			for (const _ of Array(maxDevices).keys()) {
+				await client.addDevice(uuidv4(), 'apn', user.id);
+				await sleep(100);
+			}
+			const { devices } = await client.getDevices(user.id);
+			expect(devices).to.have.length(maxDevices);
+
+			const deviceIDS = devices.map(x => x.id);
+
+			const deviceID = uuidv4();
+			await client.addDevice(deviceID, 'apn', user.id);
+
+			deviceIDS.pop();
+			deviceIDS.unshift(deviceID);
+
+			let result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			let newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+
+			result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+
+		it('adding same device does not do anything', async function() {
+			for (const _ of Array(maxDevices).keys()) {
+				await client.addDevice(uuidv4(), 'apn', user.id);
+				await sleep(100);
+			}
+			const { devices } = await client.getDevices(user.id);
+			expect(devices).to.have.length(maxDevices);
+
+			const deviceIDS = devices.map(x => x.id);
+
+			await client.addDevice(deviceIDS[5], 'apn', user.id);
+
+			let result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			let newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+
+			result = await client.getDevices(user.id);
+			expect(result.devices).to.have.length(maxDevices);
+			newDeviceIDS = result.devices.map(x => x.id);
+			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+	});
+
+	describe('Device invalidation', function() {
+		let userID;
+		let deviceID;
+		const apn_config = {
+			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
+			key_id: 'whatever',
+			team_id: 'stream',
+			bundle_id: 'bundle',
+			auth_type: 'token',
+		};
+		const firebase_config = {
+			server_key:
+				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+		};
+
+		beforeEach(async function() {
+			userID = uuidv4();
+			await client.updateUser({ id: userID });
+
+			deviceID = uuidv4();
+			await client.updateAppSettings({
+				apn_config,
+				firebase_config,
+			});
+			await sleep(100);
+		});
+
+		it('changing apn notification template does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing firebase notification template does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'firebase', userID);
+			await client.updateAppSettings({
+				firebase_config: {
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing firebase notification data does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'firebase', userID);
+			await client.updateAppSettings({
+				firebase_config: {
+					data_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing apn config invalidates device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(0);
+		});
+
+		it('adding apn config invalidates orphaned devices', async function() {
+			await client.updateAppSettings({
+				apn_config: {
+					disabled: true,
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config,
+			});
+			const r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+		});
+
+		it('using keep_devices does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					keep_devices: true,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('no-op update does not invalidate device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: apn_config.team_id,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('keep devices and then update', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					keep_devices: true,
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'B TEAM',
+				},
+			});
+			const r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+		});
+
+		it('changing apn config and notification template invalidates device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+					notification_template: '{ "key": {{ foo }} }',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(0);
+		});
+
+		it('re-adding device after config change does not error', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('adding same device twice does not error', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.addDevice(deviceID, 'apn', userID);
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(1);
+		});
+
+		it('changing apn config invalidates only apn devices', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			const [apnID, firebaseID1, firebaseID2] = [uuidv4(), uuidv4(), uuidv4()];
+			await client.addDevice(apnID, 'apn', userID);
+			await client.addDevice(firebaseID1, 'firebase', userID);
+			await client.addDevice(firebaseID2, 'firebase', userID);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const { devices } = await client.getDevices(userID);
+			expect(devices).to.have.length(2);
+			for (const d of devices) {
+				expect(d.push_provider).to.equal('firebase');
+			}
+		});
+
+		it('cannot delete invalidated device', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			const p = client.removeDevice(deviceID, userID);
+			await expect(p).to.be.rejectedWith(
+				`user ${userID} does not have device with id ${deviceID}`,
+			);
+		});
+
+		it('Cache testing', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			let r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+		});
+
+		it('Cache testing - 2', async function() {
+			await client.addDevice(deviceID, 'apn', userID);
+			let r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'A TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+
+			await client.updateAppSettings({
+				apn_config: {
+					team_id: 'B TEAM',
+				},
+			});
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(0);
+			await client.addDevice(deviceID, 'apn', userID);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+			r = await client.getDevices(userID);
+			expect(r.devices).to.have.length(1);
+		});
 	});
 });
 
@@ -1156,26 +1873,30 @@ describe('Import via Webhook compat', function() {
 		userClient = await getTestClientForUser(userID);
 	});
 
-	it('Created At should work', async function() {
+	it('Created At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			created_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.created_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
+		);
 	});
 
-	it('Updated At should work', async function() {
+	it('Updated At shouldnt work', async function() {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
-		const response = await channel.sendMessage({
+		const response = channel.sendMessage({
 			text: 'an old message',
 			updated_at: '2017-04-08T17:36:10.540Z',
 			user: created_by,
 		});
-		expect(response.message.updated_at).to.equal('2017-04-08T17:36:10.54Z');
+		await expect(response).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.updated_at is a reserved field"',
+		);
 	});
 
 	it('HTML should work', async function() {
@@ -1202,7 +1923,7 @@ describe('Import via Webhook compat', function() {
 		expect(sendPromise).to.be.rejectedWith('message.html');
 	});
 
-	it('Client side should raise an error', async function() {
+	it('Client side should also raise an error', async function() {
 		const channel = userClient.channel('livestream', channelID);
 		await channel.create();
 		const responsePromise = channel.sendMessage({
@@ -1210,7 +1931,7 @@ describe('Import via Webhook compat', function() {
 			created_at: '2017-04-08T17:36:10.540Z',
 		});
 		await expect(responsePromise).to.be.rejectedWith(
-			'message.updated_at or message.created_at',
+			'StreamChat error code 4: SendMessage failed with error: "message.created_at is a reserved field"',
 		);
 	});
 
@@ -1342,11 +2063,21 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: [
+					'zork',
+					'giphy',
+					'imgur',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${newType}`,
 				reactions: true,
 				replies: true,
@@ -1387,7 +2118,68 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: [
+					'zork',
+					'giphy',
+					'imgur',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+				],
+				connect_events: true,
+				max_message_length: 5000,
+				message_retention: 'infinite',
+				mutes: true,
+				uploads: true,
+				name: `${name}`,
+				reactions: true,
+				replies: true,
+				search: true,
+				read_events: true,
+				typing_events: true,
+				permissions,
+			};
+			expect(newChanType).like(expectedData);
+			expect(newChanType.permissions).to.be.sortedBy('priority', {
+				descending: true,
+			});
+		});
+
+		it('missing role should be handled correctly', async function() {
+			const name = uuidv4();
+			const permissions = [
+				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 32, AnyResource, null, false, Allow),
+				new Permission(uuidv4(), 2, AnyResource, null, false, Allow),
+			];
+			const newChanType = await client.createChannelType({
+				name,
+				permissions,
+				commands: ['all'],
+			});
+			await sleep(500);
+
+			permissions.forEach(function(p) {
+				p.roles = [];
+			});
+
+			permissions.sort((lhs, rhs) => (lhs.priority > rhs.priority ? -1 : 1));
+
+			const expectedData = {
+				automod: 'disabled',
+				automod_behavior: 'flag',
+				commands: [
+					'zork',
+					'giphy',
+					'imgur',
+					'flag',
+					'ban',
+					'unban',
+					'mute',
+					'unmute',
+				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -1437,16 +2229,22 @@ describe('Channel types', function() {
 				automod_behavior: 'flag',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						name: 'zork',
+						id: 1,
+					},
+					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${channelTypeName}`,
 				reactions: true,
 				replies: true,
@@ -1465,6 +2263,14 @@ describe('Channel types', function() {
 			await sleep(1000);
 		});
 
+		it('flip url_enrichment config to false', async function() {
+			const response = await client.updateChannelType(channelTypeName, {
+				url_enrichment: false,
+			});
+			expect(response.url_enrichment).to.be.false;
+			await sleep(1000);
+		});
+
 		it('new configs should be returned from channel.query', async function() {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
@@ -1473,16 +2279,22 @@ describe('Channel types', function() {
 				automod_behavior: 'flag',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
+					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: `${channelTypeName}`,
 				reactions: true,
 				replies: false,
@@ -1520,14 +2332,14 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
-			expect(response.commands).to.have.length(6);
+			expect(response.commands).to.have.length(8);
 		});
 
 		it('changing commands to fun_set', async function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['fun_set'],
 			});
-			expect(response.commands).to.have.length(1);
+			expect(response.commands).to.have.length(3);
 		});
 
 		it('changing the name should fail', async function() {
@@ -1607,52 +2419,59 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
+					{
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
+					},
+					{
+						args: '[text]',
+						description: 'Post image from imgur',
+						name: 'imgur',
 					},
 					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unban a user',
 						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Mute a user',
 						name: 'mute',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unmute a user',
 						name: 'unmute',
-						set: 'moderation_set',
 					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: 'messaging',
 				reactions: true,
 				replies: true,
 				search: true,
 				read_events: true,
 				typing_events: true,
+				url_enrichment: true,
 			};
 			expect(channelData).like(expectedData);
 		});
@@ -1681,52 +2500,59 @@ describe('Channel types', function() {
 				automod: 'disabled',
 				commands: [
 					{
+						args: 'name',
+						description: 'start Zork',
+						id: 1,
+						name: 'zork',
+					},
+					{
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
-						set: 'fun_set',
+					},
+					{
+						args: '[text]',
+						description: 'Post image from imgur',
+						name: 'imgur',
 					},
 					{
 						args: '[@username]',
 						description: 'Flag a user',
 						name: 'flag',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username] [text]',
 						description: 'Ban a user',
 						name: 'ban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unban a user',
 						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Mute a user',
 						name: 'mute',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
 						description: 'Unmute a user',
 						name: 'unmute',
-						set: 'moderation_set',
 					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
 				mutes: true,
+				uploads: true,
 				name: 'messaging',
 				reactions: true,
 				replies: true,
 				search: true,
 				read_events: true,
 				typing_events: true,
+				url_enrichment: true,
 			};
 			expect(channelTypes.channel_types.messaging).like(expectedData);
 		});
@@ -1750,5 +2576,57 @@ describe('Channel types', function() {
 		it('should fail to update', async function() {
 			await expectHTTPErrorCode(403, client2.updateChannelType('messaging', {}));
 		});
+	});
+});
+
+describe('Unread counts are properly initialised', function() {
+	const userCreatedByConnect = `connect-${uuidv4()}`;
+	const userCreatedByUpdateUsers = `createdBy-${uuidv4()}`;
+	const userCreatedByCreateChannel = `channel-${uuidv4()}`;
+	let serverSideClient;
+	const channelID = `group-${uuidv4()}`;
+
+	before(async function() {
+		//create 3 user in 3 different ways
+		//it is possible to create users by
+		//   * client.setUser
+		//   * client.updateUser
+		//   * client.sendMessage/channel.create
+		serverSideClient = await getTestClient(true);
+		await serverSideClient.updateUser({ id: userCreatedByUpdateUsers });
+		let channel = serverSideClient.channel('messaging', channelID, {
+			created_by_id: userCreatedByCreateChannel,
+		});
+		await channel.create();
+		await serverSideClient.setUser({ id: userCreatedByConnect });
+		serverSideClient = await getTestClient(true);
+		channel = serverSideClient.channel('messaging', channelID);
+		await channel.addMembers([
+			userCreatedByConnect,
+			userCreatedByUpdateUsers,
+			userCreatedByCreateChannel,
+		]);
+	});
+
+	it('validate unread counts', async function() {
+		//send a message with user created  by ws connect
+		let client = await getTestClientForUser(userCreatedByConnect);
+		const channel = client.channel('messaging', channelID);
+		await channel.sendMessage({ text: 'hi' });
+		//validate unread for user created by client.UpdateUser
+		client = await getTestClientForUser(userCreatedByUpdateUsers);
+		expect(client.health.me.total_unread_count).to.be.equal(1);
+		expect(client.health.me.unread_channels).to.be.equal(1);
+		await client.channel('messaging', channelID).sendMessage({ text: 'hello' });
+
+		//validate unread for user created by channel.created_by_id
+		client = await getTestClientForUser(userCreatedByCreateChannel);
+		expect(client.health.me.total_unread_count).to.be.equal(2);
+		expect(client.health.me.unread_channels).to.be.equal(1);
+
+		//validate unread for user created by ws connect
+		client = await getTestClientForUser(userCreatedByConnect);
+		expect(client.health.me.total_unread_count).to.be.equal(1);
+		expect(client.health.me.unread_channels).to.be.equal(1);
 	});
 });

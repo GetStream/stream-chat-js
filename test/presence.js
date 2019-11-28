@@ -13,6 +13,8 @@ import {
 	createUsers,
 	runAndLogPromise,
 	sleep,
+	getServerTestClient,
+	newEventPromise,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -211,7 +213,7 @@ describe('Presence', function() {
 			});
 			// everyone except user1 should be offline
 			for (const m of stateResponse.members) {
-				const shouldBeOnline = m.user.id == user1Client.userID;
+				const shouldBeOnline = m.user.id === user1Client.userID;
 				expect(m.user.online).to.equal(shouldBeOnline);
 			}
 			expect(b.state.members[userID].user.online).to.equal(false);
@@ -323,5 +325,215 @@ describe('Presence', function() {
 			}
 			runTest();
 		});
+	});
+});
+
+describe('Watchers count', function() {
+	const client = getTestClient(false);
+
+	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
+	const channelID = uuidv4();
+	let channel;
+
+	before(async function() {
+		await createUsers(users);
+		await client.setUser({ id: users[0] }, createUserToken(users[0]));
+		channel = client.channel('messaging', channelID, {
+			members: users,
+		});
+	});
+
+	context('When watch is called', function() {
+		const watchStartEvent = newEventPromise(client, 'user.watching.start');
+
+		it('increase watcher count', async function() {
+			const resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(1);
+		});
+
+		it('sends watch event', function() {
+			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[0]);
+				expect(events[0].watcher_count).to.eq(1);
+			});
+		});
+	});
+
+	context('When new client is connected', function() {
+		let newClient;
+		let newClientChannel;
+
+		let watchStartEvent;
+
+		before(async function() {
+			newClient = await getTestClientForUser(users[1]);
+			newClientChannel = await newClient.channel('messaging', channelID);
+			watchStartEvent = newEventPromise(client, 'user.watching.start');
+			await newClientChannel.watch();
+		});
+
+		it('sends user.watching.start event', function() {
+			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[1]);
+				expect(events[0].watcher_count).to.eq(2);
+			});
+		});
+
+		it('increase watcher count', async function() {
+			let resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(2);
+			resp = await newClientChannel.watch();
+			expect(resp.watcher_count).to.eq(2);
+		});
+
+		context('When client calls stopWatching', function() {
+			const watchingStopEvent = newEventPromise(client, 'user.watching.stop');
+
+			before(async function() {
+				await newClientChannel.stopWatching();
+			});
+
+			it('decrease watcher count', async function() {
+				const resp = await channel.watch();
+				expect(resp.watcher_count).to.eq(1);
+			});
+
+			it('sends user.watching.stop event', function() {
+				return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+					expect(events[0].user.id).to.eq(users[1]);
+					expect(events[0].watcher_count).to.eq(1);
+				});
+			});
+		});
+	});
+
+	context('When new client is disconnected', function() {
+		let newClient, newClientChannel, watchingStopEvent;
+
+		before(async function() {
+			newClient = await getTestClientForUser(users[2]);
+			newClientChannel = await newClient.channel('messaging', channelID);
+			watchingStopEvent = newEventPromise(client, 'user.watching.stop');
+
+			const resp = await newClientChannel.watch();
+			expect(resp.watcher_count).to.eq(2);
+
+			await newClient.disconnect();
+		});
+
+		it('decrease watcher count', async function() {
+			const resp = await channel.watch();
+			expect(resp.watcher_count).to.eq(1);
+		});
+
+		it('sends user.watching.stop event', function() {
+			return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+				expect(events[0].user.id).to.eq(users[2]);
+				expect(events[0].watcher_count).to.eq(1);
+			});
+		});
+	});
+});
+
+describe('Count Anonymous users', function() {
+	const admin = 'tommaso' + uuidv4();
+	const channelID = uuidv4();
+	const clients = [];
+	let channel;
+	const client = getTestClient(false);
+
+	const nClients = 5;
+
+	before(async () => {
+		await createUsers([admin]);
+		await client.setUser({ id: admin }, createUserToken(admin));
+		channel = client.channel('livestream', channelID);
+		await channel.create();
+		for (let i = 0; i < nClients; i++) {
+			const client1 = await getTestClient(false);
+			await client1.setAnonymousUser();
+			const channel1 = client1.channel('livestream', channelID);
+			clients[i] = { client: client1, channel: channel1 };
+		}
+	});
+	it('each anon client should count as a user', async function() {
+		let lastWatcherInfo;
+		//connect all the clients
+		for (let i = 0; i < nClients; i++) {
+			lastWatcherInfo = await clients[i].channel.watch();
+			expect(lastWatcherInfo.watcher_count).to.be.equal(i + 1);
+		}
+		const resp = await channel.query({
+			messages: { limit: 10 },
+			members: { limit: 50, offset: 0 },
+			watchers: { limit: 6, offset: 0 },
+		});
+		expect(resp.watchers.length).to.be.equal(nClients);
+		expect(resp.watcher_count).to.be.equal(nClients);
+
+		//stop watching or disconnect should update the counters properly
+		for (let i = 0; i < nClients; i++) {
+			if (i % 2 === 0) {
+				await clients[i].channel.stopWatching();
+			} else {
+				await clients[i].client.disconnect();
+			}
+			const resp = await channel.query({ state: true });
+			if (i !== nClients - 1) {
+				expect(resp.watcher_count).to.be.equal(nClients - (i + 1));
+			} else {
+				expect(resp.watcher_count).to.be.undefined;
+			}
+		}
+		const channelResponse = await channel.watch();
+		expect(channelResponse.watcher_count).to.be.equal(1);
+	});
+});
+
+describe('Count Guest users using state', function() {
+	const admin = 'tommaso' + uuidv4();
+	const channelID = uuidv4();
+	const clients = [];
+	let channel;
+	const client = getTestClient(false);
+
+	const nClients = 5;
+
+	before(async () => {
+		await createUsers([admin]);
+		await client.setUser({ id: admin }, createUserToken(admin));
+		channel = client.channel('livestream', channelID);
+		await channel.create();
+		for (let i = 0; i < nClients; i++) {
+			const client1 = await getTestClient(false);
+			await client1.setGuestUser({ id: uuidv4() });
+			const channel1 = client1.channel('livestream', channelID);
+			clients[i] = { client: client1, channel: channel1 };
+		}
+	});
+	it('validate watcher counts using state', async function() {
+		let lastWatcherInfo;
+		//connect all the clients
+		for (let i = 0; i < nClients; i++) {
+			lastWatcherInfo = await clients[i].channel.watch();
+			expect(lastWatcherInfo.watcher_count).to.be.equal(i + 1);
+		}
+
+		//stop watching or disconnect should update the counters properly
+		for (let i = 0; i < nClients; i++) {
+			if (i % 2 === 0) {
+				await clients[i].channel.stopWatching();
+			} else {
+				clients[i].client.disconnect();
+			}
+			const resp = await channel.query({ state: true });
+			if (i !== nClients - 1) {
+				expect(resp.watcher_count).to.be.equal(nClients - (i + 1));
+			} else {
+				expect(resp.watcher_count).to.be.undefined;
+			}
+		}
+		const channelResponse = await channel.watch();
+		expect(channelResponse.watcher_count).to.be.equal(1);
 	});
 });

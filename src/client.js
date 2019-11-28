@@ -24,9 +24,19 @@ import pkg from '../package.json';
 
 function isReadableStream(obj) {
 	return (
+		obj !== null &&
 		typeof obj === 'object' &&
-		typeof (obj._read === 'function') &&
-		typeof (obj._readableState === 'object')
+		typeof obj._read === 'function' &&
+		typeof obj._readableState === 'object'
+	);
+}
+
+function isFunction(value) {
+	return (
+		value &&
+		(Object.prototype.toString.call(value) === '[object Function]' ||
+			'function' === typeof value ||
+			value instanceof Function)
 	);
 }
 
@@ -87,7 +97,55 @@ export class StreamChat {
 		this.configs = {};
 		this.anonymous = false;
 
-		this._startCleaning();
+		/**
+		 * logger function should accept 3 parameters:
+		 * @param logLevel string
+		 * @param message   string
+		 * @param extraData object
+		 *
+		 * e.g.,
+		 * const client = new StreamChat('api_key', {}, {
+		 * 		logger = (logLevel, message, extraData) => {
+		 * 			console.log(message);
+		 * 		}
+		 * })
+		 *
+		 * extraData contains tags array attached to log message. Tags can have one/many of following values:
+		 * 1. api
+		 * 2. api_request
+		 * 3. api_response
+		 * 4. client
+		 * 5. channel
+		 * 6. connection
+		 * 7. event
+		 *
+		 * It may also contains some extra data, some examples have been mentioned below:
+		 * 1. {
+		 * 		tags: ['api', 'api_request', 'client'],
+		 * 		url: string,
+		 * 		payload: object,
+		 * 		config: object
+		 * }
+		 * 2. {
+		 * 		tags: ['api', 'api_response', 'client'],
+		 * 		url: string,
+		 * 		response: object
+		 * }
+		 * 3. {
+		 * 		tags: ['api', 'api_response', 'client'],
+		 * 		url: string,
+		 * 		error: object
+		 * }
+		 * 4. {
+		 * 		tags: ['event', 'client'],
+		 * 		event: object
+		 * }
+		 * 5. {
+		 * 		tags: ['channel'],
+		 * 		channel: object
+		 * }
+		 */
+		this.logger = isFunction(options.logger) ? options.logger : () => {};
 	}
 
 	devToken(userID) {
@@ -107,6 +165,7 @@ export class StreamChat {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
 		this.wsPromise = this.connect();
+		this._startCleaning();
 		return this.wsPromise;
 	}
 
@@ -185,6 +244,7 @@ export class StreamChat {
 				"firebase_config": {
 					"server_key": "server key from fcm",
 					"notification_template": "notification handlebars template"
+					"data_template": "data handlebars template"
 				},
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
@@ -214,6 +274,7 @@ export class StreamChat {
 				  messageID: 'id-of-message',//will error if message does not exist
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
 			}
 	 */
 	async testPushSettings(userID, data = {}) {
@@ -224,6 +285,9 @@ export class StreamChat {
 			...(data.firebaseTemplate
 				? { firebase_template: data.firebaseTemplate }
 				: {}),
+			...(data.firebaseDataTemplate
+				? { firebase_data_template: data.firebaseDataTemplate }
+				: {}),
 		});
 	}
 
@@ -231,10 +295,18 @@ export class StreamChat {
 	 * disconnect - closes the WS connection
 	 */
 	disconnect() {
+		this.logger('info', 'client:disconnect() - Disconnecting the client', {
+			tags: ['connection', 'client'],
+		});
 		// remove the user specific fields
 		delete this.user;
 		delete this._user;
 		delete this.userID;
+
+		if (this.cleaningIntervalRef != null) {
+			clearInterval(this.cleaningIntervalRef);
+			this.cleaningIntervalRef = null;
+		}
 
 		this.anonymous = false;
 		this.userToken = null;
@@ -331,6 +403,9 @@ export class StreamChat {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this.logger('info', `Attaching listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key].push(callback);
 		return {
 			unsubscribe: () => {
@@ -354,14 +429,50 @@ export class StreamChat {
 			this.listeners[key] = [];
 		}
 
+		this.logger('info', `Removing listener for ${key} event`, {
+			tags: ['event', 'client'],
+		});
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+	}
+
+	_logApiRequest(type, url, data, config) {
+		this.logger('info', `client: ${type} - Request - ${url}`, {
+			tags: ['api', 'api_request', 'client'],
+			url,
+			payload: data,
+			config,
+		});
+	}
+
+	_logApiResponse(type, url, response) {
+		this.logger(
+			'info',
+			`client:${type} - Response - url: ${url} > status ${response.status}`,
+			{
+				tags: ['api', 'api_response', 'client'],
+				url,
+				response,
+			},
+		);
+	}
+
+	_logApiError(type, url, error) {
+		this.logger('error', `client:${type} - Error - url: ${url}`, {
+			tags: ['api', 'api_response', 'client'],
+			url,
+			error,
+		});
 	}
 
 	async get(url, params) {
 		try {
+			this._logApiRequest('get', url, {}, this._addClientParams(params));
 			const response = await axios.get(url, this._addClientParams(params));
+			this._logApiResponse('get', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -373,9 +484,13 @@ export class StreamChat {
 	async put(url, data) {
 		let response;
 		try {
+			this._logApiRequest('put', url, data, this._addClientParams());
 			response = await axios.put(url, data, this._addClientParams());
+			this._logApiResponse('put', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('get', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -387,9 +502,13 @@ export class StreamChat {
 	async post(url, data) {
 		let response;
 		try {
+			this._logApiRequest('post', url, data, this._addClientParams());
 			response = await axios.post(url, data, this._addClientParams());
+			this._logApiResponse('post', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('post', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -401,9 +520,13 @@ export class StreamChat {
 	async patch(url, data) {
 		let response;
 		try {
+			this._logApiRequest('patch', url, data, this._addClientParams());
 			response = await axios.patch(url, data, this._addClientParams());
+			this._logApiResponse('patch', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('patch', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -415,9 +538,13 @@ export class StreamChat {
 	async delete(url, params) {
 		let response;
 		try {
+			this._logApiRequest('delete', url, {}, this._addClientParams());
 			response = await axios.delete(url, this._addClientParams(params));
+			this._logApiResponse('delete', url, response);
+
 			return this.handleResponse(response);
 		} catch (e) {
+			this._logApiError('delete', url, e);
 			if (e.response) {
 				return this.handleResponse(e.response);
 			} else {
@@ -431,7 +558,7 @@ export class StreamChat {
 		let fileField;
 
 		const params = this._addClientParams();
-		if (isReadableStream(uri)) {
+		if (isReadableStream(uri) || uri instanceof File) {
 			fileField = uri;
 		} else {
 			fileField = {
@@ -491,6 +618,12 @@ export class StreamChat {
 		if (channel) {
 			channel._handleChannelEvent(event);
 		}
+
+		this._callClientListeners(event);
+
+		if (channel) {
+			channel._callChannelListeners(event);
+		}
 	};
 
 	handleEvent = messageEvent => {
@@ -503,23 +636,41 @@ export class StreamChat {
 
 	_handleClientEvent(event) {
 		const client = this;
+		this.logger(
+			'info',
+			`client:_handleClientEvent - Received event of type { ${event.type} }`,
+			{
+				tags: ['event', 'client'],
+				event,
+			},
+		);
 
 		// update the client.state with any changes to users
 		if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+			if (event.user.id === this.userID) {
+				this.user = { ...this.user, ...event.user };
+				// Updating only available properties in _user object.
+				Object.keys(event.user).forEach(function(key) {
+					if (key in client._user) {
+						client._user[key] = event.user[key];
+					}
+				});
+			}
 			client.state.updateUser(event.user);
 			client._updateUserReferences(event.user);
 		}
-		if (event.type === 'health.check') {
-			if (event.me) {
-				client.user = event.me;
-				client.state.updateUser(event.me);
-			}
+		if (event.type === 'health.check' && event.me) {
+			client.user = event.me;
+			client.state.updateUser(event.me);
 		}
 
 		if (event.type === 'notification.message_new') {
 			this.configs[event.channel.type] = event.channel.config;
 		}
+	}
 
+	_callClientListeners = event => {
+		const client = this;
 		// gather and call the listeners
 		const listeners = [];
 		if (client.listeners.all) {
@@ -533,9 +684,16 @@ export class StreamChat {
 		for (const listener of listeners) {
 			listener(event);
 		}
-	}
+	};
 
 	recoverState = async () => {
+		this.logger(
+			'info',
+			`client:recoverState() - Start of recoverState with connectionID ${this.wsConnection.connectionID}`,
+			{
+				tags: ['connection'],
+			},
+		);
 		this.connectionID = this.wsConnection.connectionID;
 		const cids = Object.keys(this.activeChannels || {});
 		const lastMessageIDs = {};
@@ -548,11 +706,22 @@ export class StreamChat {
 			lastMessageIDs[c.cid] = lastMessageId;
 		}
 		if (cids.length) {
+			this.logger(
+				'info',
+				`client:recoverState() - Start the querying of ${cids.length} channels`,
+				{ tags: ['connection', 'client'] },
+			);
+
 			await this.queryChannels(
 				{ cid: { $in: cids } },
 				{ last_message_at: -1 },
 				{ limit: 30, recovery: true, last_message_ids: lastMessageIDs },
 			);
+
+			this.logger('info', 'client:recoverState() - Querying channels finished', {
+				tags: ['connection', 'client'],
+			});
+
 			this.dispatchEvent({
 				type: 'connection.recovered',
 			});
@@ -560,9 +729,9 @@ export class StreamChat {
 	};
 
 	/*
-	_updateUserReferences updates the members and watchers of the currently active channels
-	that contain this user
-	*/
+  _updateUserReferences updates the members and watchers of the currently active channels
+  that contain this user
+  */
 	_updateUserReferences(user) {
 		const refMap = this.state.userChannelReferences[user.id] || {};
 		const refs = Object.keys(refMap);
@@ -607,7 +776,7 @@ export class StreamChat {
 		const authType = this.getAuthType();
 		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
 			this.key
-		}&authorization=${token}&stream-auth-type=${authType}`;
+		}&authorization=${token}&stream-auth-type=${authType}&x-stream-client=${this._userAgent()}`;
 
 		// The StableWSConnection handles all the reconnection logic.
 		this.wsConnection = new StableWSConnection({
@@ -617,6 +786,7 @@ export class StreamChat {
 			recoverCallback: this.recoverState,
 			messageCallback: this.handleEvent,
 			eventCallback: this.dispatchEvent,
+			logger: this.logger,
 		});
 
 		const handshake = await this.wsConnection.connect();
@@ -732,11 +902,9 @@ export class StreamChat {
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.wsPromise;
 
-		const data = await this.get(this.baseURL + '/search', {
+		return await this.get(this.baseURL + '/search', {
 			payload,
 		});
-
-		return data;
 	}
 
 	/**
@@ -802,15 +970,14 @@ export class StreamChat {
 		}
 		if (~channelType.indexOf(':')) {
 			throw Error(
-				`Invalid channel group ${channelType}, cant contain the : character`,
+				`Invalid channel group ${channelType}, can't contain the : character`,
 			);
 		}
 
 		if (typeof channelID === 'string') {
-			channelID = channelID + '';
 			if (~channelID.indexOf(':')) {
 				throw Error(
-					`Invalid channel id ${channelID}, cant contain the : character`,
+					`Invalid channel id ${channelID}, can't contain the : character`,
 				);
 			}
 		} else {
@@ -819,26 +986,22 @@ export class StreamChat {
 			channelID = undefined;
 		}
 
-		// there are two ways of solving this,
-		// a. only allow 1 channel object per cid
-		// b. broadcast events to all channels
-		// the first option seems less likely to trip up devs
-		let channel;
-		if (channelID) {
-			const cid = `${channelType}:${channelID}`;
-			if (cid in this.activeChannels) {
-				channel = this.activeChannels[cid];
-				if (Object.keys(custom).length > 0) {
-					channel.data = custom;
-					channel._data = custom;
-				}
-			} else {
-				channel = new Channel(this, channelType, channelID, custom);
-				this.activeChannels[channel.cid] = channel;
-			}
-		} else {
-			channel = new Channel(this, channelType, undefined, custom);
+		if (!channelID) {
+			return new Channel(this, channelType, undefined, custom);
 		}
+
+		// only allow 1 channel object per cid
+		const cid = `${channelType}:${channelID}`;
+		if (cid in this.activeChannels) {
+			const channel = this.activeChannels[cid];
+			if (Object.keys(custom).length > 0) {
+				channel.data = custom;
+				channel._data = custom;
+			}
+			return channel;
+		}
+		const channel = new Channel(this, channelType, channelID, custom);
+		this.activeChannels[channel.cid] = channel;
 
 		return channel;
 	}
@@ -852,6 +1015,18 @@ export class StreamChat {
 	 */
 	async updateUser(userObject) {
 		return await this.updateUsers([userObject]);
+	}
+
+	/**
+	 * partialUpdateUser - Update the given user object
+	 *
+	 * @param {object} Object which should contain id and any of "set" or "unset" params;
+	 * example: {id: "user1", set:{field: value}, unset:["field2"]}
+	 *
+	 * @return {object} list of updated users
+	 */
+	async partialUpdateUser(userObject) {
+		return await this.partialUpdateUsers([userObject]);
 	}
 
 	/**
@@ -875,8 +1050,33 @@ export class StreamChat {
 		});
 	}
 
+	/**
+	 * updateUsers - Batch partial update of users
+	 *
+	 * @param {array} A list of partial update requests
+	 *
+	 * @return {object}
+	 */
+	async partialUpdateUsers(users) {
+		for (const userObject of users) {
+			if (!userObject.id) {
+				throw Error('User ID is required when updating a user');
+			}
+		}
+
+		return await this.patch(this.baseURL + '/users', {
+			users,
+		});
+	}
+
 	async deleteUser(userID, params) {
 		return await this.delete(this.baseURL + `/users/${userID}`, params);
+	}
+
+	async reactivateUser(userID, options) {
+		return await this.post(this.baseURL + `/users/${userID}/reactivate`, {
+			...options,
+		});
 	}
 
 	async deactivateUser(userID, options) {
@@ -998,6 +1198,26 @@ export class StreamChat {
 		return this.get(this.baseURL + `/channeltypes`);
 	}
 
+	createCommand(data) {
+		return this.post(this.baseURL + '/commands', data);
+	}
+
+	updateCommand(name, data) {
+		return this.put(this.baseURL + `/commands/${name}`, data);
+	}
+
+	getCommand(name) {
+		return this.get(this.baseURL + `/commands/${name}`);
+	}
+
+	deleteCommand(name) {
+		return this.delete(this.baseURL + `/commands/${name}`);
+	}
+
+	listCommands() {
+		return this.get(this.baseURL + '/commands');
+	}
+
 	/**
 	 * updateMessage - Update the given message
 	 *
@@ -1039,14 +1259,17 @@ export class StreamChat {
 				clonedMessage.user = { id: userId.id };
 			}
 		}
-
 		return await this.post(this.baseURL + `/messages/${message.id}`, {
 			message: clonedMessage,
 		});
 	}
 
-	async deleteMessage(messageID) {
-		return await this.delete(this.baseURL + `/messages/${messageID}`);
+	async deleteMessage(messageID, hardDelete) {
+		let params = {};
+		if (hardDelete) {
+			params = { hard: true };
+		}
+		return await this.delete(this.baseURL + `/messages/${messageID}`, params);
 	}
 
 	async getMessage(messageID) {
@@ -1062,11 +1285,7 @@ export class StreamChat {
 	/**
 	 * _isUsingServerAuth - Returns true if we're using server side auth
 	 */
-	_isUsingServerAuth = () => {
-		// returns if were in server side mode or not...
-		const serverAuth = !!this.secret;
-		return serverAuth;
-	};
+	_isUsingServerAuth = () => !!this.secret;
 
 	_addClientParams(params = {}) {
 		const token = this._getToken();
@@ -1102,6 +1321,9 @@ export class StreamChat {
 
 	_startCleaning() {
 		const that = this;
+		if (this.cleaningIntervalRef != null) {
+			return;
+		}
 		this.cleaningIntervalRef = setInterval(() => {
 			// call clean on the channel, used for calling the stop.typing event etc.
 			for (const channel of Object.values(that.activeChannels)) {

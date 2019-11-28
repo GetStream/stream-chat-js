@@ -81,10 +81,9 @@ export class Channel {
 	 */
 
 	async sendMessage(message) {
-		const data = await this.getClient().post(this._channelURL() + '/message', {
+		return await this.getClient().post(this._channelURL() + '/message', {
 			message,
 		});
-		return data;
 	}
 
 	sendFile(uri, name, contentType, user) {
@@ -124,11 +123,9 @@ export class Channel {
 	 */
 	async sendEvent(event) {
 		this._checkInitialized();
-		const data = await this.getClient().post(this._channelURL() + '/event', {
+		return await this.getClient().post(this._channelURL() + '/event', {
 			event,
 		});
-
-		return data;
 	}
 
 	/**
@@ -153,11 +150,10 @@ export class Channel {
 		if (user_id != null) {
 			body.reaction = { ...reaction, user: { id: user_id } };
 		}
-		const data = await this.getClient().post(
+		return await this.getClient().post(
 			this.getClient().baseURL + `/messages/${messageID}/reaction`,
 			body,
 		);
-		return data;
 	}
 
 	/**
@@ -209,8 +205,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async delete() {
-		const data = await this.getClient().delete(this._channelURL());
-		return data;
+		return await this.getClient().delete(this._channelURL());
 	}
 
 	/**
@@ -219,8 +214,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async truncate() {
-		const data = await this.getClient().post(this._channelURL() + '/truncate');
-		return data;
+		return await this.getClient().post(this._channelURL() + '/truncate');
 	}
 
 	async acceptInvite(options = {}) {
@@ -252,6 +246,14 @@ export class Channel {
 	async addModerators(members) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_moderators: members,
+		});
+		this.data = data.channel;
+		return data;
+	}
+
+	async inviteMembers(members) {
+		const data = await this.getClient().post(this._channelURL(), {
+			invites: members,
 		});
 		this.data = data.channel;
 		return data;
@@ -378,11 +380,9 @@ export class Channel {
 			return Promise.resolve(null);
 		}
 
-		const response = await this.getClient().post(this._channelURL() + '/read', {
+		return await this.getClient().post(this._channelURL() + '/read', {
 			...data,
 		});
-
-		return response;
 	}
 
 	/**
@@ -425,7 +425,16 @@ export class Channel {
 		const state = await this.query(combined);
 		this.initialized = true;
 		this._initializeState(state);
+		this.data = state.channel;
 
+		this._client.logger(
+			'info',
+			`channel:watch() - started watching channel ${this.cid}`,
+			{
+				tags: ['channel'],
+				channel: this,
+			},
+		);
 		return state;
 	}
 
@@ -438,6 +447,15 @@ export class Channel {
 		const response = await this.getClient().post(
 			this._channelURL() + '/stop-watching',
 			{},
+		);
+
+		this._client.logger(
+			'info',
+			`channel:watch() - stopped watching channel ${this.cid}`,
+			{
+				tags: ['channel'],
+				channel: this,
+			},
 		);
 
 		return response;
@@ -476,15 +494,18 @@ export class Channel {
 	 * @return {object} Server response
 	 */
 	async getReactions(message_id, options) {
-		const data = await this.getClient().get(
+		return await this.getClient().get(
 			this.getClient().baseURL + `/messages/${message_id}/reactions`,
 			{
 				...options,
 			},
 		);
-		return data;
 	}
 
+	/**
+	 * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
+	 * @return {date}
+	 */
 	lastRead() {
 		this._checkInitialized();
 		return this.state.read[this.getClient().userID]
@@ -536,10 +557,8 @@ export class Channel {
 				continue;
 			}
 			if (m.created_at > lastRead) {
-				if (
-					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
-					-1
-				) {
+				const userID = this.getClient().userID;
+				if (m.mentioned_users.findIndex(u => u.id === userID) !== -1) {
 					count++;
 				}
 			}
@@ -618,6 +637,32 @@ export class Channel {
 	}
 
 	/**
+	 * hides the channel from queryChannels for the user until a message is added
+	 *
+	 * @param userId
+	 * @returns {Promise<*>}
+	 */
+	async hide(userId = null) {
+		this._checkInitialized();
+		return await this.getClient().post(`${this._channelURL()}/hide`, {
+			user_id: userId,
+		});
+	}
+
+	/**
+	 * removes the hidden status for a channel
+	 *
+	 * @param userId
+	 * @returns {Promise<*>}
+	 */
+	async show(userId = null) {
+		this._checkInitialized();
+		return await this.getClient().post(`${this._channelURL()}/show`, {
+			user_id: userId,
+		});
+	}
+
+	/**
 	 * banUser - Removes the bans for a user on a channel
 	 *
 	 * @param targetUserID
@@ -653,6 +698,15 @@ export class Channel {
 		if (!(key in this.listeners)) {
 			this.listeners[key] = [];
 		}
+		this._client.logger(
+			'info',
+			`Attaching listener for ${key} event on channel ${this.cid}`,
+			{
+				tags: ['event', 'channel'],
+				channel: this,
+			},
+		);
+
 		this.listeners[key].push(callback);
 	}
 
@@ -672,11 +726,24 @@ export class Channel {
 			this.listeners[key] = [];
 		}
 
+		this._client.logger(
+			'info',
+			`Removing listener for ${key} event from channel ${this.cid}`,
+			{ tags: ['event', 'channel'], channel: this },
+		);
 		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
 	}
 
 	_handleChannelEvent(event) {
 		const channel = this;
+		this._client.logger(
+			'info',
+			`channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
+			{
+				tags: ['event', 'channel'],
+				channel: this,
+			},
+		);
 
 		const s = channel.state;
 		switch (event.type) {
@@ -706,7 +773,7 @@ export class Channel {
 				break;
 			case 'member.added':
 			case 'member.updated':
-				s.members = s.members.set(event.member.id, Immutable(event.member));
+				s.members = s.members.set(event.member.user_id, Immutable(event.member));
 				break;
 			case 'member.removed':
 				s.members = s.members.without(event.user.id);
@@ -727,7 +794,10 @@ export class Channel {
 		if (event.watcher_count !== undefined) {
 			channel.state.watcher_count = event.watcher_count;
 		}
+	}
 
+	_callChannelListeners = event => {
+		const channel = this;
 		// gather and call the listeners
 		const listeners = [];
 		if (channel.listeners.all) {
@@ -741,7 +811,7 @@ export class Channel {
 		for (const listener of listeners) {
 			listener(event);
 		}
-	}
+	};
 
 	/**
 	 * _channelURL - Returns the channel url
@@ -752,16 +822,13 @@ export class Channel {
 		if (!this.id) {
 			throw new Error('channel id is not defined');
 		}
-		const channelURL = `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
-		return channelURL;
+		return `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
 	};
 
 	_checkInitialized() {
 		if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
 			throw Error(
-				`Channel ${
-					this.cid
-				} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
+				`Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
 			);
 		}
 	}
@@ -785,7 +852,7 @@ export class Channel {
 		if (!this.state.messages) {
 			this.state.messages = Immutable([]);
 		}
-		this.state.addMessagesSorted(messages);
+		this.state.addMessagesSorted(messages, true);
 		this.state.watcher_count = state.watcher_count;
 		// convert the arrays into objects for easier syncing...
 		if (state.watchers) {
@@ -814,6 +881,15 @@ export class Channel {
 	}
 
 	_disconnect() {
+		this._client.logger(
+			'info',
+			`channel:disconnect() - Disconnecting the channel ${this.cid}`,
+			{
+				tags: ['connection', 'channel'],
+				channel: this,
+			},
+		);
+
 		this.disconnected = true;
 	}
 }

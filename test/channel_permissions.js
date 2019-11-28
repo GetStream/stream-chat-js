@@ -10,7 +10,7 @@ class Context {
 		this.adminUser = { id: `admin-${uuidv4()}`, role: 'admin' };
 		this.guestUser = { id: `guest-${uuidv4()}`, role: 'guest' };
 		this.user = { id: `user-${uuidv4()}`, role: 'user' };
-		this.moderator = { id: `moderator-${uuidv4()}`, role: 'channel_moderator' };
+		this.moderator = { id: `moderator-${uuidv4()}`, role: 'user' };
 		this.messageOwner = { id: `message-owner-${uuidv4()}` };
 		this.channelOwner = { id: `channel-owner-${uuidv4()}` };
 		this.channelMember = { id: `channel-member-${uuidv4()}`, role: 'user' };
@@ -31,6 +31,7 @@ class Context {
 		});
 		await this.channel.create();
 		await this.channel.addMembers([this.channelMember.id]);
+		await this.channel.addModerators([this.moderator.id]);
 	}
 }
 
@@ -1021,7 +1022,7 @@ describe('Commerce permissions', function() {
 
 	describe('Create channel', function() {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
-		roleAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, allowed));
+		roleNotAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, createChannel(ctx, ctx.user, notAllowed));
 		roleAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, allowed));
 	});
