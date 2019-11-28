@@ -2,6 +2,7 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
@@ -24,6 +25,7 @@ import uuidv4 from 'uuid/v4';
 const expect = chai.expect;
 chai.use(assertArrays);
 chai.use(chaiAsPromised);
+chai.use(chaiLike);
 
 if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
