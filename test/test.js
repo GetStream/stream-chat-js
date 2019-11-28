@@ -480,14 +480,15 @@ describe('Chat', function() {
 
 		it('Query with spaces', async function() {
 			// add a very special message
-			const channel = authClient.channel('messaging', 'poppins');
+			const id = uuidv4();
+			const channel = authClient.channel('messaging', id);
 			await channel.create();
 			const keyword = '    this    is  a query    ';
 			await channel.sendMessage({ text: `words ${keyword} what?` });
 			await channel.sendMessage({ text: `great movie because of ${keyword}` });
 			await channel.sendMessage({ text: keyword });
 
-			const filters = { type: 'messaging' };
+			const filters = { type: 'messaging', id };
 			const response = await authClient.search(filters, keyword);
 			expect(response.results.length).to.equal(3);
 			expect(response.results[0].message.text).to.contain(keyword);
@@ -496,7 +497,7 @@ describe('Chat', function() {
 		it('Basic Query using $q syntax', async function() {
 			// TODO: we didn't add support for this just yet...
 			// add a very special message
-			const channel = authClient.channel('messaging', 'poppins');
+			const channel = authClient.channel('messaging', uuidv4());
 			await channel.create();
 			const keyword = 'supercalifragilisticexpialidocious';
 			await channel.sendMessage({ text: `words ${keyword} what?` });
@@ -522,7 +523,7 @@ describe('Chat', function() {
 				{ limit: 2, offset: 0 },
 			);
 			expect(searchPromise).to.be.rejectedWith(
-				'Fulltext search is not enabled for message field "mycustomfield"',
+				'StreamChat error code 4: Search failed with error: "search is not enabled for field messages.mycustomfield."',
 			);
 		});
 
@@ -574,6 +575,73 @@ describe('Chat', function() {
 			expect(response.results[0].message.text).to.contain(
 				'supercalifragilisticexpialidocious',
 			);
+		});
+
+		it('Query messages with attachments', async function() {
+			const id = uuidv4();
+			const channel = authClient.channel('messaging', id, {
+				members: ['thierry', 'tommaso'],
+			});
+			await channel.create();
+			await channel.sendMessage({ text: '1', attachments: [] });
+			await channel.sendMessage({
+				text: '2',
+				attachments: [
+					{
+						type: 'hashtag',
+						name: 'awesome',
+						awesome: true,
+					},
+				],
+			});
+			await channel.sendMessage({ text: '3' });
+
+			const response = await authClient.search(
+				{
+					type: 'messaging',
+					id,
+					members: { $in: ['tommaso'] },
+				},
+				{
+					attachments: { $exists: true },
+				},
+			);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.text).to.equal('2');
+		});
+
+		it('Query messages without attachments', async function() {
+			const id = uuidv4();
+			const channel = authClient.channel('messaging', id, {
+				members: ['thierry', 'tommaso'],
+			});
+			await channel.create();
+			await channel.sendMessage({ text: '1', attachments: [] });
+			await channel.sendMessage({
+				text: '2',
+				attachments: [
+					{
+						type: 'hashtag',
+						name: 'awesome',
+						awesome: true,
+					},
+				],
+			});
+			await channel.sendMessage({ text: '3' });
+
+			const response = await authClient.search(
+				{
+					type: 'messaging',
+					id,
+					members: { $in: ['tommaso'] },
+				},
+				{
+					attachments: { $exists: false },
+				},
+			);
+			expect(response.results.length).to.equal(2);
+			expect(response.results[0].message.text).to.equal('3');
+			expect(response.results[1].message.text).to.equal('1');
 		});
 
 		it('Query without $q', async function() {
