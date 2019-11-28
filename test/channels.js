@@ -525,11 +525,7 @@ describe('Channels - Distinct channels', function() {
 
 	it('create a distinct channel without specifying members should fail', async function() {
 		const channel = thierryClient.channel(channelGroup, '');
-		await expectHTTPErrorCode(
-			400,
-			channel.create(),
-			'StreamChat error code 4: GetOrCreateChannel failed with error: "When using member based IDs specify at least 2 members"',
-		);
+		await expectHTTPErrorCode(400, channel.create());
 	});
 
 	it('create a distinct channel with only one member should fail', async function() {
