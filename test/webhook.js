@@ -10,6 +10,7 @@ describe('Webhooks', function() {
 
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
+	const horatiuID = `horatiu-${uuidv4()}`;
 	const jaapID = `jaap-${uuidv4()}`;
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
@@ -73,7 +74,9 @@ describe('Webhooks', function() {
 		await sleep(100);
 		await client.updateUser({ id: thierryID });
 		await client.updateUser({ id: tommasoID });
+		await client.updateUser({ id: horatiuID });
 		await client.updateUser({ id: jaapID });
+		await chan.create();
 	});
 
 	after(async () => {
@@ -125,6 +128,42 @@ describe('Webhooks', function() {
 		expect(event.members[1].user.unread_channels).to.eq(0);
 		expect(event.members[1].user.id).to.eq(tommasoID);
 		expect(event.members[1].user.online).to.eq(false);
+	});
+
+	it('should receive new message event with thread participants', async function() {
+		await chan.addMembers([horatiuID]);
+
+		const eventsPromise = promises.waitForEvents('message.new', 3);
+
+		const parent = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+
+		await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: thierryID },
+			parent_id: parent.message.id,
+		});
+
+		await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: horatiuID },
+			parent_id: parent.message.id,
+		});
+
+		const events = await eventsPromise;
+
+		expect(events[0].thread_participants).to.be.undefined; // no thread participant for parent
+		expect(events[1].thread_participants.map(u => u.id)).to.have.members([
+			thierryID,
+			tommasoID,
+		]);
+		expect(events[2].thread_participants.map(u => u.id)).to.have.members([
+			thierryID,
+			tommasoID,
+			horatiuID,
+		]);
 	});
 
 	let messageResponse;
@@ -308,10 +347,11 @@ describe('Webhooks', function() {
 
 	it('member.removed', async function() {
 		await Promise.all([
-			promises.waitForEvents('member.removed', 3),
+			promises.waitForEvents('member.removed', 4),
 			chan.removeMembers([thierryID]),
 			chan.removeMembers([tommasoID]),
 			chan.removeMembers([jaapID]),
+			chan.removeMembers([horatiuID]),
 		]);
 	});
 
@@ -361,6 +401,21 @@ describe('Webhooks', function() {
 		expect(event.channel.awesome).to.eq('yes yes');
 		expect(event.message).to.not.be.null;
 		expect(event.message.custom_stuff).to.eq('bananas');
+	});
+
+	it('channel.created', async function() {
+		let chan2 = client.channel('messaging', uuidv4(), {
+			created_by: { id: tommasoID },
+		});
+		const [events] = await Promise.all([
+			promises.waitForEvents('channel.created'),
+			chan2.create(),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('channel.created');
+		expect(event.channel_type).to.eq(chan2.type);
+		expect(event.channel_id).to.eq(chan2.id);
 	});
 
 	it('moderation mute', async function() {

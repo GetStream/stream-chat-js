@@ -374,6 +374,9 @@ export class StreamChat {
 	 * @return {string} Returns a token
 	 */
 	createToken(userID, exp) {
+		if (this.secret == null) {
+			throw Error(`tokens can only be created server-side using the API Secret`);
+		}
 		const extra = {};
 		if (exp != null) {
 			extra.exp = exp;
@@ -956,11 +959,16 @@ export class StreamChat {
 	}
 
 	/**
-	 * channel - Returns a new channel with the given type and id
+	 * channel - Returns a new channel with the given type, id and custom data
+	 *
+	 * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter
+	 * and only provide ID and the list of members
+	 *
+	 * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
 	 *
 	 * @param {string} channelType The channel type
-	 * @param {string} channelID   The channel data
-	 * @param {object} [custom]      Custom data to attach to the channel
+	 * @param {string} channelID   The channel ID, you can leave this out if you want to create a conversation channel
+	 * @param {object} [custom]    Custom data to attach to the channel
 	 *
 	 * @return {channel} The channel object, initialize it using channel.watch()
 	 */
@@ -968,26 +976,27 @@ export class StreamChat {
 		if (!this.userID && !this._isUsingServerAuth()) {
 			throw Error('Call setUser or setAnonymousUser before creating a channel');
 		}
+
 		if (~channelType.indexOf(':')) {
 			throw Error(
 				`Invalid channel group ${channelType}, can't contain the : character`,
 			);
 		}
 
-		if (typeof channelID === 'string') {
-			if (~channelID.indexOf(':')) {
-				throw Error(
-					`Invalid channel id ${channelID}, can't contain the : character`,
-				);
-			}
-		} else {
-			// support the 2 param init method
-			custom = channelID || {};
-			channelID = undefined;
+		// support channel("messaging", null, {options})
+		// support channel("messaging", undefined, {options})
+		// support channel("messaging", "", {options})
+		if (channelID == null || channelID === '') {
+			return new Channel(this, channelType, undefined, custom || {});
 		}
 
-		if (!channelID) {
-			return new Channel(this, channelType, undefined, custom);
+		// support channel("messaging", {options})
+		if (typeof channelID === 'object' && arguments.length === 2) {
+			return new Channel(this, channelType, undefined, channelID || {});
+		}
+
+		if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
+			throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
 		}
 
 		// only allow 1 channel object per cid
