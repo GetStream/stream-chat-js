@@ -606,7 +606,7 @@ export class Channel {
 	/**
 	 * create - Creates a new channel
 	 *
-	 * @return {type} The Server Reponse
+	 * @return {type} The Server Response
 	 */
 	create = async () => {
 		const options = {
