@@ -116,6 +116,11 @@ export interface ReactionResponse extends Reaction {
   created_at: string;
   updated_at: string;
 }
+
+export interface MuteParams {
+  user_id?: string;
+  target_id: string;
+}
 export interface StreamChatOptions {
   /**
    * extraData contains tags array attached to log message. Tags can have one/many of following values:
@@ -229,8 +234,8 @@ export class StreamChat {
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
 
-  muteUser(targetUserID: string): Promise<MuteAPIResponse>;
-  unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
+  muteUser(users: MuteParams): Promise<MuteAPIResponse>;
+  unmuteUser(users: MuteParams): Promise<UnmuteAPIResponse>;
 
   flagUser(userID: string): Promise<FlagAPIResponse>;
   unflagUser(userID: string): Promise<UnflagAPIResponse>;

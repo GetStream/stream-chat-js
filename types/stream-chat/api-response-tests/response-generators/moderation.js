@@ -36,7 +36,7 @@ async function muteUser() {
 	await utils.createUsers([user1, user2]);
 	const client1 = await utils.getTestClientForUser(user1);
 
-	return await client1.muteUser(user2);
+	return await client1.muteUser({ target_id: user2 });
 }
 
 async function unmuteUser() {
@@ -45,8 +45,8 @@ async function unmuteUser() {
 	await utils.createUsers([user1, user2]);
 	const client1 = await utils.getTestClientForUser(user1);
 
-	await client1.muteUser(user2);
-	return await client1.unmuteUser(user2);
+	await client1.muteUser({ target_id: user2 });
+	return await client1.unmuteUser({ target_id: user2 });
 }
 async function flagUser() {
 	//flag the user

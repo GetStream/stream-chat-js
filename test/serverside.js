@@ -1827,10 +1827,13 @@ describe('Moderation', function() {
 
 	describe('Mutes', function() {
 		it('source user not set', async function() {
-			await expectHTTPErrorCode(400, srvClient.muteUser(targetUser));
+			await expectHTTPErrorCode(400, srvClient.muteUser({ target_id: targetUser }));
 		});
 		it('source user set', async function() {
-			const data = await srvClient.muteUser(targetUser, srcUser);
+			const data = await srvClient.muteUser({
+				user_id: srcUSer,
+				target_id: targetUser,
+			});
 			expect(data.mute.user.id).to.equal(srcUser);
 			expect(data.mute.target.id).to.equal(targetUser);
 
@@ -1846,10 +1849,13 @@ describe('Moderation', function() {
 
 	describe('Unmutes', function() {
 		it('source user not set', async function() {
-			await expectHTTPErrorCode(400, srvClient.unmuteUser(targetUser));
+			await expectHTTPErrorCode(
+				400,
+				srvClient.unmuteUser({ target_id: targetUser }),
+			);
 		});
 		it('source user set', async function() {
-			await srvClient.unmuteUser(targetUser, srcUser);
+			await srvClient.unmuteUser({ user_id: srcUser, target_id: targetUser });
 
 			const client = getTestClient(false);
 			const connectResponse = await client.setUser(

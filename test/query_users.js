@@ -131,8 +131,8 @@ describe('Query Users', function() {
 			},
 		]);
 
-		await client.muteUser(userID2, userID);
-		await client.muteUser(userID3, userID);
+		await client.muteUser({ user_id: userID, target_id: userID2 });
+		await client.muteUser({ user_id: userID, target_id: userID3 });
 
 		const response = await client.queryUsers({
 			id: { $eq: userID },

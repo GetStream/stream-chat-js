@@ -2490,12 +2490,12 @@ describe('Chat', function() {
 			});
 		});
 		it('Mute', async function() {
-			const data = await authClient.muteUser('eviluser');
+			const data = await authClient.muteUser({ target_id: 'eviluser' });
 			expect(data.mute.user.id).to.equal('thierry2');
 			expect(data.mute.target.id).to.equal('eviluser');
 		});
 		it('Unmute', async function() {
-			const data = await authClient.unmuteUser('eviluser');
+			const data = await authClient.unmuteUser({ target_id: 'eviluser' });
 			expect(data).to.not.be.null;
 		});
 		it('Flag and Unflag a message ', async function() {

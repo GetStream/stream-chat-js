@@ -38,7 +38,7 @@ describe('Moderation', function() {
 				resolve();
 			});
 		});
-		const response = await client1.muteUser(user2);
+		const response = await client1.muteUser({ target_id: user2 });
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
 		expect(response.mute.user.id).to.equal(user1);
@@ -59,7 +59,7 @@ describe('Moderation', function() {
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
-		const response = await client1.muteUser(user2);
+		const response = await client1.muteUser({ target_id: user2 });
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
 		expect(response.mute.user.id).to.equal(user1);
@@ -83,7 +83,7 @@ describe('Moderation', function() {
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
-		await client1.muteUser(user2);
+		await client1.muteUser({ target_id: user2 });
 
 		const eventPromise = new Promise(resolve => {
 			// verify that the notification is sent
@@ -94,7 +94,7 @@ describe('Moderation', function() {
 			});
 		});
 
-		await client1.unmuteUser(user2);
+		await client1.unmuteUser({ target_id: user2 });
 
 		// wait notification
 		await eventPromise;

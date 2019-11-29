@@ -421,7 +421,7 @@ describe('Webhooks', function() {
 	it('moderation mute', async function() {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.muted'),
-			client.muteUser(tommasoID, jaapID),
+			client.muteUser({ user_id: jaapID, target_id: tommasoID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
@@ -450,7 +450,7 @@ describe('Webhooks', function() {
 	it('moderation unmute', async function() {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.unmuted'),
-			client.unmuteUser(tommasoID, jaapID),
+			client.unmuteUser({ user_id: jaapID, target_id: tommasoID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;

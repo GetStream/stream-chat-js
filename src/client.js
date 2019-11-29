@@ -1125,30 +1125,46 @@ export class StreamChat {
 		});
 	}
 
+	// old: string, string?
+	// new: {user_id?, target_id}
+	getMuteParams(users, userID) {
+		if (typeof users === 'object') {
+			return users;
+		}
+		return {
+			target_id: users,
+			...(userID ? { user_id: userID } : {}),
+		};
+	}
+
 	/** muteUser - mutes a user
 	 *
-	 * @param targetID
-	 * @param [userID] Only used with serverside auth
+	 * @param {object} Object A pair of ids: muter and muted. Muter is only needed server side
+	 * example: {user_id: "A", target_id: "B"} - user A mutes user B - server side
+	 * example: {target_id: "B"} - user B is muted by the current user
+	 *
 	 * @returns {Promise<*>}
 	 */
-	async muteUser(targetID, userID = null) {
-		return await this.post(this.baseURL + '/moderation/mute', {
-			target_id: targetID,
-			...(userID ? { user_id: userID } : {}),
-		});
+	async muteUser(users, userID = null) {
+		return await this.post(
+			this.baseURL + '/moderation/mute',
+			this.getMuteParams(users, userID),
+		);
 	}
 
 	/** unmuteUser - unmutes a user
 	 *
-	 * @param targetID
-	 * @param [userID] Only used with serverside auth
+	 * @param {object} Object A pair of ids: unmuter and unmuted. Unmuter is only needed server side
+	 * example: {user_id: "A", target_id: "B"} - user A unmutes user B - server side
+	 * example: {target_id: "B"} - user B is unmuted by the current user
+	 *
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetID, userID = null) {
-		return await this.post(this.baseURL + '/moderation/unmute', {
-			target_id: targetID,
-			...(userID ? { user_id: userID } : {}),
-		});
+	async unmuteUser(users, userID = null) {
+		return await this.post(
+			this.baseURL + '/moderation/unmute',
+			this.getMuteParams(users, userID),
+		);
 	}
 
 	async flagMessage(messageID) {

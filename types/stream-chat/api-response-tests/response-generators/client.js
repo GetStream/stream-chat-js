@@ -9,7 +9,7 @@ async function setUser() {
 	await utils.createUsers([user1, user2]);
 	const client1 = await utils.getTestClientForUser(user1);
 
-	await client1.muteUser(user2);
+	await client1.muteUser({ target_id: user2 });
 
 	const authClient = await utils.getTestClient(false);
 	return authClient.setUser({ id: user1 }, utils.createUserToken(user1));
