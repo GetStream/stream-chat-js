@@ -6,8 +6,6 @@ node_js:
   - 12
   - 13
 
-cache: yarn
-
 install:
   - yarn
   - yarn lint
