@@ -1,6 +1,12 @@
+## December 3, 2019 - 1.2.1
+
+- Handling `channel.truncated` event
+- Support for system message for addMember/removeMember functionality
+- Throw clear errors when trying to build tokens without secret
+
 ## October 25, 2019 - 1.2.0
 
-- Improve client.channel signature, support short-hand with only type and object as well as null or undefined ID (instead of only "") 
+- Improve client.channel signature, support short-hand with only type and object as well as null or undefined ID (instead of only "")
 
 ## October 25, 2019 - 1.1.5
 
