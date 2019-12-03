@@ -84,6 +84,7 @@ export type MemberUpdatedEvent = 'member.updated';
 export type MemberRemovedEvent = 'member.removed';
 export type ChannelUpdatedEvent = 'channel.updated';
 export type ChannelDeletedEvent = 'channel.deleted';
+export type ChannelTruncatedEvent = 'channel.truncated';
 export type HealthCheckEvent = 'health.check';
 export type NotificationNewMessageEvent = 'notification.message_new';
 export type NotificationMarkReadEvent = 'notification.mark_read';
