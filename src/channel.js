@@ -808,6 +808,9 @@ export class Channel {
 			case 'message.deleted':
 				s.addMessageSorted(event.message);
 				break;
+			case 'channel.truncated':
+				s.messages = Immutable([]);
+				break;
 			case 'member.added':
 			case 'member.updated':
 				s.members = s.members.set(event.member.user_id, Immutable(event.member));
