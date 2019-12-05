@@ -14,10 +14,11 @@ export class Channel {
 	 * @param {string} type  the type of channel
 	 * @param {string} [id]  the id of the chat
 	 * @param {type} custom any additional custom params
+	 * @param {bool} passive Passive channels don't throw exceptions on when the network is down.
 	 *
 	 * @return {Channel} Returns a new uninitialized channel
 	 */
-	constructor(client, type, id, data) {
+	constructor(client, type, id, data, passive = false) {
 		const validTypeRe = /^[\w_-]+$/;
 		const validIDRe = /^[\w!_-]+$/;
 
@@ -48,6 +49,7 @@ export class Channel {
 		this.lastTypingEvent = null;
 		this.isTyping = false;
 		this.disconnected = false;
+		this.passive = passive;
 	}
 
 	/**
@@ -123,7 +125,7 @@ export class Channel {
 	 * @return {object} The Server Response
 	 */
 	async sendEvent(event) {
-		this._checkInitialized();
+		this._checkActive();
 		const data = await this.getClient().post(this._channelURL() + '/event', {
 			event,
 		});
@@ -170,7 +172,7 @@ export class Channel {
 	 * @return {object} The Server Response
 	 */
 	deleteReaction(messageID, reactionType, user_id) {
-		this._checkInitialized();
+		this._checkActive();
 		if (!reactionType || !messageID) {
 			throw Error(
 				'Deleting a reaction requires specifying both the message and reaction type',
@@ -274,7 +276,7 @@ export class Channel {
 	}
 
 	sendAction(messageID, formData) {
-		this._checkInitialized();
+		this._checkActive();
 		if (!messageID) {
 			throw Error(`Message id is missing`);
 		}
@@ -294,6 +296,7 @@ export class Channel {
 	 *  Call this on every keystroke
 	 */
 	async keystroke() {
+		if (!this._checkActive()) return;
 		if (!this.getConfig().typing_events) {
 			return;
 		}
@@ -314,6 +317,7 @@ export class Channel {
 	 * stopTyping - Sets last typing to null and sends the typing.stop event
 	 */
 	async stopTyping() {
+		if (!this._checkActive()) return;
 		if (!this.getConfig().typing_events) {
 			return;
 		}
@@ -355,7 +359,9 @@ export class Channel {
 	 * @return {Promise} Description
 	 */
 	async markRead(data = {}) {
-		this._checkInitialized();
+		if (!this._checkActive()) {
+			return;
+		}
 
 		if (!this.getConfig().read_events) {
 			return Promise.resolve(null);
@@ -491,7 +497,7 @@ export class Channel {
 	 * @return {date}
 	 */
 	lastRead() {
-		this._checkInitialized();
+		this._checkActive();
 		return this.state.read[this.getClient().userID]
 			? this.state.read[this.getClient().userID].last_read
 			: null;
@@ -575,6 +581,7 @@ export class Channel {
 	 */
 	async query(options) {
 		// Make sure we wait for the connect promise if there is a pending one
+		if (this.passive) return;
 		await this.getClient().wsPromise;
 
 		let queryURL = `${this.getClient().baseURL}/channels/${this.type}`;
@@ -614,7 +621,7 @@ export class Channel {
 	 * @returns {Promise<*>}
 	 */
 	async banUser(targetUserID, options) {
-		this._checkInitialized();
+		this._checkActive();
 		return await this.getClient().banUser(targetUserID, {
 			...options,
 			type: this.type,
@@ -629,7 +636,7 @@ export class Channel {
 	 * @returns {Promise<*>}
 	 */
 	async hide(userId = null) {
-		this._checkInitialized();
+		this._checkActive();
 		return await this.getClient().post(`${this._channelURL()}/hide`, {
 			user_id: userId,
 		});
@@ -642,7 +649,7 @@ export class Channel {
 	 * @returns {Promise<*>}
 	 */
 	async show(userId = null) {
-		this._checkInitialized();
+		this._checkActive();
 		return await this.getClient().post(`${this._channelURL()}/show`, {
 			user_id: userId,
 		});
@@ -655,7 +662,7 @@ export class Channel {
 	 * @returns {Promise<*>}
 	 */
 	async unbanUser(targetUserID) {
-		this._checkInitialized();
+		this._checkActive();
 		return await this.getClient().unbanUser(targetUserID, {
 			type: this.type,
 			id: this.id,
@@ -701,7 +708,7 @@ export class Channel {
 	 *
 	 */
 	off(callbackOrString, callbackOrNothing) {
-		this._checkInitialized();
+		this._checkActive();
 		const key = callbackOrNothing ? callbackOrString : 'all';
 		const valid = isValidEventType(key);
 		if (!valid) {
@@ -812,12 +819,16 @@ export class Channel {
 		return channelURL;
 	};
 
-	_checkInitialized() {
+	_checkActive() {
+		if (this.passive) return false;
+
 		if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
 			throw Error(
 				`Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
 			);
 		}
+
+		return true;
 	}
 
 	_initializeState(state) {

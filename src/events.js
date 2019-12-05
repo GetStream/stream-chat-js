@@ -30,6 +30,7 @@ export const EVENT_MAP = {
 	// local events
 	'connection.changed': true,
 	'connection.recovered': true,
+	'connection.established': true,
 };
 
 export function isValidEventType(eventType) {

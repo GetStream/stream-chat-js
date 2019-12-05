@@ -213,7 +213,6 @@ export class StreamChat {
 		}
 		this._setUser(user);
 		this.anonymous = false;
-
 		return this._setupConnection();
 	}
 
@@ -787,6 +786,12 @@ export class StreamChat {
 		});
 
 		const handshake = await this.wsConnection.connect();
+		if (handshake) {
+			this.dispatchEvent({
+				type: 'connection.established',
+			});
+		}
+
 		this.connectionID = this.wsConnection.connectionID;
 		return handshake;
 	}
@@ -963,7 +968,7 @@ export class StreamChat {
 	 *
 	 * @return {channel} The channel object, initialize it using channel.watch()
 	 */
-	channel(channelType, channelID, custom = {}) {
+	channel(channelType, channelID, custom = {}, passive = false) {
 		if (!this.userID && !this._isUsingServerAuth()) {
 			throw Error('Call setUser or setAnonymousUser before creating a channel');
 		}
@@ -995,16 +1000,17 @@ export class StreamChat {
 			const cid = `${channelType}:${channelID}`;
 			if (cid in this.activeChannels) {
 				channel = this.activeChannels[cid];
+				channel.passive = passive;
 				if (Object.keys(custom).length > 0) {
 					channel.data = custom;
 					channel._data = custom;
 				}
 			} else {
-				channel = new Channel(this, channelType, channelID, custom);
+				channel = new Channel(this, channelType, channelID, custom, passive);
 				this.activeChannels[channel.cid] = channel;
 			}
 		} else {
-			channel = new Channel(this, channelType, undefined, custom);
+			channel = new Channel(this, channelType, undefined, custom, passive);
 		}
 
 		return channel;
