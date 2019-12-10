@@ -2461,6 +2461,28 @@ describe('Chat', function() {
 			const channels = await client.queryChannels({ id: channelID });
 			expect(channels).to.have.length(1);
 		});
+
+		context('When hide channel with remove messages', function() {
+			const channelID = 'fuckingtest';
+			const userID = 'fuckinguser';
+
+			before(async function() {
+				client = await getTestClientForUser(userID, 'test', { color: 'green' });
+				channel = client.channel('team', channelID, { members: [userID] });
+				await channel.watch();
+				await channel.sendMessage({ text: 'channel hide test' });
+				await sleep(1000);
+			});
+
+			it('removes messages', async function() {
+				await channel.hide(userID, true);
+				await channel.show();
+
+				const channels = await client.queryChannels({ id: channelID });
+				expect(channels).to.have.length(1);
+				expect(channels[0].state.messages).to.have.length(0);
+			});
+		});
 	});
 
 	describe('Moderation', function() {

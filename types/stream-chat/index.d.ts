@@ -342,7 +342,7 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
-  hide(userId?: string): Promise<APIResponse>;
+  hide(userId?: string, clearHistory?: bool): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
 }
 
