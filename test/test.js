@@ -2463,24 +2463,39 @@ describe('Chat', function() {
 		});
 
 		context('When hide channel with remove messages', function() {
-			const channelID = 'fuckingtest';
-			const userID = 'fuckinguser';
+			const channelID = uuidv4();
+			const userID = uuidv4();
+
+			let event;
 
 			before(async function() {
 				client = await getTestClientForUser(userID, 'test', { color: 'green' });
 				channel = client.channel('team', channelID, { members: [userID] });
 				await channel.watch();
+
 				await channel.sendMessage({ text: 'channel hide test' });
-				await sleep(1000);
+
+				event = new Promise(resolve => {
+					channel.on('channel.hidden', event => {
+						if (event.clear_history) {
+							resolve();
+						}
+					});
+				});
+
+				await channel.hide(userID, true);
+
+				await channel.show();
 			});
 
 			it('removes messages', async function() {
-				await channel.hide(userID, true);
-				await channel.show();
-
 				const channels = await client.queryChannels({ id: channelID });
 				expect(channels).to.have.length(1);
 				expect(channels[0].state.messages).to.have.length(0);
+			});
+
+			it('receives event', async function() {
+				expect(event).to.be.fulfilled;
 			});
 		});
 	});
