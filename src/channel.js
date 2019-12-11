@@ -684,16 +684,10 @@ export class Channel {
 	async hide(userId = null, clearHistory = false) {
 		this._checkInitialized();
 
-		return await this.getClient()
-			.post(`${this._channelURL()}/hide`, {
-				user_id: userId,
-				clear_history: clearHistory,
-			})
-			.then(() => {
-				if (clearHistory) {
-					this.state.clearMessages();
-				}
-			});
+		return await this.getClient().post(`${this._channelURL()}/hide`, {
+			user_id: userId,
+			clear_history: clearHistory,
+		});
 	}
 
 	/**
