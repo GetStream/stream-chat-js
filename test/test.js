@@ -638,6 +638,14 @@ describe('Chat', function() {
 				{
 					attachments: { $exists: false },
 				},
+				{
+					sort: [
+						{
+							field: 'created_at',
+							direction: -1,
+						},
+					],
+				},
 			);
 			expect(response.results.length).to.equal(2);
 			expect(response.results[0].message.text).to.equal('3');
@@ -669,6 +677,58 @@ describe('Chat', function() {
 			);
 			expect(response.results.length).to.equal(2);
 		});
+
+		it('Query with asc sort', async function() {
+			// add a very special message
+			const channel = authClient.channel('messaging', 'poppins');
+			await channel.create();
+			const keyword = 'sdfsdfdsfeerere';
+			await channel.sendMessage({ text: `${keyword} 1` });
+			await channel.sendMessage({ text: `${keyword} 2` });
+
+			const filters = { type: 'messaging' };
+			const sort = [
+				{
+					field: 'created_at',
+					direction: 1,
+				},
+			];
+
+			const response = await authClient.search(filters, keyword, {
+				limit: 2,
+				offset: 0,
+				sort,
+			});
+			expect(response.results.length).to.equal(2);
+			expect(response.results[0].message.text).to.eq(`${keyword} 1`);
+			expect(response.results[1].message.text).to.eq(`${keyword} 2`);
+		});
+	});
+
+	it('Query with desc sort', async function() {
+		// add a very special message
+		const channel = authClient.channel('messaging', 'poppins');
+		await channel.create();
+		const keyword = 'sdfsdfdsfeerere';
+		await channel.sendMessage({ text: `${keyword} 1` });
+		await channel.sendMessage({ text: `${keyword} 2` });
+
+		const filters = { type: 'messaging' };
+		const sort = [
+			{
+				field: 'created_at',
+				direction: -1,
+			},
+		];
+
+		const response = await authClient.search(filters, keyword, {
+			limit: 2,
+			offset: 0,
+			sort,
+		});
+		expect(response.results.length).to.equal(2);
+		expect(response.results[0].message.text).to.eq(`${keyword} 2`);
+		expect(response.results[1].message.text).to.eq(`${keyword} 1`);
 	});
 
 	describe('Server Side Integration', function() {
