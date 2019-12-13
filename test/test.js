@@ -2488,14 +2488,18 @@ describe('Chat', function() {
 				await channel.show();
 			});
 
-			it('removes messages', async function() {
+			it('receives event', function() {
+				return expect(event).to.be.fulfilled;
+			});
+
+			it('removes messages for the channel', function() {
+				expect(channel.state.messages).to.have.length(0);
+			});
+
+			it('removes messages for query channels', async function() {
 				const channels = await client.queryChannels({ id: channelID });
 				expect(channels).to.have.length(1);
 				expect(channels[0].state.messages).to.have.length(0);
-			});
-
-			it('receives event', async function() {
-				expect(event).to.be.fulfilled;
 			});
 		});
 	});
