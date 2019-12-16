@@ -1,3 +1,7 @@
+## December 16, 2019 - 1.2.2
+
+- Handling `channel.hidden` event
+
 ## December 3, 2019 - 1.2.1
 
 - Handling `channel.truncated` event
