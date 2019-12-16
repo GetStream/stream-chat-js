@@ -321,6 +321,7 @@ describe('Chat', function() {
 				);
 				let bannedUserFound = false;
 				bannedUsers.users.forEach(function(user) {
+					expect(user.banned).to.be.true;
 					if (user.id === banned) {
 						bannedUserFound = true;
 					}
