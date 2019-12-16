@@ -81,10 +81,9 @@ export class Channel {
 	 */
 
 	async sendMessage(message) {
-		const data = await this.getClient().post(this._channelURL() + '/message', {
+		return await this.getClient().post(this._channelURL() + '/message', {
 			message,
 		});
-		return data;
 	}
 
 	sendFile(uri, name, contentType, user) {
@@ -124,11 +123,9 @@ export class Channel {
 	 */
 	async sendEvent(event) {
 		this._checkInitialized();
-		const data = await this.getClient().post(this._channelURL() + '/event', {
+		return await this.getClient().post(this._channelURL() + '/event', {
 			event,
 		});
-
-		return data;
 	}
 
 	/**
@@ -153,11 +150,10 @@ export class Channel {
 		if (user_id != null) {
 			body.reaction = { ...reaction, user: { id: user_id } };
 		}
-		const data = await this.getClient().post(
+		return await this.getClient().post(
 			this.getClient().baseURL + `/messages/${messageID}/reaction`,
 			body,
 		);
-		return data;
 	}
 
 	/**
@@ -209,8 +205,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async delete() {
-		const data = await this.getClient().delete(this._channelURL());
-		return data;
+		return await this.getClient().delete(this._channelURL());
 	}
 
 	/**
@@ -219,8 +214,7 @@ export class Channel {
 	 * @return {object} The server response
 	 */
 	async truncate() {
-		const data = await this.getClient().post(this._channelURL() + '/truncate');
-		return data;
+		return await this.getClient().post(this._channelURL() + '/truncate');
 	}
 
 	/**
@@ -423,11 +417,9 @@ export class Channel {
 			return Promise.resolve(null);
 		}
 
-		const response = await this.getClient().post(this._channelURL() + '/read', {
+		return await this.getClient().post(this._channelURL() + '/read', {
 			...data,
 		});
-
-		return response;
 	}
 
 	/**
@@ -539,13 +531,12 @@ export class Channel {
 	 * @return {object} Server response
 	 */
 	async getReactions(message_id, options) {
-		const data = await this.getClient().get(
+		return await this.getClient().get(
 			this.getClient().baseURL + `/messages/${message_id}/reactions`,
 			{
 				...options,
 			},
 		);
-		return data;
 	}
 
 	/**
@@ -603,10 +594,8 @@ export class Channel {
 				continue;
 			}
 			if (m.created_at > lastRead) {
-				if (
-					m.mentioned_users.map(u => u.id).indexOf(this.getClient().userID) !==
-					-1
-				) {
+				const userID = this.getClient().userID;
+				if (m.mentioned_users.findIndex(u => u.id === userID) !== -1) {
 					count++;
 				}
 			}
@@ -617,7 +606,7 @@ export class Channel {
 	/**
 	 * create - Creates a new channel
 	 *
-	 * @return {type} The Server Reponse
+	 * @return {type} The Server Response
 	 */
 	create = async () => {
 		const options = {
@@ -819,6 +808,9 @@ export class Channel {
 			case 'message.deleted':
 				s.addMessageSorted(event.message);
 				break;
+			case 'channel.truncated':
+				s.messages = Immutable([]);
+				break;
 			case 'member.added':
 			case 'member.updated':
 				s.members = s.members.set(event.member.user_id, Immutable(event.member));
@@ -870,8 +862,7 @@ export class Channel {
 		if (!this.id) {
 			throw new Error('channel id is not defined');
 		}
-		const channelURL = `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
-		return channelURL;
+		return `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
 	};
 
 	_checkInitialized() {
