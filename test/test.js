@@ -1371,7 +1371,7 @@ describe('Chat', function() {
 				const data = await channel.sendMessage({ text });
 			});
 
-			it('Enrichment', async function() {
+			it.skip('Enrichment', async function() {
 				const text =
 					'this youtube link is awesome https://www.youtube.com/watch?v=Q0CbN8sfihY';
 				const data = await channel.sendMessage({ text });
