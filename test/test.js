@@ -1582,7 +1582,6 @@ describe('Chat', function() {
 				};
 
 				users[i] = (await serverAuthClient.updateUser(user)).users[username(i)];
-				users[i].banned = false;
 				userMap[username(i)] = users[i];
 			}
 		});
