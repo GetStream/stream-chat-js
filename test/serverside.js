@@ -1304,6 +1304,7 @@ describe('App configs', function() {
 			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
+				messageID: 'very-fake-message',
 				firebaseTemplate: '{"id": "{{message.id}}"}',
 			});
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
@@ -1317,6 +1318,7 @@ describe('App configs', function() {
 			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
+				messageID: 'very-fake-message',
 				firebaseDataTemplate: '{"id": "{{message.id}}"}',
 			});
 
