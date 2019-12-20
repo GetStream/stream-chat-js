@@ -698,7 +698,7 @@ export class StreamChat {
 			},
 		);
 		this.connectionID = this.wsConnection.connectionID;
-		const cids = Object.keys(this.activeChannels || {});
+		const cids = Object.keys(this.activeChannels);
 		const lastMessageIDs = {};
 		for (const c of Object.values(this.activeChannels)) {
 			const lastMessage = c.lastMessage();
@@ -992,7 +992,7 @@ export class StreamChat {
 
 		// support channel("messaging", {options})
 		if (typeof channelID === 'object' && arguments.length === 2) {
-			return new Channel(this, channelType, undefined, channelID || {});
+			return new Channel(this, channelType, undefined, channelID);
 		}
 
 		if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
