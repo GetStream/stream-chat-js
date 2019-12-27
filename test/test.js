@@ -640,8 +640,8 @@ describe('Chat', function() {
 				},
 			);
 			expect(response.results.length).to.equal(2);
-			expect(response.results[0].message.text).to.equal('3');
-			expect(response.results[1].message.text).to.equal('1');
+			expect(response.results[0].message.text).to.equal('1');
+			expect(response.results[1].message.text).to.equal('3');
 		});
 
 		it('Query without $q', async function() {
