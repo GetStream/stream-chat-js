@@ -186,8 +186,8 @@ export class Channel {
 	/**
 	 * update - Edit the channel's custom properties
 	 *
-	 * @param {object} custom The object to update the custom properties of this channel with
-	 *
+	 * @param {object} channelData The object to update the custom properties of this channel with
+	 * @param {object} updateMessage Optional message object for channel members notification
 	 * @return {type} The server response
 	 */
 	async update(channelData, updateMessage) {
@@ -200,7 +200,7 @@ export class Channel {
 	}
 
 	/**
-	 * delete - Delete the channel.. Messages are permanently removed.
+	 * delete - Delete the channel. Messages are permanently removed.
 	 *
 	 * @return {object} The server response
 	 */
@@ -217,6 +217,13 @@ export class Channel {
 		return await this.getClient().post(this._channelURL() + '/truncate');
 	}
 
+	/**
+	 * acceptInvite - accept invitation to the channel
+	 *
+	 * @param {object} options The object to update the custom properties of this channel with
+	 *
+	 * @return {type} The server response
+	 */
 	async acceptInvite(options = {}) {
 		const data = await this.getClient().post(this._channelURL(), {
 			accept_invite: true,
@@ -226,6 +233,13 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * acceptInvite - reject invitation to the channel
+	 *
+	 * @param {object} options The object to update the custom properties of this channel with
+	 *
+	 * @return {type} The server response
+	 */
 	async rejectInvite(options = {}) {
 		const data = await this.getClient().post(this._channelURL(), {
 			reject_invite: true,
@@ -235,41 +249,81 @@ export class Channel {
 		return data;
 	}
 
-	async addMembers(members) {
+	/**
+	 * addMembers - add members to the channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
+	async addMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_members: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
 	}
 
-	async addModerators(members) {
+	/**
+	 * addModerators - add moderators to the channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
+	async addModerators(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			add_moderators: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
 	}
 
-	async inviteMembers(members) {
+	/**
+	 * inviteMembers - invite members to the channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
+	async inviteMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			invites: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
 	}
 
-	async removeMembers(members) {
+	/**
+	 * removeMembers - remove members from channel
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
+	async removeMembers(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			remove_members: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
 	}
 
-	async demoteModerators(members) {
+	/**
+	 * demoteModerators - remove moderator role from channel members
+	 *
+	 * @param {array} members An array of member identifiers
+	 * @param {object} message Optional message object for channel members notification
+	 * @return {type} The server response
+	 */
+	async demoteModerators(members, message) {
 		const data = await this.getClient().post(this._channelURL(), {
 			demote_moderators: members,
+			message,
 		});
 		this.data = data.channel;
 		return data;
@@ -552,7 +606,7 @@ export class Channel {
 	/**
 	 * create - Creates a new channel
 	 *
-	 * @return {type} The Server Reponse
+	 * @return {type} The Server Response
 	 */
 	create = async () => {
 		const options = {
@@ -621,14 +675,18 @@ export class Channel {
 
 	/**
 	 * hides the channel from queryChannels for the user until a message is added
+	 * If clearHistory is set to true - all messages will be removed for the user
 	 *
 	 * @param userId
+	 * @param clearHistory
 	 * @returns {Promise<*>}
 	 */
-	async hide(userId = null) {
+	async hide(userId = null, clearHistory = false) {
 		this._checkInitialized();
+
 		return await this.getClient().post(`${this._channelURL()}/hide`, {
 			user_id: userId,
+			clear_history: clearHistory,
 		});
 	}
 
@@ -754,6 +812,9 @@ export class Channel {
 			case 'message.deleted':
 				s.addMessageSorted(event.message);
 				break;
+			case 'channel.truncated':
+				s.clearMessages();
+				break;
 			case 'member.added':
 			case 'member.updated':
 				s.members = s.members.set(event.member.user_id, Immutable(event.member));
@@ -769,6 +830,11 @@ export class Channel {
 				break;
 			case 'reaction.deleted':
 				s.removeReaction(event.reaction, event.message);
+				break;
+			case 'channel.hidden':
+				if (event.clear_history) {
+					s.clearMessages();
+				}
 				break;
 			default:
 		}

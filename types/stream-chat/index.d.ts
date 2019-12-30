@@ -84,6 +84,7 @@ export type MemberUpdatedEvent = 'member.updated';
 export type MemberRemovedEvent = 'member.removed';
 export type ChannelUpdatedEvent = 'channel.updated';
 export type ChannelDeletedEvent = 'channel.deleted';
+export type ChannelTruncatedEvent = 'channel.truncated';
 export type HealthCheckEvent = 'health.check';
 export type NotificationNewMessageEvent = 'notification.message_new';
 export type NotificationMarkReadEvent = 'notification.mark_read';
@@ -317,10 +318,10 @@ export class Channel {
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
 
-  addMembers(members: string[]): Promise<AddMembersAPIResponse>;
+  addMembers(members: string[], message?: Message): Promise<AddMembersAPIResponse>;
   addModerators(members: string[]): Promise<AddModeratorsAPIResponse>;
   inviteMembers(members: string[]): Promise<AddMembersAPIResponse>;
-  removeMembers(members: string[]): Promise<RemoveMembersAPIResponse>;
+  removeMembers(members: string[], message?: Message): Promise<RemoveMembersAPIResponse>;
   demoteModerators(members: string[]): Promise<RemoteModeratorsAPIResponse>;
 
   sendAction(messageID: string, formData: object): Promise<SendMessageAPIResponse>;
@@ -341,7 +342,7 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
-  hide(userId?: string): Promise<APIResponse>;
+  hide(userId?: string, clearHistory?: bool): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
 }
 
