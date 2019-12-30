@@ -302,4 +302,8 @@ export class ChannelState {
 			}
 		}
 	}
+
+	clearMessages() {
+		this.messages = Immutable([]);
+	}
 }
