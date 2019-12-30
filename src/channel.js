@@ -606,7 +606,7 @@ export class Channel {
 	/**
 	 * create - Creates a new channel
 	 *
-	 * @return {type} The Server Reponse
+	 * @return {type} The Server Response
 	 */
 	create = async () => {
 		const options = {
@@ -675,14 +675,18 @@ export class Channel {
 
 	/**
 	 * hides the channel from queryChannels for the user until a message is added
+	 * If clearHistory is set to true - all messages will be removed for the user
 	 *
 	 * @param userId
+	 * @param clearHistory
 	 * @returns {Promise<*>}
 	 */
-	async hide(userId = null) {
+	async hide(userId = null, clearHistory = false) {
 		this._checkInitialized();
+
 		return await this.getClient().post(`${this._channelURL()}/hide`, {
 			user_id: userId,
+			clear_history: clearHistory,
 		});
 	}
 
@@ -808,6 +812,9 @@ export class Channel {
 			case 'message.deleted':
 				s.addMessageSorted(event.message);
 				break;
+			case 'channel.truncated':
+				s.clearMessages();
+				break;
 			case 'member.added':
 			case 'member.updated':
 				s.members = s.members.set(event.member.user_id, Immutable(event.member));
@@ -823,6 +830,11 @@ export class Channel {
 				break;
 			case 'reaction.deleted':
 				s.removeReaction(event.reaction, event.message);
+				break;
+			case 'channel.hidden':
+				if (event.clear_history) {
+					s.clearMessages();
+				}
 				break;
 			default:
 		}

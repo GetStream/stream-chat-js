@@ -6,10 +6,14 @@ import {
 	expectHTTPErrorCode,
 	getTestClient,
 	getTestClientForUser,
+	getServerTestClient,
 } from './utils';
 import chai from 'chai';
+import chaiAsPromised from 'chai-as-promised';
 
 const expect = chai.expect;
+
+chai.use(chaiAsPromised);
 
 if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
@@ -21,6 +25,72 @@ Promise.config({
 	warnings: {
 		wForgottenReturn: false,
 	},
+});
+
+describe('Channels - Constructor', function() {
+	const client = getServerTestClient();
+
+	it('canonical form', function(done) {
+		const channel = client.channel('messaging', '123', { cool: true });
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		expect(channel.data).to.eql({ cool: true });
+		done();
+	});
+
+	it('default options', function(done) {
+		const channel = client.channel('messaging', '123');
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		done();
+	});
+
+	it('null ID no options', function(done) {
+		const channel = client.channel('messaging', null);
+		expect(channel.id).to.eq(undefined);
+		done();
+	});
+
+	it('undefined ID no options', function(done) {
+		const channel = client.channel('messaging', undefined);
+		expect(channel.id).to.eql(undefined);
+		expect(channel.data).to.eql({});
+		done();
+	});
+
+	it('short version with options', function(done) {
+		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('null ID with options', function(done) {
+		const channel = client.channel('messaging', null, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function(done) {
+		const channel = client.channel('messaging', '', {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function(done) {
+		const channel = client.channel('messaging', undefined, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
 });
 
 describe('Channels - Create', function() {
@@ -470,9 +540,9 @@ describe('Channels - Distinct channels', function() {
 	});
 
 	it('create a distinct channel with 2 members should succeed', async function() {
-		distinctChannel = thierryClient.channel(channelGroup, '', {
+		distinctChannel = thierryClient.channel(channelGroup, null, {
 			members: [tommasoID, thierryID],
-			unique: unique,
+			unique,
 		});
 		await distinctChannel.create();
 	});
@@ -480,7 +550,7 @@ describe('Channels - Distinct channels', function() {
 	it('query previous created distinct channel', async function() {
 		const channels = await thierryClient.queryChannels({
 			members: [tommasoID, thierryID],
-			unique: unique,
+			unique,
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].data.unique).to.be.equal(unique);

@@ -2,6 +2,7 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat } from '../src';
 import { expectHTTPErrorCode } from './utils';
@@ -24,6 +25,7 @@ import uuidv4 from 'uuid/v4';
 const expect = chai.expect;
 chai.use(assertArrays);
 chai.use(chaiAsPromised);
+chai.use(chaiLike);
 
 if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
@@ -319,6 +321,7 @@ describe('Chat', function() {
 				);
 				let bannedUserFound = false;
 				bannedUsers.users.forEach(function(user) {
+					expect(user.banned).to.be.true;
 					if (user.id === banned) {
 						bannedUserFound = true;
 					}
@@ -1368,7 +1371,7 @@ describe('Chat', function() {
 				const data = await channel.sendMessage({ text });
 			});
 
-			it('Enrichment', async function() {
+			it.skip('Enrichment', async function() {
 				const text =
 					'this youtube link is awesome https://www.youtube.com/watch?v=Q0CbN8sfihY';
 				const data = await channel.sendMessage({ text });
@@ -2458,6 +2461,47 @@ describe('Chat', function() {
 			await channel.show();
 			const channels = await client.queryChannels({ id: channelID });
 			expect(channels).to.have.length(1);
+		});
+
+		context('When hide channel with remove messages', function() {
+			const channelID = uuidv4();
+			const userID = uuidv4();
+
+			let event;
+
+			before(async function() {
+				client = await getTestClientForUser(userID, 'test', { color: 'green' });
+				channel = client.channel('team', channelID, { members: [userID] });
+				await channel.watch();
+
+				await channel.sendMessage({ text: 'channel hide test' });
+
+				event = new Promise(resolve => {
+					channel.on('channel.hidden', event => {
+						if (event.clear_history) {
+							resolve();
+						}
+					});
+				});
+
+				await channel.hide(userID, true);
+
+				await channel.show();
+			});
+
+			it('receives event', function() {
+				return expect(event).to.be.fulfilled;
+			});
+
+			it('removes messages for the channel', function() {
+				expect(channel.state.messages).to.have.length(0);
+			});
+
+			it('removes messages for query channels', async function() {
+				const channels = await client.queryChannels({ id: channelID });
+				expect(channels).to.have.length(1);
+				expect(channels[0].state.messages).to.have.length(0);
+			});
 		});
 	});
 

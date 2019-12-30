@@ -1364,10 +1364,11 @@ describe('App configs', function() {
 			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
-				firebaseTemplate: '{}',
+				messageID: 'very-fake-message',
+				firebaseTemplate: '{"id": "{{message.id}}"}',
 			});
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
-			expect(firebaseMsg.notification).to.be.empty;
+			expect(firebaseMsg.notification.id).to.be.equal('very-fake-message');
 		});
 
 		it('Good data template', async function() {
@@ -1377,10 +1378,12 @@ describe('App configs', function() {
 			await client.addDevice(deviceID, 'apn', userID);
 
 			const response = await client.testPushSettings(userID, {
-				firebaseDataTemplate: '{}',
+				messageID: 'very-fake-message',
+				firebaseDataTemplate: '{"id": "{{message.id}}"}',
 			});
+
 			const firebaseMsg = JSON.parse(response.rendered_firebase_template);
-			expect(firebaseMsg.notification).to.be.empty;
+			expect(firebaseMsg.data.id).to.be.equal('very-fake-message');
 		});
 
 		it('All good', async function() {
