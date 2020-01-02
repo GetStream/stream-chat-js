@@ -7,4 +7,5 @@ node_js:
 install:
   - yarn
   - yarn lint
+  # - yarn dtslint # enable after https://github.com/GetStream/stream-chat-js/issues/210
   - yarn test
