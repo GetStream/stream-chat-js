@@ -1,5 +1,5 @@
 import {
-  ConnectAPIReponse,
+  ConnectAPIResponse,
   SearchAPIResponse,
   UpdateUsersAPIResponse,
   BanUserAPIResponse,
@@ -1036,7 +1036,7 @@ export const removeMembersResponse: RemoveMembersAPIResponse = {
   members: [],
   duration: '14.56ms',
 };
-export const setUserResponse: ConnectAPIReponse = {
+export const setUserResponse: ConnectAPIResponse = {
   connection_id: '26a33f44-a679-43e9-8e71-c90014f9866e',
   cid: '*',
   type: 'health.check',
