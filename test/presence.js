@@ -34,7 +34,7 @@ Promise.config({
 	},
 });
 
-describe('Presence', function() {
+describe.only('Presence', function() {
 	let user1Client;
 	let sarahID;
 	let paulID;
@@ -303,7 +303,7 @@ describe('Presence', function() {
 		});
 
 		// Invisible user support
-		it.skip('Invisible', function(done) {
+		it('Invisible', function(done) {
 			user1Client.on('user.presence.changed', event => {
 				expect(event.user.id).to.equal('sandra');
 				expect(event.user.status).to.equal('going to be invisible');
