@@ -82,12 +82,71 @@ export function UserFromToken(token) {
 	return data.user_id;
 }
 
-function encodeBase64(s) {
-	if (typeof window !== 'undefined' && window.btoa) {
-		return window.btoa(s);
-	} else {
-		return Buffer.from(s.toString(), 'binary').toString('base64');
+/**
+ * Credit: https://github.com/mathiasbynens/base64
+ *
+ * `encode` is designed to be fully compatible with `btoa` as described in the
+ * HTML Standard: http://whatwg.org/html/webappapis.html#dom-windowbase64-btoa
+ *
+ * @param {*} input
+ *
+ * @return {string}
+ */
+function encodeBase64(input) {
+	input = String(input);
+	const TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+	if (/[^\0-\xFF]/.test(input)) {
+		// Note: no need to special-case astral symbols here, as surrogates are
+		// matched, and the input is supposed to only contain ASCII anyway.
+		throw Error(
+			'The string to be encoded contains characters outside of the ' +
+				'Latin1 range.',
+		);
 	}
+	const padding = input.length % 3;
+	const outputArray = [];
+	let position = -1;
+	let a;
+	let b;
+	let c;
+	let buffer;
+	// Make sure any padding is handled outside of the loop.
+	const length = input.length - padding;
+
+	while (++position < length) {
+		// Read three bytes, i.e. 24 bits.
+		a = input.charCodeAt(position) << 16;
+		b = input.charCodeAt(++position) << 8;
+		c = input.charCodeAt(++position);
+		buffer = a + b + c;
+		// Turn the 24 bits into four chunks of 6 bits each, and append the
+		// matching character for each of them to the output.
+		outputArray.push(
+			TABLE.charAt((buffer >> 18) & 0x3f) +
+				TABLE.charAt((buffer >> 12) & 0x3f) +
+				TABLE.charAt((buffer >> 6) & 0x3f) +
+				TABLE.charAt(buffer & 0x3f),
+		);
+	}
+
+	if (padding === 2) {
+		a = input.charCodeAt(position) << 8;
+		b = input.charCodeAt(++position);
+		buffer = a + b;
+		outputArray.push(
+			TABLE.charAt(buffer >> 10) +
+				TABLE.charAt((buffer >> 4) & 0x3f) +
+				TABLE.charAt((buffer << 2) & 0x3f) +
+				'=',
+		);
+	} else if (padding === 1) {
+		buffer = input.charCodeAt(position);
+		outputArray.push(
+			TABLE.charAt(buffer >> 2) + TABLE.charAt((buffer << 4) & 0x3f) + '==',
+		);
+	}
+
+	return outputArray.join('');
 }
 
 /**
