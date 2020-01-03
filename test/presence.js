@@ -313,7 +313,7 @@ describe('Presence', function() {
 			async function runTest() {
 				// create a channel where channel.members contains wendy
 				const b = user1Client.channel('messaging', 'bird-box', {
-					members: ['sandra', 'sarah', 'user1'],
+					members: ['sandra', sarahID, 'user1'],
 				});
 				await b.watch({ presence: true });
 				// sandra goes online should trigger an event
