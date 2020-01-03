@@ -10,6 +10,8 @@ const executables = [
 	{ f: rg.setUser, type: 'ConnectAPIResponse' },
 	{ f: rg.channelSearch, type: 'SearchAPIResponse' },
 	{ f: rg.updateUsers, type: 'UpdateUsersAPIResponse' },
+	{ f: rg.partialUpdateUser, type: 'UpdateUsersAPIResponse' },
+	{ f: rg.partialUpdateUsers, type: 'UpdateUsersAPIResponse' },
 	{ f: rg.banUsers, type: 'BanUserAPIResponse' },
 	{ f: rg.unbanUsers, type: 'UnbanUserAPIResponse' },
 	{ f: rg.muteUser, type: 'MuteAPIResponse' },
