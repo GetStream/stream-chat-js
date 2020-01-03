@@ -34,7 +34,7 @@ Promise.config({
 	},
 });
 
-describe.only('Presence', function() {
+describe('Presence', function() {
 	let user1Client;
 	let sarahID;
 	let paulID;
