@@ -342,7 +342,7 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
-  hide(userId?: string, clearHistory?: bool): Promise<APIResponse>;
+  hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
 }
 
@@ -430,6 +430,10 @@ export function UserFromToken(token: string): string;
 export function DevToken(userId: string): string;
 
 export function CheckSignature(body: any, secret: string, signature: string): boolean;
+
+export function encodeBase64(s: string): string;
+
+export function decodeBase64(s: string): string;
 
 export function isValidEventType(eventType: string): boolean;
 
