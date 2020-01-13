@@ -1,6 +1,5 @@
 // import * as uuidv4 from 'uuid/v4';
 const uuidv4 = require('uuid/v4');
-const fs = require('fs');
 const utils = require('../utils');
 
 async function banUsers() {
