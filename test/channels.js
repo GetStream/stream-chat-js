@@ -1164,3 +1164,52 @@ describe('query channels members $nin', function() {
 		}
 	});
 });
+
+describe('Query channels using last_updated', function() {
+	const CHANNELS_ORDER = [1, 2, 0];
+	const NUM_OF_CHANNELS = CHANNELS_ORDER.length;
+	const CHANGED_CHANNEL = 1;
+
+	const creator = uuidv4();
+	let channels = [];
+	let client;
+
+	before(async function() {
+		client = await getTestClientForUser(creator);
+		await createUsers([creator]);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			const channel = client.channel('messaging', 'channelme_' + uuidv4());
+			await channel.create();
+			channels.push(channel);
+		}
+
+		await channels[CHANGED_CHANNEL].sendMessage({ text: 'Test Message' });
+	});
+
+	it('with the parameter', async function() {
+		let list = await client.queryChannels();
+
+		expect(list.length).equal(channels.length);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			expect(list[i].cid).equal(channels[CHANNELS_ORDER[i]].cid);
+		}
+	});
+
+	it('without parameters', async function() {
+		let list = await client.queryChannels({}, { last_updated: -1 });
+
+		expect(list.length).equal(channels.length);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			expect(list[i].cid).equal(channels[CHANNELS_ORDER[i]].cid);
+		}
+	});
+
+	it('filtering by the parameter', async function() {
+		let list = await client.queryChannels({
+			last_updated: channels[0].data.created_at,
+		});
+
+		expect(list.length).equal(1);
+		expect(list[0].cid).equal(channels[0].cid);
+	});
+});
