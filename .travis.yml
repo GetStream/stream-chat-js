@@ -1,8 +1,10 @@
 language: node_js
 
 node_js:
-  - 11
   - 10
+  - 11
+  - 12
+  - 13
 
 install:
   - yarn
