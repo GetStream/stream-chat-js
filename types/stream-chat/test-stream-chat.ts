@@ -7,7 +7,6 @@ import {
 import { ImmutableObject, Immutable } from 'seamless-immutable';
 
 const apiKey = 'apiKey';
-const apiSecret = 'apiSecret';
 // prettier-ignore
 const client = new StreamChat(apiKey, null, { timeout: 3000, logger: (logLevel: string, msg: string, extraData: {}) => {}}); // $ExpectType StreamChat
 

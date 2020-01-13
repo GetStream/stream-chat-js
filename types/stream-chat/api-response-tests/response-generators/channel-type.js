@@ -1,8 +1,5 @@
 const uuidv4 = require('uuid/v4');
-const fs = require('fs');
 const utils = require('../utils');
-
-const johnID = `john-${uuidv4()}`;
 
 async function createChannelType() {
 	const client = utils.getTestClient(true);

@@ -264,7 +264,6 @@ describe('Mark Read All Server Side', function() {
 	const channelID = 'mark-read-ss-' + uuidv4();
 	const client = getTestClient(true);
 	let channel;
-	let message;
 
 	before(async () => {
 		await createUsers([markReadUser.id]);
@@ -273,8 +272,7 @@ describe('Mark Read All Server Side', function() {
 			created_by: channelCreator,
 		});
 		await channel.create();
-		const resp = await channel.sendMessage({ text: 'hi', user: channelCreator });
-		message = resp.message;
+		await channel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
 	it('mark read in server side auth require user or user_id', async function() {
@@ -643,14 +641,13 @@ describe('App configs', function() {
 	const userToken =
 		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZ3V5b24ifQ.c8ofzBnAuW1yVaznCDv0iGeoJQ-csme7kPpIMOjtkso';
 
-	let secretChannel;
 	let channel;
 
 	before(async function() {
 		channel = client.channel('messaging', 'secret-place', {
 			created_by: { id: `${createdById}` },
 		});
-		secretChannel = await channel.create();
+		await channel.create();
 	});
 
 	it('Empty request should not break', async function() {
