@@ -4,7 +4,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
+import { StreamChat, decodeBase64, encodeBase64 } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
@@ -583,6 +583,25 @@ describe('Chat', function() {
 				role: 'admin',
 			});
 			expect(response.users.tommaso.id).to.equal('tommaso');
+		});
+	});
+
+	describe('base64', function() {
+		it('encodes correctly', function() {
+			const testCases = [
+				'vishal',
+				'vishy',
+				'jaap',
+				'eugene',
+				'luke=',
+				'Marcello!?',
+			];
+
+			testCases.forEach(name => {
+				const b64str = encodeBase64(name);
+				const str = decodeBase64(b64str);
+				expect(str).to.equal(name);
+			});
 		});
 	});
 
