@@ -1,8 +1,6 @@
 const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
 
-const johnID = `john-${uuidv4()}`;
-
 async function setUser() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
