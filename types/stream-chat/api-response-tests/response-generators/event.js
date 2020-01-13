@@ -1,5 +1,4 @@
 const uuid4 = require('uuid/v4');
-const fs = require('fs');
 const utils = require('../utils');
 
 const johnID = `john-${uuid4()}`;
