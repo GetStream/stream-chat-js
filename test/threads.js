@@ -24,7 +24,7 @@ if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
 }
 
-Promise = require('bluebird'); // eslint-disable-line no-global-assign
+const Promise = require('bluebird');
 Promise.config({
 	longStackTraces: true,
 	warnings: {
