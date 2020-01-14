@@ -7,7 +7,7 @@ const rg = require('./response-generators/index');
 let countExecutables = 0;
 
 const executables = [
-	{ f: rg.setUser, type: 'ConnectAPIReponse' },
+	{ f: rg.setUser, type: 'ConnectAPIResponse' },
 	{ f: rg.channelSearch, type: 'SearchAPIResponse' },
 	{ f: rg.updateUsers, type: 'UpdateUsersAPIResponse' },
 	{ f: rg.banUsers, type: 'BanUserAPIResponse' },

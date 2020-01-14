@@ -170,7 +170,7 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): Promise<void>;
+  setUser(user: User, userToken: string): Promise<ConnectAPIResponse>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
@@ -621,7 +621,7 @@ export interface DeleteMessageAPIResponse extends APIResponse {
   message: MessageResponse;
 }
 
-export interface ConnectAPIReponse extends Event<HealthCheckEvent> {}
+export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}
 
 export interface ChannelMemberResponse {
   user_id?: string;
