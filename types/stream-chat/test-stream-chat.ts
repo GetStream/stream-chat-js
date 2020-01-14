@@ -18,6 +18,17 @@ client.setBaseURL('https://chat-us-east-1.stream-io-api.com/'); // $ExpectType v
 client.updateAppSettings({}); // $ExpectType Promise<object>
 const currentSettings = client.getAppSettings(); // $ExpectType Promise<object>
 client.disconnect(); // $ExpectType Promise<void>
+const updateRequest = {
+  id: 'vishal',
+  set: {
+    name: 'Awesome',
+  },
+  unset: ['example'],
+};
+
+client.partialUpdateUser(updateRequest); // $ExpectType Promise<UpdateUsersAPIResponse>
+
+client.partialUpdateUsers([updateRequest]); // $ExpectType Promise<UpdateUsersAPIResponse>
 
 client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<void>
 client.setAnonymousUser(); // $ExpectType Promise<void>
@@ -47,6 +58,8 @@ const event = {
       id: 'john',
     },
     created_at: '',
+    updated_at: '',
+    score: 10,
   },
   member: { id: 'john' },
   user: { id: 'john' },

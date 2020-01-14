@@ -222,10 +222,15 @@ export class StreamChat {
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
   removeDevice(deviceId: string, userID?: string): Promise<APIResponse>;
 
-  channel(channelType: string, channelID: string, custom: ChannelData): Channel;
+  channel(channelType: string, channelID: string, custom?: ChannelData): Channel;
 
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
+
+  partialUpdateUser(updateRequest: updateUserRequest): Promise<UpdateUsersAPIResponse>;
+  partialUpdateUsers(
+    updateRequests: updateUserRequest[],
+  ): Promise<UpdateUsersAPIResponse>;
 
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
@@ -255,6 +260,13 @@ export class StreamChat {
   verifyWebhook(requestBody: object, xSignature: string): boolean;
 }
 
+export interface updateUserRequest {
+  id: string;
+  set?: {
+    [key: string]: any;
+  };
+  unset?: string[];
+}
 export class ClientState {
   constructor();
   updateUser(user: User): void;
@@ -332,7 +344,7 @@ export class Channel {
   lastMessage(): Message;
   markRead(): Promise<MarkReadAPIResponse>;
   clean(): void;
-  watch(options: object): Promise<ChannelAPIResponse>;
+  watch(options?: object): Promise<ChannelAPIResponse>;
   query(options: object): Promise<ChannelAPIResponse>;
   stopWatching(): Promise<StopWatchingAPIResponse>;
   getReplies(parent_id: string, options: object): Promise<GetRepliesAPIResponse>;
@@ -706,6 +718,7 @@ export interface ChannelConfigFields {
   message_retention: string;
   max_message_length: number;
   uploads: boolean;
+  url_enrichment: boolean;
   automod: 'disabled' | 'simple' | 'AI';
   automod_behavior: 'flag' | 'block';
 }
