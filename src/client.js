@@ -819,7 +819,7 @@ export class StreamChat {
 		}
 
 		const defaultOptions = {
-			presence: true,
+			presence: false,
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
