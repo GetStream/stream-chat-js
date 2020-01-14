@@ -109,7 +109,7 @@
     "build": "rollup -c",
     "prettier": "npx prettier --list-different '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
-    "test-api-dts": "node types/stream-chat/api-response-tests/index.js && npx prettier --write 'types/stream-chat/api-response-tests/data.ts' .eslintrc.json .prettierrc .babelrc && tsc types/stream-chat/api-response-tests/data.ts && rm types/stream-chat/api-response-tests/data.js",
+    "test-api-dts": "node types/stream-chat/api-response-tests/index.js && npx prettier --write 'types/stream-chat/api-response-tests/data.ts' .eslintrc.json .prettierrc .babelrc && tsc types/stream-chat/api-response-tests/data.ts && rm types/stream-chat/api-response-tests/data.js && dtslint types/stream-chat",
     "eslint": "npx eslint '**/*.{js,md}' --max-warnings 0",
     "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js -- --async-stack-traces",
     "testall": "NODE_ENV=test mocha --exit --timeout 3000 --require @babel/register test/*.js -- --async-stack-traces",

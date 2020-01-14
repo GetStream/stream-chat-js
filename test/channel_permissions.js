@@ -157,16 +157,6 @@ function banUser(ctx, user, responseTest) {
 	};
 }
 
-function banUserCommand(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
-			const channel = client.channel(ctx.channelType, ctx.channelId, {});
-			const message = { text: `/ban @${ctx.scapegoatUser.id} because i said so!` };
-			responseTest(channel.sendMessage(message), done);
-		});
-	};
-}
-
 function changeRole(ctx, user, responseTest) {
 	return function(done) {
 		setupUser(ctx, user, done, client => {

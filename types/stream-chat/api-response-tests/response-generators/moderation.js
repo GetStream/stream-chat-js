@@ -164,14 +164,6 @@ async function unflagMessage() {
 	//flag the user
 	const authClient = utils.getTestClient(true);
 	const serverAuthClient = utils.getTestClient(true);
-	const evilId = uuidv4();
-	const evil = {
-		id: evilId,
-		name: 'Eviluser',
-		status: 'busy',
-		image: 'myimageurl',
-		role: 'user',
-	};
 	const thierry = {
 		id: 'thierry2',
 		name: 'Thierry',
