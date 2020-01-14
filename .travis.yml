@@ -6,7 +6,7 @@ node_js:
   - 12
   - 13
 
-install:
+script:
   - yarn
   - yarn lint
   - yarn test-api-dts
