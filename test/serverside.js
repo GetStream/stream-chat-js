@@ -324,7 +324,6 @@ describe('Send Event Server Side', function() {
 	const channelID = 'events-' + uuidv4();
 	const client = getTestClient(true);
 	let eventChannel;
-	let message;
 
 	before(async () => {
 		await createUsers([eventUser.id]);
@@ -333,8 +332,7 @@ describe('Send Event Server Side', function() {
 			created_by: channelCreator,
 		});
 		await eventChannel.create();
-		const resp = await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
-		message = resp.message;
+		await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
 	it('creating server side event require user or user_id', async function() {
