@@ -18,7 +18,7 @@
     "./dist/index.js": "./dist/browser.js"
   },
   "jsdelivr": "./dist/browser.full-bundle.min.js",
-  "license": "Other/Commercial",
+  "license": "SEE LICENSE IN LICENSE",
   "keywords": [
     "chat",
     "messaging",
@@ -31,7 +31,8 @@
   "files": [
     "/dist",
     "/types/stream-chat/index.d.ts",
-    "readme.md"
+    "readme.md",
+    "license"
   ],
   "dependencies": {
     "@babel/runtime": "^7.3.1",
