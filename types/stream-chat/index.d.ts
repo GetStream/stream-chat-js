@@ -312,7 +312,7 @@ export class Channel {
   sendReaction(
     messageID: string,
     reaction: Reaction,
-    user_id: string,
+    user_id?: string,
   ): Promise<SendReactionAPIResponse>;
   getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
   deleteReaction(
