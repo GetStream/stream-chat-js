@@ -1433,9 +1433,29 @@ describe('Chat', function() {
 				const message = {
 					id,
 					text: 'yo',
+					user_id: uuidv4(),
 				};
-				await channel.sendMessage(message);
-				await expectHTTPErrorCode(400, channel.sendMessage(message));
+				const client = await getTestClient(true);
+				let serverChannel = client.channel(channel.type, channel.id);
+				await serverChannel.sendMessage(message);
+				await expectHTTPErrorCode(
+					400,
+					serverChannel.sendMessage(message),
+					`StreamChat error code 4: SendMessage failed with error: "a message with ID ${id} already exists"`,
+				);
+			});
+
+			it('Add a chat message with ID client side should fail', async function() {
+				const id = uuidv4();
+				const message = {
+					id,
+					text: 'yo',
+				};
+				await expectHTTPErrorCode(
+					400,
+					channel.sendMessage(message),
+					'StreamChat error code 4: SendMessage failed with error: "Setting message.id is only allowed when using server side auth."',
+				);
 			});
 
 			it('Edit a chat message with text that is too long', async function() {
