@@ -1478,7 +1478,7 @@ describe('Chat', function() {
 		});
 	});
 
-	describe('Opengraph', () => {
+	describe.skip('Opengraph', () => {
 		it('og link should be processed by Opengraph parser', async function() {
 			const data = await channel.sendMessage({
 				text: 'https://imgur.com/gallery/jj1QKWc',
