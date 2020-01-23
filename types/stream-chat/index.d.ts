@@ -190,7 +190,7 @@ export class StreamChat {
   errorFromResponse(response: APIResponse): Error;
 
   sendFile(
-    url: string,
+    url: string | Buffer,
     uri: string,
     name?: string,
     contentType?: string,
@@ -294,13 +294,13 @@ export class Channel {
   getConfig(): object;
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
-    uri: string,
+    uri: string | Buffer,
     name?: string,
     contentType?: string,
     user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
-    uri: string,
+    uri: string | Buffer,
     name?: string,
     contentType?: string,
     user?: User,
