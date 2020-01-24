@@ -2624,10 +2624,54 @@ describe('Chat', function() {
 		});
 	});
 
+	describe('channel.getMessagesById', function() {
+		let channel;
+		const user = uuidv4();
+		const msgIds = [uuidv4(), uuidv4()];
+
+		before(async function() {
+			const client = await getTestClientForUser(user);
+			channel = client.channel('messaging', uuidv4(), {
+				members: [user],
+			});
+			await channel.create();
+			await channel.sendMessage({ id: msgIds[0], text: 'text' });
+			await channel.sendMessage({ id: msgIds[1], text: 'text' });
+			await channel.sendReaction(msgIds[0], { type: 'like' });
+			await channel.sendReaction(msgIds[1], { type: 'like' });
+		});
+
+		it('empty list', function(done) {
+			channel
+				.getMessagesById([])
+				.then(() => done('should have failed'))
+				.catch(() => done());
+		});
+
+		it('get one message and check reactions are populated', async function() {
+			const response = await channel.getMessagesById([msgIds[0]]);
+			expect(response.messages).to.be.an('array');
+			expect(response.messages).to.have.length(1);
+			expect(response.messages[0].id).to.eq(msgIds[0]);
+			expect(response.messages[0].own_reactions).to.be.an('array');
+			expect(response.messages[0].own_reactions).to.have.length(1);
+			expect(response.messages[0].latest_reactions).to.be.an('array');
+			expect(response.messages[0].latest_reactions).to.have.length(1);
+		});
+
+		it('get two message', async function() {
+			const response = await channel.getMessagesById(msgIds);
+			expect(response.messages).to.be.an('array');
+			expect(response.messages).to.have.length(2);
+			expect(msgIds.indexOf(response.messages[0].id)).to.not.eq(-1);
+			expect(msgIds.indexOf(response.messages[1].id)).to.not.eq(-1);
+		});
+	});
+
 	describe('unread counts for messages send by muted users', function() {
-		let user1 = uuidv4();
-		let user2 = uuidv4(); //muted by user 1
-		let user3 = uuidv4();
+		const user1 = uuidv4();
+		const user2 = uuidv4(); //muted by user 1
+		const user3 = uuidv4();
 		let channel;
 		let client1, client2, client3;
 

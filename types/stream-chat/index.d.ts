@@ -356,6 +356,7 @@ export class Channel {
   off(callbackOrString: string, callbackOrNothing: any): void;
   hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
+  getMessagesById(messageIds: string[]): Promise<APIResponse>;
 }
 
 export class ChannelState {

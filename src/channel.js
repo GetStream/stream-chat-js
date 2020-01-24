@@ -530,13 +530,26 @@ export class Channel {
 	 *
 	 * @return {object} Server response
 	 */
-	async getReactions(message_id, options) {
-		return await this.getClient().get(
+	getReactions(message_id, options) {
+		return this.getClient().get(
 			this.getClient().baseURL + `/messages/${message_id}/reactions`,
 			{
 				...options,
 			},
 		);
+	}
+
+	/**
+	 * getMessagesById - Retrieves a list of messages by ID
+	 *
+	 * @param {string} messageIds The ids of the messages to retrieve from this channel
+	 *
+	 * @return {object} Server response
+	 */
+	getMessagesById(messageIds) {
+		return this.getClient().get(this._channelURL() + '/messages', {
+			ids: messageIds.join(','),
+		});
 	}
 
 	/**
