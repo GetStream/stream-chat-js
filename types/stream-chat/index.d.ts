@@ -170,7 +170,7 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): Promise<void>;
+  setUser(user: User, userToken: string): Promise<ConnectAPIResponse>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
@@ -190,7 +190,7 @@ export class StreamChat {
   errorFromResponse(response: APIResponse): Error;
 
   sendFile(
-    url: string,
+    url: string | Buffer,
     uri: string,
     name?: string,
     contentType?: string,
@@ -231,6 +231,11 @@ export class StreamChat {
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
 
+  partialUpdateUser(updateRequest: updateUserRequest): Promise<UpdateUsersAPIResponse>;
+  partialUpdateUsers(
+    updateRequests: updateUserRequest[],
+  ): Promise<UpdateUsersAPIResponse>;
+
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
 
@@ -259,6 +264,13 @@ export class StreamChat {
   verifyWebhook(requestBody: object, xSignature: string): boolean;
 }
 
+export interface updateUserRequest {
+  id: string;
+  set?: {
+    [key: string]: any;
+  };
+  unset?: string[];
+}
 export class ClientState {
   constructor();
   updateUser(user: User): void;
@@ -286,13 +298,13 @@ export class Channel {
   getConfig(): object;
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
-    uri: string,
+    uri: string | Buffer,
     name?: string,
     contentType?: string,
     user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
-    uri: string,
+    uri: string | Buffer,
     name?: string,
     contentType?: string,
     user?: User,
@@ -304,7 +316,7 @@ export class Channel {
   sendReaction(
     messageID: string,
     reaction: Reaction,
-    user_id: string,
+    user_id?: string,
   ): Promise<SendReactionAPIResponse>;
   getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
   deleteReaction(
@@ -336,7 +348,7 @@ export class Channel {
   lastMessage(): Message;
   markRead(): Promise<MarkReadAPIResponse>;
   clean(): void;
-  watch(options: object): Promise<ChannelAPIResponse>;
+  watch(options?: object): Promise<ChannelAPIResponse>;
   query(options: object): Promise<ChannelAPIResponse>;
   stopWatching(): Promise<StopWatchingAPIResponse>;
   getReplies(parent_id: string, options: object): Promise<GetRepliesAPIResponse>;
@@ -346,7 +358,7 @@ export class Channel {
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
   on(callbackOrString: string, callbackOrNothing: any): void;
   off(callbackOrString: string, callbackOrNothing: any): void;
-  hide(userId?: string, clearHistory?: bool): Promise<APIResponse>;
+  hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
 }
 
@@ -434,6 +446,10 @@ export function UserFromToken(token: string): string;
 export function DevToken(userId: string): string;
 
 export function CheckSignature(body: any, secret: string, signature: string): boolean;
+
+export function encodeBase64(s: string): string;
+
+export function decodeBase64(s: string): string;
 
 export function isValidEventType(eventType: string): boolean;
 
@@ -621,7 +637,7 @@ export interface DeleteMessageAPIResponse extends APIResponse {
   message: MessageResponse;
 }
 
-export interface ConnectAPIReponse extends Event<HealthCheckEvent> {}
+export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}
 
 export interface ChannelMemberResponse {
   user_id?: string;
@@ -706,6 +722,7 @@ export interface ChannelConfigFields {
   message_retention: string;
   max_message_length: number;
   uploads: boolean;
+  url_enrichment: boolean;
   automod: 'disabled' | 'simple' | 'AI';
   automod_behavior: 'flag' | 'block';
 }

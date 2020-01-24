@@ -1,26 +1,33 @@
-import {
-  StreamChat,
-  Member,
-  AcceptInviteAPIResponse,
-  ChannelMemberResponse,
-} from 'stream-chat';
-import { ImmutableObject, Immutable } from 'seamless-immutable';
+import { StreamChat } from 'stream-chat';
 
 const apiKey = 'apiKey';
-const apiSecret = 'apiSecret';
-// prettier-ignore
-const client = new StreamChat(apiKey, null, { timeout: 3000, logger: (logLevel: string, msg: string, extraData: {}) => {}}); // $ExpectType StreamChat
+
+// $ExpectType StreamChat
+const client = new StreamChat(apiKey, null, {
+  timeout: 3000,
+  logger: (logLevel: string, msg: string, extraData: {}) => {},
+});
 
 const devToken = client.devToken('joshua'); // $ExpectType string
-const userToken = client.createToken('james', 3600); // $ExpectType string
-const authType = client.getAuthType(); // $ExpectType string
+client.createToken('james', 3600); // $ExpectType string
+client.getAuthType(); // $ExpectType string
 
 client.setBaseURL('https://chat-us-east-1.stream-io-api.com/'); // $ExpectType void
 client.updateAppSettings({}); // $ExpectType Promise<object>
-const currentSettings = client.getAppSettings(); // $ExpectType Promise<object>
+client.getAppSettings(); // $ExpectType Promise<object>
 client.disconnect(); // $ExpectType Promise<void>
+const updateRequest = {
+  id: 'vishal',
+  set: {
+    name: 'Awesome',
+  },
+  unset: ['example'],
+};
 
-client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<void>
+client.partialUpdateUser(updateRequest); // $ExpectType Promise<UpdateUsersAPIResponse>
+client.partialUpdateUsers([updateRequest]); // $ExpectType Promise<UpdateUsersAPIResponse>
+
+client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<ConnectAPIResponse>
 client.setAnonymousUser(); // $ExpectType Promise<void>
 client.setGuestUser({ id: 'steven' }); // $ExpectType Promise<void>
 
@@ -48,6 +55,8 @@ const event = {
       id: 'john',
     },
     created_at: '',
+    updated_at: '',
+    score: 10,
   },
   member: { id: 'john' },
   user: { id: 'john' },
@@ -60,18 +69,19 @@ client.recoverState(); // $ExpectType Promise<void>
 
 const channels = client.queryChannels({}, {}, {});
 channels.then(response => {
-  const type = response[0].type; // $ExpectType string
-  const cid = response[0].cid; // $ExpectType string
+  response[0].type; // $ExpectType string
+  response[0].cid; // $ExpectType string
 });
 
 const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
 const channelState = channel.state; // $ExpectType ChannelState
-const member = channelState.members.someUser12433222; // $ExpectType ImmutableObject<ChannelMemberResponse>
-const member1 = channelState.members.someUser124332221; // $ExpectType ImmutableObject<ChannelMemberResponse>
+channelState.members.someUser12433222; // $ExpectType ImmutableObject<ChannelMemberResponse>
+channelState.members.someUser124332221; // $ExpectType ImmutableObject<ChannelMemberResponse>
 
-const response = channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
-// const typingEvent = channelState.typing.someId; // $ExpectType string
+channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
+channelState.typing.someUserId; // $ExpectType "typing.start"
 const acceptInvite = channel.acceptInvite({}); // $ExpectType Promise<AcceptInviteAPIResponse>
 acceptInvite.then(value => {
-  const response = value; // $ExpectType AcceptInviteAPIResponse
+  const resp = value; // $ExpectType AcceptInviteAPIResponse
+  return resp;
 });

@@ -65,3 +65,6 @@ typings/
 .tern-port
 
 /.vscode
+
+types/stream-chat/api-response-tests/data.js
+types/stream-chat/api-response-tests/data.ts

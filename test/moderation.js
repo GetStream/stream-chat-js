@@ -4,7 +4,6 @@ import {
 	createUsers,
 	getTestClient,
 	createUserToken,
-	sleep,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -14,7 +13,7 @@ if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
 }
 
-Promise = require('bluebird'); // eslint-disable-line no-global-assign
+const Promise = require('bluebird');
 Promise.config({
 	longStackTraces: true,
 	warnings: {

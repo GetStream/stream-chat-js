@@ -1,5 +1,5 @@
 // Its a simple node script which uses our js client to make various API calls.
-// The responses received from those calls are written to a typescirpt file and compared against there corresponding
+// The responses received from those calls are written to a typescript file and compared against there corresponding
 // APIResponse types, specified in declaration file - types/stream-chat/index.d.ts
 const fs = require('fs');
 const rg = require('./response-generators/index');
@@ -7,9 +7,11 @@ const rg = require('./response-generators/index');
 let countExecutables = 0;
 
 const executables = [
-	{ f: rg.setUser, type: 'ConnectAPIReponse' },
+	{ f: rg.setUser, type: 'ConnectAPIResponse' },
 	{ f: rg.channelSearch, type: 'SearchAPIResponse' },
 	{ f: rg.updateUsers, type: 'UpdateUsersAPIResponse' },
+	{ f: rg.partialUpdateUser, type: 'UpdateUsersAPIResponse' },
+	{ f: rg.partialUpdateUsers, type: 'UpdateUsersAPIResponse' },
 	{ f: rg.banUsers, type: 'BanUserAPIResponse' },
 	{ f: rg.unbanUsers, type: 'UnbanUserAPIResponse' },
 	{ f: rg.muteUser, type: 'MuteAPIResponse' },

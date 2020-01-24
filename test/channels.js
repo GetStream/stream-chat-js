@@ -7,6 +7,7 @@ import {
 	getTestClient,
 	getTestClientForUser,
 	getServerTestClient,
+	sleep,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -19,7 +20,7 @@ if (process.env.NODE_ENV !== 'production') {
 	require('longjohn');
 }
 
-Promise = require('bluebird'); // eslint-disable-line no-global-assign
+const Promise = require('bluebird');
 Promise.config({
 	longStackTraces: true,
 	warnings: {
@@ -1162,5 +1163,173 @@ describe('query channels members $nin', function() {
 			expect(resp[i].id).not.be.equal(membersIdS[0]);
 			expect(membersIdS.indexOf(resp[i].id)).not.be.equal(-1);
 		}
+	});
+});
+
+describe('Query channels using last_updated', function() {
+	const CHANNELS_ORDER = [1, 2, 0];
+	const NUM_OF_CHANNELS = CHANNELS_ORDER.length;
+	const CHANGED_CHANNEL = 1;
+
+	const creator = uuidv4();
+	let channels = [];
+	let client;
+
+	before(async function() {
+		client = await getTestClientForUser(creator);
+		await createUsers([creator]);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			const channel = client.channel('messaging', 'channelme_' + uuidv4());
+			await channel.create();
+			channels.push(channel);
+		}
+
+		await channels[CHANGED_CHANNEL].sendMessage({ text: 'Test Message' });
+	});
+
+	it('with the parameter', async function() {
+		let list = await client.queryChannels();
+
+		expect(list.length).equal(channels.length);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			expect(list[i].cid).equal(channels[CHANNELS_ORDER[i]].cid);
+		}
+	});
+
+	it('without parameters', async function() {
+		let list = await client.queryChannels({}, { last_updated: -1 });
+
+		expect(list.length).equal(channels.length);
+		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
+			expect(list[i].cid).equal(channels[CHANNELS_ORDER[i]].cid);
+		}
+	});
+
+	it('filtering by the parameter', async function() {
+		let list = await client.queryChannels({
+			last_updated: channels[0].data.created_at,
+		});
+
+		expect(list.length).equal(1);
+		expect(list[0].cid).equal(channels[0].cid);
+	});
+});
+
+describe('Channels op $in with custom fields', function() {
+	const user1 = uuidv4();
+	const user2 = uuidv4();
+	const channelId = uuidv4();
+	const channelId2 = uuidv4();
+	const unique = uuidv4(); //used to return consistent results in test
+	let user1Client;
+	before(async function() {
+		await createUsers([user1, user2]);
+		user1Client = await getTestClientForUser(user1);
+
+		const channel = user1Client.channel('messaging', channelId, {
+			members: [user1, user2],
+			color: ['blue', 'red'],
+			age: [30, 31],
+			array: [[1], [2]],
+			object: [{ a: 1 }, { b: 1 }],
+			unique,
+		});
+		await channel.create();
+		const channel2 = user1Client.channel('messaging', channelId2, {
+			members: [user1, user2],
+			customField: [6],
+			unique,
+		});
+		await channel2.create();
+	});
+
+	it('query $in on custom string field subset', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			color: { $in: ['red'] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom string $or custom $in int', async function() {
+		const channels = await user1Client.queryChannels({
+			$or: [{ color: { $in: ['red'] } }, { customField: { $in: [6] } }],
+			unique: unique,
+		});
+		expect(channels.length).to.be.equal(2);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId2}`);
+		expect(channels[1].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom string field full set out of order', async function() {
+		const channels = await user1Client.queryChannels({
+			color: { $in: ['red', 'blue'] },
+			unique: unique,
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom int field subset', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			age: { $in: [30] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom int field full set out of order', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			age: { $in: [31, 30] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom array field subset', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			array: { $in: [[1]] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom array field full set out of order', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			array: { $in: [[2], [1]] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom object field subset', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			object: { $in: [{ a: 1 }] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom object field full set out of order', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			object: { $in: [{ a: 1 }, { b: 1 }] },
+		});
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $in on custom field (wrong value types)', async function() {
+		const channels = await user1Client.queryChannels({
+			unique: unique,
+			object: { $in: [3] },
+		});
+		expect(channels.length).to.be.equal(0);
 	});
 });
