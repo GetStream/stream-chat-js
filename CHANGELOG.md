@@ -8,11 +8,13 @@
 - Support for system message for addMember/removeMember functionality
 - Throw clear errors when trying to build tokens without secret
 
-## October 25, 2019 - 1.2.0
+## November 28, 2019 - 1.2.0
+
+## November 22, 2019 - 1.1.8
 
 - Improve client.channel signature, support short-hand with only type and object as well as null or undefined ID (instead of only "")
 
-## October 25, 2019 - 1.1.5
+## October 25, 2019 - 1.1.7
 
 - Add support for member invites after channel creation.
 
