@@ -222,7 +222,7 @@ export class StreamChat {
   getDevices(userId: string): Promise<GetDevicesAPIResponse>;
   removeDevice(deviceId: string, userID?: string): Promise<APIResponse>;
 
-  channel(channelType: string, channelID: string, custom?: ChannelData): Channel;
+  channel(channelType: string, channelID?: string, custom?: ChannelData): Channel;
 
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
