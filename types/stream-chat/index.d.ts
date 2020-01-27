@@ -179,7 +179,7 @@ export class StreamChat {
   setAnonymousUser(): Promise<void>;
   setGuestUser(user: User): Promise<void>;
 
-  on(callbackOrString: string, callbackOrNothing?: any): { unsubsribe(): void };
+  on(callbackOrString: string, callbackOrNothing?: any): { unsubscribe(): void };
   off(callbackOrString: string, callbackOrNothing?: any): void;
 
   get(url: string, params: object): Promise<APIResponse>;
