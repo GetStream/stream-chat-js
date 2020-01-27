@@ -113,6 +113,9 @@ export interface Reaction {
   [propName: string]: any;
 }
 
+export interface ReactionRequest {
+  type: string;
+}
 export interface ReactionResponse extends Reaction {
   created_at: string;
   updated_at: string;
@@ -311,7 +314,7 @@ export class Channel {
   sendEvent<T = string>(chatEvent: Event<T>): Promise<SendEventAPIResponse<T>>;
   sendReaction(
     messageID: string,
-    reaction: Reaction,
+    reaction: ReactionRequest,
     user_id?: string,
   ): Promise<SendReactionAPIResponse>;
   getReactions(message_id: string, options: object): Promise<GetReactionsAPIResponse>;
