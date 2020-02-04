@@ -232,7 +232,7 @@ export class StableWSConnection {
 		// cleanup the old connection
 		this.logger(
 			'info',
-			'connection:_reconnect() : Destroying current WS connection',
+			'connection:_reconnect() - Destroying current WS connection',
 			{
 				tags: ['connection'],
 			},
@@ -244,7 +244,7 @@ export class StableWSConnection {
 			if (this.recoverCallback) {
 				this.logger(
 					'info',
-					'connection:_reconnect() : Waiting for recoverCallBack',
+					'connection:_reconnect() - Waiting for recoverCallBack',
 					{
 						tags: ['connection'],
 					},
@@ -252,7 +252,7 @@ export class StableWSConnection {
 				await this.recoverCallback(open);
 				this.logger(
 					'info',
-					'connection:_reconnect() : Finished recoverCallBack',
+					'connection:_reconnect() - Finished recoverCallBack',
 					{
 						tags: ['connection'],
 					},
@@ -266,7 +266,7 @@ export class StableWSConnection {
 			if (e.isWSFailure) {
 				this.logger(
 					'info',
-					'connection:_reconnect() : WS failure, so going to try to reconnect',
+					'connection:_reconnect() - WS failure, so going to try to reconnect',
 					{
 						tags: ['connection'],
 					},
@@ -274,7 +274,7 @@ export class StableWSConnection {
 				this._reconnect();
 			}
 		}
-		this.logger('info', 'connection:_reconnect() : == END ==', {
+		this.logger('info', 'connection:_reconnect() - == END ==', {
 			tags: ['connection'],
 		});
 	}
@@ -290,7 +290,7 @@ export class StableWSConnection {
 			// mark the connection as down
 			this.logger(
 				'info',
-				'connection:onlineStatusChanged() : Status changing to offline',
+				'connection:onlineStatusChanged() - Status changing to offline',
 				{
 					tags: ['connection'],
 				},
@@ -303,7 +303,7 @@ export class StableWSConnection {
 			// it's possible we didnt miss any messages, so this process is just expensive and not needed.
 			this.logger(
 				'info',
-				`connection:onlineStatusChanged() : Status changing to online. isHealthy: ${this.isHealthy}`,
+				`connection:onlineStatusChanged() - Status changing to online. isHealthy: ${this.isHealthy}`,
 				{
 					tags: ['connection'],
 				},
@@ -316,7 +316,7 @@ export class StableWSConnection {
 
 	onopen = wsID => {
 		if (this.wsID !== wsID) return;
-		this.logger('info', 'connection:onopen() : onopen callback', {
+		this.logger('info', 'connection:onopen() - onopen callback', {
 			tags: ['connection'],
 			wsID,
 		});
@@ -337,7 +337,7 @@ export class StableWSConnection {
 
 		// trigger the event..
 		this.lastEvent = new Date();
-		this.logger('info', 'connection:onmessage() : onmessage callback', {
+		this.logger('info', 'connection:onmessage() - onmessage callback', {
 			tags: ['connection'],
 			event,
 			wsID,
@@ -347,7 +347,7 @@ export class StableWSConnection {
 	};
 
 	onclose = (wsID, event) => {
-		this.logger('info', 'connection:onclose() : onclose callback', {
+		this.logger('info', 'connection:onclose() - onclose callback', {
 			tags: ['connection'],
 			event,
 			wsID,
@@ -363,7 +363,7 @@ export class StableWSConnection {
 			this.rejectPromise(error);
 			this.logger(
 				'info',
-				`connection:onclose() : WS connection reject with error ${event.reason}`,
+				`connection:onclose() - WS connection reject with error ${event.reason}`,
 				{
 					tags: ['connection'],
 					event,
@@ -378,7 +378,7 @@ export class StableWSConnection {
 
 			this.logger(
 				'info',
-				`connection:onclose() : WS connection closed. Calling reconnect ...`,
+				`connection:onclose() - WS connection closed. Calling reconnect ...`,
 				{
 					tags: ['connection'],
 					event,
@@ -398,7 +398,7 @@ export class StableWSConnection {
 		this._setHealth(false);
 
 		this.rejectPromise(this._errorFromWSEvent(event));
-		this.logger('info', `connection:onerror() : WS connection resulted into error`, {
+		this.logger('info', `connection:onerror() - WS connection resulted into error`, {
 			tags: ['connection'],
 			event,
 		});
@@ -442,7 +442,7 @@ export class StableWSConnection {
 	 *
 	 */
 	_errorFromWSEvent = event => {
-		this.logger('error', `connection:onclose() : WS failed with code ${event.code}`, {
+		this.logger('error', `connection:onclose() - WS failed with code ${event.code}`, {
 			tags: ['connection'],
 			event,
 		});
