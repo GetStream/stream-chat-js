@@ -138,9 +138,25 @@ export class StableWSConnection {
 			const { ws } = this;
 			isClosedPromise = new Promise(resolve => {
 				ws.onclose = () => {
+					this.logger(
+						'info',
+						`connection:disconnect() - resolving isClosedPromise`,
+						{
+							tags: ['connection'],
+						},
+					);
 					resolve();
 				};
 			});
+
+			this.logger(
+				'info',
+				`connection:disconnect() - Manually closed connection by calling client.disconnect()`,
+				{
+					tags: ['connection'],
+				},
+			);
+
 			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
 		}
 
@@ -216,7 +232,7 @@ export class StableWSConnection {
 		// cleanup the old connection
 		this.logger(
 			'info',
-			'connection:_reconnect() : Destroying current WS connection',
+			'connection:_reconnect() - Destroying current WS connection',
 			{
 				tags: ['connection'],
 			},
@@ -228,7 +244,7 @@ export class StableWSConnection {
 			if (this.recoverCallback) {
 				this.logger(
 					'info',
-					'connection:_reconnect() : Waiting for recoverCallBack',
+					'connection:_reconnect() - Waiting for recoverCallBack',
 					{
 						tags: ['connection'],
 					},
@@ -236,7 +252,7 @@ export class StableWSConnection {
 				await this.recoverCallback(open);
 				this.logger(
 					'info',
-					'connection:_reconnect() : Finished recoverCallBack',
+					'connection:_reconnect() - Finished recoverCallBack',
 					{
 						tags: ['connection'],
 					},
@@ -250,7 +266,7 @@ export class StableWSConnection {
 			if (e.isWSFailure) {
 				this.logger(
 					'info',
-					'connection:_reconnect() : WS failure, so going to try to reconnect',
+					'connection:_reconnect() - WS failure, so going to try to reconnect',
 					{
 						tags: ['connection'],
 					},
@@ -258,7 +274,7 @@ export class StableWSConnection {
 				this._reconnect();
 			}
 		}
-		this.logger('info', 'connection:_reconnect() : == END ==', {
+		this.logger('info', 'connection:_reconnect() - == END ==', {
 			tags: ['connection'],
 		});
 	}
@@ -274,7 +290,7 @@ export class StableWSConnection {
 			// mark the connection as down
 			this.logger(
 				'info',
-				'connection:onlineStatusChanged() : Status changing to offline',
+				'connection:onlineStatusChanged() - Status changing to offline',
 				{
 					tags: ['connection'],
 				},
@@ -287,7 +303,7 @@ export class StableWSConnection {
 			// it's possible we didnt miss any messages, so this process is just expensive and not needed.
 			this.logger(
 				'info',
-				`connection:onlineStatusChanged() : Status changing to online. isHealthy: ${this.isHealthy}`,
+				`connection:onlineStatusChanged() - Status changing to online. isHealthy: ${this.isHealthy}`,
 				{
 					tags: ['connection'],
 				},
@@ -300,6 +316,10 @@ export class StableWSConnection {
 
 	onopen = wsID => {
 		if (this.wsID !== wsID) return;
+		this.logger('info', 'connection:onopen() - onopen callback', {
+			tags: ['connection'],
+			wsID,
+		});
 
 		// set healthy..
 		this._setHealth(true);
@@ -317,10 +337,22 @@ export class StableWSConnection {
 
 		// trigger the event..
 		this.lastEvent = new Date();
+		this.logger('info', 'connection:onmessage() - onmessage callback', {
+			tags: ['connection'],
+			event,
+			wsID,
+		});
+
 		this.messageCallback(event);
 	};
 
 	onclose = (wsID, event) => {
+		this.logger('info', 'connection:onclose() - onclose callback', {
+			tags: ['connection'],
+			event,
+			wsID,
+		});
+
 		if (this.wsID !== wsID) return;
 
 		if (event.code === 1000) {
@@ -329,12 +361,29 @@ export class StableWSConnection {
 			const error = new Error(`WS connection reject with error ${event.reason}`);
 			error.reason = event.reason;
 			this.rejectPromise(error);
+			this.logger(
+				'info',
+				`connection:onclose() - WS connection reject with error ${event.reason}`,
+				{
+					tags: ['connection'],
+					event,
+				},
+			);
 		} else {
 			this.consecutiveFailures += 1;
 			this.totalFailures += 1;
 			this._setHealth(false);
 
 			this.rejectPromise(this._errorFromWSEvent(event));
+
+			this.logger(
+				'info',
+				`connection:onclose() - WS connection closed. Calling reconnect ...`,
+				{
+					tags: ['connection'],
+					event,
+				},
+			);
 
 			// reconnect if its an abnormal failure
 			this._reconnect();
@@ -349,6 +398,10 @@ export class StableWSConnection {
 		this._setHealth(false);
 
 		this.rejectPromise(this._errorFromWSEvent(event));
+		this.logger('info', `connection:onerror() - WS connection resulted into error`, {
+			tags: ['connection'],
+			event,
+		});
 
 		this._reconnect();
 	};
@@ -389,6 +442,11 @@ export class StableWSConnection {
 	 *
 	 */
 	_errorFromWSEvent = event => {
+		this.logger('error', `connection:onclose() - WS failed with code ${event.code}`, {
+			tags: ['connection'],
+			event,
+		});
+
 		const error = new Error(`WS failed with code ${event.code}`);
 		error.code = event.code;
 		error.isWSFailure = true;
