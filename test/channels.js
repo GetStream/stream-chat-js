@@ -41,7 +41,7 @@ describe('query by frozen', function() {
 		await channel.create();
 	});
 
-	it('frozen:false should return all active channels', async function() {
+	it('frozen:false should return 1 active channels', async function() {
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
 			frozen: false,
@@ -50,7 +50,7 @@ describe('query by frozen', function() {
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 
-	it('frozen:true should return 0', async function() {
+	it('frozen:true should return 0 results', async function() {
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
 			frozen: true,
@@ -66,6 +66,13 @@ describe('query by frozen', function() {
 		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+
+	it('send messages on a frozen channel should fail', async function() {
+		const resp = await channel.sendMessage({ text: 'hi' });
+		expect(resp.message.text).to.be.equal(
+			'Sorry, this channel has been frozen by the admin',
+		);
 	});
 });
 
