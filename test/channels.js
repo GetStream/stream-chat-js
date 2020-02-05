@@ -28,6 +28,47 @@ Promise.config({
 	},
 });
 
+describe('query by frozen', function() {
+	let client;
+	let channel;
+	let user = uuidv4();
+	before(async function() {
+		await createUsers([user]);
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [user],
+		});
+		await channel.create();
+	});
+
+	it('frozen:false should return all active channels', async function() {
+		const resp = await client.queryChannels({
+			members: { $in: [user] },
+			frozen: false,
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+
+	it('frozen:true should return 0', async function() {
+		const resp = await client.queryChannels({
+			members: { $in: [user] },
+			frozen: true,
+		});
+		expect(resp.length).to.be.equal(0);
+	});
+
+	it('mark the channel as frozen and search frozen:true should return 1 result', async function() {
+		await channel.update({ frozen: true });
+		const resp = await client.queryChannels({
+			members: { $in: [user] },
+			frozen: true,
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+});
+
 describe('Channels - Constructor', function() {
 	const client = getServerTestClient();
 
