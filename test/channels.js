@@ -74,6 +74,16 @@ describe('query by frozen', function() {
 			'Sorry, this channel has been frozen by the admin',
 		);
 	});
+
+	it('remove the frozen property and search frozen:false should return 1 result', async function() {
+		await channel.update({ frozen: false });
+		const resp = await client.queryChannels({
+			members: { $in: [user] },
+			frozen: false,
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
 });
 
 describe('Channels - Constructor', function() {
