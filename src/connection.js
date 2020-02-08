@@ -132,10 +132,10 @@ export class StableWSConnection {
 
 		let isClosedPromise;
 		// and finally close...
-		if (this.ws && this.ws.close) {
-			// Assigning to local here because we will remove it from this before the
-			// promise resolves.
-			const { ws } = this;
+		// Assigning to local here because we will remove it from this before the
+		// promise resolves.
+		const { ws } = this;
+		if (ws && ws.close && ws.readyState === ws.OPEN) {
 			isClosedPromise = new Promise(resolve => {
 				ws.onclose = () => {
 					this.logger(
@@ -148,7 +148,6 @@ export class StableWSConnection {
 					resolve();
 				};
 			});
-
 			this.logger(
 				'info',
 				`connection:disconnect() - Manually closed connection by calling client.disconnect()`,
@@ -158,6 +157,15 @@ export class StableWSConnection {
 			);
 
 			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
+		} else {
+			this.logger(
+				'info',
+				`connection:disconnect() - ws connection doesn't exist or it is already closed.`,
+				{
+					tags: ['connection'],
+				},
+			);
+			isClosedPromise = Promise.resolve();
 		}
 
 		delete this.ws;

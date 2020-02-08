@@ -325,6 +325,8 @@ export class StreamChat {
 		if (this.wsConnection) {
 			return this.wsConnection.disconnect();
 		}
+
+		return Promise.resolve();
 	}
 
 	setAnonymousUser() {
