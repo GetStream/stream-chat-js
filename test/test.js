@@ -703,6 +703,23 @@ describe('Chat', function() {
 			p = anonClient.addDevice('deviceID', 'apn');
 			await expect(p).to.be.rejectedWith(errorMsg);
 		});
+
+		it('disconnect should always return promise irrespective of wsConnection status', async function() {
+			const client2 = await getTestClientForUser('bob');
+			const chan = client2.channel('messaging', uuidv4());
+			await chan.watch();
+			let disconnect = client2.disconnect();
+			await expect(disconnect).to.be.fulfilled;
+
+			// Lets try disconnect second time on same client.
+			disconnect = client2.disconnect();
+			await expect(disconnect).to.be.fulfilled;
+
+			// Lets try deleting websocket connection object.
+			client2.wsConnection = null;
+			disconnect = client2.disconnect();
+			await expect(disconnect).to.be.fulfilled;
+		});
 	});
 
 	describe('Permissions', function() {
