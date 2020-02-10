@@ -106,10 +106,10 @@ export interface ConnectionChangeEvent {
 
 export interface Reaction {
   type: string;
-  message_id: string;
+  message_id?: string;
   user_id?: string;
-  user: User;
-  score: number;
+  user?: User;
+  score?: number;
   [propName: string]: any;
 }
 
