@@ -407,7 +407,7 @@ export class StableWSConnection {
     eventCallback: (event: ConnectionChangeEvent) => void,
   );
   connect(): Promise<void>;
-  disconnect(): void;
+  disconnect(): Promise<void>;
   onlineStatusChanged(event: OnlineStatusEvent): void;
   onopen(wsID: number): void;
   onmessage(wsID: number, event: WebSocket.MessageEvent): void;
