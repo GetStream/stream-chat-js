@@ -769,7 +769,6 @@ export class Channel {
 	 *
 	 */
 	off(callbackOrString, callbackOrNothing) {
-		this._checkInitialized();
 		const key = callbackOrNothing ? callbackOrString : 'all';
 		const valid = isValidEventType(key);
 		if (!valid) {
