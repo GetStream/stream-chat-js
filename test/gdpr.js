@@ -249,6 +249,43 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
 
+		it('hard delete a message with replies on the channel', async function() {
+			const userID = uuidv4();
+			const creatorID = uuidv4();
+			const channelID = uuidv4();
+
+			const channel = serverClient.channel('livestream', channelID, {
+				created_by: { id: creatorID },
+			});
+
+			await channel.create();
+
+			const response = await channel.sendMessage({
+				text: 'message1',
+				user: { id: userID },
+			});
+
+			// add a reply to the message but show it on the channel (show_in_channel)
+			await channel.sendMessage({
+				text: 'reply to the top man',
+				parent_id: response.message.id,
+				show_in_channel: true,
+				user: { id: userID },
+			});
+
+			// delete the parent message
+			await serverClient.deleteMessage(response.message.id, true);
+
+			// reply should be gone as well
+			const channelResponse = await serverClient
+				.channel('livestream', channelID, {
+					created_by: { id: creatorID },
+				})
+				.query();
+
+			expect(channelResponse.messages).to.have.length(0);
+		});
+
 		it('deleted messages do not get restored', async function() {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
