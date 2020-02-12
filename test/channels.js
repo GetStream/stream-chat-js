@@ -1392,3 +1392,101 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels.length).to.be.equal(0);
 	});
 });
+
+describe('$ne operator', function() {
+	let client;
+	let channels = [];
+	let unique = uuidv4();
+	let creator = uuidv4();
+
+	before(async function() {
+		client = await getTestClientForUser(creator);
+	});
+
+	it('creates 4 channels distinct channels', async function() {
+		for (let i = 1; i < 5; i++) {
+			let c = client.channel('messaging', uuidv4(), {
+				unique,
+				number: i,
+				string: i.toString(),
+				object: { key: i },
+				array: [i],
+			});
+			await c.create();
+			channels.push(c);
+		}
+	});
+
+	it('query $ne on reserved fields', async function() {
+		let response = await client.queryChannels({
+			unique: unique,
+			id: { $ne: channels[0].id },
+		});
+		expect(response.length).to.be.equal(3);
+		expect(
+			response.findIndex(function(c) {
+				return c.id === channels[0].id;
+			}),
+		).to.be.equal(-1);
+	});
+
+	it('query $ne with invalid type on reserved fields', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.queryChannels({ unique: unique, id: { $ne: 1 } }),
+			'StreamChat error code 4: QueryChannels failed with error: "field `id` contains type number. expecting string"',
+		);
+	});
+
+	it('query $ne on custom int fields', async function() {
+		let response = await client.queryChannels({
+			unique: unique,
+			number: { $ne: channels[0].data.number },
+		});
+		expect(response.length).to.be.equal(3);
+		expect(
+			response.findIndex(function(c) {
+				return c.id === channels[0].id;
+			}),
+		).to.be.equal(-1);
+	});
+
+	it('query $ne on custom string fields', async function() {
+		let response = await client.queryChannels({
+			unique: unique,
+			string: { $ne: channels[0].data.string },
+		});
+		expect(response.length).to.be.equal(3);
+		expect(
+			response.findIndex(function(c) {
+				return c.id === channels[0].id;
+			}),
+		).to.be.equal(-1);
+	});
+
+	it('query $ne on custom object fields', async function() {
+		let response = await client.queryChannels({
+			unique: unique,
+			object: { $ne: channels[0].data.object },
+		});
+		expect(response.length).to.be.equal(3);
+		expect(
+			response.findIndex(function(c) {
+				return c.id === channels[0].id;
+			}),
+		).to.be.equal(-1);
+	});
+
+	it('query $ne on custom array fields', async function() {
+		let response = await client.queryChannels({
+			unique: unique,
+			array: { $ne: channels[0].data.array },
+		});
+		expect(response.length).to.be.equal(3);
+		expect(
+			response.findIndex(function(c) {
+				return c.id === channels[0].id;
+			}),
+		).to.be.equal(-1);
+	});
+});
