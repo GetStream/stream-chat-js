@@ -1401,9 +1401,6 @@ describe('$ne operator', function() {
 
 	before(async function() {
 		client = await getTestClientForUser(creator);
-	});
-
-	it('creates 4 channels distinct channels', async function() {
 		for (let i = 1; i < 5; i++) {
 			let c = client.channel('messaging', uuidv4(), {
 				unique,
