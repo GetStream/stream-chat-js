@@ -1933,6 +1933,23 @@ describe('Chat', function() {
 				);
 			}
 		});
+
+		it('should allow .off() on unwatched channels', () => {
+			const client = getTestClient(false);
+			const userID = uuidv4();
+
+			client.setUser({ id: userID }, createUserToken(userID));
+			const channel = client.channel('messaging', uuidv4());
+			let result;
+			try {
+				channel.off('message.new');
+				result = true;
+			} catch (e) {
+				result = false;
+			}
+
+			expect(result).to.be.ok;
+		});
 	});
 
 	describe('Channel State', function() {
