@@ -34,7 +34,7 @@ Promise.config({
 	},
 });
 
-describe.only('GDPR endpoints', function() {
+describe('GDPR endpoints', function() {
 	const serverClient = getServerTestClient();
 
 	it('export data for a user', async function() {
