@@ -435,25 +435,74 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].text).to.equal('hi');
 		});
 
-		it('hard delete a user without specifying mark_messages_deleted should fail', async function() {
-			// setup
+		it('hard delete with delete_conversation_channels', async function() {
 			const userID = uuidv4();
-			const creatorID = uuidv4();
-			const channelID = uuidv4();
-			const channel = serverClient.channel('livestream', channelID, {
-				created_by: { id: creatorID },
+			const userID2 = uuidv4();
+			const userID3 = uuidv4();
+
+			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.updateUser({ id: userID2 });
+			await serverClient.updateUser({ id: userID3 });
+
+			const chan1 = serverClient.channel('messaging', {
+				members: [userID, userID2],
+				created_by: { id: userID },
 			});
-			await channel.create();
+			await chan1.create();
+
+			await chan1.sendMessage({
+				text: 'yo',
+				user: { id: userID },
+			});
+
+			const chan2 = serverClient.channel('messaging', {
+				members: [userID, userID3],
+				created_by: { id: userID },
+			});
+			await chan2.create();
+
+			await chan2.sendMessage({
+				text: 'yo',
+				user: { id: userID },
+			});
+
+			const chan3 = serverClient.channel('messaging', {
+				members: [userID, userID2, userID3],
+				created_by: { id: userID },
+			});
+			await chan3.create();
+
+			await chan3.sendMessage({
+				text: 'yo',
+				user: { id: userID },
+			});
+
+			const chan4 = serverClient.channel('messaging', uuidv4(), {
+				members: [userID, userID3],
+				created_by: { id: userID },
+			});
+			await chan4.create();
+
+			let userID2Client = await getTestClientForUser(userID2);
+			expect(userID2Client.health.me.unread_count).to.eq(2);
 
 			// delete the user
-			await expectHTTPErrorCode(
-				400,
-				serverClient.deleteUser(userID, {
-					mark_messages_deleted: false,
-					hard_delete: true,
-				}),
-				'StreamChat error code 4: DeleteUser failed with error: "mark_messages_deleted must be set together with hard_delete"',
-			);
+			await serverClient.deleteUser(userID, {
+				hard_delete: true,
+				delete_conversation_channels: true,
+			});
+
+			userID2Client = await getTestClientForUser(userID2);
+			expect(userID2Client.health.me.unread_count).to.eq(1);
+
+			const channels = await serverClient.queryChannels({
+				cid: { $in: [chan1.cid, chan2.cid, chan3.cid, chan4.cid] },
+			});
+
+			expect(channels).to.have.length(1);
+			expect(channels[0].cid).to.eq(chan3.cid);
+
+			await expectHTTPErrorCode(400, chan1.query());
 		});
 
 		it('hard delete a user, their message and reactions', async function() {
