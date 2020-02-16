@@ -23,6 +23,7 @@ const externalPackages = [
 	'lodash',
 	'seamless-immutable',
 	'uuid/v4',
+	'base64-js',
 	'@babel/runtime/regenerator',
 	'@babel/runtime/helpers/asyncToGenerator',
 	'@babel/runtime/helpers/objectWithoutProperties',

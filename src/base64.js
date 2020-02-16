@@ -1,4 +1,4 @@
-const base64 = require('base64-js');
+import { fromByteArray } from 'base64-js';
 
 // source - https://github.com/beatgammit/base64-js/blob/master/test/convert.js#L72
 const map = (arr, callback) => {
@@ -20,7 +20,7 @@ const map = (arr, callback) => {
 };
 
 export function encodeBase64(data) {
-	return base64.fromByteArray(
+	return fromByteArray(
 		map(data, function(char) {
 			return char.charCodeAt(0);
 		}),
