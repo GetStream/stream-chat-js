@@ -396,7 +396,7 @@ export class Channel {
 		const messageSlice = this.state.messages.slice(min, max).asMutable();
 
 		// sort by pk desc
-		messageSlice.sort((a, b) => b.created_at - a.created_at);
+		messageSlice.sort((a, b) => b.raw_created_at - a.raw_created_at);
 
 		let lastMessage;
 		if (messageSlice.length > 0) {

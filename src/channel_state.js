@@ -44,9 +44,13 @@ export class ChannelState {
 	messageToImmutable(message) {
 		message.__html = message.html;
 		// parse the date..
-		message.raw_created_at = message.created_at;
+
+		message.raw_created_at =
+			message.raw_created_at != null ? message.raw_created_at : message.created_at;
 		message.created_at = new Date(message.created_at);
 		message.updated_at = new Date(message.updated_at);
+		console.log('message to imutable', message.raw_created_at);
+
 		if (!message.status) {
 			message.status = 'received';
 		}
