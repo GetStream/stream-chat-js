@@ -482,7 +482,7 @@ describe('Unread on connect', function() {
 		expect(chan.state.read).to.be.an('object');
 		expect(chan.state.read[thierryID]).to.be.an('object');
 		expect(chan.state.read[thierryID].user).to.be.an('object');
-		const previousLastRead = chan.state.read[thierryID].last_read;
+		const previousLastRead = chan.state.read[thierryID].raw_last_read;
 		let resp = chan.countUnread();
 		expect(resp).to.eq(1);
 		await chan.markRead();
@@ -491,7 +491,7 @@ describe('Unread on connect', function() {
 		expect(chan.state.read).to.be.an('object');
 		expect(chan.state.read[thierryID]).to.be.an('object');
 		expect(chan.state.read[thierryID].user).to.be.an('object');
-		expect(chan.state.read[thierryID].last_read).to.be.greaterThan(previousLastRead);
+		expect(chan.state.read[thierryID].raw_last_read > previousLastRead).to.be.true;
 	});
 
 	it('thierry re-connects and receive unread_count=4', async function() {
