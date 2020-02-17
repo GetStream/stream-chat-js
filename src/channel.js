@@ -559,7 +559,7 @@ export class Channel {
 	lastRead() {
 		this._checkInitialized();
 		return this.state.read[this.getClient().userID]
-			? this.state.read[this.getClient().userID].last_read
+			? this.state.read[this.getClient().userID].raw_last_read
 			: null;
 	}
 
@@ -583,7 +583,7 @@ export class Channel {
 				count++;
 				continue;
 			}
-			if (m.created_at > lastRead) {
+			if (m.raw_created_at > lastRead) {
 				count++;
 			}
 		}
@@ -606,7 +606,7 @@ export class Channel {
 				count++;
 				continue;
 			}
-			if (m.created_at > lastRead) {
+			if (m.raw_created_at > lastRead) {
 				const userID = this.getClient().userID;
 				if (m.mentioned_users.findIndex(u => u.id === userID) !== -1) {
 					count++;
@@ -809,7 +809,11 @@ export class Channel {
 			case 'message.read':
 				s.read = s.read.set(
 					event.user.id,
-					Immutable({ user: { ...event.user }, last_read: event.received_at }),
+					Immutable({
+						user: { ...event.user },
+						last_read: event.created_at,
+						raw_last_read: event.created_at,
+					}),
 				);
 				break;
 			case 'user.watching.start':
@@ -931,6 +935,7 @@ export class Channel {
 			for (const read of state.read) {
 				const parsedRead = Object.assign({ ...read });
 				parsedRead.last_read = new Date(read.last_read);
+				parsedRead.raw_last_read = read.last_read;
 				this.state.read = this.state.read.set(read.user.id, parsedRead);
 			}
 		}
