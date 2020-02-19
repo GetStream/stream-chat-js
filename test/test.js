@@ -426,10 +426,11 @@ describe('Chat', function() {
 					const response = await client.getDevices();
 					expect(response.devices.length).to.equal(0);
 				});
-				it(`can't delete already deleted devices`, async function() {
+
+				it.skip(`can't delete already deleted devices`, async function() {
 					await expectHTTPErrorCode(404, client.removeDevice(deviceId));
 				});
-				it(`can't delete devices with bogus ids`, async function() {
+				it.skip(`can't delete devices with bogus ids`, async function() {
 					await expectHTTPErrorCode(404, client.removeDevice('totes fake'));
 				});
 			});
