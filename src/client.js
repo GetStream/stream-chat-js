@@ -900,9 +900,15 @@ export class StreamChat {
 		// Return a list of channels
 		const payload = {
 			filter_conditions: filterConditions,
-			query,
 			...options,
 		};
+		if (typeof query === 'string') {
+			payload.query = query;
+		} else if (typeof query === 'object') {
+			payload.message_filter_conditions = query;
+		} else {
+			throw Error(`Invalid type ${typeof query} for query parameter`);
+		}
 
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.wsPromise;
@@ -991,7 +997,6 @@ export class StreamChat {
 		if (channelID == null || channelID === '') {
 			return new Channel(this, channelType, undefined, custom || {});
 		}
-
 		// support channel("messaging", {options})
 		if (typeof channelID === 'object' && arguments.length === 2) {
 			return new Channel(this, channelType, undefined, channelID);
