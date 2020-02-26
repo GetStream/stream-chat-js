@@ -462,9 +462,10 @@ describe('Chat', function() {
 	});
 
 	describe('Search', function() {
-		it('Basic Query', async function() {
+		it('Basic Query (old format)', async function() {
+			const channelId = uuidv4();
 			// add a very special message
-			const channel = authClient.channel('messaging', 'poppins');
+			const channel = authClient.channel('messaging', channelId);
 			await channel.create();
 			const keyword = 'supercalifragilisticexpialidocious';
 			await channel.sendMessage({ text: `words ${keyword} what?` });
@@ -482,8 +483,74 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax', async function() {
-			// TODO: we didn't add support for this just yet...
+		it('invalid query argument type should return an error', async function() {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			try {
+				await authClient.search({ cid: '1' }, 1);
+			} catch (e) {
+				expect(e.message).to.be.equal('Invalid type number for query parameter');
+			}
+		});
+
+		it('query message custom fields', async function() {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			await channel.sendMessage({ text: 'hi', unique });
+
+			const channelFilters = { unique };
+			const messageFilters = { unique };
+			const response = await authClient.search(channelFilters, messageFilters);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.unique).to.equal(unique);
+		});
+
+		it('query message text and custom field', async function() {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			await channel.sendMessage({ text: 'hi', unique });
+			await channel.sendMessage({ text: 'hi' });
+
+			const channelFilters = { unique };
+			const messageFilters = { text: 'hi', unique: unique };
+			const response = await authClient.search(channelFilters, messageFilters);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.unique).to.equal(unique);
+		});
+
+		it('query messages with attachments', async function() {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			const attachments = [
+				{
+					type: 'hashtag',
+					name: 'awesome',
+					awesome: true,
+				},
+			];
+			await channel.sendMessage({ text: 'hi', unique });
+			await channel.sendMessage({ text: 'hi', attachments });
+
+			const channelFilters = { unique };
+			const messageFilters = { attachments: { $exists: true } };
+			const response = await authClient.search(channelFilters, messageFilters);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.unique).to.be.undefined;
+		});
+
+		it('Basic Query using $q syntax', async function() {
 			// add a very special message
 			const channel = authClient.channel('messaging', 'poppins');
 			await channel.create();
@@ -503,7 +570,7 @@ describe('Chat', function() {
 			);
 		});
 
-		it.skip('Basic Query using $q syntax on a field thats not supported', function() {
+		it('Basic Query using $q syntax on a field thats not supported', function() {
 			const filters = { type: 'messaging' };
 			const searchPromise = authClient.search(
 				filters,
