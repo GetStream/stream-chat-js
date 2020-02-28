@@ -121,8 +121,7 @@ export class StableWSConnection {
 
 		this._removeConnectionListeners();
 
-		// reset the wsID;
-		this.wsID = 1;
+		this.wsID += 1;
 		this.isHealthy = false;
 
 		// remove ws handlers...
