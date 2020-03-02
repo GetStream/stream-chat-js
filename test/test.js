@@ -292,6 +292,21 @@ describe('Chat', function() {
 			expect(updatedUser.book).to.equal('dune');
 		});
 
+		it.only('manual disconnect and reconnect flow', async () => {
+			const userID = uuidv4();
+			const client = getTestClient(false);
+			const token = createUserToken(userID);
+			await client.setUser({ id: userID }, token);
+
+			await client.wsConnection.disconnect();
+			expect(client.wsConnection.isHealthy).to.equal(false);
+			expect(client.wsConnection.wsID).to.equal(2);
+			expect(client.wsConnection.ws).to.equal(undefined);
+
+			await client._setupConnection();
+			expect(client.wsConnection.isHealthy).to.equal(true);
+			expect(client.wsConnection.ws).to.not.equal(undefined);
+		});
 		context('When user is banned', function() {
 			const banned = uuidv4();
 			const token = createUserToken(banned);
