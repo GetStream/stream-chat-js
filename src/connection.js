@@ -450,10 +450,14 @@ export class StableWSConnection {
 	 *
 	 */
 	_errorFromWSEvent = event => {
-		this.logger('error', `connection:onclose() - WS failed with code ${event.code}`, {
-			tags: ['connection'],
-			event,
-		});
+		this.logger(
+			'error',
+			`connection:_errorFromWSEvent() - WS failed with code ${event.code}`,
+			{
+				tags: ['connection'],
+				event,
+			},
+		);
 
 		const error = new Error(`WS failed with code ${event.code}`);
 		error.code = event.code;
