@@ -111,6 +111,8 @@ export class StableWSConnection {
 			},
 		);
 
+		this.wsID += 1;
+
 		// start by removing all the listeners
 		if (this.healthCheckIntervalRef) {
 			clearInterval(this.healthCheckIntervalRef);
@@ -121,7 +123,6 @@ export class StableWSConnection {
 
 		this._removeConnectionListeners();
 
-		this.wsID += 1;
 		this.isHealthy = false;
 
 		// remove ws handlers...
