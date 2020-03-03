@@ -1699,63 +1699,6 @@ describe('Devices', function() {
 				`user ${userID} does not have device with id ${deviceID}`,
 			);
 		});
-
-		it('Cache testing', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			let r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-		});
-
-		it('Cache testing - 2', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			let r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'B TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-		});
 	});
 });
 
