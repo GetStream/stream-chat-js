@@ -11,6 +11,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { StreamChat } from '../src';
 
 const expect = chai.expect;
 
@@ -1485,5 +1486,86 @@ describe('$ne operator', function() {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
+	});
+});
+
+describe('unread counts on hard delete messages', function() {
+	let channel;
+	let client;
+	let ssclient;
+	const tommaso = uuidv4();
+	const thierry = uuidv4();
+	const nick = uuidv4();
+	const messages = [];
+	before(async function() {
+		await createUsers([tommaso, thierry, nick]);
+		client = await getTestClientForUser(tommaso);
+		ssclient = await getTestClient(true);
+
+		channel = client.channel('messaging', uuidv4(), {
+			members: [tommaso, thierry, nick],
+		});
+		await channel.create();
+	});
+
+	it('tommaso sends 3 messages', async function() {
+		for (let i = 0; i < 3; i++) {
+			messages.push(await channel.sendMessage({ text: 'hi' }));
+		}
+	});
+
+	it('tommaso deletes the 1st message', async function() {
+		await ssclient.deleteMessage(messages[0].message.id, true);
+	});
+
+	it('validates unread counts for all the users', async function() {
+		let tommasoClient = await getTestClientForUser(tommaso);
+		// expect 0 conts since tommaso is the sender
+		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let thierryClient = await getTestClientForUser(thierry);
+		// expect 2 counts since we deleted the first message
+		expect(thierryClient.health.me.unread_count).to.be.equal(2);
+		expect(thierryClient.health.me.unread_channels).to.be.equal(1);
+
+		let nickClient = await getTestClientForUser(nick);
+		// expect 2 counts since  we deleted the first message
+		expect(nickClient.health.me.unread_count).to.be.equal(2);
+		expect(nickClient.health.me.unread_channels).to.be.equal(1);
+	});
+
+	it('nick and thierry mark the channel as read', async function() {
+		let nickClient = await getTestClientForUser(nick);
+		let nickChannel = nickClient.channel(channel.type, channel.id);
+		await nickChannel.watch();
+		await nickChannel.markRead();
+
+		let thierryClient = await getTestClientForUser(thierry);
+		let thierryChannel = thierryClient.channel(channel.type, channel.id);
+		await thierryChannel.watch();
+		await thierryChannel.markRead();
+	});
+
+	it('tommaso hard delete the remaining messages', async function() {
+		await ssclient.deleteMessage(messages[1].message.id, true);
+		await ssclient.deleteMessage(messages[2].message.id, true);
+	});
+
+	it('unread counts should be zero for all the users', async function() {
+		let tommasoClient = await getTestClientForUser(tommaso);
+		// expect 0 conts since tommaso is the sender
+		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
+		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
+
+		let thierryClient = await getTestClientForUser(thierry);
+		// expect 2 counts since we deleted the first message
+		expect(thierryClient.health.me.unread_count).to.be.equal(0);
+		expect(thierryClient.health.me.unread_channels).to.be.equal(0);
+
+		let nickClient = await getTestClientForUser(nick);
+		// expect 2 counts since we deleted the first message
+		expect(nickClient.health.me.unread_count).to.be.equal(0);
+		expect(nickClient.health.me.unread_channels).to.be.equal(0);
 	});
 });
