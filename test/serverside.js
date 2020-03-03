@@ -1134,6 +1134,7 @@ describe('App configs', function() {
 		});
 
 		it('User has no devices', async function() {
+			await client.removeDevice(deviceID, userID);
 			await client.updateAppSettings({
 				firebase_config,
 			});
