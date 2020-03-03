@@ -1628,7 +1628,7 @@ describe('Devices', function() {
 			expect(devices).to.have.length(1);
 		});
 
-		it('disabling apn config skips apn devices', async function() {
+		it('disabling apn config doesnt skips apn devices', async function() {
 			await client.updateAppSettings({
 				apn_config: {
 					disabled: true,
@@ -1636,7 +1636,7 @@ describe('Devices', function() {
 			});
 			await client.addDevice(deviceID, 'apn', userID);
 			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(0);
+			expect(devices).to.have.length(1);
 		});
 
 		it('no-op update does not invalidate device', async function() {
