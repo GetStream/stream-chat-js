@@ -292,7 +292,7 @@ describe('Chat', function() {
 			expect(updatedUser.book).to.equal('dune');
 		});
 
-		it.only('manual disconnect and reconnect flow', async () => {
+		it('manual disconnect and reconnect flow', async () => {
 			const userID = uuidv4();
 			const client = getTestClient(false);
 			const token = createUserToken(userID);
