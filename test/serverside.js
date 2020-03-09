@@ -1134,6 +1134,7 @@ describe('App configs', function() {
 		});
 
 		it('User has no devices', async function() {
+			await client.removeDevice(deviceID, userID);
 			await client.updateAppSettings({
 				firebase_config,
 			});
@@ -1616,7 +1617,7 @@ describe('Devices', function() {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing apn config invalidates device', async function() {
+		it('changing apn config does not invalidates device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1624,34 +1625,16 @@ describe('Devices', function() {
 				},
 			});
 			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(0);
+			expect(devices).to.have.length(1);
 		});
 
-		it('adding apn config invalidates orphaned devices', async function() {
+		it('disabling apn config doesnt skips apn devices', async function() {
 			await client.updateAppSettings({
 				apn_config: {
 					disabled: true,
 				},
 			});
 			await client.addDevice(deviceID, 'apn', userID);
-			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config,
-			});
-			const r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-		});
-
-		it('using keep_devices does not invalidate device', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-					keep_devices: true,
-				},
-			});
 			const { devices } = await client.getDevices(userID);
 			expect(devices).to.have.length(1);
 		});
@@ -1667,27 +1650,7 @@ describe('Devices', function() {
 			expect(devices).to.have.length(1);
 		});
 
-		it('keep devices and then update', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-					keep_devices: true,
-				},
-			});
-			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'B TEAM',
-				},
-			});
-			const r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-		});
-
-		it('changing apn config and notification template invalidates device', async function() {
+		it('changing apn config and notification template doesnt invalidate device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1696,7 +1659,7 @@ describe('Devices', function() {
 				},
 			});
 			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(0);
+			expect(devices).to.have.length(1);
 		});
 
 		it('re-adding device after config change does not error', async function() {
@@ -1724,25 +1687,6 @@ describe('Devices', function() {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing apn config invalidates only apn devices', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			const [apnID, firebaseID1, firebaseID2] = [uuidv4(), uuidv4(), uuidv4()];
-			await client.addDevice(apnID, 'apn', userID);
-			await client.addDevice(firebaseID1, 'firebase', userID);
-			await client.addDevice(firebaseID2, 'firebase', userID);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-				},
-			});
-			const { devices } = await client.getDevices(userID);
-			expect(devices).to.have.length(2);
-			for (const d of devices) {
-				expect(d.push_provider).to.equal('firebase');
-			}
-		});
-
 		it.skip('cannot delete invalidated device', async function() {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
@@ -1754,63 +1698,6 @@ describe('Devices', function() {
 			await expect(p).to.be.rejectedWith(
 				`user ${userID} does not have device with id ${deviceID}`,
 			);
-		});
-
-		it('Cache testing', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			let r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-		});
-
-		it('Cache testing - 2', async function() {
-			await client.addDevice(deviceID, 'apn', userID);
-			let r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'A TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-
-			await client.updateAppSettings({
-				apn_config: {
-					team_id: 'B TEAM',
-				},
-			});
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(0);
-			await client.addDevice(deviceID, 'apn', userID);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
-			r = await client.getDevices(userID);
-			expect(r.devices).to.have.length(1);
 		});
 	});
 });
