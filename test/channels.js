@@ -1488,7 +1488,7 @@ describe('$ne operator', function() {
 	});
 });
 
-describe.only('channel message search', function() {
+describe('channel message search', function() {
 	let authClient;
 	before(async () => {
 		authClient = await getTestClientForUser(uuidv4());
@@ -1610,7 +1610,7 @@ describe.only('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
 
-	it.only('query by message parent_id', async function() {
+	it('query by message parent_id', async function() {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
 		const smResp = await channel.sendMessage({ text: 'awesome response' });
@@ -1627,7 +1627,7 @@ describe.only('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(reply.message.id);
 	});
 
-	it.only('query by message reply count', async function() {
+	it('query by message reply count', async function() {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
 		const smResp = await channel.sendMessage({ text: 'awesome response' });
