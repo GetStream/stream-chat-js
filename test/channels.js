@@ -1627,6 +1627,24 @@ describe('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(reply.message.id);
 	});
 
+	it('query parent_id $exists + custom field', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+			unique: uuidv4(),
+		});
+
+		const response = await channel.search(
+			{ parent_id: { $exists: true }, unique: reply.message.unique },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(reply.message.id);
+	});
+
 	it('query by message reply count', async function() {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
