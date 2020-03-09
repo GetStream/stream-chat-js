@@ -1488,7 +1488,7 @@ describe('$ne operator', function() {
 	});
 });
 
-describe('channel message search', function() {
+describe.only('channel message search', function() {
 	let authClient;
 	before(async () => {
 		authClient = await getTestClientForUser(uuidv4());
@@ -1578,7 +1578,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.unique).to.be.undefined;
 	});
 
-	it('Basic Query using $q syntax', async function() {
+	it('basic Query using $q syntax', async function() {
 		// add a very special message
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
@@ -1594,5 +1594,53 @@ describe('channel message search', function() {
 		expect(response.results[0].message.text).to.contain(
 			'supercalifragilisticexpialidocious',
 		);
+	});
+
+	it('query by message id', async function() {
+		// add a very special messsage
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+
+		const response = await channel.search(
+			{ id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
+	});
+
+	it.only('query by message parent_id', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+		});
+
+		const response = await channel.search(
+			{ parent_id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(reply.message.id);
+	});
+
+	it.only('query by message reply count', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+		});
+
+		const response = await channel.search(
+			{ reply_count: 1 },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
 });
