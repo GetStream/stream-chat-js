@@ -214,7 +214,7 @@ export class StreamChat {
   ): Promise<Channel[]>;
   search(
     filterConditions: object,
-    query: object,
+    query: string | object,
     options: object,
   ): Promise<SearchAPIResponse>;
 
@@ -330,6 +330,7 @@ export class Channel {
     updateMessage: Message,
   ): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
+  search(query: string | object, options: object): Promise<SearchAPIResponse>;
 
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;

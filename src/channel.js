@@ -129,6 +129,36 @@ export class Channel {
 	}
 
 	/**
+	 * search - Query messages
+	 *
+	 * @param {object|string}  message search query or object MongoDB style filters
+	 * @param {object} options       Option object, {user_id: 'tommaso'}
+	 *
+	 * @return {object} search messages response
+	 */
+	async search(query, options = {}) {
+		// Return a list of channels
+		const payload = {
+			filter_conditions: { cid: this.cid },
+			...options,
+		};
+		if (typeof query === 'string') {
+			payload.query = query;
+		} else if (typeof query === 'object') {
+			payload.message_filter_conditions = query;
+		} else {
+			throw Error(`Invalid type ${typeof query} for query parameter`);
+		}
+
+		// Make sure we wait for the connect promise if there is a pending one
+		await this.wsPromise;
+
+		return await this.getClient().get(this.getClient().baseURL + '/search', {
+			payload,
+		});
+	}
+
+	/**
 	 * sendReaction - Send a reaction about a message
 	 *
 	 * @param {string} messageID the message id

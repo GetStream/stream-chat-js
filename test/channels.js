@@ -11,7 +11,6 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { StreamChat } from '../src';
 
 const expect = chai.expect;
 
@@ -1567,5 +1566,180 @@ describe('unread counts on hard delete messages', function() {
 		// expect 2 counts since we deleted the first message
 		expect(nickClient.health.me.unread_count).to.be.equal(0);
 		expect(nickClient.health.me.unread_channels).to.be.equal(0);
+	});
+});
+
+describe('channel message search', function() {
+	let authClient;
+	before(async () => {
+		authClient = await getTestClientForUser(uuidv4());
+	});
+
+	it('Basic Query (old format)', async function() {
+		const channelId = uuidv4();
+		// add a very special message
+		const channel = authClient.channel('messaging', channelId);
+		await channel.create();
+		const keyword = 'supercalifragilisticexpialidocious';
+		await channel.sendMessage({ text: `words ${keyword} what?` });
+		await channel.sendMessage({ text: `great movie because of ${keyword}` });
+
+		const filters = { type: 'messaging' };
+		const response = await channel.search('supercalifragilisticexpialidocious', {
+			limit: 2,
+			offset: 0,
+		});
+		expect(response.results.length).to.equal(2);
+		expect(response.results[0].message.text).to.contain(
+			'supercalifragilisticexpialidocious',
+		);
+	});
+
+	it('invalid query argument type should return an error', async function() {
+		const unique = uuidv4();
+		const channel = authClient.channel('messaging', uuidv4(), {
+			unique,
+		});
+		await channel.create();
+		try {
+			await channel.search(1);
+		} catch (e) {
+			expect(e.message).to.be.equal('Invalid type number for query parameter');
+		}
+	});
+
+	it('query message custom fields', async function() {
+		const unique = uuidv4();
+		const channel = authClient.channel('messaging', uuidv4(), {
+			unique,
+		});
+		await channel.create();
+		await channel.sendMessage({ text: 'hi', unique });
+
+		const messageFilters = { unique };
+		const response = await channel.search(messageFilters);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.unique).to.equal(unique);
+	});
+
+	it('query message text and custom field', async function() {
+		const unique = uuidv4();
+		const channel = authClient.channel('messaging', uuidv4(), {
+			unique,
+		});
+		await channel.create();
+		await channel.sendMessage({ text: 'hi', unique });
+		await channel.sendMessage({ text: 'hi' });
+
+		const messageFilters = { text: 'hi', unique: unique };
+		const response = await channel.search(messageFilters);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.unique).to.equal(unique);
+	});
+
+	it('query messages with attachments', async function() {
+		const unique = uuidv4();
+		const channel = authClient.channel('messaging', uuidv4(), {
+			unique,
+		});
+		await channel.create();
+		const attachments = [
+			{
+				type: 'hashtag',
+				name: 'awesome',
+				awesome: true,
+			},
+		];
+		await channel.sendMessage({ text: 'hi', unique });
+		await channel.sendMessage({ text: 'hi', attachments });
+
+		const messageFilters = { attachments: { $exists: true } };
+		const response = await channel.search(messageFilters);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.unique).to.be.undefined;
+	});
+
+	it('basic Query using $q syntax', async function() {
+		// add a very special message
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const keyword = 'supercalifragilisticexpialidocious';
+		await channel.sendMessage({ text: `words ${keyword} what?` });
+		await channel.sendMessage({ text: `great movie because of ${keyword}` });
+
+		const response = await channel.search(
+			{ text: { $q: 'supercalifragilisticexpialidocious' } },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(2);
+		expect(response.results[0].message.text).to.contain(
+			'supercalifragilisticexpialidocious',
+		);
+	});
+
+	it('query by message id', async function() {
+		// add a very special messsage
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+
+		const response = await channel.search(
+			{ id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
+	});
+
+	it('query by message parent_id', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+		});
+
+		const response = await channel.search(
+			{ parent_id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(reply.message.id);
+	});
+
+	it('query parent_id $exists + custom field', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+			unique: uuidv4(),
+		});
+
+		const response = await channel.search(
+			{ parent_id: { $exists: true }, unique: reply.message.unique },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(reply.message.id);
+	});
+
+	it('query by message reply count', async function() {
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+		const reply = await channel.sendMessage({
+			text: 'awesome response reply',
+			parent_id: smResp.message.id,
+		});
+
+		const response = await channel.search(
+			{ reply_count: 1 },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
 });
