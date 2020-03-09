@@ -896,6 +896,15 @@ export class StreamChat {
 		return channels;
 	}
 
+	/**
+	 * search - Query messages
+	 *
+	 * @param {object} channels MongoDB style filter conditions
+	 * @param {object|string}  message search query or object MongoDB style filters
+	 * @param {object} options       Option object, {user_id: 'tommaso'}
+	 *
+	 * @return {object} search messages response
+	 */
 	async search(filterConditions, query, options = {}) {
 		// Return a list of channels
 		const payload = {

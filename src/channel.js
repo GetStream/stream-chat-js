@@ -128,6 +128,14 @@ export class Channel {
 		});
 	}
 
+	/**
+	 * search - Query messages
+	 *
+	 * @param {object|string}  message search query or object MongoDB style filters
+	 * @param {object} options       Option object, {user_id: 'tommaso'}
+	 *
+	 * @return {object} search messages response
+	 */
 	async search(query, options = {}) {
 		// Return a list of channels
 		const payload = {
