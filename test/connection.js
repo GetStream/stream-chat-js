@@ -215,12 +215,12 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Disconnect', async function() {
 		const conn = createTestWSConnection(validURL);
-		const healthCheck = await conn.connect();
+		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
-
+		const wsID = conn.wsID;
 		conn.disconnect();
 		expect(conn.isHealthy).to.equal(false);
-		expect(conn.wsID).to.equal(1);
+		expect(conn.wsID).to.equal(wsID + 1);
 		expect(conn.ws).to.equal(undefined);
 	});
 });
