@@ -55,8 +55,7 @@ describe('Moderation', function() {
 
 	it.only('Mute Channel (notification)', async function() {
 		const user1 = uuidv4();
-		const user2 = uuidv4();
-		await createUsers([user1, user2]);
+		await createUsers([user1]);
 		const client1 = await getTestClientForUser(user1);
 
 		const eventPromise = new Promise(resolve => {
@@ -75,11 +74,11 @@ describe('Moderation', function() {
 		});
 
 		let channel = client1.channel('messaging', uuidv4(), {
-			members: [user1, user2],
+			members: [user1],
 		});
 		await channel.create();
 
-		const response = await client1.muteChannel(channel.cid);
+		const response = await channel.mute();
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
 		expect(response.mute.user.id).to.equal(user1);

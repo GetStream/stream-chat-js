@@ -1170,12 +1170,25 @@ export class StreamChat {
 	/** unmuteUser - unmutes a user
 	 *
 	 * @param targetID
+	 * @param [currentUserID] Only used with serverside auth
+	 * @returns {Promise<*>}
+	 */
+	async unmuteUser(targetID, currentUserID = null) {
+		return await this.post(this.baseURL + '/moderation/unmute', {
+			target_id: targetID,
+			...(currentUserID ? { user_id: currentUserID } : {}),
+		});
+	}
+
+	/** unmuteChannel - unmutes a channel
+	 *
+	 * @param targetCID
 	 * @param [userID] Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetID, userID = null) {
-		return await this.post(this.baseURL + '/moderation/unmute', {
-			target_id: targetID,
+	async unmuteChannel(targetCID, userID = null) {
+		return await this.post(this.baseURL + '/moderation/unmute/channel', {
+			target_cid: targetCID,
 			...(userID ? { user_id: userID } : {}),
 		});
 	}

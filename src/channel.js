@@ -359,6 +359,24 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * mute - mutes the current channel
+	 *
+	 * @return {object} 			The server response
+	 */
+	async mute() {
+		return await this.getClient().muteChannel(this.cid);
+	}
+
+	/**
+	 * unmute - unmutes the current channel
+	 *
+	 * @return {object} 			The server response
+	 */
+	async unmute() {
+		return await this.getClient().unmuteChannel(this.cid);
+	}
+
 	sendAction(messageID, formData) {
 		this._checkInitialized();
 		if (!messageID) {
