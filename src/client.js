@@ -1141,6 +1141,19 @@ export class StreamChat {
 		});
 	}
 
+	/** muteUser - mutes a user
+	 *
+	 * @param targetID
+	 * @param [userID] Only used with serverside auth
+	 * @returns {Promise<*>}
+	 */
+	async muteUser(targetID, userID = null) {
+		return await this.post(this.baseURL + '/moderation/mute', {
+			target_id: targetID,
+			...(userID ? { user_id: userID } : {}),
+		});
+	}
+
 	/** muteChannel - mutes a channel
 	 *
 	 * @param targetCID
