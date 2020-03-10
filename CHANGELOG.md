@@ -1,3 +1,7 @@
+## March 10, 2020 - 1.4.0
+
+- Support filtering by messages custom fields  - [#264](https://github.com/GetStream/stream-chat-js/pull/264)
+
 ## March 3, 2020 - 1.3.4
 
 - Increment wsID when ws connection is disconnected manually, to ensure any of the callbacks (onclose, onerror etc) are obsolete - [792de5b](https://github.com/GetStream/stream-chat-js/commit/792de5ba178d00dd94fb8e41abdaadf45d7d436f)
