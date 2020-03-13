@@ -1162,7 +1162,7 @@ export class StreamChat {
 	 */
 	async muteChannel(targetCID, currentUserID = null) {
 		return await this.post(this.baseURL + '/moderation/mute/channel', {
-			target_cid: targetCID,
+			channel_cid: targetCID,
 			...(currentUserID ? { user_id: currentUserID } : {}),
 		});
 	}
@@ -1188,7 +1188,7 @@ export class StreamChat {
 	 */
 	async unmuteChannel(targetCID, userID = null) {
 		return await this.post(this.baseURL + '/moderation/unmute/channel', {
-			target_cid: targetCID,
+			channel_cid: targetCID,
 			...(userID ? { user_id: userID } : {}),
 		});
 	}

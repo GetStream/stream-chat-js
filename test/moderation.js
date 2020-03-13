@@ -60,14 +60,14 @@ describe('Moderation', function() {
 
 		const eventPromise = new Promise(resolve => {
 			// verify that the notification is sent
-			client1.on('notification.mutes_updated', e => {
+			client1.on('notification.channel_mutes_updated', e => {
 				expect(e.me.mutes.length).to.equal(1);
 				let mute = e.me.mutes[0];
 				expect(mute.created_at).to.not.be.undefined;
 				expect(mute.updated_at).to.not.be.undefined;
 				expect(mute.user.id).to.equal(user1);
 				expect(mute.type).to.equal('mute_channel');
-				expect(mute.target_cid).to.equal(channel.cid);
+				expect(mute.channel_cid).to.equal(channel.cid);
 				expect(mute.target).to.be.undefined;
 				resolve();
 			});
@@ -79,11 +79,12 @@ describe('Moderation', function() {
 		await channel.create();
 
 		const response = await channel.mute();
+		console.log(response);
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
 		expect(response.mute.user.id).to.equal(user1);
 		expect(response.mute.type).to.equal('mute_channel');
-		expect(response.mute.target_cid).to.equal(channel.cid);
+		expect(response.mute.channel_cid).to.equal(channel.cid);
 		expect(response.mute.target).to.be.undefined;
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
@@ -94,7 +95,7 @@ describe('Moderation', function() {
 		expect(connectResponse.me.mutes.length).to.equal(1);
 		expect(connectResponse.me.mutes[0].target).to.be.undefined;
 		expect(connectResponse.me.mutes[0].type).to.be.equal('mute_channel');
-		expect(connectResponse.me.mutes[0].target_cid).to.be.equal(channel.cid);
+		expect(connectResponse.me.mutes[0].channel_cid).to.be.equal(channel.cid);
 		await eventPromise;
 	});
 
