@@ -342,4 +342,16 @@ describe('Threads and Replies', function() {
 		const p = channel.sendMessage({ text: 'yo', parent_id: msg.message.id + 1 });
 		await expect(p).to.be.rejected;
 	});
+
+	it('Deleted reply should not be listed in channel', async function() {
+		await replyClient.channel('livestream', 'replies').query();
+		const parent = await channel.sendMessage({ text: 'Check this out!!!' });
+		const reply = await channel.sendMessage({
+			text: 'No way!',
+			parent_id: parent.message.id,
+		});
+		await replyClient.deleteMessage(reply.message.id);
+		const response = await replyClient.channel('livestream', 'replies').query();
+		expect(response.messages.map(m => m.id)).to.not.contain(reply.message.id);
+	});
 });
