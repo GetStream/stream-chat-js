@@ -497,6 +497,7 @@ export interface UnbanUserAPIResponse extends APIResponse {}
 
 export interface MuteAPIResponse extends APIResponse {
   mute: MuteResponse;
+  channel_mute: MuteChannelResponse;
   own_user: OwnUserResponse;
 }
 
@@ -688,8 +689,15 @@ export interface ReadResponse {
 export interface MuteResponse {
   user: UserResponse;
   target?: UserResponse;
-  type: 'mute_user' | 'mute_channel';
   channel?: Channel;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MuteChannelResponse {
+  user: UserResponse;
+  channel?: Channel;
+  expires?: string;
   created_at?: string;
   updated_at?: string;
 }
