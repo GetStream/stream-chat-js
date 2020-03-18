@@ -120,12 +120,11 @@ describe('mute channels', function() {
 
 		const eventPromise = new Promise(resolve => {
 			let onChannelMute = e => {
-				expect(e.me.mutes.length).to.equal(1);
-				let mute = e.me.mutes[0];
+				expect(e.me.channel_mutes.length).to.equal(1);
+				let mute = e.me.channel_mutes[0];
 				expect(mute.created_at).to.not.be.undefined;
 				expect(mute.updated_at).to.not.be.undefined;
 				expect(mute.user.id).to.equal(user1);
-				expect(mute.type).to.equal('mute_channel');
 				expect(mute.channel.cid).to.equal(channel.cid);
 				expect(mute.target).to.be.undefined;
 				resolve();
@@ -145,8 +144,7 @@ describe('mute channels', function() {
 		expect(response.channel_mute.created_at).to.not.be.undefined;
 		expect(response.channel_mute.updated_at).to.not.be.undefined;
 		expect(response.channel_mute.user.id).to.equal(user1);
-		expect(response.channel_mute.type).to.equal('mute_channel');
-		expect(response.channel_mute.channel_cid).to.equal(channel.cid);
+		expect(response.channel_mute.channel.cid).to.equal(channel.cid);
 		expect(response.channel_mute.target).to.be.undefined;
 		// verify we return the right channel mute upon connect
 		const client = getTestClient(false);
@@ -154,9 +152,9 @@ describe('mute channels', function() {
 			{ id: user1 },
 			createUserToken(user1),
 		);
-		expect(connectResponse.me.mutes.length).to.equal(1);
-		expect(connectResponse.me.mutes[0].target).to.be.undefined;
-		expect(connectResponse.me.mutes[0].type).to.be.equal('mute_channel');
+		expect(connectResponse.me.channel_mutes.length).to.equal(1);
+		expect(connectResponse.me.channel_mutes[0].target).to.be.undefined;
+		expect(connectResponse.me.channel_mutes[0].channel.cid).to.equal(channel.cid);
 		await eventPromise;
 	});
 
@@ -183,7 +181,7 @@ describe('mute channels', function() {
 	it('unmute channel ', async function() {
 		const eventPromise = new Promise(resolve => {
 			let onChannelMute = e => {
-				expect(e.me.mutes.length).to.equal(0);
+				expect(e.me.channel_mutes.length).to.equal(0);
 				resolve();
 				//cleanup
 				client1.off('notification.channel_mutes_updated', onChannelMute);
@@ -200,7 +198,7 @@ describe('mute channels', function() {
 			{ id: user1 },
 			createUserToken(user1),
 		);
-		expect(connectResponse.me.mutes.length).to.equal(0);
+		expect(connectResponse.me.channel_mutes.length).to.equal(0);
 		await eventPromise;
 	});
 
@@ -270,12 +268,12 @@ describe('mute channels', function() {
 		await channel.mute({ expiration: 500 });
 
 		let client = await getTestClientForUser(user1);
-		expect(client.health.me.mutes.length).to.equal(1);
+		expect(client.health.me.channel_mutes.length).to.equal(1);
 
 		await sleep(500);
 		// mute should be expired and not returned
 		client = await getTestClientForUser(user1);
-		expect(client.health.me.mutes.length).to.equal(0);
+		expect(client.health.me.channel_mutes.length).to.equal(0);
 		// expired muted should not be returned in query channels
 		let resp = await client1.queryChannels({ muted: true });
 		expect(resp.length).to.be.equal(0);
