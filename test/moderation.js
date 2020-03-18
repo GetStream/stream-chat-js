@@ -159,7 +159,10 @@ describe('mute channels', function() {
 	});
 
 	it('query muted channels', async function() {
-		const resp = await client1.queryChannels({ muted: true });
+		const resp = await client1.queryChannels({
+			muted: true,
+			members: { $in: [user1] },
+		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].id).to.be.equal(mutedChannelId);
 	});
@@ -174,7 +177,10 @@ describe('mute channels', function() {
 	});
 
 	it('exclude muted channels', async function() {
-		const resp = await client1.queryChannels({ muted: false });
+		const resp = await client1.queryChannels({
+			muted: false,
+			members: { $in: [user1] },
+		});
 		expect(resp.length).to.be.equal(0);
 	});
 
@@ -236,6 +242,7 @@ describe('mute channels', function() {
 		const client = getTestClient(true);
 		const channel = client.channel('messaging', uuidv4(), {
 			created_by_id: user1,
+			members: [user1],
 		});
 		await channel.create();
 
@@ -250,6 +257,7 @@ describe('mute channels', function() {
 		const client = getTestClient(true);
 		const channel = client.channel('messaging', uuidv4(), {
 			created_by_id: user1,
+			members: [user1],
 		});
 		await channel.create();
 
@@ -261,7 +269,7 @@ describe('mute channels', function() {
 	});
 
 	it('mute channel with expiration', async function() {
-		const channel = client1.channel('messaging', uuidv4());
+		const channel = client1.channel('messaging', uuidv4(), { members: [user1] });
 		await channel.create();
 
 		// mute will expire in 500 milliseconds
@@ -275,11 +283,14 @@ describe('mute channels', function() {
 		client = await getTestClientForUser(user1);
 		expect(client.health.me.channel_mutes.length).to.equal(0);
 		// expired muted should not be returned in query channels
-		let resp = await client1.queryChannels({ muted: true });
+		let resp = await client1.queryChannels({
+			muted: true,
+			members: { $in: [user1] },
+		});
 		expect(resp.length).to.be.equal(0);
 
-		// return only non muted channels + other filter
-		resp = await client1.queryChannels({ muted: false, cid: channel.cid });
+		// return only non muted channels
+		resp = await client1.queryChannels({ muted: false, members: { $in: [user1] } });
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
