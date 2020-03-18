@@ -85,6 +85,8 @@ export type MemberRemovedEvent = 'member.removed';
 export type ChannelUpdatedEvent = 'channel.updated';
 export type ChannelDeletedEvent = 'channel.deleted';
 export type ChannelTruncatedEvent = 'channel.truncated';
+export type ChannelMutedEvent = 'channel.muted';
+export type ChannelUnmutedEvent = 'channel.unmuted';
 export type HealthCheckEvent = 'health.check';
 export type NotificationNewMessageEvent = 'notification.message_new';
 export type NotificationMarkReadEvent = 'notification.mark_read';
@@ -362,6 +364,9 @@ export class Channel {
   hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
   getMessagesById(messageIds: string[]): Promise<APIResponse>;
+
+  mute(options?: object): Promise<MuteAPIResponse>;
+  unmute(options?: object): Promise<UnmuteAPIResponse>;
 }
 
 export class ChannelState {
@@ -492,6 +497,7 @@ export interface UnbanUserAPIResponse extends APIResponse {}
 
 export interface MuteAPIResponse extends APIResponse {
   mute: MuteResponse;
+  channel_mute: MuteChannelResponse;
   own_user: OwnUserResponse;
 }
 
@@ -682,7 +688,16 @@ export interface ReadResponse {
 
 export interface MuteResponse {
   user: UserResponse;
-  target: UserResponse;
+  target?: UserResponse;
+  channel?: Channel;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MuteChannelResponse {
+  user: UserResponse;
+  channel?: Channel;
+  expires?: string;
   created_at?: string;
   updated_at?: string;
 }

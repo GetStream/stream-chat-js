@@ -359,6 +359,46 @@ export class Channel {
 		return data;
 	}
 
+	/**
+	 * mute - mutes the current channel
+	 * @param {object} 				opts expiration or user_id
+	 * @return {object} 			The server response
+	 *
+	 * example with expiration:
+	 * await channel.mute({expiration: moment.duration(2, 'weeks')});
+	 *
+	 * example server side:
+	 * await channel.mute({user_id: userId});
+	 *
+	 */
+	async mute(opts = {}) {
+		return await this.getClient().post(
+			this.getClient().baseURL + '/moderation/mute/channel',
+			{
+				channel_cid: this.cid,
+				...opts,
+			},
+		);
+	}
+
+	/**
+	 * unmute - mutes the current channel
+	 * @param {object} opts user_id
+	 * @return {object} 			The server response
+	 *
+	 * example server side:
+	 * await channel.unmute({user_id: userId});
+	 */
+	async unmute(opts = {}) {
+		return await this.getClient().post(
+			this.getClient().baseURL + '/moderation/unmute/channel',
+			{
+				channel_cid: this.cid,
+				...opts,
+			},
+		);
+	}
+
 	sendAction(messageID, formData) {
 		this._checkInitialized();
 		if (!messageID) {

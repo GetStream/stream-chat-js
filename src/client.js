@@ -1157,13 +1157,13 @@ export class StreamChat {
 	/** unmuteUser - unmutes a user
 	 *
 	 * @param targetID
-	 * @param [userID] Only used with serverside auth
+	 * @param [currentUserID] Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetID, userID = null) {
+	async unmuteUser(targetID, currentUserID = null) {
 		return await this.post(this.baseURL + '/moderation/unmute', {
 			target_id: targetID,
-			...(userID ? { user_id: userID } : {}),
+			...(currentUserID ? { user_id: currentUserID } : {}),
 		});
 	}
 
