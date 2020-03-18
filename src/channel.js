@@ -399,15 +399,6 @@ export class Channel {
 		);
 	}
 
-	/**
-	 * mute - check if channel is muted
-	 *
-	 * @return {object} 			The server response
-	 */
-	async muteStatus() {
-		return await this.getClient().muteChannel(this.cid);
-	}
-
 	sendAction(messageID, formData) {
 		this._checkInitialized();
 		if (!messageID) {

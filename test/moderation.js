@@ -110,7 +110,7 @@ describe('Moderation', function() {
 	});
 });
 
-describe.only('mute channels', function() {
+describe('mute channels', function() {
 	let user1 = uuidv4();
 	let client1;
 	let mutedChannelId = uuidv4();

@@ -18,6 +18,8 @@ export class ChannelState {
 		this.threads = Immutable({});
 		// a list of users to hide messages from
 		this.mutedUsers = Immutable([]);
+		// a list of channels to hide messages from
+		this.mutedChannels = Immutable([]);
 		this.watchers = Immutable({});
 		this.members = Immutable({});
 		this.last_message_at =
