@@ -5,6 +5,7 @@ import {
 	getTestClient,
 	createUserToken,
 	expectHTTPErrorCode,
+	sleep,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -125,7 +126,6 @@ describe.only('mute channels', function() {
 				expect(mute.updated_at).to.not.be.undefined;
 				expect(mute.user.id).to.equal(user1);
 				expect(mute.type).to.equal('mute_channel');
-				expect(mute.channel_cid).to.equal(channel.cid);
 				expect(mute.channel.cid).to.equal(channel.cid);
 				expect(mute.target).to.be.undefined;
 				resolve();
@@ -157,7 +157,6 @@ describe.only('mute channels', function() {
 		expect(connectResponse.me.mutes.length).to.equal(1);
 		expect(connectResponse.me.mutes[0].target).to.be.undefined;
 		expect(connectResponse.me.mutes[0].type).to.be.equal('mute_channel');
-		expect(connectResponse.me.mutes[0].channel_cid).to.be.equal(channel.cid);
 		await eventPromise;
 	});
 
@@ -233,5 +232,57 @@ describe.only('mute channels', function() {
 			client1.channel('messaging', id).unmute(),
 			`StreamChat error code 4: UnmuteChannel failed with error: "some channels do not exist or were deleted: (messaging:${id})"`,
 		);
+	});
+
+	it('mute server side require an user to be specified', async function() {
+		const client = getTestClient(true);
+		const channel = client.channel('messaging', uuidv4(), {
+			created_by_id: user1,
+		});
+		await channel.create();
+
+		await expectHTTPErrorCode(
+			400,
+			channel.mute(),
+			`StreamChat error code 4: MuteChannel failed with error: "either user or user_id must be provided when using server side auth."`,
+		);
+	});
+
+	it('unmute server side require an user to be specified', async function() {
+		const client = getTestClient(true);
+		const channel = client.channel('messaging', uuidv4(), {
+			created_by_id: user1,
+		});
+		await channel.create();
+
+		await expectHTTPErrorCode(
+			400,
+			channel.unmute(),
+			`StreamChat error code 4: UnmuteChannel failed with error: "either user or user_id must be provided when using server side auth."`,
+		);
+	});
+
+	it('mute channel with expiration', async function() {
+		const channel = client1.channel('messaging', uuidv4());
+		await channel.create();
+
+		// mute will expire in 500 milliseconds
+		await channel.mute({ expiration: 500 });
+
+		let client = await getTestClientForUser(user1);
+		expect(client.health.me.mutes.length).to.equal(1);
+
+		await sleep(500);
+		// mute should be expired and not returned
+		client = await getTestClientForUser(user1);
+		expect(client.health.me.mutes.length).to.equal(0);
+		// expired muted should not be returned in query channels
+		let resp = await client1.queryChannels({ muted: true });
+		expect(resp.length).to.be.equal(0);
+
+		// return only non muted channels + other filter
+		resp = await client1.queryChannels({ muted: false, cid: channel.cid });
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 });

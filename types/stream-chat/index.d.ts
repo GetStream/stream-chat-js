@@ -687,9 +687,9 @@ export interface ReadResponse {
 
 export interface MuteResponse {
   user: UserResponse;
-  target: UserResponse;
+  target?: UserResponse;
   type: 'mute_user' | 'mute_channel';
-  target_cid: string;
+  channel?: Channel;
   created_at?: string;
   updated_at?: string;
 }
