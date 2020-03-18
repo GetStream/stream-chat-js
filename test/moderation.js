@@ -68,6 +68,7 @@ describe('Moderation', function() {
 				expect(mute.user.id).to.equal(user1);
 				expect(mute.type).to.equal('mute_channel');
 				expect(mute.channel_cid).to.equal(channel.cid);
+				expect(mute.channel.cid).to.equal(channel.cid);
 				expect(mute.target).to.be.undefined;
 				resolve();
 			});
@@ -76,16 +77,16 @@ describe('Moderation', function() {
 		let channel = client1.channel('messaging', uuidv4(), {
 			members: [user1],
 		});
-		await channel.create();
+		await channel.watch();
 
 		const response = await channel.mute();
 		console.log(response);
-		expect(response.mute.created_at).to.not.be.undefined;
-		expect(response.mute.updated_at).to.not.be.undefined;
-		expect(response.mute.user.id).to.equal(user1);
-		expect(response.mute.type).to.equal('mute_channel');
-		expect(response.mute.channel_cid).to.equal(channel.cid);
-		expect(response.mute.target).to.be.undefined;
+		expect(response.channel_mute.created_at).to.not.be.undefined;
+		expect(response.channel_mute.updated_at).to.not.be.undefined;
+		expect(response.channel_mute.user.id).to.equal(user1);
+		expect(response.channel_mute.type).to.equal('mute_channel');
+		expect(response.channel_mute.channel_cid).to.equal(channel.cid);
+		expect(response.channel_mute.target).to.be.undefined;
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
 		const connectResponse = await client.setUser(
