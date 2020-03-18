@@ -4,6 +4,7 @@ import {
 	createUsers,
 	getTestClient,
 	createUserToken,
+	expectHTTPErrorCode,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -50,53 +51,6 @@ describe('Moderation', function() {
 		);
 		expect(connectResponse.me.mutes.length).to.equal(1);
 		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
-		await eventPromise;
-	});
-
-	it.only('Mute Channel (notification)', async function() {
-		const user1 = uuidv4();
-		await createUsers([user1]);
-		const client1 = await getTestClientForUser(user1);
-
-		const eventPromise = new Promise(resolve => {
-			// verify that the notification is sent
-			client1.on('notification.channel_mutes_updated', e => {
-				expect(e.me.mutes.length).to.equal(1);
-				let mute = e.me.mutes[0];
-				expect(mute.created_at).to.not.be.undefined;
-				expect(mute.updated_at).to.not.be.undefined;
-				expect(mute.user.id).to.equal(user1);
-				expect(mute.type).to.equal('mute_channel');
-				expect(mute.channel_cid).to.equal(channel.cid);
-				expect(mute.channel.cid).to.equal(channel.cid);
-				expect(mute.target).to.be.undefined;
-				resolve();
-			});
-		});
-
-		let channel = client1.channel('messaging', uuidv4(), {
-			members: [user1],
-		});
-		await channel.watch();
-
-		const response = await channel.mute();
-		console.log(response);
-		expect(response.channel_mute.created_at).to.not.be.undefined;
-		expect(response.channel_mute.updated_at).to.not.be.undefined;
-		expect(response.channel_mute.user.id).to.equal(user1);
-		expect(response.channel_mute.type).to.equal('mute_channel');
-		expect(response.channel_mute.channel_cid).to.equal(channel.cid);
-		expect(response.channel_mute.target).to.be.undefined;
-		// verify we return the right user mute upon connect
-		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
-			{ id: user1 },
-			createUserToken(user1),
-		);
-		expect(connectResponse.me.mutes.length).to.equal(1);
-		expect(connectResponse.me.mutes[0].target).to.be.undefined;
-		expect(connectResponse.me.mutes[0].type).to.be.equal('mute_channel');
-		expect(connectResponse.me.mutes[0].channel_cid).to.be.equal(channel.cid);
 		await eventPromise;
 	});
 
@@ -152,5 +106,132 @@ describe('Moderation', function() {
 			createUserToken(user1),
 		);
 		expect(connectResponse.me.mutes.length).to.equal(0);
+	});
+});
+
+describe.only('mute channels', function() {
+	let user1 = uuidv4();
+	let client1;
+	let mutedChannelId = uuidv4();
+	it('mute channel and expect notification)', async function() {
+		await createUsers([user1]);
+		client1 = await getTestClientForUser(user1);
+
+		const eventPromise = new Promise(resolve => {
+			let onChannelMute = e => {
+				expect(e.me.mutes.length).to.equal(1);
+				let mute = e.me.mutes[0];
+				expect(mute.created_at).to.not.be.undefined;
+				expect(mute.updated_at).to.not.be.undefined;
+				expect(mute.user.id).to.equal(user1);
+				expect(mute.type).to.equal('mute_channel');
+				expect(mute.channel_cid).to.equal(channel.cid);
+				expect(mute.channel.cid).to.equal(channel.cid);
+				expect(mute.target).to.be.undefined;
+				resolve();
+				//cleanup
+				client1.off('notification.channel_mutes_updated', onChannelMute);
+			};
+			// verify that the notification is sent
+			client1.on('notification.channel_mutes_updated', onChannelMute);
+		});
+
+		let channel = client1.channel('messaging', mutedChannelId, {
+			members: [user1],
+		});
+		await channel.create();
+
+		const response = await channel.mute();
+		expect(response.channel_mute.created_at).to.not.be.undefined;
+		expect(response.channel_mute.updated_at).to.not.be.undefined;
+		expect(response.channel_mute.user.id).to.equal(user1);
+		expect(response.channel_mute.type).to.equal('mute_channel');
+		expect(response.channel_mute.channel_cid).to.equal(channel.cid);
+		expect(response.channel_mute.target).to.be.undefined;
+		// verify we return the right channel mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(1);
+		expect(connectResponse.me.mutes[0].target).to.be.undefined;
+		expect(connectResponse.me.mutes[0].type).to.be.equal('mute_channel');
+		expect(connectResponse.me.mutes[0].channel_cid).to.be.equal(channel.cid);
+		await eventPromise;
+	});
+
+	it('query muted channels', async function() {
+		const resp = await client1.queryChannels({ muted: true });
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].id).to.be.equal(mutedChannelId);
+	});
+
+	it('query muted channels with other filters', async function() {
+		const resp = await client1.queryChannels({
+			members: { $in: [user1] },
+			muted: true,
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].id).to.be.equal(mutedChannelId);
+	});
+
+	it('exclude muted channels', async function() {
+		const resp = await client1.queryChannels({ muted: false });
+		expect(resp.length).to.be.equal(0);
+	});
+
+	it('unmute channel ', async function() {
+		const eventPromise = new Promise(resolve => {
+			let onChannelMute = e => {
+				expect(e.me.mutes.length).to.equal(0);
+				resolve();
+				//cleanup
+				client1.off('notification.channel_mutes_updated', onChannelMute);
+			};
+			// verify that the notification is sent
+			client1.on('notification.channel_mutes_updated', onChannelMute);
+		});
+
+		await client1.channel('messaging', mutedChannelId).unmute();
+
+		// verify we return the right channel mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(0);
+		await eventPromise;
+	});
+
+	it('muted and mute_expires_at are reserved fields', async function() {
+		let channel = client1.channel('messaging', uuidv4(), {
+			muted: true,
+			mute_expires_at: new Date(),
+		});
+		await expectHTTPErrorCode(
+			400,
+			channel.create(),
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "data.mute_expires_at is a reserved field, data.muted is a reserved field"',
+		);
+	});
+
+	it('mute non existing channel must fail', async function() {
+		const id = uuidv4();
+		await expectHTTPErrorCode(
+			400,
+			client1.channel('messaging', id).mute(),
+			`StreamChat error code 4: MuteChannel failed with error: "some channels do not exist or were deleted: (messaging:${id})"`,
+		);
+	});
+
+	it('ummute non existing channel must fail', async function() {
+		const id = uuidv4();
+		await expectHTTPErrorCode(
+			400,
+			client1.channel('messaging', id).unmute(),
+			`StreamChat error code 4: UnmuteChannel failed with error: "some channels do not exist or were deleted: (messaging:${id})"`,
+		);
 	});
 });

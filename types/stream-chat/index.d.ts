@@ -244,9 +244,6 @@ export class StreamChat {
   muteUser(targetUserID: string): Promise<MuteAPIResponse>;
   unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
 
-  muteChannel(targetCID: string): Promise<MuteAPIResponse>;
-  unmuteChannel(targetCID: string): Promise<UnmuteAPIResponse>;
-
   flagUser(userID: string): Promise<FlagAPIResponse>;
   unflagUser(userID: string): Promise<UnflagAPIResponse>;
   flagMessage(messageID: string): Promise<FlagAPIResponse>;
@@ -368,8 +365,8 @@ export class Channel {
   show(userId?: string): Promise<APIResponse>;
   getMessagesById(messageIds: string[]): Promise<APIResponse>;
 
-  mute(): Promise<MuteAPIResponse>;
-  unmute(): Promise<UnmuteAPIResponse>;
+  mute(options?: object): Promise<MuteAPIResponse>;
+  unmute(options?: object): Promise<UnmuteAPIResponse>;
 }
 
 export class ChannelState {

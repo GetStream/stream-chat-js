@@ -1154,19 +1154,6 @@ export class StreamChat {
 		});
 	}
 
-	/** muteChannel - mutes a channel
-	 *
-	 * @param targetCID
-	 * @param [currentUserID] Only used with serverside auth
-	 * @returns {Promise<*>}
-	 */
-	async muteChannel(targetCID, currentUserID = null) {
-		return await this.post(this.baseURL + '/moderation/mute/channel', {
-			channel_cid: targetCID,
-			...(currentUserID ? { user_id: currentUserID } : {}),
-		});
-	}
-
 	/** unmuteUser - unmutes a user
 	 *
 	 * @param targetID
@@ -1177,19 +1164,6 @@ export class StreamChat {
 		return await this.post(this.baseURL + '/moderation/unmute', {
 			target_id: targetID,
 			...(currentUserID ? { user_id: currentUserID } : {}),
-		});
-	}
-
-	/** unmuteChannel - unmutes a channel
-	 *
-	 * @param targetCID
-	 * @param [userID] Only used with serverside auth
-	 * @returns {Promise<*>}
-	 */
-	async unmuteChannel(targetCID, userID = null) {
-		return await this.post(this.baseURL + '/moderation/unmute/channel', {
-			channel_cid: targetCID,
-			...(userID ? { user_id: userID } : {}),
 		});
 	}
 
