@@ -269,29 +269,34 @@ describe('mute channels', function() {
 	});
 
 	it('mute channel with expiration', async function() {
-		const channel = client1.channel('messaging', uuidv4(), { members: [user1] });
+		const user = uuidv4();
+		await createUsers([user]);
+		client1 = await getTestClientForUser(user);
+
+		const channel = client1.channel('messaging', uuidv4(), { members: [user] });
 		await channel.create();
 
 		// mute will expire in 500 milliseconds
 		await channel.mute({ expiration: 500 });
 
-		let client = await getTestClientForUser(user1);
+		let client = await getTestClientForUser(user);
 		expect(client.health.me.channel_mutes.length).to.equal(1);
 
 		await sleep(500);
 		// mute should be expired and not returned
-		client = await getTestClientForUser(user1);
+		client = await getTestClientForUser(user);
 		expect(client.health.me.channel_mutes.length).to.equal(0);
 		// expired muted should not be returned in query channels
 		let resp = await client1.queryChannels({
 			muted: true,
-			members: { $in: [user1] },
+			members: { $in: [user] },
 		});
 		expect(resp.length).to.be.equal(0);
 
 		// return only non muted channels
-		resp = await client1.queryChannels({ muted: false, members: { $in: [user1] } });
+		resp = await client1.queryChannels({ muted: false, members: { $in: [user] } });
 		expect(resp.length).to.be.equal(1);
+
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 });
