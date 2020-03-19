@@ -303,7 +303,7 @@ describe('mute channels', function() {
 	});
 });
 
-describe.only('channel muteStatus', function() {
+describe('channel muteStatus', function() {
 	let channel;
 	let userID = uuidv4();
 	let client;
