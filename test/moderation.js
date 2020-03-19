@@ -6,6 +6,7 @@ import {
 	createUserToken,
 	expectHTTPErrorCode,
 	sleep,
+	newEventPromise,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -112,10 +113,11 @@ describe('Moderation', function() {
 
 describe('mute channels', function() {
 	let user1 = uuidv4();
+	let user2 = uuidv4();
 	let client1;
 	let mutedChannelId = uuidv4();
 	it('mute channel and expect notification)', async function() {
-		await createUsers([user1]);
+		await createUsers([user1, user2]);
 		client1 = await getTestClientForUser(user1);
 
 		const eventPromise = new Promise(resolve => {
@@ -136,7 +138,7 @@ describe('mute channels', function() {
 		});
 
 		let channel = client1.channel('messaging', mutedChannelId, {
-			members: [user1],
+			members: [user1, user2],
 		});
 		await channel.create();
 
@@ -146,6 +148,7 @@ describe('mute channels', function() {
 		expect(response.channel_mute.user.id).to.equal(user1);
 		expect(response.channel_mute.channel.cid).to.equal(channel.cid);
 		expect(response.channel_mute.target).to.be.undefined;
+
 		// verify we return the right channel mute upon connect
 		const client = getTestClient(false);
 		const connectResponse = await client.setUser(
@@ -156,6 +159,21 @@ describe('mute channels', function() {
 		expect(connectResponse.me.channel_mutes[0].target).to.be.undefined;
 		expect(connectResponse.me.channel_mutes[0].channel.cid).to.equal(channel.cid);
 		await eventPromise;
+	});
+
+	it('sending messages to muted channels dont increment unread counts', async function() {
+		let client2 = await getTestClientForUser(user2);
+		await client2
+			.channel('messaging', mutedChannelId)
+			.sendMessage({ text: 'message to muted channel' });
+
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.total_unread_count).to.equal(0);
+		expect(connectResponse.me.unread_channels).to.be.equal(0);
 	});
 
 	it('query muted channels', async function() {
@@ -298,5 +316,71 @@ describe('mute channels', function() {
 		expect(resp.length).to.be.equal(1);
 
 		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+});
+
+describe('channel muteStatus', function() {
+	let channel;
+	let userID = uuidv4();
+	let client;
+
+	before(async function() {
+		client = await getTestClientForUser(userID);
+		channel = client.channel('messaging', uuidv4());
+		await channel.watch();
+	});
+
+	it('add mute update internal mute state', async function() {
+		const muteUpdatedEvent = newEventPromise(
+			client,
+			'notification.channel_mutes_updated',
+		);
+		await channel.mute();
+		await expect(muteUpdatedEvent).to.be.fulfilled.then(function(muteEvent) {
+			expect(muteEvent.length).to.be.equal(1);
+			expect(muteEvent[0].me.channel_mutes.length).to.be.equal(1);
+			const muteStatus = channel.muteStatus();
+			expect(muteStatus.muted).to.be.true;
+			expect(muteStatus.expiresAt).to.be.null;
+			expect(muteStatus.createdAt.getTime()).to.be.equal(
+				new Date(muteEvent[0].me.channel_mutes[0].created_at).getTime(),
+			);
+		});
+	});
+
+	it('setUser populate internal mute state', async function() {
+		const c = await getTestClientForUser(userID);
+		expect(c.health.me.channel_mutes.length).to.be.equal(1);
+		expect(c.health.me.channel_mutes[0].channel.cid).to.be.equal(channel.cid);
+		await c.disconnect();
+	});
+
+	it('remove mute update internal mute state', async function() {
+		const UnmuteUpdatedEvent = newEventPromise(
+			client,
+			'notification.channel_mutes_updated',
+		);
+		await channel.unmute();
+		await expect(UnmuteUpdatedEvent).to.be.fulfilled.then(function(muteEvent) {
+			expect(muteEvent.length).to.be.equal(1);
+			const muteStatus = channel.muteStatus();
+			expect(muteStatus.muted).to.be.false;
+			expect(muteStatus.expiresAt).to.be.null;
+		});
+	});
+
+	it('muteStatus properly detect expired mutes', async function() {
+		const MuteUpdatedEvent = newEventPromise(
+			client,
+			'notification.channel_mutes_updated',
+		);
+		await channel.mute({ expiration: 1000 });
+		await expect(MuteUpdatedEvent).to.be.fulfilled;
+
+		let muteStatus = channel.muteStatus();
+		expect(muteStatus.muted).to.be.true;
+		await sleep(1000);
+		muteStatus = channel.muteStatus();
+		expect(muteStatus.muted).to.be.false;
 	});
 });
