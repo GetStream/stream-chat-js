@@ -113,10 +113,11 @@ describe('Moderation', function() {
 
 describe('mute channels', function() {
 	let user1 = uuidv4();
+	let user2 = uuidv4();
 	let client1;
 	let mutedChannelId = uuidv4();
 	it('mute channel and expect notification)', async function() {
-		await createUsers([user1]);
+		await createUsers([user1, user2]);
 		client1 = await getTestClientForUser(user1);
 
 		const eventPromise = new Promise(resolve => {
@@ -137,7 +138,7 @@ describe('mute channels', function() {
 		});
 
 		let channel = client1.channel('messaging', mutedChannelId, {
-			members: [user1],
+			members: [user1, user2],
 		});
 		await channel.create();
 
@@ -158,6 +159,21 @@ describe('mute channels', function() {
 		expect(connectResponse.me.channel_mutes[0].target).to.be.undefined;
 		expect(connectResponse.me.channel_mutes[0].channel.cid).to.equal(channel.cid);
 		await eventPromise;
+	});
+
+	it('sending messages to muted channels dont increment unread counts', async function() {
+		let client2 = await getTestClientForUser(user2);
+		await client2
+			.channel('messaging', mutedChannelId)
+			.sendMessage({ text: 'message to muted channel' });
+
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.total_unread_count).to.equal(0);
+		expect(connectResponse.me.unread_channels).to.be.equal(0);
 	});
 
 	it('query muted channels', async function() {
