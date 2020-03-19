@@ -677,42 +677,36 @@ export class StreamChat {
 			this.configs[event.channel.type] = event.channel.config;
 		}
 
-		if (event.type === 'notification.mutes_updated') {
-			this.mutedChannels = event.me;
-		}
-
-		if (event.type === 'channel.muted' || event.type === 'channel.unmuted') {
-			if (event.channel) {
-				this._updateChannelMute(event.mute);
-			}
-			if (event.channels) {
-				for (let i = 0; i < client.mutedChannels.length; ++i) {
-					this._updateChannelMute(client.mutedChannels[i]);
-				}
-			}
+		if (event.type === 'notification.channel_mutes_updated') {
+			this.mutedChannels = event.me.channel_mutes;
 		}
 	}
 
-	_updateChannelMute(mute) {
-		// remove the mute
-		if (!mute.muted) {
-			for (let i = 0; i < this.mutedChannels.length; ++i) {
-				if (this.mutedChannels[i].channel.cid === mute.cid) {
-					this.mutedChannels.splice(i, 1);
-					return;
+	_muteStatus(cid) {
+		let muteStatus;
+		this.mutedChannels.forEach(function(mute) {
+			if (mute.channel.cid === cid) {
+				let muted = true;
+				if (mute.expires) {
+					muted = new Date(mute.expires).getTime() > new Date().getTime();
 				}
+				muteStatus = {
+					muted,
+					createdAt: new Date(mute.created_at),
+					expiresAt: mute.expires ? new Date(mute.expires) : null,
+				};
 			}
+		});
+
+		if (muteStatus) {
+			return muteStatus;
 		}
-		// its a new mute
-		// replace the mute if already exists (expiration might have changed)
-		for (let i = 0; i < this.mutedChannels.length; ++i) {
-			if (this.mutedChannels[i].channel.cid === mute.cid) {
-				this.mutedChannels.splice(i, 1, mute);
-				return;
-			}
-		}
-		// mute not found. add the new mute
-		this.mutedChannels.push(mute);
+
+		return {
+			muted: false,
+			createdAt: null,
+			expiresAt: null,
+		};
 	}
 
 	_callClientListeners = event => {
