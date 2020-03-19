@@ -21,6 +21,7 @@ import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
+import Immutable from 'seamless-immutable';
 
 function isReadableStream(obj) {
 	return (
@@ -48,6 +49,8 @@ export class StreamChat {
 		this.secret = null;
 		this.listeners = {};
 		this.state = new ClientState();
+		// a list of channels to hide ws events from
+		this.mutedChannels = [];
 
 		// set the secret
 		if (secretOrOptions && secretOrOptions.indexOf) {
@@ -667,11 +670,49 @@ export class StreamChat {
 		if (event.type === 'health.check' && event.me) {
 			client.user = event.me;
 			client.state.updateUser(event.me);
+			client.mutedChannels = event.me.channel_mutes;
 		}
 
 		if (event.type === 'notification.message_new') {
 			this.configs[event.channel.type] = event.channel.config;
 		}
+
+		if (event.type === 'notification.mutes_updated') {
+			this.mutedChannels = event.me;
+		}
+
+		if (event.type === 'channel.muted' || event.type === 'channel.unmuted') {
+			if (event.channel) {
+				this._updateChannelMute(event.mute);
+			}
+			if (event.channels) {
+				for (let i = 0; i < client.mutedChannels.length; ++i) {
+					this._updateChannelMute(client.mutedChannels[i]);
+				}
+			}
+		}
+	}
+
+	_updateChannelMute(mute) {
+		// remove the mute
+		if (!mute.muted) {
+			for (let i = 0; i < this.mutedChannels.length; ++i) {
+				if (this.mutedChannels[i].channel.cid === mute.cid) {
+					this.mutedChannels.splice(i, 1);
+					return;
+				}
+			}
+		}
+		// its a new mute
+		// replace the mute if already exists (expiration might have changed)
+		for (let i = 0; i < this.mutedChannels.length; ++i) {
+			if (this.mutedChannels[i].channel.cid === mute.cid) {
+				this.mutedChannels.splice(i, 1, mute);
+				return;
+			}
+		}
+		// mute not found. add the new mute
+		this.mutedChannels.push(mute);
 	}
 
 	_callClientListeners = event => {
