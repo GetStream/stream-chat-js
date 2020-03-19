@@ -461,6 +461,32 @@ describe('Webhooks', function() {
 		expect(event.target_user.id).to.eq(tommasoID);
 	});
 
+	it('channel mute', async function() {
+		const [events] = await Promise.all([
+			promises.waitForEvents('channel.muted'),
+			chan.mute({ user_id: jaapID }),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('channel.muted');
+		expect(event.mute).to.be.an('object');
+		expect(event.mute.channel.cid).to.eq(chan.cid);
+		expect(event.mute.user.id).to.eq(jaapID);
+	});
+
+	it('channel unmute', async function() {
+		const [events] = await Promise.all([
+			promises.waitForEvents('channel.unmuted'),
+			chan.unmute({ user_id: jaapID }),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('channel.unmuted');
+		expect(event.mute).to.be.an('object');
+		expect(event.mute.channel.cid).to.eq(chan.cid);
+		expect(event.mute.user.id).to.eq(jaapID);
+	});
+
 	it('slash unmute', async function() {
 		let text = `/mute ${thierryID}`;
 		await chan.sendMessage({ text, user_id: jaapID });
