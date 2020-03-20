@@ -252,7 +252,7 @@ export class ChannelState {
 	 */
 	removeMessage(messageToRemove) {
 		let isRemoved = false;
-		if (messageToRemove.parent_id) {
+		if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
 			const { removed, result: threadMessages } = this.removeMessageFromArray(
 				this.threads[messageToRemove.parent_id],
 				messageToRemove,
