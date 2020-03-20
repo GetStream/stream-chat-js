@@ -1,3 +1,8 @@
+## March 20, 2020 - 1.5.1
+
+- Fixing `removeMessage` function in ChannelState to handle thread message - [e67a432](https://github.com/GetStream/stream-chat-js/commit/13bdeb75d60370e00abac3e0bc57d81733d40b8e)
+- Fixing typescript file for channel mutes - [c7fefa8](https://github.com/GetStream/stream-chat-js/commit/c7fefa8c836658b305dd567b0b6479672bcc745a)
+
 ## March 19, 2020 - 1.5.0
 
 - Support for channel mutes
