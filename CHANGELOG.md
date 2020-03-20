@@ -1,3 +1,7 @@
+## March 19, 2020 - 1.5.0
+
+- Support for channel mutes
+
 ## March 10, 2020 - 1.4.0
 
 - Support filtering by messages custom fields  - [#264](https://github.com/GetStream/stream-chat-js/pull/264)

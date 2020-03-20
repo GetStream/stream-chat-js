@@ -901,6 +901,32 @@ describe('Query Channels and sort by unread', function() {
 	});
 });
 
+describe('members and unread count', function() {
+	let client1;
+	let client2;
+
+	const user1 = uuidv4();
+	const user2 = uuidv4();
+
+	const channelID = uuidv4();
+
+	before(async function() {
+		client1 = await getTestClientForUser(user1);
+		await getTestClientForUser(user2);
+		await client1
+			.channel('messaging', channelID, { members: [user1, user2] })
+			.create();
+	});
+
+	it('adding a member twice should not mark the channel as read', async function() {
+		const channel = client1.channel('messaging', channelID);
+		await channel.sendMessage({ text: 'hi 1' });
+		await channel.addMembers([user2]);
+		client2 = await getTestClientForUser(user2);
+		expect(client2.health.me.total_unread_count).to.eq(1);
+	});
+});
+
 describe('hard delete messages', function() {
 	const channelID = uuidv4();
 	const user = uuidv4();

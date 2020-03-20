@@ -21,6 +21,7 @@ import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
+import Immutable from 'seamless-immutable';
 
 function isReadableStream(obj) {
 	return (
@@ -48,6 +49,8 @@ export class StreamChat {
 		this.secret = null;
 		this.listeners = {};
 		this.state = new ClientState();
+		// a list of channels to hide ws events from
+		this.mutedChannels = [];
 
 		// set the secret
 		if (secretOrOptions && secretOrOptions.indexOf) {
@@ -667,11 +670,43 @@ export class StreamChat {
 		if (event.type === 'health.check' && event.me) {
 			client.user = event.me;
 			client.state.updateUser(event.me);
+			client.mutedChannels = event.me.channel_mutes;
 		}
 
 		if (event.type === 'notification.message_new') {
 			this.configs[event.channel.type] = event.channel.config;
 		}
+
+		if (event.type === 'notification.channel_mutes_updated') {
+			this.mutedChannels = event.me.channel_mutes;
+		}
+	}
+
+	_muteStatus(cid) {
+		let muteStatus;
+		this.mutedChannels.forEach(function(mute) {
+			if (mute.channel.cid === cid) {
+				let muted = true;
+				if (mute.expires) {
+					muted = new Date(mute.expires).getTime() > new Date().getTime();
+				}
+				muteStatus = {
+					muted,
+					createdAt: new Date(mute.created_at),
+					expiresAt: mute.expires ? new Date(mute.expires) : null,
+				};
+			}
+		});
+
+		if (muteStatus) {
+			return muteStatus;
+		}
+
+		return {
+			muted: false,
+			createdAt: null,
+			expiresAt: null,
+		};
 	}
 
 	_callClientListeners = event => {
@@ -1157,13 +1192,13 @@ export class StreamChat {
 	/** unmuteUser - unmutes a user
 	 *
 	 * @param targetID
-	 * @param [userID] Only used with serverside auth
+	 * @param [currentUserID] Only used with serverside auth
 	 * @returns {Promise<*>}
 	 */
-	async unmuteUser(targetID, userID = null) {
+	async unmuteUser(targetID, currentUserID = null) {
 		return await this.post(this.baseURL + '/moderation/unmute', {
 			target_id: targetID,
-			...(userID ? { user_id: userID } : {}),
+			...(currentUserID ? { user_id: currentUserID } : {}),
 		});
 	}
 
