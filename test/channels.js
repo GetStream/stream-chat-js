@@ -219,7 +219,7 @@ describe('Channels - members', function() {
 
 	it(`tommaso tries to create a channel that's too large`, async function() {
 		await expectHTTPErrorCode(
-			400,
+			413,
 			tommasoClient
 				.channel(channelGroup, `big-boy-${uuidv4()}`, {
 					stuff: 'x'.repeat(6 * 1024),
