@@ -1556,7 +1556,7 @@ describe('Chat', function() {
 
 			it(`Add a Chat Message that's too large in content`, async function() {
 				await expectHTTPErrorCode(
-					400,
+					413,
 					channel.sendMessage({
 						text: 'boop',
 						stuff: 'x'.repeat(5 * 1024),
@@ -1573,7 +1573,7 @@ describe('Chat', function() {
 				const newMsg = Object.assign({}, message, {
 					new_stuff: 'x'.repeat(5 * 1024),
 				});
-				await expectHTTPErrorCode(400, authClient.updateMessage(newMsg));
+				await expectHTTPErrorCode(413, authClient.updateMessage(newMsg));
 			});
 		});
 	});
