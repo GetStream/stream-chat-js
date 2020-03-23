@@ -1770,7 +1770,7 @@ describe('channel message search', function() {
 	});
 });
 
-describe.only('search on deleted channels', function() {
+describe('search on deleted channels', function() {
 	let user = uuidv4();
 	let channelId = uuidv4();
 	let channel;
