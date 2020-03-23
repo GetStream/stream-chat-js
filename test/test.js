@@ -2916,3 +2916,55 @@ describe('Chat', function() {
 		});
 	});
 });
+
+describe('paginate order with id_gt{,e}', function() {
+	let channel;
+	let client;
+	let user = uuidv4();
+	before(async function() {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			await channel.sendMessage({
+				text: user + i.toString(),
+				id: user + i.toString(),
+			});
+		}
+	});
+	it('id_gte=5 should return message 5 to 6', async function() {
+		const result = await channel.query({
+			messages: { limit: 2, id_gte: user + (5).toString() },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(user + (5).toString());
+		expect(result.messages[1].id).to.be.equal(user + (6).toString());
+	});
+
+	it('id_gt=5 should return message 6 to 7', async function() {
+		const result = await channel.query({
+			messages: { limit: 2, id_gt: user + (5).toString() },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(user + (6).toString());
+		expect(result.messages[1].id).to.be.equal(user + (7).toString());
+	});
+
+	it('id_lte=5 should return message 4 to 5', async function() {
+		const result = await channel.query({
+			messages: { limit: 2, id_lte: user + (5).toString() },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(user + (4).toString());
+		expect(result.messages[1].id).to.be.equal(user + (5).toString());
+	});
+
+	it('id_lt=5 should return message 3 to 4', async function() {
+		const result = await channel.query({
+			messages: { limit: 2, id_lt: user + (5).toString() },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(user + (3).toString());
+		expect(result.messages[1].id).to.be.equal(user + (4).toString());
+	});
+});
