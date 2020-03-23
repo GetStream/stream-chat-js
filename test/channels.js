@@ -1769,3 +1769,43 @@ describe('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
 });
+
+describe.only('search on deleted channels', function() {
+	let user = uuidv4();
+	let channelId = uuidv4();
+	let channel;
+	let client;
+	before(async function() {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', channelId, {
+			members: [user],
+		});
+		await channel.create();
+	});
+
+	it('add some messages to the channel', async function() {
+		for (let i = 0; i < 5; i++) {
+			await channel.sendMessage({
+				text: `supercalifragilisticexpialidocious ${i}`,
+			});
+		}
+	});
+
+	it('search by text', async function() {
+		let resp = await channel.search('supercalifragilisticexpialidocious');
+		expect(resp.results.length).to.be.equal(5);
+	});
+
+	it('delete and recreate the channel', async function() {
+		await channel.delete();
+		channel = client.channel('messaging', channelId, {
+			members: [user],
+		});
+		await channel.create();
+	});
+
+	it('search on previously deleted chanel', async function() {
+		let resp = await channel.search('supercalifragilisticexpialidocious');
+		expect(resp.results.length).to.be.equal(0);
+	});
+});
