@@ -18,8 +18,6 @@ export class ChannelState {
 		this.threads = Immutable({});
 		// a list of users to hide messages from
 		this.mutedUsers = Immutable([]);
-		// a list of channels to hide messages from
-		this.mutedChannels = Immutable([]);
 		this.watchers = Immutable({});
 		this.members = Immutable({});
 		this.last_message_at =
@@ -253,23 +251,43 @@ export class ChannelState {
 	 * @return {boolean} Returns if the message was removed
 	 */
 	removeMessage(messageToRemove) {
-		let removed = false;
-		const messages = this.messages.flatMap(message => {
-			const idMatch =
-				message.id && messageToRemove.id && message.id === messageToRemove.id;
+		let isRemoved = false;
+		if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
+			const { removed, result: threadMessages } = this.removeMessageFromArray(
+				this.threads[messageToRemove.parent_id],
+				messageToRemove,
+			);
+			this.threads = this.threads[messageToRemove.parent_id].set(
+				messageToRemove.parent_id,
+				threadMessages,
+			);
+			isRemoved = removed;
+		} else {
+			const { removed, result: messages } = this.removeMessageFromArray(
+				this.messages,
+				messageToRemove,
+			);
+			this.messages = messages;
+			isRemoved = removed;
+		}
 
+		return isRemoved;
+	}
+
+	removeMessageFromArray = (msgArray, msg) => {
+		let removed = false;
+		const result = msgArray.flatMap(message => {
+			const idMatch = message.id && msg.id && message.id === msg.id;
 			if (idMatch) {
+				removed = true;
 				return [];
 			} else {
-				removed = true;
 				return message;
 			}
 		});
 
-		this.messages = messages;
-		return removed;
-	}
-
+		return { removed, result };
+	};
 	/**
 	 * filterErrorMessages - Removes error messages from the channel state.
 	 *

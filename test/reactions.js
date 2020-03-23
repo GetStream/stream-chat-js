@@ -135,7 +135,7 @@ describe('Reactions', function() {
 	it('Size constraints', async function() {
 		const message = await getTestMessage('Whatever bro', channel);
 		await expectHTTPErrorCode(
-			400,
+			413,
 			channel.sendReaction(message.id, {
 				type: 'love',
 				extra: 'x'.repeat(256),

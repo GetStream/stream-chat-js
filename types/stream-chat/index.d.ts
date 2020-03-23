@@ -365,7 +365,7 @@ export class Channel {
   show(userId?: string): Promise<APIResponse>;
   getMessagesById(messageIds: string[]): Promise<APIResponse>;
 
-  mute(options?: object): Promise<MuteAPIResponse>;
+  mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
 }
 
@@ -496,9 +496,14 @@ export interface BanUserAPIResponse extends APIResponse {}
 export interface UnbanUserAPIResponse extends APIResponse {}
 
 export interface MuteAPIResponse extends APIResponse {
-  mute: MuteResponse;
-  channel_mute: MuteChannelResponse;
+  mute: MuteUserResponse;
   own_user: OwnUserResponse;
+}
+
+export interface MuteChannelAPIResponse extends APIResponse {
+  mute: MuteUserResponse;
+  own_user: OwnUserResponse;
+  channel_mute: ChannelMute;
 }
 
 export interface UnmuteAPIResponse extends APIResponse {}
@@ -629,6 +634,7 @@ export interface OwnUserResponse extends UserResponse {
   total_unread_count: number;
   unread_channels: number;
   mutes: Mute[];
+  channel_mutes: ChannelMute[];
 }
 
 export interface Mute {
@@ -689,17 +695,22 @@ export interface ReadResponse {
 export interface MuteResponse {
   user: UserResponse;
   target?: UserResponse;
-  channel?: Channel;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface MuteChannelResponse {
+export interface MuteUserResponse extends MuteResponse {}
+export interface ChannelMute {
   user: UserResponse;
   channel?: Channel;
   expires?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface MuteChannelAPIResponse {
+  channel_mute: ChannelMute;
+  own_user: OwnUserResponse;
 }
 
 export interface FlagResponse {

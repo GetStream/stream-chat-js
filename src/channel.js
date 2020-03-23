@@ -399,6 +399,15 @@ export class Channel {
 		);
 	}
 
+	/**
+	 * muteStatus - returns the mute status for the current channel
+	 * @return {object} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+	 */
+	muteStatus() {
+		this._checkInitialized();
+		return this.getClient()._muteStatus(this.cid);
+	}
+
 	sendAction(messageID, formData) {
 		this._checkInitialized();
 		if (!messageID) {
