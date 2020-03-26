@@ -1074,7 +1074,7 @@ export class StreamChat {
 	 * @return {object}
 	 */
 	async updateUser(userObject) {
-		return await this.updateUsers([userObject]);
+		return await this.upsertUsers([userObject]);
 	}
 
 	/**
@@ -1090,13 +1090,13 @@ export class StreamChat {
 	}
 
 	/**
-	 * updateUsers - Batch update the list of users
+	 * upsertUsers - Batch upsert the list of users
 	 *
 	 * @param {array} A list of users
 	 *
 	 * @return {object}
 	 */
-	async updateUsers(users) {
+	async upsertUsers(users) {
 		const userMap = {};
 		for (const userObject of users) {
 			if (!userObject.id) {
@@ -1108,6 +1108,28 @@ export class StreamChat {
 		return await this.post(this.baseURL + '/users', {
 			users: userMap,
 		});
+	}
+
+	/**
+	 * upsertUser - Update or Create the given user object
+	 *
+	 * @param {object} A user object, the only required field is the user id. IE {id: "myuser"} is valid
+	 *
+	 * @return {object}
+	 */
+	upsertUser(userObject) {
+		return this.upsertUsers([userObject]);
+	}
+
+	/**
+	 * updateUsers - Batch update the list of users
+	 *
+	 * @param {array} A list of users
+	 *
+	 * @return {object}
+	 */
+	updateUsers(users) {
+		return this.upsertUsers(users);
 	}
 
 	/**
