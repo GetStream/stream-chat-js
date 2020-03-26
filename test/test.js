@@ -2854,6 +2854,12 @@ describe('Chat', function() {
 				expect(data.file).to.be.not.empty;
 			});
 
+			it('Upload a less common image format', async function() {
+				const file = fs.createReadStream('./helloworld.heic');
+				const data = await channel.sendImage(file, 'hello_world.heic');
+				expect(data.file).to.be.not.empty;
+			});
+
 			it('File upload entire flow', async function() {
 				const promises = [
 					channel.sendImage(
@@ -2872,7 +2878,7 @@ describe('Chat', function() {
 					asset_url: response.file,
 				}));
 				const response = await channel.sendMessage({
-					text: 'Check out what i uploaded in parallel',
+					text: 'Check out what is uploaded in parallel',
 					attachments,
 				});
 				expect(response.message.attachments).to.deep.equal(attachments);
