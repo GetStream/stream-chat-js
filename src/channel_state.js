@@ -109,11 +109,6 @@ export class ChannelState {
 	}
 
 	addReaction(reaction, message) {
-		// Don't do anything if reaction already exist.
-		if (this.hasReaction(reaction, message)) {
-			return;
-		}
-
 		const { messages } = this;
 		if (!message) return;
 		const { parent_id, show_in_channel } = message;
@@ -143,16 +138,6 @@ export class ChannelState {
 				break;
 			}
 		}
-	}
-
-	hasReaction(reaction, message) {
-		if (!message.latest_reactions) return;
-
-		const index = message.latest_reactions.findIndex(
-			r => r.type === reaction.type && r.user.id === reaction.user.id,
-		);
-
-		return index > -1;
 	}
 
 	_addReactionToMessage(message, reaction) {
