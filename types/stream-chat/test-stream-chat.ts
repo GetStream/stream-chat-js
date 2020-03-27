@@ -8,6 +8,11 @@ const client = new StreamChat(apiKey, null, {
   logger: (logLevel: string, msg: string, extraData: {}) => {},
 });
 
+const clientWithoutSecret = new StreamChat(apiKey, {
+  timeout: 3000,
+  logger: (logLevel: string, msg: string, extraData: {}) => {},
+});
+
 const devToken = client.devToken('joshua'); // $ExpectType string
 client.createToken('james', 3600); // $ExpectType string
 client.getAuthType(); // $ExpectType string

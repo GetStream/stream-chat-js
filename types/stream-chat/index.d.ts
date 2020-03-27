@@ -157,7 +157,8 @@ export interface StreamChatOptions {
 export type EventHandler = (event: Event) => void;
 
 export class StreamChat {
-  constructor(key: string, secretOrOptions?: string, options?: StreamChatOptions);
+  constructor(key: string, options?: StreamChatOptions);
+  constructor(key: string, secret?: string, options?: StreamChatOptions);
 
   key: string;
   userToken?: string;
