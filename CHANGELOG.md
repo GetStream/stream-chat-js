@@ -1,3 +1,14 @@
+## March 27, 2020 - 1.6.1
+
+- Reverting [c5413c0](https://github.com/GetStream/stream-chat-js/commit/c5413c07e6743e056b04ade7ccacebeb0f2b1b4f)
+  
+  Commit description: Avoid duplication of reaction, by adding check for existing reaction
+  
+  Reason:
+    1. latest_reactions only contain 10 reactions. So the added check is not sufficient.
+    2. It will need handle remove reactions as well.
+    3. own_reactions doesn't contain user object always. So that use case will need handling as well.
+
 ## March 27, 2020 - 1.6.0
 
 - Deprecating updateUser and updateUsers api from StreamChat client.
