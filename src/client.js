@@ -1067,6 +1067,8 @@ export class StreamChat {
 	}
 
 	/**
+	 * @deprecated Please use upsertUser() function instead.
+	 *
 	 * updateUser - Update or Create the given user object
 	 *
 	 * @param {object} A user object, the only required field is the user id. IE {id: "myuser"} is valid
@@ -1122,6 +1124,8 @@ export class StreamChat {
 	}
 
 	/**
+	 * @deprecated Please use upsertUsers() function instead.
+	 *
 	 * updateUsers - Batch update the list of users
 	 *
 	 * @param {array} A list of users

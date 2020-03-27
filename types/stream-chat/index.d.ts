@@ -154,6 +154,8 @@ export interface StreamChatOptions {
   logger?(log_level: 'info' | 'error', message: string, extraData?: object): void;
   [propName: string]: any;
 }
+export type EventHandler = (event: Event) => void;
+
 export class StreamChat {
   constructor(key: string, secretOrOptions?: string, options?: StreamChatOptions);
 
@@ -181,8 +183,12 @@ export class StreamChat {
   setAnonymousUser(): Promise<void>;
   setGuestUser(user: User): Promise<void>;
 
-  on(callbackOrString: string, callbackOrNothing?: any): { unsubscribe(): void };
-  off(callbackOrString: string, callbackOrNothing?: any): void;
+  on(callback: EventHandler): { unsubscribe(): void };
+
+  on(eventType: string, callback: EventHandler): { unsubscribe(): void };
+
+  off(callback: EventHandler): void;
+  off(eventType: string, callback: EventHandler): void;
 
   get(url: string, params: object): Promise<APIResponse>;
   put(url: string, data: object): Promise<APIResponse>;
@@ -200,7 +206,7 @@ export class StreamChat {
   ): Promise<FileUploadAPIResponse>;
 
   dispatchEvent(event: Event): void;
-  handleEvent(messageEvent: Event): void;
+  handleEvent: EventHandler;
   recoverState(): Promise<void>;
 
   connect(): Promise<void>;
@@ -230,9 +236,17 @@ export class StreamChat {
     custom?: ChannelData,
   ): Channel;
 
+  /** @deprecated Please use upsertUser() function instead. */
   updateUser(userObject: User): Promise<UpdateUsersAPIResponse>;
+  /** @deprecated Please use upsertUsers() function instead. */
   updateUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
 
+  /** Update or Create the given user object */
+  upsertUser(userObject: User): Promise<UpdateUsersAPIResponse>;
+  /** Batch upsert the list of users */
+  upsertUsers(users: User[]): Promise<UpdateUsersAPIResponse>;
+
+  getMessage(messageID: string): Promise<GetMessageAPIResponse>;
   partialUpdateUser(updateRequest: updateUserRequest): Promise<UpdateUsersAPIResponse>;
   partialUpdateUsers(
     updateRequests: updateUserRequest[],
@@ -359,11 +373,16 @@ export class Channel {
   create(): Promise<ChannelAPIResponse>;
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string): Promise<UnbanUserAPIResponse>;
-  on(callbackOrString: string, callbackOrNothing: any): void;
-  off(callbackOrString: string, callbackOrNothing: any): void;
+
+  on(eventType: string, callback: EventHandler): void;
+  on(callback: EventHandler): void;
+
+  off(eventType: string, callback: EventHandler): void;
+  off(callback: EventHandler): void;
+
   hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
-  getMessagesById(messageIds: string[]): Promise<APIResponse>;
+  getMessagesById(messageIds: string[]): Promise<GetMultipleMessagesAPIResponse>;
 
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
@@ -649,6 +668,14 @@ export interface UpdateMessageAPIResponse extends APIResponse {
 
 export interface DeleteMessageAPIResponse extends APIResponse {
   message: MessageResponse;
+}
+
+export interface GetMessageAPIResponse extends APIResponse {
+  message: MessageResponse;
+}
+
+export interface GetMultipleMessagesAPIResponse extends APIResponse {
+  messages: MessageResponse[];
 }
 
 export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}
