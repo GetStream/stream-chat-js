@@ -534,14 +534,14 @@ describe('Unread on connect', function() {
 		}
 	});
 
-	it('thierry re-connects and receives unread_count=100', async function() {
+	it('thierry re-connects and receives unread_count=104', async function() {
 		thierryClient = getTestClient(false);
 		const response = await thierryClient.setUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
-		expect(response.me.unread_count).to.eq(100);
-		expect(response.me.total_unread_count).to.eq(100);
+		expect(response.me.unread_count).to.eq(104);
+		expect(response.me.total_unread_count).to.eq(104);
 	});
 
 	it('thierry marks messaging:chatty as read', async function() {
