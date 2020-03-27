@@ -15,7 +15,7 @@ export interface Attachment {
   type?: string;
   fallback?: string;
   pretext?: string;
-  autor_name?: string;
+  author_name?: string;
   author_link?: string;
   author_icon?: string;
   title?: string;
