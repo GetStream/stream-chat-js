@@ -1,9 +1,14 @@
-import { StreamChat } from 'stream-chat';
+import { StreamChat, Event } from 'stream-chat';
 
 const apiKey = 'apiKey';
 
 // $ExpectType StreamChat
 const client = new StreamChat(apiKey, null, {
+  timeout: 3000,
+  logger: (logLevel: string, msg: string, extraData: {}) => {},
+});
+
+const clientWithoutSecret = new StreamChat(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData: {}) => {},
 });
@@ -26,6 +31,12 @@ const updateRequest = {
 
 client.partialUpdateUser(updateRequest); // $ExpectType Promise<UpdateUsersAPIResponse>
 client.partialUpdateUsers([updateRequest]); // $ExpectType Promise<UpdateUsersAPIResponse>
+
+const eventHandler = (event: Event) => {};
+client.on(eventHandler);
+client.off(eventHandler);
+client.on('message.new', eventHandler);
+client.off('message.new', eventHandler);
 
 client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<ConnectAPIResponse>
 client.setAnonymousUser(); // $ExpectType Promise<void>
@@ -85,3 +96,8 @@ acceptInvite.then(value => {
   const resp = value; // $ExpectType AcceptInviteAPIResponse
   return resp;
 });
+
+channel.on(eventHandler);
+channel.off(eventHandler);
+channel.on('message.new', eventHandler);
+channel.off('message.new', eventHandler);

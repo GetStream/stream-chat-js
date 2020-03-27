@@ -27,6 +27,8 @@ const executables = [
 	{ f: rg.sendMessage, type: 'SendMessageAPIResponse' },
 	{ f: rg.updateMessage, type: 'UpdateMessageAPIResponse' },
 	{ f: rg.deleteMessage, type: 'DeleteMessageAPIResponse' },
+	{ f: rg.getMessage, type: 'GetMessageAPIResponse' },
+	{ f: rg.getMessagesById, type: 'GetMultipleMessagesAPIResponse' },
 	{
 		f: rg.sendMessageReadEvent,
 		type: 'SendEventAPIResponse<MessageReadEvent>',

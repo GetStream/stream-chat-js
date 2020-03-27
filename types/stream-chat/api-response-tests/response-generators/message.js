@@ -30,6 +30,24 @@ async function deleteMessage() {
 	await authClient.deleteMessage(message.id);
 }
 
+async function getMessage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+
+	return await authClient.getMessage(message.id);
+}
+
+async function getMessagesById() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+
+	return await channel.getMessagesById([message.id]);
+}
+
 async function sendAction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
@@ -80,6 +98,8 @@ module.exports = {
 	updateMessage,
 	sendMessage,
 	deleteMessage,
+	getMessagesById,
+	getMessage,
 	sendAction,
 	getReplies,
 };
