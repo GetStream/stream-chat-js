@@ -109,11 +109,6 @@ export class ChannelState {
 	}
 
 	addReaction(reaction, message) {
-		// Don't do anything if reaction already exist.
-		if (this.hasReaction(reaction, message)) {
-			return;
-		}
-
 		const { messages } = this;
 		if (!message) return;
 		const { parent_id, show_in_channel } = message;
@@ -160,6 +155,11 @@ export class ChannelState {
 
 		if (!idMatch) {
 			return false;
+		}
+
+		// Don't do anything if reaction already exist.
+		if (this.hasReaction(reaction, message)) {
+			return;
 		}
 
 		message = this._removeReactionFromMessage(message, reaction);
