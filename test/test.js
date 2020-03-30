@@ -328,7 +328,7 @@ describe('Chat', function() {
 				expect(response.me.banned).to.eq(true);
 			});
 
-			it('query for banned', async function f() {
+			it('query for banned', async function() {
 				const bannedUsers = await client.queryUsers(
 					{ banned: true },
 					{ updated_at: -1 },
@@ -1818,11 +1818,11 @@ describe('Chat', function() {
 			let result = await c.query({ members: { limit: 2, offset: 0 } });
 			expect(result.members.length).to.equal(2);
 
-			// read non-existing page
-			result = await c.query({
-				members: { limit: 2, offset: 6 },
-			});
+			result = await c.query({ members: { limit: 2, offset: 2 } });
+			expect(result.members.length).to.equal(2);
 
+			// read non-existing page
+			result = await c.query({ members: { limit: 2, offset: 4 } });
 			expect(result.members.length).to.equal(0);
 		});
 	});
