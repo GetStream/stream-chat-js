@@ -1257,7 +1257,7 @@ describe('Query channels using last_updated', function() {
 	const CHANGED_CHANNEL = 1;
 
 	const creator = uuidv4();
-	let channels = [];
+	const channels = [];
 	let client;
 
 	before(async function() {
@@ -1273,7 +1273,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('with the parameter', async function() {
-		let list = await client.queryChannels();
+		const list = await client.queryChannels();
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {

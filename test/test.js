@@ -1207,13 +1207,23 @@ describe('Chat', function() {
 				const memberChannel = authClient.channel('messaging', channelID, {
 					members: [authClient.userID, uniqueMember],
 				});
+
 				await memberChannel.create();
 
 				const sort = { last_message_at: -1 };
 				const filter = { members: { $in: [uniqueMember] } };
+
 				const channels = await authClient.queryChannels(filter, sort);
 				expect(channels.length).to.equal(1);
 				expect(channels[0].data.id).to.equal(channelID);
+
+				const state = channels[0].state;
+
+				expect(state.membership).to.not.equal(null);
+				expect(state.membership.user).to.not.equal(null);
+				expect(state.membership.user.id).to.equal(authClient.userID);
+				expect(state.membership.role).to.equal('admin');
+				expect(state.membership.user.role).to.equal('admin');
 			});
 
 			it.skip('Channel Filtering equal Members', async function() {
@@ -1846,6 +1856,29 @@ describe('Chat', function() {
 			expect(state.members.length).to.equal(2);
 			expect(state.members[0].user.id).to.equal('helen');
 			expect(state.members[1].user.id).to.equal('wendy');
+		});
+
+		it('thierry should not be in membership', async () => {
+			const b = authClient.channel('commerce', 'ozark', {
+				members: ['helen', 'wendy'],
+				name: 'a very dark conversation',
+			});
+			const state = await b.watch();
+			expect(state.membership).to.equal(null);
+		});
+
+		it('helen should not be in membership', async () => {
+			const client = await getTestClientForUser('helen');
+			const b = client.channel('commerce', 'ozark', {
+				members: ['helen', 'wendy'],
+				name: 'a very dark conversation',
+			});
+			const state = await b.watch();
+			expect(state.membership).to.not.equal(null);
+			expect(state.membership.user).to.not.equal(null);
+			expect(state.membership.user.id).to.equal('helen');
+			expect(state.membership.role).to.equal('member');
+			expect(state.membership.user.role).to.equal('user');
 		});
 
 		it('Add and remove members should return the correct member count', async function() {
