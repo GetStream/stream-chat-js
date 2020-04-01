@@ -1,5 +1,13 @@
-import { StreamChat, Event } from 'stream-chat';
-
+import {
+  StreamChat,
+  Event,
+  Deny,
+  AnyRole,
+  Allow,
+  AnyResource,
+  Permission,
+  MaxPriority,
+} from 'stream-chat';
 const apiKey = 'apiKey';
 
 // $ExpectType StreamChat
@@ -101,3 +109,46 @@ channel.on(eventHandler);
 channel.off(eventHandler);
 channel.on('message.new', eventHandler);
 channel.off('message.new', eventHandler);
+
+const permissions = [
+  new Permission(
+    'Admin users can perform any action',
+    MaxPriority,
+    AnyResource,
+    AnyRole,
+    false,
+    Allow,
+  ),
+  new Permission(
+    'Anonymous users are not allowed',
+    500,
+    AnyResource,
+    ['anonymous'],
+    false,
+    Deny,
+  ),
+  new Permission(
+    'Users can modify their own messages',
+    400,
+    AnyResource,
+    ['user'],
+    true,
+    Allow,
+  ),
+  new Permission('Users can create channels', 300, AnyResource, ['user'], false, Allow),
+  new Permission(
+    'Channel Members',
+    200,
+    ['ReadChannel', 'CreateMessage'],
+    ['channel_member'],
+    false,
+    Allow,
+  ),
+  new Permission('Discard all', 100, AnyResource, AnyRole, false, Deny),
+];
+
+client.updateChannelType('messaging', { permissions }).then(response => {
+  const permissions = response.permissions;
+  const permissionName: string = permissions[0].name;
+  const permissionRoles: string[] = permissions[0].roles;
+});
