@@ -1,3 +1,19 @@
+
+## April 2, 2020 - 1.6.2
+
+- Adding (missing) following permission constants in typescript file [5b08dec](https://github.com/GetStream/stream-chat-js/commit/5b08dec04e623e940fb5cdffaa2e1ed9410731ae#diff-5b99411a607296a74a128d9535a49dbe)
+  - Allow
+  - Deny
+  - AnyResource
+  - AnyRole
+  - MaxPriority
+  - MinPriority
+
+- Moving following dependencies from devDependencies to dependencies to avoid ts errors regarding missing types [5b08dec](https://github.com/GetStream/stream-chat-js/commit/5b08dec04e623e940fb5cdffaa2e1ed9410731ae#diff-b9cfc7f2cdf78a7f4b91a753d10865a2)
+
+  - @types/seamless-immutable
+  - @types/ws
+
 ## March 27, 2020 - 1.6.1
 
 - Reverting [c5413c0](https://github.com/GetStream/stream-chat-js/commit/c5413c07e6743e056b04ade7ccacebeb0f2b1b4f)
