@@ -454,10 +454,24 @@ export class Permission {
     owner: boolean,
     action: string,
   );
+
+  name: string;
+  priority: number;
+  resources: string[];
+  roles: string[];
+  owner: boolean;
+  action: string;
 }
 
 export const AllowAll: Permission;
 export const DenyAll: Permission;
+
+export const Allow: 'Allow';
+export const Deny: 'Deny';
+export const AnyResource: ['*'];
+export const AnyRole: ['*'];
+export const MaxPriority: 999;
+export const MinPriority: 1;
 
 export function JWTUserToken(
   apiSecret: string,
