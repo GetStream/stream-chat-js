@@ -807,10 +807,6 @@ export class StreamChat {
 			server_determines_connection_id: true,
 		};
 		const qs = encodeURIComponent(JSON.stringify(params));
-		if (qs.length > 1900) {
-			throw Error('User object is too large');
-		}
-
 		const token = this._getToken();
 
 		const authType = this.getAuthType();
