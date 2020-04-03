@@ -388,7 +388,12 @@ export class Channel {
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
 }
-
+export interface ChannelMembership {
+  user: UserResponse;
+  role: string;
+  created_at?: string;
+  updated_at?: string;
+}
 export class ChannelState {
   constructor(channel: Channel);
   watcher_count: number;
@@ -412,6 +417,7 @@ export class ChannelState {
   members: SeamlessImmutable.Immutable<{
     [user_id: string]: SeamlessImmutable.Immutable<ChannelMemberResponse>;
   }>;
+  membership: SeamlessImmutable.Immutable<ChannelMembership>;
   last_message_at: string;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;

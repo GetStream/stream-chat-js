@@ -981,6 +981,8 @@ export class Channel {
 			}
 		}
 
+		this.state.membership = Immutable(state.membership ? state.membership : {});
+
 		if (state.watchers) {
 			for (const w of state.watchers) {
 				this.getClient().state.updateUserReference(w.user, this.cid);
