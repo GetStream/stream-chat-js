@@ -20,6 +20,7 @@ export class ChannelState {
 		this.mutedUsers = Immutable([]);
 		this.watchers = Immutable({});
 		this.members = Immutable({});
+		this.membership = Immutable({});
 		this.last_message_at =
 			channel.last_message_at != null ? new Date(channel.last_message_at) : null;
 	}
