@@ -903,6 +903,7 @@ export class StreamChat {
 
 		if (!this._hasConnectionID()) {
 			payload.watch = false;
+			payload.presence = false;
 		}
 
 		const data = await this.get(this.baseURL + '/channels', {
