@@ -2323,6 +2323,12 @@ describe('Chat', function() {
 			knows_klingon: true,
 		};
 
+		const oversizeUserData = {
+			id: uuidv4(),
+			oversize1: 'x'.repeat(3 * 1024),
+			oversize2: 'x'.repeat(3 * 1024),
+		};
+
 		before(async () => {
 			userClient = getTestClient(false);
 			await userClient.setUser(userData, createUserToken(userData.id));
@@ -2383,6 +2389,15 @@ describe('Chat', function() {
 			);
 			expect(response.me.knows_klingon).to.eq(true);
 			expect(response.me.new_field).to.eq('yes');
+		});
+
+		it('custom fields must be less than 5KB total', async function() {
+			const client = getTestClient(false);
+
+			await expectHTTPErrorCode(
+				413,
+				client.setUser(oversizeUserData, createUserToken(oversizeUserData.id)),
+			);
 		});
 	});
 
