@@ -892,11 +892,6 @@ export class StreamChat {
 
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.wsPromise;
-
-		if (!this._hasConnectionID()) {
-			defaultOptions.watch = false;
-		}
-
 		// Return a list of channels
 		const payload = {
 			filter_conditions: filterConditions,
@@ -905,6 +900,10 @@ export class StreamChat {
 			...defaultOptions,
 			...options,
 		};
+
+		if (!this._hasConnectionID()) {
+			payload.watch = false;
+		}
 
 		const data = await this.get(this.baseURL + '/channels', {
 			payload,
