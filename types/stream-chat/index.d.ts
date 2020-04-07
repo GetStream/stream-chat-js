@@ -312,7 +312,25 @@ export class Channel {
   disconnected: boolean;
   state: ChannelState;
 
-  getConfig(): object;
+  getConfig(): {
+    created_at: string;
+    updated_at: string;
+    name: string;
+    typing_events: boolean;
+    read_events: boolean;
+    connect_events: boolean;
+    search: boolean;
+    reactions: boolean;
+    replies: boolean;
+    mutes: boolean;
+    uploads: boolean;
+    url_enrichment: boolean;
+    message_retention: string;
+    max_message_length: number;
+    automod: string;
+    automod_behavior: string;
+    commands: object[];
+  };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
     uri: string | Buffer,
