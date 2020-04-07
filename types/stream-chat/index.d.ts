@@ -321,10 +321,10 @@ export class Channel {
     connect_events: boolean;
     search: boolean;
     reactions: boolean;
-    replies: true;
-    mutes: false;
-    uploads: true;
-    url_enrichment: true;
+    replies: boolean;
+    mutes: boolean;
+    uploads: boolean;
+    url_enrichment: boolean;
     message_retention: string;
     max_message_length: number;
     automod: string;
