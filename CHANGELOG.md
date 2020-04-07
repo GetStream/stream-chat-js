@@ -1,7 +1,8 @@
 ## April 3, 2020 - 1.7.0
 
-- Adding membership to channel state [b957db2](https://github.com/GetStream/stream-chat-js/commit/b957db2a1f96c2e1e0447b22339fd9795aa8b6a8)
-- Removed User's Data Size Check [d5d34d5](https://github.com/GetStream/stream-chat-js/commit/d5d34d547d33a61ce7ce6870da747d5efb99647e)
+## April 7, 2020 - 1.7.1
+
+- Add types for channel.getConfig()
 
 ## April 2, 2020 - 1.6.2
 
