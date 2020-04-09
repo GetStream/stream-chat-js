@@ -46,7 +46,7 @@ const executables = [
 	{ f: rg.getReactions, type: 'GetReactionsAPIResponse' },
 	{ f: rg.updateChannel, type: 'UpdateChannelAPIResponse' },
 	{ f: rg.deleteChannel, type: 'DeleteChannelAPIResponse' },
-	/** Keeping truncate quite for now. Needs some fixes on backend regardind commands array in response */
+	/** Keeping truncate quite for now. Needs some fixes on backend regarding commands array in response */
 	// { f: rg.truncateChannel, type: 'TruncateChannelAPIResponse' },
 	{ f: rg.acceptInvite, type: 'AcceptInviteAPIResponse' },
 	{ f: rg.rejectInvite, type: 'RejectInviteAPIResponse' },
