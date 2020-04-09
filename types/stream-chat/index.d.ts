@@ -170,6 +170,15 @@ export class StreamChat {
   user: OwnUserResponse;
   browser: boolean;
   wsConnection: StableWSConnection;
+
+  testPushSettings(userID: string, data: object): Promise<APIResponse>;
+
+  deleteUser(userID: string, params: object): Promise<DeleteUserAPIResponse>;
+  reactivateUser(userID: string, options: object): Promise<ReactivateUserAPIResponse>;
+  deactivateUser(userID: string, options: object): Promise<DeactiveUserAPIResponse>;
+  exportUser(userID: string, options: object): Promise<ExportUserAPIResponse>;
+  markAllRead(data: object): Promise<void>;
+
   devToken(userID: string): string;
   createToken(userID: string, exp?: number): string;
   getAuthType(): string;
@@ -312,6 +321,16 @@ export class Channel {
   disconnected: boolean;
   state: ChannelState;
 
+  getClient(): StreamChat;
+  truncate(): Promise<TruncateChannelAPIResponse>;
+  muteStatus(): {
+    muted: boolean;
+    createdAt?: string | null;
+    expiredAt?: string | null;
+  };
+  lastRead(): string | null;
+  countUnreadMentions(): number;
+
   getConfig(): {
     created_at: string;
     updated_at: string;
@@ -437,6 +456,9 @@ export class ChannelState {
   }>;
   membership: SeamlessImmutable.Immutable<ChannelMembership>;
   last_message_at: string;
+  addReaction(reaction: Reaction, message: MessageResponse): void;
+  removeReaction(reaction: Reaction, message: MessageResponse): void;
+  clearMessages(): void;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
   messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
@@ -544,6 +566,21 @@ export interface UsersAPIResponse extends APIResponse {
   users: UserResponse[];
 }
 
+export interface DeleteUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface ReactivateUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface DeactiveUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface ExportUserAPIResponse extends APIResponse {
+  user: UserResponse;
+  messages?: MessageResponse[];
+  reactions?: ReactionResponse[];
+}
+
 export interface SearchAPIResponse extends APIResponse {
   results: Array<{
     message: MessageResponse;
@@ -625,6 +662,9 @@ export interface UpdateChannelAPIResponse extends APIResponse {
 }
 
 export interface DeleteChannelAPIResponse extends APIResponse {
+  channel: ChannelResponse;
+}
+export interface TruncateChannelAPIResponse extends APIResponse {
   channel: ChannelResponse;
 }
 
