@@ -173,10 +173,10 @@ export class StreamChat {
 
   testPushSettings(userID: string, data: object): Promise<APIResponse>;
 
-  deleteUser(userID: string, params: object): Promise<DeleteUserAPIResponse>;
-  reactivateUser(userID: string, options: object): Promise<ReactivateUserAPIResponse>;
-  deactivateUser(userID: string, options: object): Promise<DeactiveUserAPIResponse>;
-  exportUser(userID: string, options: object): Promise<ExportUserAPIResponse>;
+  deleteUser(userID: string, params?: object): Promise<DeleteUserAPIResponse>;
+  reactivateUser(userID: string, options?: object): Promise<ReactivateUserAPIResponse>;
+  deactivateUser(userID: string, options?: object): Promise<DeactiveUserAPIResponse>;
+  exportUser(userID: string, options?: object): Promise<ExportUserAPIResponse>;
   markAllRead(data: object): Promise<void>;
 
   devToken(userID: string): string;
