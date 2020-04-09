@@ -1,3 +1,11 @@
+## April 9, 2020 - 1.7.2
+
+- Fixing typescript for StreamChat, Channel and ChannelState classes [2c78981](https://github.com/GetStream/stream-chat-js/commit/2c789815c1c4ae59121cc2109f4109b1d871cdce)
+
+## April 7, 2020 - 1.7.1
+
+- Fixing typescript for getConfig function in Channel class [5bf2d7e](https://github.com/GetStream/stream-chat-js/commit/5bf2d7e8b6f1434a857dd8367b5a11c4fc839c37)
+
 ## April 3, 2020 - 1.7.0
 
 - Adding membership to channel state [b957db2](https://github.com/GetStream/stream-chat-js/commit/b957db2a1f96c2e1e0447b22339fd9795aa8b6a8)
