@@ -108,7 +108,66 @@ async function partialUpdateUsers() {
 	]);
 }
 
+async function deactivateUser() {
+	const client = utils.getServerTestClient();
+	const userID = uuid4();
+	await client.upsertUser({
+		id: userID,
+		name: 'Vishal',
+	});
+
+	return await client.deactivateUser(userID);
+}
+
+async function reactivateUser() {
+	const client = utils.getServerTestClient();
+	const userID = uuid4();
+	await client.upsertUser({
+		id: userID,
+		name: 'Vishal',
+	});
+
+	await client.deactivateUser(userID);
+
+	return await client.reactivateUser(userID);
+}
+
+async function deleteUser() {
+	const client = utils.getServerTestClient();
+	const userID = uuid4();
+	await client.upsertUser({
+		id: userID,
+		name: 'Vishal',
+	});
+
+	return client.deleteUser(userID);
+}
+
+async function exportUser() {
+	const client = utils.getServerTestClient();
+	const userID = uuid4();
+	await client.upsertUser({
+		id: userID,
+		name: 'Vishal',
+	});
+
+	const id = uuid4();
+	const channel = client.channel('messaging', id, { created_by_id: userID });
+	await channel.create();
+	const { message } = await channel.sendMessage({
+		text: 'this is great',
+		user_id: userID,
+	});
+	await channel.sendReaction(message.id, { type: 'love', user_id: userID });
+
+	return client.exportUser(userID);
+}
+
 module.exports = {
+	deactivateUser,
+	reactivateUser,
+	deleteUser,
+	exportUser,
 	updateUsers,
 	partialUpdateUser,
 	partialUpdateUsers,
