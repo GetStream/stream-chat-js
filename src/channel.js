@@ -1002,19 +1002,29 @@ export class Channel {
 				this.state.watchers = this.state.watchers.set(watcher.id, watcher);
 			}
 		}
+
+		// initialize read state to last message or current time if the channel is empty
+		// if the user is a member, this value will be overwritten later on otherwise this ensures
+		// that eveything up to this point is not marked as unread
+		if (this.getClient().userID != null) {
+			const last_read =
+				this.state.last_message_at != null
+					? this.state.last_message_at
+					: new Date();
+			this.state.read = this.state.read.set(this.getClient().user.id, {
+				last_read,
+			});
+		}
+
+		// apply read state if part of the state
 		if (state.read) {
-			if (this.getClient().userID != null) {
-				this.state.read = this.state.read.set(
-					this.getClient().user.id,
-					new Date(0),
-				);
-			}
 			for (const read of state.read) {
 				const parsedRead = Object.assign({ ...read });
 				parsedRead.last_read = new Date(read.last_read);
 				this.state.read = this.state.read.set(read.user.id, parsedRead);
 			}
 		}
+
 		if (state.members) {
 			for (const m of state.members) {
 				this.state.members = this.state.members.set(m.user.id, m);
