@@ -391,7 +391,7 @@ export class Channel {
 
   update(
     channelData: ChannelData,
-    updateMessage: Message,
+    updateMessage?: Message,
   ): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
   search(query: string | object, options: object): Promise<SearchAPIResponse>;
