@@ -42,10 +42,34 @@ describe('Channel permissions', function() {
 		const response = await client.getChannelType(name);
 		expect(response.roles).to.not.be.undefined;
 		expect(response.roles.admin).to.be.eql([
-			{ name: 'Create Channel', resource: 'CreateChannel' },
-			{ name: 'Create Message', resource: 'CreateMessage' },
-			{ name: 'Delete Any Message', resource: 'DeleteMessage' },
-			{ name: 'Delete Any Channel', resource: 'DeleteChannel' },
+			{
+				name: 'Create Channel',
+				resource: 'CreateChannel',
+				custom: false,
+				owner: false,
+				same_team: false,
+			},
+			{
+				name: 'Create Message',
+				resource: 'CreateMessage',
+				custom: false,
+				owner: false,
+				same_team: false,
+			},
+			{
+				name: 'Delete Any Message',
+				resource: 'DeleteMessage',
+				custom: false,
+				owner: false,
+				same_team: false,
+			},
+			{
+				name: 'Delete Any Channel',
+				resource: 'DeleteChannel',
+				custom: false,
+				owner: false,
+				same_team: false,
+			},
 		]);
 	});
 
@@ -58,11 +82,135 @@ describe('Channel permissions', function() {
 	it('only guest role should be different', async function() {
 		const response = await client.getChannelType(name);
 		expect(response.roles.user).to.be.eql([
-			{ name: 'Create Channel', resource: 'CreateChannel' },
+			{
+				name: 'Create Channel',
+				resource: 'CreateChannel',
+				custom: false,
+				owner: false,
+				same_team: false,
+			},
 		]);
 		expect(response.roles.guest).to.be.eql([
-			{ name: 'Delete Own Message', resource: 'DeleteMessage', owner: true },
+			{
+				name: 'Delete Own Message',
+				resource: 'DeleteMessage',
+				custom: false,
+				owner: true,
+				same_team: false,
+			},
 		]);
+	});
+});
+
+describe('Custom permissions', function() {
+	const client = getTestClient(true);
+
+	it('listing custom permissions empty', async function() {
+		const l = await client.listPermissions();
+		expect(l.permissions).to.not.be.undefined;
+		expect(l.permissions).to.eql([]);
+	});
+
+	it('create new custom permission', async function() {
+		const p = client.createPermission({
+			name: 'my very custom permission',
+			resource: 'DeleteChannel',
+			owner: false,
+			same_team: true,
+		});
+		await expect(p).to.not.be.rejected;
+	});
+
+	it('listing custom permissions', async function() {
+		const l = await client.listPermissions();
+		expect(l.permissions).to.not.be.undefined;
+		expect(l.permissions).to.not.eql([]);
+		expect(l.permissions[0]).to.eql({
+			name: 'my very custom permission',
+			resource: 'DeleteChannel',
+			same_team: true,
+			owner: false,
+			custom: true,
+		});
+	});
+
+	it('update custom permission', async function() {
+		const p = client.updatePermission('my very custom permission', {
+			resource: 'DeleteChannel',
+			same_team: false,
+		});
+		await expect(p).to.not.be.rejected;
+	});
+
+	it('get custom permission', async function() {
+		const p = client.getPermission('my very custom permission');
+		await expect(p).to.not.be.rejected;
+		const response = await p;
+		expect(response.permission).to.eql({
+			name: 'my very custom permission',
+			resource: 'DeleteChannel',
+			custom: true,
+			same_team: false,
+			owner: false,
+		});
+	});
+
+	it('update custom permission with invalid resource should error', async function() {
+		const p = client.updatePermission('my very custom permission', {
+			resource: 'dsbvjdfhbv',
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateCustomPermission failed with error: "resource "dsbvjdfhbv" is not a valid resource"',
+		);
+	});
+
+	it('delete custom permission', async function() {
+		const p = client.deletePermission('my very custom permission');
+		await expect(p).to.not.be.rejected;
+	});
+
+	it('listing custom permissions empty again', async function() {
+		const l = await client.listPermissions();
+		expect(l.permissions).to.eql([]);
+	});
+
+	it('create new custom permission with same name as a built-in permission should error', async function() {
+		const p = client.createPermission({
+			name: 'Create Channel',
+			resource: 'DeleteChannel',
+			owner: false,
+			same_team: true,
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: CreateCreateCustomPermission failed with error: "permission "Create Channel" already exists"',
+		);
+	});
+
+	it('get missing custom permission should return a 404', async function() {
+		const p = client.getPermission('cbsdhbvsdfh');
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 16: CreateGetCustomPermission failed with error: "custom permission "cbsdhbvsdfh" not found"',
+		);
+	});
+
+	it('create new custom permission for invalid resource', async function() {
+		const p = client.createPermission({
+			name: 'Custom Create Channel',
+			resource: 'yadayada',
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: CreateCreateCustomPermission failed with error: "resource "yadayada" is not a valid resource"',
+		);
+	});
+
+	it('udpate custom permission that does not exist should 404', async function() {
+		const p = client.updatePermission('does not exist', {
+			resource: 'DeleteChannel',
+			same_team: false,
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 16: UpdateCustomPermission failed with error: "custom permission "does not exist" not found"',
+		);
 	});
 });
 
