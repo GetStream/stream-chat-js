@@ -1,3 +1,7 @@
+## April 15, 2020 - 1.7.3
+
+- Adding missing event types in typescript file - [8ed49dd](https://github.com/GetStream/stream-chat-js/commit/8ed49ddf6af9d0325af920c985d1092758d6215a)
+
 ## April 9, 2020 - 1.7.2
 
 - Fixing typescript for StreamChat, Channel and ChannelState classes [2c78981](https://github.com/GetStream/stream-chat-js/commit/2c789815c1c4ae59121cc2109f4109b1d871cdce)
