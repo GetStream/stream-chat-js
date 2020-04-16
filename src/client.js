@@ -1444,4 +1444,30 @@ export class StreamChat {
 	listPermissions() {
 		return this.get(`${this.baseURL}/custom_permission`);
 	}
+
+	/** createRole - creates a custom role
+	 *
+	 * @param {string} name the new role name
+	 * @returns {Promise<*>}
+	 */
+	createRole(name) {
+		return this.post(`${this.baseURL}/custom_role`, { name });
+	}
+
+	/** listRoles - returns the list of custom roles for this application
+	 *
+	 * @returns {Promise<*>}
+	 */
+	listRoles() {
+		return this.get(`${this.baseURL}/custom_role`);
+	}
+
+	/** deleteRole - deletes a custom role
+	 *
+	 * @param {string} name the role name
+	 * @returns {Promise<*>}
+	 */
+	deleteRole(name) {
+		return this.delete(`${this.baseURL}/custom_role/${name}`);
+	}
 }

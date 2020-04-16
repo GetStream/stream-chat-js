@@ -102,7 +102,7 @@ describe('Channel permissions', function() {
 	});
 });
 
-describe('Custom permissions', function() {
+describe('Custom permissions and roles', function() {
 	const client = getTestClient(true);
 
 	it('listing custom permissions empty', async function() {
@@ -210,6 +210,42 @@ describe('Custom permissions', function() {
 		});
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 16: UpdateCustomPermission failed with error: "custom permission "does not exist" not found"',
+		);
+	});
+
+	it('create a built-in role should fail', async function() {
+		const p = client.createRole('admin');
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: CreateCreateCustomRole failed with error: "role "admin" already exists"',
+		);
+	});
+
+	it('create a custom role', async function() {
+		const p = client.createRole('rockstar');
+		await expect(p).to.not.be.rejected;
+	});
+
+	it('list custom roles', async function() {
+		const response = await client.listRoles();
+		expect(response.roles).to.contain('rockstar');
+	});
+
+	it('delete a custom role', async function() {
+		const p = client.deleteRole('rockstar');
+		await expect(p).to.not.be.rejected;
+	});
+
+	it('delete a custom role that does not exist', async function() {
+		const p = client.deleteRole('rockstar');
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "rockstar" does not exist"',
+		);
+	});
+
+	it('delete a built-in role should fail', async function() {
+		const p = client.deleteRole('admin');
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "admin" is a built-in role and cannot be deleted"',
 		);
 	});
 });
@@ -331,5 +367,10 @@ describe('User teams field', function() {
 
 		const p3 = chan.update({ team: 'bravo', color: 'red' });
 		await expect(p3).to.not.be.rejected;
+
+		const p4 = chan.update({ team: 'alpha' });
+		await expect(p4).to.be.rejectedWith(
+			'StreamChat error code 5: UpdateChannel failed with error: "changing channel team is not allowed client-side"',
+		);
 	});
 });
