@@ -56,7 +56,7 @@ export interface Event<T = string> {
   message?: MessageResponse;
   reaction?: ReactionResponse;
   channel?: ChannelResponse;
-  member?: UserResponse;
+  member?: ChannelMemberResponse;
   user?: UserResponse;
   user_id?: string;
   me?: OwnUserResponse;
