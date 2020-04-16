@@ -2599,14 +2599,21 @@ describe('Chat', function() {
 	});
 
 	describe('Hiding channels', function() {
-		let client, channel;
+		let client, channel, channel2;
 		const userID = uuidv4();
-		const channelID = uuidv4();
+		const hiddenID = uuidv4();
+		const notHiddenID = uuidv4();
 
 		before(async () => {
 			client = await getTestClientForUser(userID, 'test', { color: 'green' });
-			channel = client.channel('team', channelID);
+			channel = client.channel('team', hiddenID, {
+				color: 'blue',
+			});
 			await channel.watch();
+			channel2 = client.channel('messaging', notHiddenID, {
+				color: 'blue',
+			});
+			await channel2.watch();
 		});
 
 		it('Hide a channel for a user', async function() {
@@ -2614,36 +2621,39 @@ describe('Chat', function() {
 		});
 
 		it('Hidden channel should not be in query channels results', async function() {
-			const channels = await client.queryChannels({ id: channelID });
-			expect(channels).to.have.length(0);
+			const channels = await client.queryChannels({ color: 'blue' });
+			expect(channels).to.have.length(1);
+			expect(channels[0].id).to.be.equal(notHiddenID);
 		});
 
 		it('Hidden channel should not be in query channels results when hidden false', async function() {
-			const channels = await client.queryChannels({ id: channelID, hidden: false });
-			expect(channels).to.have.length(0);
+			const channels = await client.queryChannels({ color: 'blue', hidden: false });
+			expect(channels).to.have.length(1);
+			expect(channels[0].id).to.be.equal(notHiddenID);
 		});
 
 		it('Query channels allows you to list hidden channels', async function() {
-			const channels = await client.queryChannels({ id: channelID, hidden: true });
+			const channels = await client.queryChannels({ color: 'blue', hidden: true });
 			expect(channels).to.have.length(1);
+			expect(channels[0].id).to.be.equal(hiddenID);
 		});
 
 		it('When a new message is sent to the hidden channel', async function() {
 			serverAuthClient = getTestClient(true);
 			await createUsers([uuidv4()]);
-			const channel2 = serverAuthClient.channel('team', channelID);
+			const channel2 = serverAuthClient.channel('team', hiddenID);
 			await channel2.sendMessage({ text: 'wake up!', user_id: userID });
 		});
 
 		it('Should be listed by the query channels', async function() {
-			const channels = await client.queryChannels({ id: channelID });
+			const channels = await client.queryChannels({ id: hiddenID });
 			expect(channels).to.have.length(1);
 		});
 
 		it('Show/Hide a channel', async function() {
 			await channel.hide();
 			await channel.show();
-			const channels = await client.queryChannels({ id: channelID });
+			const channels = await client.queryChannels({ id: hiddenID });
 			expect(channels).to.have.length(1);
 		});
 
