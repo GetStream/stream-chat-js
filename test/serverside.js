@@ -736,6 +736,22 @@ describe('App configs', function() {
 					});
 				});
 
+				context('When adding outdated certificate', function() {
+					it('returns 400 error code', function() {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/push_test/stream-push-test-outdated.p12',
+									),
+								},
+							}),
+						);
+					});
+				});
+
 				context('When adding good apn certificate', function() {
 					context('When development is true', function() {
 						before(async function() {
@@ -745,7 +761,7 @@ describe('App configs', function() {
 									p12_cert: fs.readFileSync(
 										'./test/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'stream-test',
+									bundle_id: 'io.getstream.PushNotifTest',
 									development: true,
 								},
 							});
@@ -761,7 +777,7 @@ describe('App configs', function() {
 								enabled: true,
 								development: true,
 								auth_type: 'certificate',
-								bundle_id: 'stream-test',
+								bundle_id: 'io.getstream.PushNotifTest',
 								host: 'https://api.development.push.apple.com',
 							});
 						});
@@ -775,7 +791,7 @@ describe('App configs', function() {
 									p12_cert: fs.readFileSync(
 										'./test/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'stream-test',
+									bundle_id: 'io.getstream.PushNotifTest',
 									development: false,
 								},
 							});
@@ -791,7 +807,7 @@ describe('App configs', function() {
 								enabled: true,
 								development: false,
 								auth_type: 'certificate',
-								bundle_id: 'stream-test',
+								bundle_id: 'io.getstream.PushNotifTest',
 								host: 'https://api.push.apple.com',
 							});
 						});

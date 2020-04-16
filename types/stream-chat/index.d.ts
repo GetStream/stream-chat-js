@@ -71,6 +71,8 @@ export type UserPresenceChangedEvent = 'user.presence.changed';
 export type UserWatchingStartEvent = 'user.watching.start';
 export type UserWatchingStopEvent = 'user.watching.stop';
 export type UserUpdatedEvent = 'user.updated';
+export type UsedBannedEvent = 'user.banned';
+export type UserUnbannedEvent = 'user.unbanned';
 export type TypingStartEvent = 'typing.start';
 export type TypingStopEvent = 'typing.stop';
 export type MessageNewEvent = 'message.new';
@@ -79,14 +81,17 @@ export type MessageDeletedEvent = 'message.deleted';
 export type MessageReadEvent = 'message.read';
 export type ReactionNewEvent = 'reaction.new';
 export type ReactionDeletedEvent = 'reaction.deleted';
+export type ReactionUpdatedEvent = 'reaction.updated';
 export type MemberAddedEvent = 'member.added';
 export type MemberUpdatedEvent = 'member.updated';
 export type MemberRemovedEvent = 'member.removed';
 export type ChannelUpdatedEvent = 'channel.updated';
 export type ChannelDeletedEvent = 'channel.deleted';
 export type ChannelTruncatedEvent = 'channel.truncated';
+export type ChannelHiddenEvent = 'channel.hidden';
 export type ChannelMutedEvent = 'channel.muted';
 export type ChannelUnmutedEvent = 'channel.unmuted';
+export type ChannelVisibleEvent = 'channel.visible';
 export type HealthCheckEvent = 'health.check';
 export type NotificationNewMessageEvent = 'notification.message_new';
 export type NotificationMarkReadEvent = 'notification.mark_read';
@@ -94,7 +99,12 @@ export type NotificationInvitedEvent = 'notification.invited';
 export type NotificationInviteAcceptedEvent = 'notification.invite_accepted';
 export type NotificationAddedToChannelEvent = 'notification.added_to_channel';
 export type NotificationRemovedFromChannelEvent = 'notification.removed_from_channel';
+export type NotificationChannelDeletedEvent = 'notification.channel_deleted';
+export type NotificationChannelMutesUpdated = 'notification.channel_mutes_updated';
+export type NotificationChannelTruncated = 'notification.channel_truncated';
 export type NotificationMutesUpdatedEvent = 'notification.mutes_updated';
+export type ConnectionChangedEvent = 'connection.changed';
+export type ConnectionRecoveredEvent = 'connection.recovered';
 
 export interface OnlineStatusEvent {
   type: 'online' | 'offline';
@@ -170,6 +180,15 @@ export class StreamChat {
   user: OwnUserResponse;
   browser: boolean;
   wsConnection: StableWSConnection;
+
+  testPushSettings(userID: string, data: object): Promise<APIResponse>;
+
+  deleteUser(userID: string, params?: object): Promise<DeleteUserAPIResponse>;
+  reactivateUser(userID: string, options?: object): Promise<ReactivateUserAPIResponse>;
+  deactivateUser(userID: string, options?: object): Promise<DeactiveUserAPIResponse>;
+  exportUser(userID: string, options?: object): Promise<ExportUserAPIResponse>;
+  markAllRead(data: object): Promise<void>;
+
   devToken(userID: string): string;
   createToken(userID: string, exp?: number): string;
   getAuthType(): string;
@@ -312,6 +331,16 @@ export class Channel {
   disconnected: boolean;
   state: ChannelState;
 
+  getClient(): StreamChat;
+  truncate(): Promise<TruncateChannelAPIResponse>;
+  muteStatus(): {
+    muted: boolean;
+    createdAt?: string | null;
+    expiredAt?: string | null;
+  };
+  lastRead(): string | null;
+  countUnreadMentions(): number;
+
   getConfig(): {
     created_at: string;
     updated_at: string;
@@ -437,6 +466,9 @@ export class ChannelState {
   }>;
   membership: SeamlessImmutable.Immutable<ChannelMembership>;
   last_message_at: string;
+  addReaction(reaction: Reaction, message: MessageResponse): void;
+  removeReaction(reaction: Reaction, message: MessageResponse): void;
+  clearMessages(): void;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
   messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
@@ -544,6 +576,21 @@ export interface UsersAPIResponse extends APIResponse {
   users: UserResponse[];
 }
 
+export interface DeleteUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface ReactivateUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface DeactiveUserAPIResponse extends APIResponse {
+  user: UserResponse;
+}
+export interface ExportUserAPIResponse extends APIResponse {
+  user: UserResponse;
+  messages?: MessageResponse[];
+  reactions?: ReactionResponse[];
+}
+
 export interface SearchAPIResponse extends APIResponse {
   results: Array<{
     message: MessageResponse;
@@ -625,6 +672,9 @@ export interface UpdateChannelAPIResponse extends APIResponse {
 }
 
 export interface DeleteChannelAPIResponse extends APIResponse {
+  channel: ChannelResponse;
+}
+export interface TruncateChannelAPIResponse extends APIResponse {
   channel: ChannelResponse;
 }
 

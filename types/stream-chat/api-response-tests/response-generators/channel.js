@@ -75,6 +75,16 @@ async function deleteChannel() {
 	return await channel.delete();
 }
 
+async function truncateChannel() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const id = uuidv4();
+	const channel = authClient.channel('messaging', id);
+	await channel.create();
+	await channel.watch();
+
+	return await channel.truncate();
+}
+
 async function acceptInvite() {
 	const c = await createTestInviteChannel();
 	const nickC = await utils.getTestClientForUser('nick');
@@ -141,6 +151,7 @@ module.exports = {
 	stopWatching,
 	updateChannel,
 	deleteChannel,
+	truncateChannel,
 	acceptInvite,
 	rejectInvite,
 	addMembers,
