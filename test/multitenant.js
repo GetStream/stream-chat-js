@@ -371,7 +371,7 @@ describe('User teams field', function() {
 		await expect(p).to.not.be.rejected;
 	});
 
-	it('should not be possible to update channel.team', async function() {
+	it('should not be possible to update channel.team using client side auth', async function() {
 		const client = getTestClient(false);
 		await client.setUser({ id: userId }, token);
 
@@ -391,5 +391,20 @@ describe('User teams field', function() {
 		await expect(p4).to.be.rejectedWith(
 			'StreamChat error code 5: UpdateChannel failed with error: "changing channel team is not allowed client-side"',
 		);
+	});
+
+	it('change channel team is OK using server side auth', async function() {
+		const client = getTestClient(true);
+
+		const chan = client.channel('messaging', uuidv4(), {
+			team: 'bravo',
+			created_by_id: uuidv4(),
+		});
+		const p1 = chan.create();
+		await expect(p1).to.not.be.rejected;
+
+		const p2 = chan.update({ team: 'alpha', color: 'red' });
+		await expect(p2).to.not.be.rejected;
+		expect(chan.data.team).to.be.equal('alpha');
 	});
 });
