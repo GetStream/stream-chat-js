@@ -77,8 +77,8 @@ const event = {
     updated_at: '',
     score: 10,
   },
-  member: { id: 'john' },
-  user: { id: 'john' },
+  member: { id: 'john', online: false },
+  user: { id: 'john', online: true },
   unread_count: 3,
   online: true,
 };
