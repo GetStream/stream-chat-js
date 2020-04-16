@@ -2603,15 +2603,16 @@ describe('Chat', function() {
 		const userID = uuidv4();
 		const hiddenID = uuidv4();
 		const notHiddenID = uuidv4();
+		const unique = uuidv4();
 
 		before(async () => {
 			client = await getTestClientForUser(userID, 'test', { color: 'green' });
 			channel = client.channel('team', hiddenID, {
-				color: 'blue',
+				unique,
 			});
 			await channel.watch();
 			channel2 = client.channel('messaging', notHiddenID, {
-				color: 'blue',
+				unique,
 			});
 			await channel2.watch();
 		});
@@ -2621,19 +2622,19 @@ describe('Chat', function() {
 		});
 
 		it('Hidden channel should not be in query channels results', async function() {
-			const channels = await client.queryChannels({ color: 'blue' });
+			const channels = await client.queryChannels({ unique });
 			expect(channels).to.have.length(1);
 			expect(channels[0].id).to.be.equal(notHiddenID);
 		});
 
 		it('Hidden channel should not be in query channels results when hidden false', async function() {
-			const channels = await client.queryChannels({ color: 'blue', hidden: false });
+			const channels = await client.queryChannels({ unique, hidden: false });
 			expect(channels).to.have.length(1);
 			expect(channels[0].id).to.be.equal(notHiddenID);
 		});
 
 		it('Query channels allows you to list hidden channels', async function() {
-			const channels = await client.queryChannels({ color: 'blue', hidden: true });
+			const channels = await client.queryChannels({ unique, hidden: true });
 			expect(channels).to.have.length(1);
 			expect(channels[0].id).to.be.equal(hiddenID);
 		});
