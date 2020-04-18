@@ -6,6 +6,116 @@ import chaiAsPromised from 'chai-as-promised';
 const expect = chai.expect;
 chai.use(chaiAsPromised);
 
+describe('Application permissions', function() {
+	const client = getTestClient(true);
+
+	before(async function() {
+		const response = await client.getAppSettings();
+		if (response.app.permission_version !== 'v2') {
+			// eslint-disable-next-line babel/no-invalid-this
+			this.skip();
+		}
+	});
+
+	it('app config should include the permission version', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.permission_version).to.eql('v2');
+	});
+
+	it('app config should include the default search permissions', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.roles).to.not.be.undefined;
+		expect(response.app.roles).to.eql({
+			admin: [
+				{
+					name: 'Search User',
+					resource: 'SearchUser',
+					owner: false,
+					same_team: false,
+					custom: false,
+				},
+			],
+			user: [
+				{
+					name: 'Search User',
+					resource: 'SearchUser',
+					owner: false,
+					same_team: false,
+					custom: false,
+				},
+			],
+		});
+	});
+
+	it('change search permissions for all roles', async function() {
+		const user = ['Search User on same team'];
+		await client.updateAppSettings({
+			roles: { user },
+			replace_roles: true,
+		});
+	});
+
+	it('app config should include the default search permissions', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.roles).to.not.be.undefined;
+		expect(response.app.roles).to.eql({
+			user: [
+				{
+					name: 'Search User on same team',
+					resource: 'SearchUser',
+					owner: false,
+					same_team: true,
+					custom: false,
+				},
+			],
+		});
+	});
+
+	it('change search permissions for only one role', async function() {
+		const admin = ['Search User'];
+		await client.updateAppSettings({
+			roles: { admin },
+		});
+	});
+
+	it('should have the new settings', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.roles).to.not.be.undefined;
+		expect(response.app.roles).to.eql({
+			admin: [
+				{
+					name: 'Search User',
+					resource: 'SearchUser',
+					owner: false,
+					same_team: false,
+					custom: false,
+				},
+			],
+			user: [
+				{
+					name: 'Search User on same team',
+					resource: 'SearchUser',
+					owner: false,
+					same_team: true,
+					custom: false,
+				},
+			],
+		});
+	});
+
+	it('disallow search completely', async function() {
+		await client.updateAppSettings({
+			roles: {},
+		});
+	});
+
+	it('permission list should be empty', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.roles).to.not.be.undefined;
+		expect(response.app.roles).to.eql({});
+	});
+});
+
 describe('Channel permissions', function() {
 	const client = getTestClient(true);
 	const name = uuidv4();
@@ -26,7 +136,7 @@ describe('Channel permissions', function() {
 
 	it('setup the entire role-set for a channel type', async function() {
 		const anonymous = [];
-		const guest = [];
+		const guest = ['Create Channel'];
 		const user = ['Create Channel'];
 		const channel_member = user.concat(['Create Message']);
 		const channel_moderator = channel_member.concat(['Delete Any Message']);
@@ -109,7 +219,7 @@ describe('Custom permissions and roles', function() {
 
 	before(async function() {
 		const response = await client.getAppSettings();
-		v1 = response.permission_version === 'v2' ? false : true;
+		v1 = response.app.permission_version === 'v2' ? false : true;
 	});
 
 	it('listing custom permissions empty', async function() {
