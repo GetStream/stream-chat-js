@@ -105,6 +105,12 @@ describe('Channel permissions', function() {
 describe('Custom permissions and roles', function() {
 	const client = getTestClient(true);
 	let userId = uuidv4();
+	let v1 = false;
+
+	before(async function() {
+		const response = await client.getAppSettings();
+		v1 = response.permission_version === 'v2' ? false : true;
+	});
 
 	it('listing custom permissions empty', async function() {
 		const l = await client.listPermissions();
@@ -227,6 +233,11 @@ describe('Custom permissions and roles', function() {
 	});
 
 	it('create a user with the new role', async function() {
+		if (v1) {
+			// eslint-disable-next-line babel/no-invalid-this
+			this.skip();
+		}
+
 		userId = uuidv4();
 		const response = await client.upsertUser({ id: userId, role: 'rockstar' });
 		expect(response.users[userId].role).to.eql('rockstar');
@@ -238,6 +249,10 @@ describe('Custom permissions and roles', function() {
 	});
 
 	it('delete a custom role should not work if in use', async function() {
+		if (v1) {
+			// eslint-disable-next-line babel/no-invalid-this
+			this.skip();
+		}
 		const p = client.deleteRole('rockstar');
 		await expect(p).to.be.rejectedWith(
 			`StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "rockstar" cannot be deleted, at least one user is using this role (ie. "${userId}")"`,
@@ -245,6 +260,10 @@ describe('Custom permissions and roles', function() {
 	});
 
 	it('query users by custom role and set that back to user', async function() {
+		if (v1) {
+			// eslint-disable-next-line babel/no-invalid-this
+			this.skip();
+		}
 		const response = await client.queryUsers({ role: 'rockstar' });
 		await client.upsertUser({ id: response.users[0].id, role: 'user' });
 	});
