@@ -1310,10 +1310,13 @@ describe('Query channels using last_updated', function() {
 	let client;
 
 	before(async function() {
+		const unique = uuidv4();
 		client = await getTestClientForUser(creator);
 		await createUsers([creator]);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
-			const channel = client.channel('messaging', 'channelme_' + uuidv4());
+			const channel = client.channel('messaging', 'channelme_' + uuidv4(), {
+				unique,
+			});
 			await channel.create();
 			channels.push(channel);
 		}
@@ -1322,7 +1325,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('with the parameter', async function() {
-		const list = await client.queryChannels();
+		const list = await client.queryChannels({ unique: unique });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1331,7 +1334,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('without parameters', async function() {
-		let list = await client.queryChannels({}, { last_updated: -1 });
+		let list = await client.queryChannels({ unique: unique }, { last_updated: -1 });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1341,6 +1344,7 @@ describe('Query channels using last_updated', function() {
 
 	it('filtering by the parameter', async function() {
 		let list = await client.queryChannels({
+			unique: unique,
 			last_updated: channels[0].data.created_at,
 		});
 
