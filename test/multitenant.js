@@ -1,4 +1,4 @@
-import { getTestClient, createUserToken } from './utils';
+import { getTestClient, createUserToken, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -489,5 +489,87 @@ describe('User teams field', function() {
 		const p2 = chan.update({ team: 'alpha', color: 'red' });
 		await expect(p2).to.not.be.rejected;
 		expect(chan.data.team).to.be.equal('alpha');
+	});
+});
+
+describe('Full test', function() {
+	const client = getTestClient(true);
+	const channelType = uuidv4();
+	const team1 = 'blue';
+	const team2 = 'red';
+	const team1User = uuidv4();
+	const team2User = uuidv4();
+	let team1Client;
+	let team2Client;
+
+	before(async function() {
+		client.updateAppSettings({
+			user_search_disallowed_roles: ['anonymous', 'guest'],
+			user_search_same_team_only: true,
+			permission_version: 'v2',
+		});
+
+		await client.updateUsers([
+			{ id: team1User, teams: [team1] },
+			{ id: team2User, teams: [team2] },
+		]);
+
+		team1Client = await getTestClientForUser(team1User);
+		team2Client = await getTestClientForUser(team2User);
+
+		// setup the messaging channel type for multi-tenant
+
+		const anonymous = [];
+		const guest = [];
+		const user = [
+			'Create Channel',
+			'Update Members Own Channel on same team',
+			'Update Own Channel on same team',
+			'Update Own Message on same team',
+			'Delete Own Attachment on same team',
+			'Delete Own Reaction',
+			'Delete Own Message on same team',
+			'Delete Own Channel on same team',
+		];
+
+		const channel_member = user.concat([
+			'Read Any Channel on same team',
+			'Create Message on same team',
+			'Create Reaction',
+			'Upload Attachment',
+			'Add Links',
+		]);
+
+		const channel_moderator = channel_member.concat([
+			'Ban User on same team',
+			'Update Members Any Channel',
+			'Update Any Channel on same team',
+			'Update Any Message on same team',
+			'Delete Any Message on same team',
+			'Delete Any Attachment on same team',
+		]);
+
+		const admin = channel_moderator.concat(['Delete Any Channel on same team']);
+
+		await client.createChannelType({
+			name: channelType,
+			roles: { admin, user, channel_member, channel_moderator, anonymous, guest },
+			replace_roles: true,
+		});
+	});
+
+	after(async function() {
+		await client.updateAppSettings({
+			user_search_disallowed_roles: [],
+			user_search_same_team_only: false,
+			permission_version: 'v1',
+		});
+	});
+
+	it('should not be allowed to search without team filter', async function() {
+		const p = team1Client.queryUsers({ id: { $in: ['asd'] } });
+		await expect(p).to.be.rejectedWith(
+			'{"code":4,"message":"searching users is only allowed within same team but your query filters do not have any team condition","StatusCode":400,"duration":""}',
+		);
 	});
 });
