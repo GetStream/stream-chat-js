@@ -1251,6 +1251,53 @@ describe('query channels members $nin', function() {
 	});
 });
 
+describe('Unread state for non members', function() {
+	let client;
+	const watcher = uuidv4();
+	const otherUser = uuidv4();
+	let otherUserClient;
+	const emptyChan = uuidv4();
+	const chanId = uuidv4();
+	let chan;
+
+	before(async function() {
+		client = await getTestClientForUser(watcher);
+		otherUserClient = await getTestClientForUser(otherUser);
+		const c = otherUserClient.channel('livestream', emptyChan, {
+			members: [otherUser],
+		});
+		await c.create();
+		chan = otherUserClient.channel('livestream', chanId);
+		await chan.create();
+		await chan.sendMessage({ text: 'Test Message 1' });
+		await chan.sendMessage({ text: 'Test Message 2' });
+		await chan.sendMessage({ text: 'Test Message 3' });
+	});
+
+	it('connect to empty channel', async function() {
+		const c = client.channel('livestream', emptyChan);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+	});
+
+	it('connect to a channel with 3 messages', async function() {
+		const c = client.channel('livestream', chanId);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+	});
+
+	it('unread count should go up when new messages are received', async function() {
+		const c = client.channel('livestream', chanId);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+		await chan.sendMessage({ text: 'Test Message 4' });
+		expect(c.countUnread()).to.be.equal(1);
+	});
+});
+
 describe('Query channels using last_updated', function() {
 	const CHANNELS_ORDER = [1, 2, 0];
 	const NUM_OF_CHANNELS = CHANNELS_ORDER.length;
