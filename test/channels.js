@@ -1310,7 +1310,6 @@ describe('Query channels using last_updated', function() {
 	let client;
 	const unique = uuidv4();
 	before(async function() {
-		const unique = uuidv4();
 		client = await getTestClientForUser(creator);
 		await createUsers([creator]);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
