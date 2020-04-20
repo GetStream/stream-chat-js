@@ -8,6 +8,7 @@ import {
 	getTestClientForUser,
 	getServerTestClient,
 	sleep,
+	newEventPromise,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -1251,6 +1252,54 @@ describe('query channels members $nin', function() {
 	});
 });
 
+describe('Unread state for non members', function() {
+	let client;
+	const watcher = uuidv4();
+	const otherUser = uuidv4();
+	let otherUserClient;
+	const emptyChan = uuidv4();
+	const chanId = uuidv4();
+	let chan;
+
+	before(async function() {
+		client = await getTestClientForUser(watcher);
+		otherUserClient = await getTestClientForUser(otherUser);
+		const c = otherUserClient.channel('livestream', emptyChan, {
+			members: [otherUser],
+		});
+		await c.create();
+		chan = otherUserClient.channel('livestream', chanId);
+		await chan.create();
+		await chan.sendMessage({ text: 'Test Message 1' });
+		await chan.sendMessage({ text: 'Test Message 2' });
+		await chan.sendMessage({ text: 'Test Message 3' });
+	});
+
+	it('connect to empty channel', async function() {
+		const c = client.channel('livestream', emptyChan);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+	});
+
+	it('connect to a channel with 3 messages', async function() {
+		const c = client.channel('livestream', chanId);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+	});
+
+	it('unread count should go up when new messages are received', async function() {
+		const c = client.channel('livestream', chanId);
+		await c.watch();
+		const unreadCount = c.countUnread();
+		expect(unreadCount).to.be.equal(0);
+		await chan.sendMessage({ text: 'Test Message 4' });
+		await newEventPromise(client, 'message.new');
+		expect(c.countUnread()).to.be.equal(1);
+	});
+});
+
 describe('Query channels using last_updated', function() {
 	const CHANNELS_ORDER = [1, 2, 0];
 	const NUM_OF_CHANNELS = CHANNELS_ORDER.length;
@@ -1259,12 +1308,14 @@ describe('Query channels using last_updated', function() {
 	const creator = uuidv4();
 	const channels = [];
 	let client;
-
+	const unique = uuidv4();
 	before(async function() {
 		client = await getTestClientForUser(creator);
 		await createUsers([creator]);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
-			const channel = client.channel('messaging', 'channelme_' + uuidv4());
+			const channel = client.channel('messaging', 'channelme_' + uuidv4(), {
+				unique,
+			});
 			await channel.create();
 			channels.push(channel);
 		}
@@ -1273,7 +1324,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('with the parameter', async function() {
-		const list = await client.queryChannels();
+		const list = await client.queryChannels({ unique: unique });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1282,7 +1333,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('without parameters', async function() {
-		let list = await client.queryChannels({}, { last_updated: -1 });
+		let list = await client.queryChannels({ unique: unique }, { last_updated: -1 });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1292,6 +1343,7 @@ describe('Query channels using last_updated', function() {
 
 	it('filtering by the parameter', async function() {
 		let list = await client.queryChannels({
+			unique: unique,
 			last_updated: channels[0].data.created_at,
 		});
 
