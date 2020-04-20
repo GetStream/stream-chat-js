@@ -586,7 +586,7 @@ describe.only('Full test', function() {
 	});
 
 	it('should not be allowed to search with other team filter', async function() {
-		const p = team1Client.queryUsers({ teams: { $contains: [team2] } });
+		const p = team1Client.queryUsers({ teams: { $contains: team2 } });
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 17: QueryUsers failed with error: "you must filter on teams that are from the same user',
 		);
@@ -594,14 +594,14 @@ describe.only('Full test', function() {
 
 	it('should be allowed to search same team, but should not return the other team user', async function() {
 		const response = await team1Client.queryUsers({
-			$and: [{ id: { $in: [team2User] } }, { teams: { $contains: [team1] } }],
+			$and: [{ id: { $in: [team2User] } }, { teams: { $contains: team1 } }],
 		});
 		expect(response.users).to.eql([]);
 	});
 
 	it('should be allowed to search same team', async function() {
 		const response = await team1Client.queryUsers({
-			$and: [{ id: { $in: [team1User] } }, { teams: { $contains: [team1] } }],
+			$and: [{ id: { $in: [team1User] } }, { teams: { $contains: team1 } }],
 		});
 		expect(response.users).to.have.length(1);
 		expect(response.users[0].id).to.eql(team1User);
