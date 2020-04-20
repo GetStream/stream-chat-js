@@ -6,6 +6,22 @@ import chaiAsPromised from 'chai-as-promised';
 const expect = chai.expect;
 chai.use(chaiAsPromised);
 
+async function clean() {
+	const client = getTestClient(true);
+	await client.updateAppSettings({
+		user_search_same_team_only: false,
+		user_search_disallowed_roles: [],
+	});
+}
+
+before(async () => {
+	await clean();
+});
+
+after(async () => {
+	await clean();
+});
+
 describe('Lockdown user search', function() {
 	const client = getTestClient(true);
 
@@ -292,8 +308,17 @@ describe('Custom permissions and roles', function() {
 	});
 
 	it('create a custom role', async function() {
-		const p = client.createRole('rockstar');
-		await expect(p).to.not.be.rejected;
+		try {
+			await client.createRole('rockstar');
+		} catch (e) {
+			// this might fail if we did not complete the tear-down
+			console.log(e);
+		}
+	});
+
+	it('list custom roles', async function() {
+		const response = await client.listRoles();
+		expect(response.roles).to.contain('rockstar');
 	});
 
 	it('create a user with the new role', async function() {
@@ -305,11 +330,6 @@ describe('Custom permissions and roles', function() {
 		userId = uuidv4();
 		const response = await client.upsertUser({ id: userId, role: 'rockstar' });
 		expect(response.users[userId].role).to.eql('rockstar');
-	});
-
-	it('list custom roles', async function() {
-		const response = await client.listRoles();
-		expect(response.roles).to.contain('rockstar');
 	});
 
 	it('delete a custom role should not work if in use', async function() {
@@ -492,7 +512,7 @@ describe('User teams field', function() {
 	});
 });
 
-describe('Full test', function() {
+describe.only('Full test', function() {
 	const client = getTestClient(true);
 	const channelType = uuidv4();
 	const team1 = 'blue';
@@ -558,18 +578,32 @@ describe('Full test', function() {
 		});
 	});
 
-	after(async function() {
-		await client.updateAppSettings({
-			user_search_disallowed_roles: [],
-			user_search_same_team_only: false,
-			permission_version: 'v1',
-		});
-	});
-
 	it('should not be allowed to search without team filter', async function() {
 		const p = team1Client.queryUsers({ id: { $in: ['asd'] } });
 		await expect(p).to.be.rejectedWith(
-			'{"code":4,"message":"searching users is only allowed within same team but your query filters do not have any team condition","StatusCode":400,"duration":""}',
+			'StreamChat error code 17: QueryUsers failed with error: "you must include a team filter to use this endpoint client-side',
 		);
+	});
+
+	it('should not be allowed to search with other team filter', async function() {
+		const p = team1Client.queryUsers({ teams: { $contains: [team2] } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 17: QueryUsers failed with error: "you must filter on teams that are from the same user',
+		);
+	});
+
+	it('should be allowed to search same team, but should not return the other team user', async function() {
+		const response = await team1Client.queryUsers({
+			$and: [{ id: { $in: [team2User] } }, { teams: { $contains: [team1] } }],
+		});
+		expect(response.users).to.eql([]);
+	});
+
+	it('should be allowed to search same team', async function() {
+		const response = await team1Client.queryUsers({
+			$and: [{ id: { $in: [team1User] } }, { teams: { $contains: [team1] } }],
+		});
+		expect(response.users).to.have.length(1);
+		expect(response.users[0].id).to.eql(team1User);
 	});
 });
