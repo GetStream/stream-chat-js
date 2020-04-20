@@ -297,7 +297,7 @@ export class StreamChat {
     messageID: string,
     hardDelete?: boolean,
   ): Promise<DeleteMessageAPIResponse>;
-  verifyWebhook(requestBody: object, xSignature: string): boolean;
+  verifyWebhook(requestBody: string | Int8Array | Buffer, xSignature: string): boolean;
 }
 
 export interface updateUserRequest {
