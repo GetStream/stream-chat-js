@@ -512,7 +512,7 @@ describe('User teams field', function() {
 	});
 });
 
-describe.only('Full test', function() {
+describe('Full test', function() {
 	const client = getTestClient(true);
 	const channelType = uuidv4();
 	const team1 = 'blue';
