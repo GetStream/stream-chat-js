@@ -523,7 +523,7 @@ describe('Full test', function() {
 	let team2Client;
 
 	before(async function() {
-		client.updateAppSettings({
+		await client.updateAppSettings({
 			user_search_disallowed_roles: ['anonymous', 'guest'],
 			user_search_same_team_only: true,
 			permission_version: 'v2',
@@ -576,6 +576,23 @@ describe('Full test', function() {
 			roles: { admin, user, channel_member, channel_moderator, anonymous, guest },
 			replace_roles: true,
 		});
+
+		await client.getChannelType(channelType);
+
+		await client
+			.channel(channelType, 'blue', {
+				created_by_id: team1User,
+				team: team1,
+				members: [team1User],
+			})
+			.create();
+		await client
+			.channel(channelType, 'red', {
+				created_by_id: team2User,
+				team: team2,
+				members: [team2User],
+			})
+			.create();
 	});
 
 	it('should not be allowed to search without team filter', async function() {
@@ -605,5 +622,15 @@ describe('Full test', function() {
 		});
 		expect(response.users).to.have.length(1);
 		expect(response.users[0].id).to.eql(team1User);
+	});
+
+	it('query channels should not include channels from other teams', async function() {
+		const response1 = await team1Client.queryChannels({ type: channelType });
+		expect(response1).to.have.length(1);
+		expect(response1[0].data.team).to.eql(team1);
+
+		const response2 = await team2Client.queryChannels({ type: channelType });
+		expect(response2).to.have.length(1);
+		expect(response2[0].data.team).to.eql(team2);
 	});
 });
