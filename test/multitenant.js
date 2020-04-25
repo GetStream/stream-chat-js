@@ -14,16 +14,16 @@ async function clean() {
 	});
 }
 
-before(async () => {
-	await clean();
-});
-
-after(async () => {
-	await clean();
-});
-
 describe('Lockdown user search', function() {
 	const client = getTestClient(true);
+
+	before(async () => {
+		await clean();
+	});
+
+	after(async () => {
+		await clean();
+	});
 
 	it('app config should include the permission version', async function() {
 		const response = await client.getAppSettings();
