@@ -1516,6 +1516,26 @@ describe('Chat', function() {
 
 		describe('Fail', () => {
 			// empty message
+			before(async () => {
+				try {
+					await serverAuthClient.getChannelType('everythingDisabled');
+				} catch (e) {
+					await serverAuthClient.createChannelType({
+						name: 'everythingDisabled',
+						commands: ['all'],
+						max_message_length: 10,
+						typing_events: false,
+						read_events: false,
+						connect_events: false,
+						search: false,
+						reactions: false,
+						replies: false,
+						mutes: false,
+						uploads: false,
+					});
+				}
+			});
+
 			it('Add a Chat message with a wrong custom field', async function() {
 				const message = {
 					text: 'helloworld chat test',
