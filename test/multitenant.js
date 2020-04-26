@@ -25,6 +25,11 @@ describe('Lockdown user search', function() {
 		await clean();
 	});
 
+	it('app config should start with search not locked down', async function() {
+		const response = await client.getAppSettings();
+		expect(response.app.user_search_same_team_only).to.be.false;
+	});
+
 	it('app config should include the permission version', async function() {
 		const response = await client.getAppSettings();
 		expect(response.app.permission_version).to.not.be.undefined;
@@ -101,7 +106,7 @@ describe('Channel permissions', function() {
 
 	it('should have no roles', async function() {
 		const response = await client.getChannelType(name);
-		expect(response.roles).to.be.undefined;
+		expect(response.roles).to.eql({});
 	});
 
 	it('setup the entire role-set for a channel type', async function() {
@@ -574,7 +579,6 @@ describe('Full test', function() {
 		await client.createChannelType({
 			name: channelType,
 			roles: { admin, user, channel_member, channel_moderator, anonymous, guest },
-			replace_roles: true,
 		});
 
 		await client.getChannelType(channelType);
@@ -593,6 +597,49 @@ describe('Full test', function() {
 				members: [team2User],
 			})
 			.create();
+	});
+
+	after(async () => {
+		await clean();
+	});
+
+	it('disable the messaging channel type', async function() {
+		let channels = await client.queryChannels(
+			{ type: 'messaging' },
+			{},
+			{ limit: 100 },
+		);
+
+		for (let index = 0; index < channels.length; index++) {
+			await channels[index].delete();
+		}
+		console.log(channels.length);
+		channels = await client.queryChannels({ type: 'messaging' }, {}, { limit: 100 });
+		console.log(channels.length);
+		if (channels.length > 0) {
+			// eslint-disable-next-line babel/no-invalid-this
+			this.skip('too many channels exist, skip this test');
+		}
+
+		await client.updateChannelType('messaging', {
+			roles: {
+				admin: [],
+				user: [],
+				channel_member: [],
+				channel_moderator: [],
+				anonymous: [],
+				guest: [],
+			},
+		});
+
+		const response = await client.getChannelType('messaging');
+		expect(response.roles).to.eql({});
+
+		await client.deleteChannelType('messaging');
+
+		const response2 = await client.getChannelType('messaging');
+		expect(response2.roles).to.not.eql({});
+		expect(response2.roles.admin).to.be.not.undefined;
 	});
 
 	it('should not be allowed to search without team filter', async function() {
