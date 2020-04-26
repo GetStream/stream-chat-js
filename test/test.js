@@ -1548,6 +1548,7 @@ describe('Chat', function() {
 								'Create Channel',
 								'Read Any Channel',
 								'Create Message',
+								'Update Any Message',
 							],
 						},
 					});
