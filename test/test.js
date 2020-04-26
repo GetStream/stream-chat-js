@@ -4,6 +4,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
+import { Permission, AnyResource, AnyRole, Allow } from '../src';
 import { StreamChat, decodeBase64, encodeBase64 } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
@@ -1532,6 +1533,23 @@ describe('Chat', function() {
 						replies: false,
 						mutes: false,
 						uploads: false,
+						permissions: [
+							new Permission(
+								uuidv4(),
+								20,
+								AnyResource,
+								AnyRole,
+								false,
+								Allow,
+							),
+						],
+						roles: {
+							admin: [
+								'Create Channel',
+								'Read Any Channel',
+								'Create Message',
+							],
+						},
 					});
 				}
 			});
