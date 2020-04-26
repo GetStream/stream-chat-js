@@ -102,7 +102,7 @@ describe('Query Users', function() {
 		});
 		const queryPromise = client.queryUsers({ mycustomfield: { $q: 'rove' } });
 		await expect(queryPromise).to.be.rejectedWith(
-			'StreamChat error code 4: QueryUsers failed with error: "unsupported operator $q',
+			'StreamChat error code 4: QueryUsers failed with error: "search is not enabled for field users.mycustomfield',
 		);
 	});
 
