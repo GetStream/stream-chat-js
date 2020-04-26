@@ -526,8 +526,12 @@ describe('Full test', function() {
 	const team2User = uuidv4();
 	let team1Client;
 	let team2Client;
+	let rollbackToV1 = false;
 
 	before(async function() {
+		const response = await client.getAppSettings();
+		rollbackToV1 = response.permission_version !== 'v2';
+
 		await client.updateAppSettings({
 			user_search_disallowed_roles: ['anonymous', 'guest'],
 			user_search_same_team_only: true,
@@ -601,6 +605,11 @@ describe('Full test', function() {
 
 	after(async () => {
 		await clean();
+		if (rollbackToV1) {
+			await client.updateAppSettings({
+				permission_version: 'v1',
+			});
+		}
 	});
 
 	it('disable the messaging channel type', async function() {
@@ -613,9 +622,7 @@ describe('Full test', function() {
 		for (let index = 0; index < channels.length; index++) {
 			await channels[index].delete();
 		}
-		console.log(channels.length);
 		channels = await client.queryChannels({ type: 'messaging' }, {}, { limit: 100 });
-		console.log(channels.length);
 		if (channels.length > 0) {
 			// eslint-disable-next-line babel/no-invalid-this
 			this.skip('too many channels exist, skip this test');

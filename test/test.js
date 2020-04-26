@@ -1982,7 +1982,6 @@ describe('Chat', function() {
 			await conversation.addMembers(['tommaso', 'thierry']);
 			await conversation.removeMembers(['tommaso']);
 			const state = await conversation.query();
-			console.log('state', state);
 			expect(state.members.length).to.equal(1);
 			expect(state.members[0].user.id).to.eql('thierry');
 		});
