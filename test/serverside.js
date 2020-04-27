@@ -2355,6 +2355,18 @@ describe('Channel types', function() {
 						name: 'giphy',
 						set: 'fun_set',
 					},
+					{
+						args: '[@username]',
+						description: 'Mute a user',
+						name: 'mute',
+						set: 'moderation_set',
+					},
+					{
+						args: '[@username]',
+						description: 'Unmute a user',
+						name: 'unmute',
+						set: 'moderation_set',
+					},
 				],
 				connect_events: true,
 				max_message_length: 5000,
