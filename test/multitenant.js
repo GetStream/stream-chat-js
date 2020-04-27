@@ -2,6 +2,7 @@ import { getTestClient, createUserToken, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { BuiltinPermissions } from '../src';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -9,8 +10,7 @@ chai.use(chaiAsPromised);
 async function clean() {
 	const client = getTestClient(true);
 	await client.updateAppSettings({
-		user_search_same_team_only: false,
-		user_search_disallowed_roles: [],
+		multi_tenant_enabled: false,
 	});
 }
 
@@ -27,7 +27,7 @@ describe('Lockdown user search', function() {
 
 	it('app config should start with search not locked down', async function() {
 		const response = await client.getAppSettings();
-		expect(response.app.user_search_same_team_only).to.be.false;
+		expect(response.app.multi_tenant_enabled).to.be.false;
 	});
 
 	it('app config should include the permission version', async function() {
@@ -35,59 +35,22 @@ describe('Lockdown user search', function() {
 		expect(response.app.permission_version).to.not.be.undefined;
 	});
 
-	it('app config should include the default search roles', async function() {
-		const response = await client.getAppSettings();
-		expect(response.app.user_search_disallowed_roles).to.not.be.undefined;
-		expect(response.app.user_search_disallowed_roles).to.eql([]);
-	});
-
-	it('change search permissions - disable some roles', async function() {
-		const p = client.updateAppSettings({
-			user_search_disallowed_roles: ['anonymous', 'guest'],
-		});
-		await expect(p).to.not.be.rejected;
-	});
-
-	it('app config should include the default search roles', async function() {
-		const response = await client.getAppSettings();
-		expect(response.app.user_search_disallowed_roles).to.not.be.undefined;
-		expect(response.app.user_search_disallowed_roles).to.eql(['anonymous', 'guest']);
-	});
-
-	it('change search permissions - disabling bad roles should fail', async function() {
-		const p = client.updateAppSettings({
-			user_search_disallowed_roles: [
-				'bogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogusbogus',
-			],
-		});
-		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateApp failed with error: "user_search_disallowed_roles[0] must be a maximum of 100 characters in length"',
-		);
-	});
-
-	it('change search permissions - enable it for all roles', async function() {
-		const p = client.updateAppSettings({
-			user_search_disallowed_roles: [],
-		});
-		await expect(p).to.not.be.rejected;
-	});
-
 	it('app config should include the default user_search_same_team_only', async function() {
 		const response = await client.getAppSettings();
-		expect(response.app.user_search_same_team_only).to.not.be.undefined;
-		expect(response.app.user_search_same_team_only).to.eql(false);
+		expect(response.app.multi_tenant_enabled).to.not.be.undefined;
+		expect(response.app.multi_tenant_enabled).to.eql(false);
 	});
 
 	it('change search permissions - allow it only for same team', async function() {
 		await client.updateAppSettings({
-			user_search_same_team_only: true,
+			multi_tenant_enabled: true,
 		});
 	});
 
 	it('app config should now have user_search_same_team_only = true', async function() {
 		const response = await client.getAppSettings();
-		expect(response.app.user_search_same_team_only).to.not.be.undefined;
-		expect(response.app.user_search_same_team_only).to.eql(true);
+		expect(response.app.multi_tenant_enabled).to.not.be.undefined;
+		expect(response.app.multi_tenant_enabled).to.eql(true);
 	});
 });
 
@@ -96,7 +59,7 @@ describe('Channel permissions', function() {
 	const name = uuidv4();
 
 	before(async function() {
-		await client.createChannelType({ name });
+		await client.createChannelType({ name, roles: {} });
 	});
 
 	it('messaging should have some defaults', async function() {
@@ -109,13 +72,23 @@ describe('Channel permissions', function() {
 		expect(response.roles).to.eql({});
 	});
 
+	it('should have default messaging roles it created without', async function() {
+		const name2 = uuidv4();
+		await client.createChannelType({ name: name2 });
+		const response = await client.getChannelType(name);
+		const response2 = await client.getChannelType('messaging');
+		expect(response.roles).to.eql(response2.roles);
+	});
+
 	it('setup the entire role-set for a channel type', async function() {
 		const anonymous = [];
-		const guest = ['Create Channel'];
-		const user = ['Create Channel'];
-		const channel_member = user.concat(['Create Message']);
-		const channel_moderator = channel_member.concat(['Delete Any Message']);
-		const admin = channel_moderator.concat(['Delete Any Channel']);
+		const guest = [BuiltinPermissions.CreateChannel];
+		const user = [BuiltinPermissions.CreateChannel];
+		const channel_member = user.concat([BuiltinPermissions.CreateMessage]);
+		const channel_moderator = channel_member.concat([
+			BuiltinPermissions.DeleteAnyMessage,
+		]);
+		const admin = channel_moderator.concat([BuiltinPermissions.DeleteAnyChannel]);
 
 		await client.updateChannelType(name, {
 			roles: { admin, user, channel_member, channel_moderator, anonymous, guest },
@@ -128,28 +101,28 @@ describe('Channel permissions', function() {
 		expect(response.roles).to.not.be.undefined;
 		expect(response.roles.admin).to.be.eql([
 			{
-				name: 'Create Channel',
+				name: BuiltinPermissions.CreateChannel,
 				resource: 'CreateChannel',
 				custom: false,
 				owner: false,
 				same_team: false,
 			},
 			{
-				name: 'Create Message',
+				name: BuiltinPermissions.CreateMessage,
 				resource: 'CreateMessage',
 				custom: false,
 				owner: false,
 				same_team: false,
 			},
 			{
-				name: 'Delete Any Message',
+				name: BuiltinPermissions.DeleteAnyMessage,
 				resource: 'DeleteMessage',
 				custom: false,
 				owner: false,
 				same_team: false,
 			},
 			{
-				name: 'Delete Any Channel',
+				name: BuiltinPermissions.DeleteAnyChannel,
 				resource: 'DeleteChannel',
 				custom: false,
 				owner: false,
@@ -160,7 +133,7 @@ describe('Channel permissions', function() {
 
 	it('replace all permissions for one role on a channel type', async function() {
 		await client.updateChannelType(name, {
-			roles: { guest: ['Delete Own Message'] },
+			roles: { guest: [BuiltinPermissions.DeleteOwnMessage] },
 		});
 	});
 
@@ -168,7 +141,7 @@ describe('Channel permissions', function() {
 		const response = await client.getChannelType(name);
 		expect(response.roles.user).to.be.eql([
 			{
-				name: 'Create Channel',
+				name: BuiltinPermissions.CreateChannel,
 				resource: 'CreateChannel',
 				custom: false,
 				owner: false,
@@ -177,7 +150,7 @@ describe('Channel permissions', function() {
 		]);
 		expect(response.roles.guest).to.be.eql([
 			{
-				name: 'Delete Own Message',
+				name: BuiltinPermissions.DeleteOwnMessage,
 				resource: 'DeleteMessage',
 				custom: false,
 				owner: true,
@@ -195,7 +168,6 @@ describe('Custom permissions and roles', function() {
 	before(async () => {
 		const response = await client.getAppSettings();
 		v1 = response.app.permission_version !== 'v2';
-		console.log(response.app.permission_version);
 	});
 
 	it('listing custom permissions empty', async function() {
@@ -269,7 +241,7 @@ describe('Custom permissions and roles', function() {
 
 	it('create new custom permission with same name as a built-in permission should error', async function() {
 		const p = client.createPermission({
-			name: 'Create Channel',
+			name: BuiltinPermissions.CreateChannel,
 			resource: 'DeleteChannel',
 			owner: false,
 			same_team: true,
@@ -385,6 +357,19 @@ describe('User teams field', function() {
 		const client = getTestClient(false);
 		await client.setUser({ id: userId }, token);
 		await client.disconnect();
+	});
+
+	after(async () => {
+		await clean();
+	});
+
+	it('should work to set up multi tenant', async () => {
+		const client = getTestClient(true);
+		await client.updateAppSettings({
+			multi_tenant_enabled: true,
+		});
+		const response = await client.getAppSettings();
+		expect(response.app.multi_tenant_enabled).to.be.true;
 	});
 
 	it('should not be possible to set user.team on connect', function(done) {
@@ -526,16 +511,10 @@ describe('Full test', function() {
 	const team2User = uuidv4();
 	let team1Client;
 	let team2Client;
-	let rollbackToV1 = false;
 
 	before(async function() {
-		const response = await client.getAppSettings();
-		rollbackToV1 = response.permission_version !== 'v2';
-
 		await client.updateAppSettings({
-			user_search_disallowed_roles: ['anonymous', 'guest'],
-			user_search_same_team_only: true,
-			permission_version: 'v2',
+			multi_tenant_enabled: true,
 		});
 
 		await client.updateUsers([
@@ -547,42 +526,8 @@ describe('Full test', function() {
 		team2Client = await getTestClientForUser(team2User);
 
 		// setup the messaging channel type for multi-tenant
-
-		const anonymous = [];
-		const guest = [];
-		const user = [
-			'Create Channel',
-			'Update Members Own Channel on same team',
-			'Update Own Channel on same team',
-			'Update Own Message on same team',
-			'Delete Own Attachment on same team',
-			'Delete Own Reaction',
-			'Delete Own Message on same team',
-			'Delete Own Channel on same team',
-		];
-
-		const channel_member = user.concat([
-			'Read Any Channel on same team',
-			'Create Message on same team',
-			'Create Reaction',
-			'Upload Attachment',
-			'Add Links',
-		]);
-
-		const channel_moderator = channel_member.concat([
-			'Ban User on same team',
-			'Update Members Any Channel',
-			'Update Any Channel on same team',
-			'Update Any Message on same team',
-			'Delete Any Message on same team',
-			'Delete Any Attachment on same team',
-		]);
-
-		const admin = channel_moderator.concat(['Delete Any Channel on same team']);
-
 		await client.createChannelType({
 			name: channelType,
-			roles: { admin, user, channel_member, channel_moderator, anonymous, guest },
 		});
 
 		await client.getChannelType(channelType);
@@ -605,11 +550,6 @@ describe('Full test', function() {
 
 	after(async () => {
 		await clean();
-		if (rollbackToV1) {
-			await client.updateAppSettings({
-				permission_version: 'v1',
-			});
-		}
 	});
 
 	it('disable the messaging channel type', async function() {

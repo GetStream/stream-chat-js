@@ -43,7 +43,6 @@ async function setupMessagingChannelType(serverAuthClient) {
 // even when .only or --grep are used
 
 let runBefore = false;
-let runAfter = false;
 
 beforeEach(async () => {
 	if (runBefore === true) return;
@@ -52,10 +51,4 @@ beforeEach(async () => {
 	await setupEverythingDisabledChannel(serverAuthClient);
 	await setupMessagingChannelType(serverAuthClient);
 	runBefore = true;
-});
-
-afterEach(function() {
-	if (runAfter === true) return;
-	console.log('teardown');
-	runAfter = true;
 });
