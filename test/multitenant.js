@@ -192,9 +192,10 @@ describe('Custom permissions and roles', function() {
 	let userId = uuidv4();
 	let v1 = false;
 
-	before(async function() {
+	before(async () => {
 		const response = await client.getAppSettings();
-		v1 = response.app.permission_version === 'v2' ? false : true;
+		v1 = response.app.permission_version !== 'v2';
+		console.log(response.app.permission_version);
 	});
 
 	it('listing custom permissions empty', async function() {
@@ -317,7 +318,6 @@ describe('Custom permissions and roles', function() {
 			await client.createRole('rockstar');
 		} catch (e) {
 			// this might fail if we did not complete the tear-down
-			console.log(e);
 		}
 	});
 
