@@ -4,7 +4,6 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
-import { Permission, AnyResource, AnyRole, Allow } from '../src';
 import { StreamChat, decodeBase64, encodeBase64 } from '../src';
 import { expectHTTPErrorCode } from './utils';
 import fs from 'fs';
@@ -15,11 +14,9 @@ import {
 	createUserToken,
 	getTestClient,
 	getTestClientForUser,
-	runAndLogPromise,
 	getServerTestClient,
 	createUsers,
 	sleep,
-	getTestClientForUser2,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -1516,45 +1513,6 @@ describe('Chat', function() {
 		});
 
 		describe('Fail', () => {
-			// empty message
-			before(async () => {
-				try {
-					await serverAuthClient.getChannelType('everythingDisabled');
-				} catch (e) {
-					await serverAuthClient.createChannelType({
-						name: 'everythingDisabled',
-						commands: ['all'],
-						max_message_length: 10,
-						typing_events: false,
-						read_events: false,
-						connect_events: false,
-						search: false,
-						reactions: false,
-						replies: false,
-						mutes: false,
-						uploads: false,
-						permissions: [
-							new Permission(
-								uuidv4(),
-								20,
-								AnyResource,
-								AnyRole,
-								false,
-								Allow,
-							),
-						],
-						roles: {
-							admin: [
-								'Create Channel',
-								'Read Any Channel',
-								'Create Message',
-								'Update Any Message',
-							],
-						},
-					});
-				}
-			});
-
 			it('Add a Chat message with a wrong custom field', async function() {
 				const message = {
 					text: 'helloworld chat test',
