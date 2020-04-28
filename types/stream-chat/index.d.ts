@@ -1,6 +1,6 @@
 // TypeScript Version: 2.8
 
-export as namespace stream;
+export as namespace StreamChat;
 import * as SeamlessImmutable from 'seamless-immutable';
 import * as WebSocket from 'ws';
 export interface Action {
