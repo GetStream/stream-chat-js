@@ -1,10 +1,10 @@
+## April 29, 2020 - 1.8.0
+- **Breaking:** updated typescript namespace to avoid conflict with getstream package
+  - Fixes: GetStream/stream-js#258
+
 ## April 20, 2020 - 1.7.4
 
 - Fixed types for verifyWebhook function
-
-## April 15, 2020 - 1.8.0
-- **Breaking:** updated typescript namespace to avoid conflict with getstream package
-  - Fixes: GetStream/stream-js#258
 
 ## April 15, 2020 - 1.7.3
 
