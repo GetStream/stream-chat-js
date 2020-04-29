@@ -1861,3 +1861,22 @@ describe('search on deleted channels', function() {
 		expect(resp.results.length).to.be.equal(0);
 	});
 });
+
+describe('pagination with invalid offset', function() {
+	let channel;
+	let client;
+	let user = uuidv4();
+	before(async function() {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+
+		for (let i = 0; i < 30; i++) {
+			const m = await channel.sendMessage({ text: i.toString() });
+		}
+	});
+	it('get the first 10 messages', async function() {
+		const result = await channel.query({ messages: { limit: 10, offset: 35 } });
+		expect(result.messages.length).to.be.equal(0);
+	});
+});
