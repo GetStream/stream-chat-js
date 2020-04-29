@@ -2,6 +2,10 @@
 
 - Fixed types for verifyWebhook function
 
+## April 15, 2020 - 1.8.0
+- **Breaking:** updated typescript namespace to avoid conflict with getstream package
+  - Fixes: GetStream/stream-js#258
+
 ## April 15, 2020 - 1.7.3
 
 - Adding missing event types in typescript file - [8ed49dd](https://github.com/GetStream/stream-chat-js/commit/8ed49ddf6af9d0325af920c985d1092758d6215a)
