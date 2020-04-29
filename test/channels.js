@@ -1875,7 +1875,7 @@ describe('pagination with invalid offset', function() {
 			const m = await channel.sendMessage({ text: i.toString() });
 		}
 	});
-	it('get the first 10 messages', async function() {
+	it('offset > than total channel messages', async function() {
 		const result = await channel.query({ messages: { limit: 10, offset: 35 } });
 		expect(result.messages.length).to.be.equal(0);
 	});
