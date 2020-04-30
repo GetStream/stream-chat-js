@@ -2086,6 +2086,9 @@ describe('Channel types', function() {
 			channelType = await client.createChannelType({
 				name: channelTypeName,
 				commands: ['ban'],
+				roles: {
+					user: ['Create Channel', 'Read Any Channel'],
+				},
 			});
 			channelPermissions = channelType.permissions;
 			expect(channelPermissions).to.have.length(7);
@@ -2243,7 +2246,12 @@ describe('Channel types', function() {
 			const typeName = uuidv4();
 
 			it('create a new type', async function() {
-				await client.createChannelType({ name: typeName });
+				await client.createChannelType({
+					name: typeName,
+					roles: {
+						user: ['Create Channel', 'Read Any Channel'],
+					},
+				});
 				await sleep(1000);
 			});
 
@@ -2281,30 +2289,13 @@ describe('Channel types', function() {
 		it('should return configs correctly', function() {
 			const expectedData = {
 				automod: 'disabled',
+				automod_behavior: 'flag',
 				commands: [
 					{
 						args: '[text]',
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
 						set: 'fun_set',
-					},
-					{
-						args: '[@username]',
-						description: 'Flag a user',
-						name: 'flag',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@username] [text]',
-						description: 'Ban a user',
-						name: 'ban',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@username]',
-						description: 'Unban a user',
-						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',
@@ -2363,24 +2354,6 @@ describe('Channel types', function() {
 						description: 'Post a random gif to the channel',
 						name: 'giphy',
 						set: 'fun_set',
-					},
-					{
-						args: '[@username]',
-						description: 'Flag a user',
-						name: 'flag',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@username] [text]',
-						description: 'Ban a user',
-						name: 'ban',
-						set: 'moderation_set',
-					},
-					{
-						args: '[@username]',
-						description: 'Unban a user',
-						name: 'unban',
-						set: 'moderation_set',
 					},
 					{
 						args: '[@username]',

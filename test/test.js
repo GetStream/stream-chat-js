@@ -14,11 +14,9 @@ import {
 	createUserToken,
 	getTestClient,
 	getTestClientForUser,
-	runAndLogPromise,
 	getServerTestClient,
 	createUsers,
 	sleep,
-	getTestClientForUser2,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -1515,7 +1513,6 @@ describe('Chat', function() {
 		});
 
 		describe('Fail', () => {
-			// empty message
 			it('Add a Chat message with a wrong custom field', async function() {
 				const message = {
 					text: 'helloworld chat test',
@@ -1943,7 +1940,6 @@ describe('Chat', function() {
 			await conversation.addMembers(['tommaso', 'thierry']);
 			await conversation.removeMembers(['tommaso']);
 			const state = await conversation.query();
-			console.log('state', state);
 			expect(state.members.length).to.equal(1);
 			expect(state.members[0].user.id).to.eql('thierry');
 		});

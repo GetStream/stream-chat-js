@@ -220,8 +220,6 @@ describe('Presence', function() {
 			expect(user1Client.state.users[userID].online).to.equal(false);
 
 			// sandra goes online should trigger an event
-			console.log('marking user online', userID);
-
 			const eventReceived = new Promise(resolve =>
 				user1Client.on('user.presence.changed', event => {
 					if (event.user.id === userID) {

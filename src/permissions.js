@@ -5,6 +5,8 @@ export const AnyRole = ['*'];
 export const MaxPriority = 999;
 export const MinPriority = 1;
 
+// deprecated permission object class, you should use the new permission system v2 and use permissions
+// defined in BuiltinPermissions to configure your channel types
 export class Permission {
 	constructor(
 		name,
@@ -23,6 +25,7 @@ export class Permission {
 	}
 }
 
+// deprecated
 export const AllowAll = new Permission(
 	'Allow all',
 	MaxPriority,
@@ -31,6 +34,8 @@ export const AllowAll = new Permission(
 	false,
 	Allow,
 );
+
+// deprecated
 export const DenyAll = new Permission(
 	'Deny all',
 	MinPriority,
@@ -39,3 +44,38 @@ export const DenyAll = new Permission(
 	false,
 	Deny,
 );
+
+export const BuiltinRoles = {
+	Anonymous: 'anonymous',
+	Guest: 'guest',
+	User: 'user',
+	Admin: 'admin',
+	ChannelModerator: 'channel_moderator',
+	ChannelMember: 'channel_member',
+};
+
+export const BuiltinPermissions = {
+	CreateMessage: 'Create Message',
+	UpdateAnyMessage: 'Update Any Message',
+	UpdateOwnMessage: 'Update Own Message',
+	DeleteAnyMessage: 'Delete Any Message',
+	DeleteOwnMessage: 'Delete Own Message',
+	CreateChannel: 'Create Channel',
+	ReadAnyChannel: 'Read Any Channel',
+	ReadOwnChannel: 'Read Own Channel',
+	UpdateMembersAnyChannel: 'Update Members Any Channel',
+	UpdateMembersOwnChannel: 'Update Members Own Channel',
+	UpdateAnyChannel: 'Update Any Channel',
+	UpdateOwnChannel: 'Update Own Channel',
+	DeleteAnyChannel: 'Delete Any Channel',
+	DeleteOwnChannel: 'Delete Own Channel',
+	RunMessageAction: 'Run Message Action',
+	BanUser: 'Ban User',
+	UploadAttachment: 'Upload Attachment',
+	DeleteAnyAttachment: 'Delete Any Attachment',
+	DeleteOwnAttachment: 'Delete Own Attachment',
+	AddLinks: 'Add Links',
+	CreateReaction: 'Create Reaction',
+	DeleteAnyReaction: 'Delete Any Reaction',
+	DeleteOwnReaction: 'Delete Own Reaction',
+};

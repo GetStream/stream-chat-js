@@ -1115,7 +1115,7 @@ describe('query channels by field $exists', function() {
 	});
 
 	it('only boolean values are allowed in $exists', async function() {
-		expect(
+		await expect(
 			client.queryChannels({ testid: testID, even: { $exists: [] } }),
 		).to.be.rejectedWith(
 			'QueryChannels failed with error: "$exists operator only support boolean values"',

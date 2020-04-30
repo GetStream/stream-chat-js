@@ -1397,4 +1397,77 @@ export class StreamChat {
 	verifyWebhook(requestBody, xSignature) {
 		return CheckSignature(requestBody, this.secret, xSignature);
 	}
+
+	/** getPermission - gets the definition for a permission
+	 *
+	 * @param {string} name
+	 * @returns {Promise<*>}
+	 */
+	getPermission(name) {
+		return this.get(`${this.baseURL}/custom_permission/${name}`);
+	}
+
+	/** createPermission - creates a custom permission
+	 *
+	 * @param {object} permissionData the permission data
+	 * @returns {Promise<*>}
+	 */
+	createPermission(permissionData) {
+		return this.post(`${this.baseURL}/custom_permission`, { ...permissionData });
+	}
+
+	/** updatePermission - updates an existing custom permission
+	 *
+	 * @param {string} name
+	 * @param {object} permissionData the permission data
+	 * @returns {Promise<*>}
+	 */
+	updatePermission(name, permissionData) {
+		return this.post(`${this.baseURL}/custom_permission/${name}`, {
+			...permissionData,
+		});
+	}
+
+	/** deletePermission - deletes a custom permission
+	 *
+	 * @param {name}
+	 * @returns {Promise<*>}
+	 */
+	deletePermission(name) {
+		return this.delete(`${this.baseURL}/custom_permission/${name}`);
+	}
+
+	/** listPermissions - returns the list of custom permissions for this application
+	 *
+	 * @returns {Promise<*>}
+	 */
+	listPermissions() {
+		return this.get(`${this.baseURL}/custom_permission`);
+	}
+
+	/** createRole - creates a custom role
+	 *
+	 * @param {string} name the new role name
+	 * @returns {Promise<*>}
+	 */
+	createRole(name) {
+		return this.post(`${this.baseURL}/custom_role`, { name });
+	}
+
+	/** listRoles - returns the list of custom roles for this application
+	 *
+	 * @returns {Promise<*>}
+	 */
+	listRoles() {
+		return this.get(`${this.baseURL}/custom_role`);
+	}
+
+	/** deleteRole - deletes a custom role
+	 *
+	 * @param {string} name the role name
+	 * @returns {Promise<*>}
+	 */
+	deleteRole(name) {
+		return this.delete(`${this.baseURL}/custom_role/${name}`);
+	}
 }
