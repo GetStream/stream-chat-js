@@ -1470,4 +1470,8 @@ export class StreamChat {
 	deleteRole(name) {
 		return this.delete(`${this.baseURL}/custom_role/${name}`);
 	}
+
+	sync(channel_cids, last_sync_at) {
+		return this.post(`${this.baseURL}/sync`, { channel_cids, last_sync_at });
+	}
 }
