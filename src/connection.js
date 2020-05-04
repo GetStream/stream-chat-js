@@ -178,17 +178,26 @@ export class StableWSConnection {
 		const { ws } = this;
 		if (ws && ws.close && ws.readyState === ws.OPEN) {
 			isClosedPromise = new Promise(resolve => {
-				ws.onclose = () => {
+				const onclose = event => {
 					this.logger(
 						'info',
-						`connection:disconnect() - resolving isClosedPromise`,
+						`connection:disconnect() - resolving isClosedPromise ${
+							event ? 'with' : 'without'
+						} close frame`,
 						{
 							tags: ['connection'],
+							event,
 						},
 					);
 					resolve();
 				};
+
+				ws.onclose = onclose;
+				// In case we don't receive close frame websocket server in time,
+				// lets not wait for more than 2 seconds.
+				setTimeout(onclose, 2000);
 			});
+
 			this.logger(
 				'info',
 				`connection:disconnect() - Manually closed connection by calling client.disconnect()`,
