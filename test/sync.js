@@ -28,7 +28,6 @@ describe('Sync endpoint', () => {
 		const p = userClient.sync(['messaging:hello'], new Date());
 		await expect(p).to.not.be.rejected;
 		const response = await p;
-		expect(response.messages).to.eql([]);
 		expect(response.channels).to.eql({});
 	});
 
@@ -91,7 +90,7 @@ describe('Sync endpoint', () => {
 	const deletedMessages = [];
 	let messageWithReaction;
 
-	it('delete some messages from green channel and add some new ones', async () => {
+	it('delete some messages', async () => {
 		deletedMessages.push(messages[0].message.id);
 		deletedMessages.push(messages[2].message.id);
 		await serverSideClient.deleteMessage(deletedMessages[0]);
@@ -129,8 +128,6 @@ describe('Sync endpoint', () => {
 			expect(syncReply.channels[greenChannel.cid].removed).to.eql(false);
 		});
 
-		it('should include new channels', () => {});
-
 		it('blue channel should be marked as updated', () => {
 			const chan = syncReply.channels[blueChannel.cid].channel;
 			expect(chan.created_at).to.not.eql(chan.updated_at);
@@ -144,7 +141,10 @@ describe('Sync endpoint', () => {
 		});
 
 		it('should include deleted channels', () => {
-			const deletedMessages = syncReply.messages
+			const msgs = syncReply.channels[greenChannel.cid].messages.concat(
+				syncReply.channels[blueChannel.cid].messages,
+			);
+			const deletedMessages = msgs
 				.filter(m => m.deleted_at != null)
 				.map(m => m.id)
 				.sort();
@@ -152,7 +152,9 @@ describe('Sync endpoint', () => {
 		});
 
 		it('messages should include new reactions', () => {
-			const msgs = syncReply.messages.filter(m => m.id === messageWithReaction);
+			const msgs = syncReply.channels[blueChannel.cid].messages.filter(
+				m => m.id === messageWithReaction,
+			);
 			expect(msgs).to.have.length(1);
 			expect(msgs[0].latest_reactions).to.have.length(1);
 			expect(msgs[0].reaction_counts).to.eql({ like: 1 });
