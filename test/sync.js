@@ -108,6 +108,10 @@ describe('Sync endpoint', () => {
 		);
 	});
 
+	it('hide the green channel for current user (via backend)', async () => {
+		await greenChannel.hide(userID, true);
+	});
+
 	let syncReply;
 
 	it('sync should return a response', async () => {
@@ -131,6 +135,12 @@ describe('Sync endpoint', () => {
 			const chan = syncReply.channels[blueChannel.cid].channel;
 			expect(chan.created_at).to.not.eql(chan.updated_at);
 			expect(chan.color).to.eql('blue');
+		});
+
+		it('green channel should be marked as hidden', () => {
+			const chan = syncReply.channels[greenChannel.cid].channel;
+			expect(chan.hidden).to.be.true;
+			expect(chan.hide_messages_before).to.not.be.undefined;
 		});
 
 		it('should include deleted channels', () => {
