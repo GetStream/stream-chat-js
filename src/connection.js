@@ -116,10 +116,10 @@ export class StableWSConnection {
 				return false;
 			}
 
-			// if (!error.isWSFailure) {
-			// 	// This is a permanent failure, throw the error...
-			// 	throw error;
-			// }
+			if (!error.isWSFailure) {
+				// This is a permanent failure, throw the error...
+				throw error;
+			}
 		}
 	}
 
@@ -132,7 +132,6 @@ export class StableWSConnection {
 		};
 		const qs = encodeURIComponent(JSON.stringify(params));
 		const token = this.tokenManager.getToken();
-
 		return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
 	};
 

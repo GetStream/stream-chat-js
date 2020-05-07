@@ -93,6 +93,14 @@ export class StreamChat {
 		this.configs = {};
 		this.anonymous = false;
 
+		// If its a server-side client, then lets initialize the tokenManager, since token will be
+		// generated from secret.
+		if (this.secret) {
+			this.tokenManager = new TokenManager({
+				secret: this.secret,
+			});
+		}
+
 		/**
 		 * logger function should accept 3 parameters:
 		 * @param logLevel string
@@ -375,6 +383,7 @@ export class StreamChat {
 		if (exp != null) {
 			extra.exp = exp;
 		}
+
 		return JWTUserToken(this.secret, userID, extra, {});
 	}
 
