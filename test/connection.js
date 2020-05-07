@@ -6,30 +6,52 @@ import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 const expect = chai.expect;
 import sinon from 'sinon';
+import { TokenManager } from '../src/token_manager';
 
 const wsBaseURL = process.env.STREAM_LOCAL_TEST_RUN
 	? 'ws://localhost:3030'
 	: 'wss://chat-us-east-1.stream-io-api.com';
 
-// const validURL = `${wsBaseURL}/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%7D&api_key=qk4nn7rpcn75&authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9./eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0&stream-auth-type=jwt`;
-const validURL = `${wsBaseURL}/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%2C%22server_determines_connection_id%22%3Atrue%7D&api_key=qk4nn7rpcn75&authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0&stream-auth-type=jwt`;
+const tokenManagerWithProvider = new TokenManager({
+	tokenOrProvider: () =>
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODc5MzQ4MH0.At-JGwdxIvz6ItYBSetljYCZBCMRRtuNd6KPPkwSxHk',
+	user: { id: 'thierry' },
+});
 
-const emptyAuthURL = `${wsBaseURL}/connect?json=%7B%22client_id%22%3A%22thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae%22%2C%22user_id%22%3A%22thierry%22%2C%22user_details%22%3A%7B%22id%22%3A%22thierry%22%7D%2C%22user_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSJ9.EJ6poZ2UbnJJvbCi6ZiImeEPeIoXVEBSdZN_-2YC3t0%22%2C%22server_determines_connection_id%22%3Atrue%7D&api_key=qk4nn7rpcn75&authorization=&stream-auth-type=`;
+const tokenManagerStatic_validToken = new TokenManager({
+	tokenOrProvider:
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MjQwMDE1ODg3OTk2MzF9.vJsAQxuV4OABR2VTLc2NIUFzVIazAnnB31FajUxf-ws',
+	user: { id: 'thierry' },
+});
 
-function createTestWSConnection(wsURL) {
+const tokenManagerStatic_expiredToken = new TokenManager({
+	tokenOrProvider:
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODgzOTg2NH0.RHfcNuX-FkitL3ne-KS2whFGbU7lJFkMpgiF_g8DhHI',
+	user: { id: 'thierry' },
+});
+
+function createTestWSConnection(options) {
 	const conn = new StableWSConnection({
-		wsURL,
-		clientID: 'thierry--b853403e-1f7c-4425-bd43-be8e4dda41ae',
+		wsBaseURL,
 		userID: 'thierry',
+		user: { id: 'thierry' },
+		tokenManager: tokenManagerStatic_validToken,
+		apiKey: '892s22ypvt6m',
+		authType: 'jwt',
+		userAgent: '',
 		messageCallback: sinon.fake(),
 		recoverCallback: sinon.fake(),
 		eventCallback: sinon.fake(),
-		logger: () => {},
+		logger: (type, msg) => {
+			// console.log(msg);
+		},
+		...options,
 	});
 	// disable the retry interval to speedup tests
 	conn._retryInterval = function() {
 		return 10;
 	};
+
 	return conn;
 }
 
@@ -75,7 +97,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connect', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const result = healthCheck;
 		expect(result.type).to.equal('health.check');
@@ -85,7 +107,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connect twice should fail', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		try {
 			const healthCheck2 = await conn.connect();
@@ -96,7 +118,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		conn.isHealthy = false;
 		const open2 = await conn._reconnect();
@@ -110,7 +132,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect with a code bug should not trigger infinite loop', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const original = conn._retryInterval;
 		conn._retryInterval = function() {
@@ -127,7 +149,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect with a code bug should not trigger infinite loop part 2', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		conn._connect = function() {
 			throw new Error('stuff is broken in the connect');
@@ -141,7 +163,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connection closed', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection closed... should trigger a reconnect...
@@ -157,14 +179,13 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connection error', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection error... should trigger a reconnect
 		conn.onerror(conn.wsID, { text: 'a test error' });
 
 		await sleep(1000);
-
 		expect(conn.consecutiveFailures).to.equal(0);
 		expect(conn.totalFailures).to.equal(1);
 		expect(conn.wsID).to.equal(2);
@@ -174,7 +195,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Health check failure', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a health check failure...
@@ -189,7 +210,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Browser offline', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		conn.onlineStatusChanged({ type: 'offline' });
@@ -206,15 +227,21 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connect auth error', function(done) {
-		const conn = createTestWSConnection(emptyAuthURL);
-		// this should fail since auth details are invalid
-		conn.connect().catch(e => {
+		try {
+			const conn = createTestWSConnection({
+				tokenManager: new TokenManager({
+					tokenOrProvider: '',
+					user: { id: 'thierry' },
+				}),
+				authType: '',
+			});
+		} catch (e) {
 			done();
-		});
+		}
 	});
 
 	it('Disconnect', async function() {
-		const conn = createTestWSConnection(validURL);
+		const conn = createTestWSConnection();
 		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		const wsID = conn.wsID;
@@ -222,5 +249,27 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.isHealthy).to.equal(false);
 		expect(conn.wsID).to.equal(wsID + 1);
 		expect(conn.ws).to.equal(undefined);
+	});
+
+	it('Expired static tokens should fail', done => {
+		const conn = createTestWSConnection({
+			tokenManager: tokenManagerStatic_expiredToken,
+		});
+
+		// this should fail since auth details are invalid
+		conn.connect().catch(e => {
+			done();
+		});
+	});
+
+	it('Provider based expired tokens should should invoke loadToken and reconnect', async () => {
+		const conn = createTestWSConnection({ tokenManager: tokenManagerWithProvider });
+		await conn.tokenManager.loadToken();
+
+		conn._reconnect = sinon.fake();
+		conn.connect();
+
+		await sleep(1000);
+		expect(conn._reconnect.calledWith({ refreshToken: true })).to.equal(true);
 	});
 });
