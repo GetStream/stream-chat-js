@@ -27,3 +27,8 @@ export function isFunction(value) {
 			value instanceof Function)
 	);
 }
+
+export const chatCodes = {
+	TOKEN_EXPIRED: 40,
+	WS_CLOSED_SUCCESS: 1000,
+};

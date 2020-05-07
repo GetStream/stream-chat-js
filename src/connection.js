@@ -1,5 +1,5 @@
 import isoWS from 'isomorphic-ws';
-import { sleep } from './utils';
+import { sleep, chatCodes } from './utils';
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
  * - the browser will sometimes report that you're online or offline
@@ -102,7 +102,7 @@ export class StableWSConnection {
 			this.isConnecting = false;
 			this.isHealthy = false;
 			this.consecutiveFailures += 1;
-			if (error.code === 40 && !this.tokenManager.isStatic()) {
+			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
 				this.logger(
 					'info',
 					'connection:connect() - WS failure due to expired token, so going to try to reload token and reconnect',
@@ -194,7 +194,10 @@ export class StableWSConnection {
 				},
 			);
 
-			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
+			ws.close(
+				chatCodes.WS_CLOSED_SUCCESS,
+				'Manually closed connection by calling client.disconnect()',
+			);
 		} else {
 			this.logger(
 				'info',
@@ -320,7 +323,7 @@ export class StableWSConnection {
 			this.isHealthy = false;
 			this.consecutiveFailures += 1;
 
-			if (error.code === 40 && !this.tokenManager.isStatic()) {
+			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
 				this.logger(
 					'info',
 					'connection:_reconnect() - WS failure due to expired token, so going to try to reload token and reconnect',
@@ -427,7 +430,7 @@ export class StableWSConnection {
 
 		if (this.wsID !== wsID) return;
 
-		if (event.code === 1000) {
+		if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
 			// this is a permanent error raised by stream..
 			// usually caused by invalid auth details
 			const error = new Error(`WS connection reject with error ${event.reason}`);
