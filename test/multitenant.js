@@ -389,7 +389,7 @@ describe('User teams field', function() {
 		const p = client.setUser({ id: userId, teams: ['alpha', 'bravo'] }, token);
 
 		await expect(p).to.be.rejectedWith(
-			'{"code":4,"message":"user teams cannot be changed at connection time","StatusCode":400,"duration":""}',
+			'user teams cannot be changed at connection time',
 		);
 	});
 
