@@ -18,3 +18,12 @@ export function logChatPromiseExecution(promise, name) {
 }
 
 export const sleep = m => new Promise(r => setTimeout(r, m));
+
+export function isFunction(value) {
+	return (
+		value &&
+		(Object.prototype.toString.call(value) === '[object Function]' ||
+			'function' === typeof value ||
+			value instanceof Function)
+	);
+}

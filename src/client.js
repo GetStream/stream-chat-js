@@ -22,6 +22,8 @@ import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
 import Immutable from 'seamless-immutable';
+import { TokenManager } from './token_manager';
+import { isFunction } from './utils';
 
 function isReadableStream(obj) {
 	return (
@@ -29,15 +31,6 @@ function isReadableStream(obj) {
 		typeof obj === 'object' &&
 		typeof obj._read === 'function' &&
 		typeof obj._readableState === 'object'
-	);
-}
-
-function isFunction(value) {
-	return (
-		value &&
-		(Object.prototype.toString.call(value) === '[object Function]' ||
-			'function' === typeof value ||
-			value instanceof Function)
 	);
 }
 
@@ -182,7 +175,7 @@ export class StreamChat {
 	 *
 	 * @return {promise} Returns a promise that resolves when the connection is setup
 	 */
-	setUser(user, userToken) {
+	setUser = async (user, userTokenOrProvider) => {
 		if (this.userID) {
 			throw new Error(
 				'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -195,30 +188,22 @@ export class StreamChat {
 			throw new Error('The "id" field on the user is missing');
 		}
 
-		this.userToken = userToken;
-
-		if (userToken == null && this.secret != null) {
-			this.userToken = this.createToken(this.userID);
-		}
-
-		if (this.userToken == null) {
-			throw new Error('both userToken and api secret are not provided');
-		}
-
-		const tokenUserId = UserFromToken(this.userToken);
-		if (
-			userToken != null &&
-			(tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)
-		) {
-			throw new Error(
-				'userToken does not have a user_id or is not matching with user.id',
-			);
-		}
+		await this._setToken(user, userTokenOrProvider);
 		this._setUser(user);
 		this.anonymous = false;
 
 		return this._setupConnection();
-	}
+	};
+
+	_setToken = async (user, userTokenOrProvider) => {
+		this.tokenManager = new TokenManager({
+			tokenOrProvider: userTokenOrProvider,
+			secret: this.secret,
+			user,
+		});
+
+		await this.tokenManager.loadToken();
+	};
 
 	_setUser(user) {
 		// this one is used by the frontend
@@ -335,10 +320,14 @@ export class StreamChat {
 	setAnonymousUser() {
 		this.anonymous = true;
 		this.userID = uuidv4();
-		this._setUser({
+		const anonymousUser = {
 			id: this.userID,
 			anon: true,
-		});
+		};
+
+		this._setToken(anonymousUser, '');
+		this._setUser(anonymousUser);
+
 		return this._setupConnection();
 	}
 
@@ -799,26 +788,15 @@ export class StreamChat {
 				'Call setUser or setAnonymousUser before starting the connection',
 			);
 		}
-		const params = {
-			client_id: client.client_id,
-			user_id: client.userID,
-			user_details: client._user,
-			user_token: client.userToken,
-			server_determines_connection_id: true,
-		};
-		const qs = encodeURIComponent(JSON.stringify(params));
-		const token = this._getToken();
-
-		const authType = this.getAuthType();
-		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
-			this.key
-		}&authorization=${token}&stream-auth-type=${authType}&x-stream-client=${this._userAgent()}`;
 
 		// The StableWSConnection handles all the reconnection logic.
 		this.wsConnection = new StableWSConnection({
-			wsURL: client.wsURL,
-			clientID: this.clientID,
-			userID: this.userID,
+			wsBaseURL: client.wsBaseURL,
+			tokenManager: client.tokenManager,
+			user: this.user,
+			authType: this.getAuthType(),
+			userAgent: this._userAgent(),
+			apiKey: this.key,
 			recoverCallback: this.recoverState,
 			messageCallback: this.handleEvent,
 			eventCallback: this.dispatchEvent,
@@ -1369,16 +1347,7 @@ export class StreamChat {
 	}
 
 	_getToken() {
-		if (this.secret == null && this.userToken == null && !this.anonymous) {
-			throw new Error(
-				`Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
-			);
-		}
-		let token = '';
-		if (!this.anonymous) {
-			token = this.userToken != null ? this.userToken : JWTServerToken(this.secret);
-		}
-		return token;
+		return this.tokenManager.getToken();
 	}
 
 	_startCleaning() {
