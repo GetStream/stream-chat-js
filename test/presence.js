@@ -97,6 +97,7 @@ describe('Presence', function() {
 			const b = user1Client.channel('messaging', id, {
 				members: ['doug', 'claire', 'user1', 'james'],
 			});
+			await b.create();
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
@@ -127,6 +128,7 @@ describe('Presence', function() {
 			const b = user1Client.channel('messaging', id, {
 				members: ['doug', 'claire', 'user1', 'james'],
 			});
+			await b.create();
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
@@ -274,7 +276,6 @@ describe('Presence', function() {
 			});
 			// same as above, but with the query channels endpoint
 			user1Client.on('user.presence.changed', event => {
-				console.log(event.type);
 				if (event.user.id === paulID) {
 					expect(event.user.status).to.equal('rallying fremen');
 					expect(event.user.online).to.equal(true);
@@ -294,7 +295,6 @@ describe('Presence', function() {
 				// start out as offline
 				expect(r[0].state.members[paulID].user.online).to.equal(false);
 				expect(user1Client.state.users[paulID].online).to.equal(false);
-				console.log('waiting for connect..... event');
 				await getTestClientForUser(paulID, 'rallying fremen');
 			}
 			runAndLogPromise(runTest);

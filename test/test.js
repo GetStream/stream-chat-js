@@ -2014,13 +2014,7 @@ describe('Chat', function() {
 			expect(lastMessage.text).to.equal('message-7');
 		});
 
-		const events = [
-			'message.read',
-			'typing.start',
-			'typing.stop',
-			'user.watching.start',
-			'user.watching.stop',
-		];
+		const events = ['message.read', 'typing.start', 'typing.stop'];
 
 		it('Supported events', async function() {
 			const permittedChan = authClient.channel('messaging', 'awesome-group-1');
