@@ -313,6 +313,8 @@ export class StreamChat {
 		this.activeChannels = {};
 		// reset client state
 		this.state = new ClientState();
+		// reset token manager
+		this.tokenManager = new TokenManager({ secret: this.secret });
 
 		// close the WS connection
 		if (this.wsConnection) {
