@@ -51,11 +51,15 @@ describe.only('Query Members', function() {
 
 		csClient = await getTestClientForUser(rob);
 		channel = ssClient.channel('messaging', uuidv4(), {
-			members: [mod, rob, rob2, adam, banned],
 			created_by_id: mod,
 		});
 		await channel.create();
 		await channel.addModerators([mod]);
+		await channel.addMembers([rob]);
+		await channel.addMembers([rob2]);
+		await channel.addMembers([adam]);
+		await channel.addMembers([banned]);
+
 		await channel.inviteMembers([invited, pending, rejected]);
 
 		// mod bans user banned
