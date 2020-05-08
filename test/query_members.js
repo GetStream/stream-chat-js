@@ -1,7 +1,12 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 
-import { getServerTestClient, createUsers, getTestClientForUser } from './utils';
+import {
+	getServerTestClient,
+	createUsers,
+	getTestClientForUser,
+	expectHTTPErrorCode,
+} from './utils';
 import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
@@ -20,10 +25,10 @@ Promise.config({
 	},
 });
 
-describe.only('Query Members', function() {
+describe('Query Members', function() {
 	let mod = 'mod-' + uuidv4();
 	let rob = 'rob-' + uuidv4();
-	let rob2 = 'rob-' + uuidv4();
+	let rob2 = 'rob2-' + uuidv4();
 	let adam = 'adam-' + uuidv4();
 	let invited = 'invited-' + uuidv4();
 	let pending = 'pending-' + uuidv4();
@@ -100,6 +105,12 @@ describe.only('Query Members', function() {
 		expect(results.members[0].user.id).to.be.equal(invited);
 	});
 
+	it('query members with rejected invites', async function() {
+		let results = await channel.queryMembers({ invite: 'rejected' });
+		expect(results.members.length).to.be.equal(1);
+		expect(results.members[0].user.id).to.be.equal(rejected);
+	});
+
 	it('query channel moderators', async function() {
 		let results = await channel.queryMembers({ is_moderator: true });
 		expect(results.members.length).to.be.equal(1);
@@ -115,5 +126,23 @@ describe.only('Query Members', function() {
 	it('query for not banned members', async function() {
 		let results = await channel.queryMembers({ banned: false });
 		expect(results.members.length).to.be.equal(7);
+	});
+
+	it('query by cid is not allowed', async function() {
+		let results = channel.queryMembers({ cid: channel.cid });
+		await expectHTTPErrorCode(
+			400,
+			results,
+			'StreamChat error code 4: QueryMembers failed with error: "cannot search by cid"',
+		);
+	});
+
+	it('invalid fields return an error', async function() {
+		let results = channel.queryMembers({ invalid: channel.cid });
+		await expectHTTPErrorCode(
+			400,
+			results,
+			'StreamChat error code 4: QueryMembers failed with error: "unrecognized field "invalid""',
+		);
 	});
 });
