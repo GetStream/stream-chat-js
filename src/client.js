@@ -202,12 +202,7 @@ export class StreamChat {
 	};
 
 	_setToken = async (user, userTokenOrProvider) => {
-		this.tokenManager = new TokenManager({
-			tokenOrProvider: userTokenOrProvider,
-			secret: this.secret,
-			user,
-		});
-		await this.tokenManager.loadToken();
+		await this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 	};
 
 	_setUser(user) {
@@ -314,7 +309,7 @@ export class StreamChat {
 		// reset client state
 		this.state = new ClientState();
 		// reset token manager
-		this.tokenManager = new TokenManager({ secret: this.secret });
+		this.tokenManager.expire();
 
 		// close the WS connection
 		if (this.wsConnection) {

@@ -20,9 +20,19 @@ export class TokenManager {
 	 * - user {object}
 	 * - secret {string}
 	 */
-	constructor({ tokenOrProvider, user, secret }) {
-		this.validateToken(tokenOrProvider, user, secret);
-		this.secret = secret;
+	constructor(options) {
+		if (options && options.secret) {
+			this.secret = options.secret;
+		}
+		this.type = 'static';
+
+		if (this.secret) {
+			this.token = JWTServerToken(this.secret);
+		}
+	}
+
+	setTokenOrProvider = async (tokenOrProvider, user) => {
+		this.validateToken(tokenOrProvider, user);
 		this.user = user;
 
 		if (isFunction(tokenOrProvider)) {
@@ -39,7 +49,14 @@ export class TokenManager {
 			this.token = JWTUserToken(this.secret, user.id, {}, {});
 			this.type = 'static';
 		}
-	}
+
+		await this.loadToken();
+	};
+
+	expire = () => {
+		this.token = null;
+		this.user = null;
+	};
 
 	// Validates the user token.
 	validateToken = (tokenOrProvider, user) => {

@@ -12,30 +12,25 @@ const wsBaseURL = process.env.STREAM_LOCAL_TEST_RUN
 	? 'ws://localhost:3030'
 	: 'wss://chat-us-east-1.stream-io-api.com';
 
-const tokenManagerWithProvider = new TokenManager({
-	tokenOrProvider: () =>
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODkzMzY5OX0.4v5WiQDBtkM3dNQXewRf5or6seuSj0XT5v21yZqgCAU',
-	user: { id: 'thierry' },
-});
+const tokenProvider = () =>
+	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODkzMzY5OX0.4v5WiQDBtkM3dNQXewRf5or6seuSj0XT5v21yZqgCAU';
+const validStaticToken =
+	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MjQwMDE1ODg3OTk2MzF9.vJsAQxuV4OABR2VTLc2NIUFzVIazAnnB31FajUxf-ws';
+const expiredStaticToken =
+	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODgzOTg2NH0.RHfcNuX-FkitL3ne-KS2whFGbU7lJFkMpgiF_g8DhHI';
 
-const tokenManagerStatic_validToken = new TokenManager({
-	tokenOrProvider:
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MjQwMDE1ODg3OTk2MzF9.vJsAQxuV4OABR2VTLc2NIUFzVIazAnnB31FajUxf-ws',
-	user: { id: 'thierry' },
-});
+const tokenManager = new TokenManager();
 
-const tokenManagerStatic_expiredToken = new TokenManager({
-	tokenOrProvider:
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODgzOTg2NH0.RHfcNuX-FkitL3ne-KS2whFGbU7lJFkMpgiF_g8DhHI',
-	user: { id: 'thierry' },
-});
-
-function createTestWSConnection(options) {
+async function createTestWSConnection(
+	tokenOrProvider = validStaticToken,
+	connectionOptions,
+) {
+	await tokenManager.setTokenOrProvider(tokenOrProvider, { id: 'thierry' });
 	const conn = new StableWSConnection({
 		wsBaseURL,
 		userID: 'thierry',
 		user: { id: 'thierry' },
-		tokenManager: tokenManagerStatic_validToken,
+		tokenManager,
 		apiKey: '892s22ypvt6m',
 		authType: 'jwt',
 		userAgent: '',
@@ -45,7 +40,7 @@ function createTestWSConnection(options) {
 		logger: (type, msg) => {
 			// console.log(msg);
 		},
-		...options,
+		...connectionOptions,
 	});
 	// disable the retry interval to speedup tests
 	conn._retryInterval = function() {
@@ -97,7 +92,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connect', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const result = healthCheck;
 		expect(result.type).to.equal('health.check');
@@ -107,7 +102,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connect twice should fail', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		try {
 			const healthCheck2 = await conn.connect();
@@ -118,7 +113,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		conn.isHealthy = false;
 		const open2 = await conn._reconnect();
@@ -132,7 +127,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect with a code bug should not trigger infinite loop', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const original = conn._retryInterval;
 		conn._retryInterval = function() {
@@ -149,7 +144,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Reconnect with a code bug should not trigger infinite loop part 2', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		conn._connect = function() {
 			throw new Error('stuff is broken in the connect');
@@ -163,7 +158,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connection closed', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection closed... should trigger a reconnect...
@@ -179,7 +174,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Connection error', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a connection error... should trigger a reconnect
@@ -195,7 +190,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Health check failure', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		// fake a health check failure...
@@ -210,7 +205,7 @@ describe('Connection and reconnect behaviour', function() {
 	});
 
 	it('Browser offline', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		conn.onlineStatusChanged({ type: 'offline' });
@@ -226,22 +221,16 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Connect auth error', function(done) {
+	it('Connect auth error', async function() {
 		try {
-			const conn = createTestWSConnection({
-				tokenManager: new TokenManager({
-					tokenOrProvider: '',
-					user: { id: 'thierry' },
-				}),
-				authType: '',
-			});
+			await createTestWSConnection('', { authType: '' });
 		} catch (e) {
-			done();
+			expect(true).to.equal(true);
 		}
 	});
 
 	it('Disconnect', async function() {
-		const conn = createTestWSConnection();
+		const conn = await createTestWSConnection();
 		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		const wsID = conn.wsID;
@@ -251,19 +240,16 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.ws).to.equal(undefined);
 	});
 
-	it('Expired static tokens should fail', done => {
-		const conn = createTestWSConnection({
-			tokenManager: tokenManagerStatic_expiredToken,
-		});
-
-		// this should fail since auth details are invalid
-		conn.connect().catch(e => {
-			done();
-		});
+	it('Expired static tokens should fail', async () => {
+		try {
+			const conn = await createTestWSConnection(expiredStaticToken);
+		} catch (e) {
+			//
+		}
 	});
 
 	it('Provider based expired tokens should should invoke loadToken and reconnect', async () => {
-		const conn = createTestWSConnection({ tokenManager: tokenManagerWithProvider });
+		const conn = await createTestWSConnection(tokenProvider);
 		await conn.tokenManager.loadToken();
 
 		conn._reconnect = sinon.fake();
@@ -273,7 +259,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn._reconnect.calledWith({ refreshToken: true })).to.equal(true);
 	});
 
-	it.only('Http request with expired token should reload token', async () => {
+	it('Http request with expired token should reload token', async () => {
 		const client = getTestClient(false);
 		await client.setUser({ id: 'thierry' }, () => createUserToken('thierry', 1));
 
