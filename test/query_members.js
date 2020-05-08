@@ -1,7 +1,7 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 
-import { getServerTestClient, createUsers } from './utils';
+import { getServerTestClient, createUsers, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
@@ -21,25 +21,45 @@ Promise.config({
 });
 
 describe.only('Query Members', function() {
-	let tom = 'tom-' + uuidv4();
+	let mod = 'mod-' + uuidv4();
 	let rob = 'rob-' + uuidv4();
+	let rob2 = 'rob-' + uuidv4();
 	let adam = 'adam-' + uuidv4();
 	let invited = 'invited-' + uuidv4();
+	let pending = 'pending-' + uuidv4();
+	let rejected = 'rejected-' + uuidv4();
+	let banned = 'banned-' + uuidv4();
 	let channel;
 	let ssClient;
 	before(async function() {
 		ssClient = await getServerTestClient();
 		await ssClient.updateUser({ id: rob, name: 'Robert' });
-		await ssClient.updateUser({ id: tom, name: 'Tomas' });
+		await ssClient.updateUser({ id: rob2, name: 'Robert2' });
+		await ssClient.updateUser({ id: mod, name: 'Tomas' });
 		await ssClient.updateUser({ id: adam, name: 'Adame' });
 		await ssClient.updateUser({ id: invited, name: 'Mary' });
-		await createUsers([tom, rob, adam]);
+		await ssClient.updateUser({ id: pending, name: 'Carlos' });
+		await ssClient.updateUser({ id: rejected, name: 'Joseph' });
+		await ssClient.updateUser({ id: banned, name: 'Evil' });
+		await createUsers([mod, rob, adam]);
 		channel = ssClient.channel('messaging', uuidv4(), {
-			members: [tom, rob, adam],
-			created_by_id: tom,
+			members: [mod, rob, rob2, adam, banned],
+			created_by_id: mod,
 		});
 		await channel.create();
-		await channel.inviteMembers([invited]);
+		await channel.addModerators([mod]);
+		await channel.inviteMembers([invited, pending, rejected]);
+
+		// mod bans user banned
+		await channel.banUser(banned, { user_id: mod });
+
+		//accept the invite
+		const clientA = await getTestClientForUser(invited);
+		await clientA.channel('messaging', channel.id).acceptInvite();
+
+		//reject the invite
+		const clientR = await getTestClientForUser(rejected);
+		await clientR.channel('messaging', channel.id).rejectInvite();
 	});
 
 	it('query member with name Robert', async function() {
@@ -48,17 +68,52 @@ describe.only('Query Members', function() {
 		expect(results.members[0].user.id).to.be.equal(rob);
 	});
 
+	it('autocomplete member with name Robert', async function() {
+		let results = await channel.queryMembers({ name: { $autocomplete: 'Rob' } });
+		expect(results.members.length).to.be.equal(2);
+		expect(results.members[0].user.id).to.be.equal(rob);
+		expect(results.members[1].user.id).to.be.equal(rob2);
+	});
+
 	it('query members by id', async function() {
-		let results = await channel.queryMembers({ id: tom });
+		let results = await channel.queryMembers({ id: mod });
 		expect(results.members.length).to.be.equal(1);
-		expect(results.members[0].user.id).to.be.equal(tom);
+		expect(results.members[0].user.id).to.be.equal(mod);
 	});
 
 	it('query multiple users by id', async function() {
-		let results = await channel.queryMembers({ id: { $in: [tom, rob, adam] } });
-		expect(results.members.length).to.be.equal(3);
-		expect(results.members[0].user.id).to.be.equal(tom);
-		expect(results.members[1].user.id).to.be.equal(rob);
-		expect(results.members[2].user.id).to.be.equal(adam);
+		let results = await channel.queryMembers({ id: { $in: [rob, adam] } });
+		expect(results.members.length).to.be.equal(2);
+		expect(results.members[0].user.id).to.be.equal(rob);
+		expect(results.members[1].user.id).to.be.equal(adam);
+	});
+
+	it('query members with pending invites', async function() {
+		let results = await channel.queryMembers({ invite: 'pending' });
+		expect(results.members.length).to.be.equal(1);
+		expect(results.members[0].user.id).to.be.equal(pending);
+	});
+
+	it('query members with accepted invites', async function() {
+		let results = await channel.queryMembers({ invite: 'accepted' });
+		expect(results.members.length).to.be.equal(1);
+		expect(results.members[0].user.id).to.be.equal(invited);
+	});
+
+	it('query channel moderators', async function() {
+		let results = await channel.queryMembers({ is_moderator: true });
+		expect(results.members.length).to.be.equal(1);
+		expect(results.members[0].user.id).to.be.equal(mod);
+	});
+
+	it('query for banned members', async function() {
+		let results = await channel.queryMembers({ banned: true });
+		expect(results.members.length).to.be.equal(1);
+		expect(results.members[0].user.id).to.be.equal(banned);
+	});
+
+	it('query for not banned members', async function() {
+		let results = await channel.queryMembers({ banned: false });
+		expect(results.members.length).to.be.equal(7);
 	});
 });
