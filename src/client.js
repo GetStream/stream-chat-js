@@ -165,13 +165,13 @@ export class StreamChat {
 		this.wsBaseURL = this.baseURL.replace('http', 'ws');
 	}
 
-	_setupConnection() {
+	_setupConnection = () => {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
 		this.wsPromise = this.connect();
 		this._startCleaning();
 		return this.wsPromise;
-	}
+	};
 
 	_hasConnectionID = () => Boolean(this.connectionID);
 
@@ -209,7 +209,6 @@ export class StreamChat {
 			secret: this.secret,
 			user,
 		});
-
 		await this.tokenManager.loadToken();
 	};
 
@@ -325,7 +324,7 @@ export class StreamChat {
 		return Promise.resolve();
 	}
 
-	setAnonymousUser() {
+	setAnonymousUser = async () => {
 		this.anonymous = true;
 		this.userID = uuidv4();
 		const anonymousUser = {
@@ -333,11 +332,11 @@ export class StreamChat {
 			anon: true,
 		};
 
-		this._setToken(anonymousUser, '');
+		await this._setToken(anonymousUser, '');
 		this._setUser(anonymousUser);
 
 		return this._setupConnection();
-	}
+	};
 
 	/**
 	 * setGuestUser - Setup a temporary guest user
@@ -346,7 +345,7 @@ export class StreamChat {
 	 *
 	 * @return {promise} Returns a promise that resolves when the connection is setup
 	 */
-	async setGuestUser(user) {
+	setGuestUser = async user => {
 		let response;
 		this.anonymous = true;
 		try {
@@ -364,7 +363,7 @@ export class StreamChat {
 			...guestUser
 		} = response.user;
 		return await this.setUser(guestUser, response.access_token);
-	}
+	};
 
 	/**
 	 * createToken - Creates a token to authenticate this user. This function is used server side.
@@ -1356,6 +1355,8 @@ export class StreamChat {
 	}
 
 	_getToken() {
+		if (!this.tokenManager) return null;
+
 		return this.tokenManager.getToken();
 	}
 

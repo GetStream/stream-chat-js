@@ -1,4 +1,4 @@
-import { UserFromToken, JWTServerToken } from './signing';
+import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
 
 /**
@@ -36,22 +36,17 @@ export class TokenManager {
 		}
 
 		if (!tokenOrProvider && this.user && this.secret) {
-			this.token = JWTServerToken(this.secret, user.id, {}, {});
+			this.token = JWTUserToken(this.secret, user.id, {}, {});
 			this.type = 'static';
 		}
 	}
 
 	// Validates the user token.
 	validateToken = (tokenOrProvider, user, secret) => {
-		if (!tokenOrProvider) {
-			if (!secret) {
-				throw new Error('both userToken and api secret are not provided');
-			}
-
-			return;
-		}
-
 		if (typeof tokenOrProvider === 'string') {
+			// Allow empty token for anonymous users
+			if (user.anon && tokenOrProvider === '') return;
+
 			const tokenUserId = UserFromToken(tokenOrProvider);
 			if (
 				tokenOrProvider != null &&
@@ -69,6 +64,14 @@ export class TokenManager {
 			return;
 		}
 
+		if (!tokenOrProvider) {
+			if (!secret) {
+				throw new Error('both userToken and api secret are not provided');
+			}
+
+			return;
+		}
+
 		throw new Error('user token should either be a string or a function');
 	};
 
@@ -82,6 +85,10 @@ export class TokenManager {
 
 	getToken = () => {
 		if (this.token) {
+			return this.token;
+		}
+
+		if (this.user && this.user.anon && this.token === '') {
 			return this.token;
 		}
 
