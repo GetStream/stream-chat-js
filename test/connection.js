@@ -1,6 +1,6 @@
 import { StableWSConnection } from '../src/connection';
 import { sleep } from '../src/utils';
-import { getTestClientForUser } from './utils';
+import { getTestClientForUser, getTestClient, createUserToken } from './utils';
 import uuidv4 from 'uuid/v4';
 
 import chai from 'chai';
@@ -14,7 +14,7 @@ const wsBaseURL = process.env.STREAM_LOCAL_TEST_RUN
 
 const tokenManagerWithProvider = new TokenManager({
 	tokenOrProvider: () =>
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODc5MzQ4MH0.At-JGwdxIvz6ItYBSetljYCZBCMRRtuNd6KPPkwSxHk',
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGhpZXJyeSIsImV4cCI6MTU4ODkzMzY5OX0.4v5WiQDBtkM3dNQXewRf5or6seuSj0XT5v21yZqgCAU',
 	user: { id: 'thierry' },
 });
 
@@ -271,5 +271,17 @@ describe('Connection and reconnect behaviour', function() {
 
 		await sleep(1000);
 		expect(conn._reconnect.calledWith({ refreshToken: true })).to.equal(true);
+	});
+
+	it.only('Http request with expired token should reload token', async () => {
+		const client = getTestClient(false);
+		await client.setUser({ id: 'thierry' }, () => createUserToken('thierry', 1));
+
+		await sleep(2000);
+		const channel = client.channel('messaging', 'fjsdbfjsbdjfsbhjdbfhjdf');
+		channel.create();
+		client.tokenManager.loadToken = sinon.fake();
+		await sleep(2000);
+		expect(client.tokenManager.loadToken.called).to.equal(true);
 	});
 });

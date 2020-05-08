@@ -102,7 +102,11 @@ export class StableWSConnection {
 			this.isConnecting = false;
 			this.isHealthy = false;
 			this.consecutiveFailures += 1;
-			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
+			const _error = JSON.parse(error.message);
+			if (
+				_error.code === chatCodes.TOKEN_EXPIRED &&
+				!this.tokenManager.isStatic()
+			) {
 				this.logger(
 					'info',
 					'connection:connect() - WS failure due to expired token, so going to try to reload token and reconnect',

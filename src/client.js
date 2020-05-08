@@ -23,7 +23,7 @@ import FormData from 'form-data';
 import pkg from '../package.json';
 import Immutable from 'seamless-immutable';
 import { TokenManager } from './token_manager';
-import { isFunction } from './utils';
+import { isFunction, chatCodes } from './utils';
 
 function isReadableStream(obj) {
 	return (
@@ -377,11 +377,12 @@ export class StreamChat {
 			throw Error(`tokens can only be created server-side using the API Secret`);
 		}
 		const extra = {};
-		if (exp != null) {
-			extra.exp = exp;
-		}
 
-		return JWTUserToken(this.secret, userID, extra, {});
+		const jwtOptions = {};
+		if (exp) {
+			jwtOptions.expiresIn = exp;
+		}
+		return JWTUserToken(this.secret, userID, extra, jwtOptions);
 	}
 
 	/**
@@ -467,93 +468,68 @@ export class StreamChat {
 		});
 	}
 
-	async get(url, params) {
+	doAxiosRequest = async (type, url, data, params = {}) => {
 		try {
-			this._logApiRequest('get', url, {}, this._addClientParams(params));
-			const response = await axios.get(url, this._addClientParams(params));
-			this._logApiResponse('get', url, response);
+			let response;
+			this._logApiRequest(type, url, data, this._addClientParams(params));
+			switch (type) {
+				case 'get':
+					response = await axios.get(url, this._addClientParams(params));
+					break;
+				case 'delete':
+					response = await axios.delete(url, this._addClientParams(params));
+					break;
+				case 'post':
+					response = await axios.post(url, data, this._addClientParams());
+					break;
+				case 'put':
+					response = await axios.put(url, data, this._addClientParams());
+					break;
+				case 'patch':
+					response = await axios.patch(url, data, this._addClientParams());
+					break;
+				default:
+					break;
+			}
+			this._logApiResponse(type, url, response);
 
 			return this.handleResponse(response);
 		} catch (e) {
-			this._logApiError('get', url, e);
+			this._logApiError(type, url, e);
+
 			if (e.response) {
+				if (
+					e.response.data.code === chatCodes.TOKEN_EXPIRED &&
+					!this.tokenManager.isStatic()
+				) {
+					await this.tokenManager.loadToken();
+					return await this.doAxiosRequest(type, url, params, data);
+				}
 				return this.handleResponse(e.response);
 			} else {
 				throw e;
 			}
 		}
+	};
+
+	get(url, params) {
+		return this.doAxiosRequest('get', url, null, params);
 	}
 
-	async put(url, data) {
-		let response;
-		try {
-			this._logApiRequest('put', url, data, this._addClientParams());
-			response = await axios.put(url, data, this._addClientParams());
-			this._logApiResponse('put', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('get', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	put(url, data) {
+		return this.doAxiosRequest('put', url, data);
 	}
 
-	async post(url, data) {
-		let response;
-		try {
-			this._logApiRequest('post', url, data, this._addClientParams());
-			response = await axios.post(url, data, this._addClientParams());
-			this._logApiResponse('post', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('post', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	post(url, data) {
+		return this.doAxiosRequest('post', url, data);
 	}
 
-	async patch(url, data) {
-		let response;
-		try {
-			this._logApiRequest('patch', url, data, this._addClientParams());
-			response = await axios.patch(url, data, this._addClientParams());
-			this._logApiResponse('patch', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('patch', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	patch(url, data) {
+		return this.doAxiosRequest('patch', url, data);
 	}
 
-	async delete(url, params) {
-		let response;
-		try {
-			this._logApiRequest('delete', url, {}, this._addClientParams());
-			response = await axios.delete(url, this._addClientParams(params));
-			this._logApiResponse('delete', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('delete', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	delete(url, params) {
+		return this.doAxiosRequest('delete', url, null, params);
 	}
 
 	async sendFile(url, uri, name, contentType, user) {

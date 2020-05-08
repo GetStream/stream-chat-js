@@ -75,6 +75,8 @@ export class TokenManager {
 		}
 
 		this.token = await this.tokenProvider();
+
+		return this.token;
 	};
 
 	getToken = () => {
