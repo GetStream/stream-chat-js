@@ -159,6 +159,18 @@ export class Channel {
 	}
 
 	/**
+	 * search - Query Members
+	 *
+	 * @param {object|string}  member search query or object MongoDB style filters
+	 * @param {object} options       Option object, {limit: 10}
+	 *
+	 * @return {object} search messages response
+	 */
+	async queryMembers(query, options = {}) {
+		return await this.getClient().queryMembers(this.cid, query, options);
+	}
+
+	/**
 	 * sendReaction - Send a reaction about a message
 	 *
 	 * @param {string} messageID the message id
