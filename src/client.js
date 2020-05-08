@@ -877,30 +877,6 @@ export class StreamChat {
 		return data;
 	}
 
-	/**
-	 * queryUsers - Query Members
-	 *
-	 * @param {string} cid channel to search members
-	 * @param {object} filterConditions MongoDB style filter conditions
-	 * @param {object} options          Option object, {limit: 10}
-	 *
-	 * @return {object} Member Query Response
-	 */
-	async queryMembers(cid, filterConditions, options) {
-		if (!options) {
-			options = {};
-		}
-
-		// Return a list of users
-		return await this.get(this.baseURL + '/members', {
-			payload: {
-				cid,
-				filter_conditions: filterConditions,
-				...options,
-			},
-		});
-	}
-
 	async queryChannels(filterConditions, sort = {}, options = {}) {
 		const sortFields = [];
 

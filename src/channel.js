@@ -161,13 +161,33 @@ export class Channel {
 	/**
 	 * search - Query Members
 	 *
-	 * @param {object|string}  member search query or object MongoDB style filters
-	 * @param {object} options       Option object, {limit: 10}
+	 * @param {object|string}  filterConditions object MongoDB style filters
+	 * @param {object} options        Option object, {limit: 10, offset:10}
 	 *
-	 * @return {object} search messages response
+	 * @return {object} search members response
 	 */
-	async queryMembers(query, options = {}) {
-		return await this.getClient().queryMembers(this.cid, query, options);
+	async queryMembers(filterConditions, options = {}) {
+		if (!options) {
+			options = {};
+		}
+		let id;
+		const type = this.type;
+		let members;
+		if (this.id) {
+			id = this.id;
+		} else if (this.data && Array.isArray(this.data.members)) {
+			members = this.data.members;
+		}
+		// Return a list of members
+		return await this.getClient().get(this.getClient().baseURL + '/members', {
+			payload: {
+				type,
+				id,
+				members,
+				filter_conditions: filterConditions,
+				...options,
+			},
+		});
 	}
 
 	/**

@@ -36,6 +36,7 @@ describe('Query Members', function() {
 	let banned = 'banned-' + uuidv4();
 	let channel;
 	let ssClient;
+	let csClient;
 	before(async function() {
 		ssClient = await getServerTestClient();
 		await ssClient.updateUser({ id: rob, name: 'Robert' });
@@ -47,6 +48,8 @@ describe('Query Members', function() {
 		await ssClient.updateUser({ id: rejected, name: 'Joseph' });
 		await ssClient.updateUser({ id: banned, name: 'Evil' });
 		await createUsers([mod, rob, adam]);
+
+		csClient = await getTestClientForUser(rob);
 		channel = ssClient.channel('messaging', uuidv4(), {
 			members: [mod, rob, rob2, adam, banned],
 			created_by_id: mod,
@@ -80,6 +83,22 @@ describe('Query Members', function() {
 		expect(results.members[1].user.id).to.be.equal(rob2);
 	});
 
+	it('query without filters return all the members', async function() {
+		let results = await channel.queryMembers({});
+		expect(results.members.length).to.be.equal(8);
+	});
+
+	it('paginate members', async function() {
+		let results = await channel.queryMembers({});
+		expect(results.members.length).to.be.equal(8);
+		const members = results.members;
+		for (let i = 0; i < results.length; i++) {
+			const result = channel.queryMembers({}, { limit: 1, offset: i });
+			expect(result.members.length).to.be.equal(1);
+			expect(members[i].user.id).to.be.equal(result.members[0].user.id);
+		}
+	});
+
 	it('member with name containing Robert', async function() {
 		let results = await channel.queryMembers({ name: { $q: 'Rob' } });
 		expect(results.members.length).to.be.equal(2);
@@ -98,6 +117,15 @@ describe('Query Members', function() {
 		expect(results.members.length).to.be.equal(2);
 		expect(results.members[0].user.id).to.be.equal(rob);
 		expect(results.members[1].user.id).to.be.equal(adam);
+	});
+
+	it('query multiple users by name', async function() {
+		let results = await channel.queryMembers({
+			name: { $in: ['Robert', 'Robert2'] },
+		});
+		expect(results.members.length).to.be.equal(2);
+		expect(results.members[0].user.id).to.be.equal(rob);
+		expect(results.members[1].user.id).to.be.equal(rob2);
 	});
 
 	it('query members with pending invites', async function() {
@@ -130,9 +158,17 @@ describe('Query Members', function() {
 		expect(results.members[0].user.id).to.be.equal(banned);
 	});
 
-	it('query for not banned members', async function() {
+	it('query for members not banned', async function() {
 		let results = await channel.queryMembers({ banned: false });
 		expect(results.members.length).to.be.equal(7);
+	});
+
+	it('weird queries work fine', async function() {
+		let results = await channel.queryMembers({
+			$or: [{ $nor: [{ is_moderator: true }] }, { is_moderator: true }],
+		});
+		expect(results.members.length).to.be.equal(8);
+		// moderator should be excluded
 	});
 
 	it('query by cid is not allowed', async function() {
@@ -160,5 +196,28 @@ describe('Query Members', function() {
 			results,
 			'StreamChat error code 4: QueryMembers failed with error: "operator "$q" is not allowed for field "id""',
 		);
+	});
+
+	it('invalid invite value', async function() {
+		let results = channel.queryMembers({ invite: 'sd' });
+		await expectHTTPErrorCode(
+			400,
+			results,
+			'StreamChat error code 4: QueryMembers failed with error: "invite value must be either "pending", "accepted" or "rejected""',
+		);
+	});
+
+	it('queryMembers in distinct channels', async function() {
+		const creatorClient = await getTestClientForUser(rob);
+		let distinctChannel = creatorClient.channel('messaging', {
+			members: [rob, adam, mod],
+		});
+		await distinctChannel.create();
+		let results = await distinctChannel.queryMembers({});
+		expect(results.members.length).to.be.equal(3);
+		await distinctChannel.watch();
+		let result = await distinctChannel.queryMembers({ id: rob });
+		expect(result.members.length).to.be.equal(1);
+		expect(result.members[0].user_id).to.be.equal(rob);
 	});
 });
