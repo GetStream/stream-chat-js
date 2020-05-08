@@ -604,7 +604,7 @@ export class StableWSConnection {
 		}).then(e => {
 			const data = JSON.parse(e.data);
 			if (data.error != null) {
-				throw data.error;
+				throw new Error(JSON.stringify(data.error));
 			}
 			return data;
 		});

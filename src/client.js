@@ -95,11 +95,9 @@ export class StreamChat {
 
 		// If its a server-side client, then lets initialize the tokenManager, since token will be
 		// generated from secret.
-		if (this.secret) {
-			this.tokenManager = new TokenManager({
-				secret: this.secret,
-			});
-		}
+		this.tokenManager = new TokenManager({
+			secret: this.secret,
+		});
 
 		/**
 		 * logger function should accept 3 parameters:
@@ -801,7 +799,7 @@ export class StreamChat {
 		this.wsConnection = new StableWSConnection({
 			wsBaseURL: client.wsBaseURL,
 			tokenManager: client.tokenManager,
-			user: this.user,
+			user: this._user,
 			authType: this.getAuthType(),
 			userAgent: this._userAgent(),
 			apiKey: this.key,

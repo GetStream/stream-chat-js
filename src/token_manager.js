@@ -42,7 +42,17 @@ export class TokenManager {
 	}
 
 	// Validates the user token.
-	validateToken = (tokenOrProvider, user, secret) => {
+	validateToken = (tokenOrProvider, user) => {
+		if (user && user.anon && tokenOrProvider === '') return;
+
+		if (
+			tokenOrProvider &&
+			typeof tokenOrProvider !== 'string' &&
+			!isFunction(tokenOrProvider)
+		) {
+			throw new Error('user token should either be a string or a function');
+		}
+
 		if (typeof tokenOrProvider === 'string') {
 			// Allow empty token for anonymous users
 			if (user.anon && tokenOrProvider === '') return;
@@ -56,23 +66,7 @@ export class TokenManager {
 					'userToken does not have a user_id or is not matching with user.id',
 				);
 			}
-
-			return;
 		}
-
-		if (isFunction(tokenOrProvider)) {
-			return;
-		}
-
-		if (!tokenOrProvider) {
-			if (!secret) {
-				throw new Error('both userToken and api secret are not provided');
-			}
-
-			return;
-		}
-
-		throw new Error('user token should either be a string or a function');
 	};
 
 	loadToken = async () => {
