@@ -80,6 +80,13 @@ describe('Query Members', function() {
 		expect(results.members[1].user.id).to.be.equal(rob2);
 	});
 
+	it('member with name containing Robert', async function() {
+		let results = await channel.queryMembers({ name: { $q: 'Rob' } });
+		expect(results.members.length).to.be.equal(2);
+		expect(results.members[0].user.id).to.be.equal(rob);
+		expect(results.members[1].user.id).to.be.equal(rob2);
+	});
+
 	it('query members by id', async function() {
 		let results = await channel.queryMembers({ id: mod });
 		expect(results.members.length).to.be.equal(1);
@@ -143,6 +150,15 @@ describe('Query Members', function() {
 			400,
 			results,
 			'StreamChat error code 4: QueryMembers failed with error: "unrecognized field "invalid""',
+		);
+	});
+
+	it('invalid operator for field', async function() {
+		let results = channel.queryMembers({ id: { $q: 's' } });
+		await expectHTTPErrorCode(
+			400,
+			results,
+			'StreamChat error code 4: QueryMembers failed with error: "operator "$q" is not allowed for field "id""',
 		);
 	});
 });
