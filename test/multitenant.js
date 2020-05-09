@@ -618,6 +618,16 @@ describe('Full test', function() {
 		expect(response.users[0].id).to.eql(team1User);
 	});
 
+	it('query channels should not include channels from other teams', async function() {
+		const response1 = await team1Client.queryChannels({ type: channelType });
+		expect(response1).to.have.length(1);
+		expect(response1[0].data.team).to.eql(team1);
+
+		const response2 = await team2Client.queryChannels({ type: channelType });
+		expect(response2).to.have.length(1);
+		expect(response2[0].data.team).to.eql(team2);
+	});
+
 	it('query using wrong team should raise an error', async function() {
 		const p = team1Client.queryChannels({ type: channelType, team: team2 });
 		await expect(p).to.be.rejectedWith(
@@ -638,6 +648,28 @@ describe('Full test', function() {
 		const p = team1Client.queryChannels({ $nor: [{ team: team1 }] });
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "cannot use $nor operator when filtering by team"',
+		);
+	});
+
+	it('only $eq/$in are allowed', async function() {
+		let p = team1Client.queryChannels({ team: { $ne: team1 } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use operator "$ne" when filtering by team"',
+		);
+		p = team1Client.queryChannels({ team: { $nin: [team1] } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use operator "$nin" when filtering by team"',
+		);
+	});
+
+	it('wrong values type raise an error', async function() {
+		let p = team1Client.queryChannels({ team: { $eq: 1 } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
+		);
+		p = team1Client.queryChannels({ team: { $in: [1] } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
 		);
 	});
 });
