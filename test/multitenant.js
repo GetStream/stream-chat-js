@@ -630,7 +630,6 @@ describe('Full test', function() {
 			type: channelType,
 			team: team1,
 		});
-		console.log(response);
 		expect(response).to.have.length(1);
 		expect(response[0].data.team).to.eql(team1);
 	});
