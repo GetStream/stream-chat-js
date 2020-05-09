@@ -618,13 +618,27 @@ describe('Full test', function() {
 		expect(response.users[0].id).to.eql(team1User);
 	});
 
-	it('query channels should not include channels from other teams', async function() {
-		const response1 = await team1Client.queryChannels({ type: channelType });
-		expect(response1).to.have.length(1);
-		expect(response1[0].data.team).to.eql(team1);
+	it('query using wrong team should raise an error', async function() {
+		const p = team1Client.queryChannels({ type: channelType, team: team2 });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "search by team "red" is not allowed"',
+		);
+	});
 
-		const response2 = await team2Client.queryChannels({ type: channelType });
-		expect(response2).to.have.length(1);
-		expect(response2[0].data.team).to.eql(team2);
+	it('query by allowed team should work fine', async function() {
+		const response = await team1Client.queryChannels({
+			type: channelType,
+			team: team1,
+		});
+		console.log(response);
+		expect(response).to.have.length(1);
+		expect(response[0].data.team).to.eql(team1);
+	});
+
+	it('logical operator $nor is disallowed when filtering by team', async function() {
+		const p = team1Client.queryChannels({ $nor: [{ team: team1 }] });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use $nor operator when filtering by team"',
+		);
 	});
 });
