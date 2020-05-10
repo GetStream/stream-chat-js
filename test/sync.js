@@ -28,7 +28,7 @@ describe('Sync endpoint', () => {
 		const p = userClient.sync(['messaging:hello'], new Date());
 		await expect(p).to.not.be.rejected;
 		const response = await p;
-		expect(response.channels).to.eql({});
+		expect(response.events).to.eql([]);
 	});
 
 	it('should validate presence of cids and last_sync_at', async () => {
@@ -46,15 +46,15 @@ describe('Sync endpoint', () => {
 	it('connect to red, blue and green channels and put some messages', async () => {
 		serverSideClient = getTestClient(true);
 		await serverSideClient.updateUser({ id: otherUserID });
-		blueChannel = serverSideClient.channel('messaging', uuidv4(), {
+		blueChannel = serverSideClient.channel('messaging', `blue-${uuidv4()}`, {
 			created_by_id: otherUserID,
 			members: [userID, otherUserID],
 		});
-		redChannel = serverSideClient.channel('messaging', uuidv4(), {
+		redChannel = serverSideClient.channel('messaging', `red-${uuidv4()}`, {
 			created_by_id: otherUserID,
 			members: [userID, otherUserID],
 		});
-		greenChannel = serverSideClient.channel('messaging', uuidv4(), {
+		greenChannel = serverSideClient.channel('messaging', `green-${uuidv4()}`, {
 			created_by_id: otherUserID,
 			members: [userID, otherUserID],
 		});
@@ -122,42 +122,44 @@ describe('Sync endpoint', () => {
 	});
 
 	describe('check sync response data', () => {
-		it('red channel should be marked as removed', () => {
-			expect(syncReply.channels[blueChannel.cid].removed).to.eql(false);
-			expect(syncReply.channels[redChannel.cid].removed).to.eql(true);
-			expect(syncReply.channels[greenChannel.cid].removed).to.eql(false);
-		});
+		const eventsByType = {};
 
-		it('blue channel should be marked as updated', () => {
-			const chan = syncReply.channels[blueChannel.cid].channel;
-			expect(chan.created_at).to.not.eql(chan.updated_at);
-			expect(chan.color).to.eql('blue');
+		it('group events by type', () => {
+			syncReply.events.reduce((acc, e) => {
+				acc[e.type] = [...(acc[e.type] || []), e];
+				return acc;
+			}, eventsByType);
 		});
 
 		it('green channel should be marked as hidden', () => {
-			const chan = syncReply.channels[greenChannel.cid].channel;
-			expect(chan.hidden).to.be.true;
-			expect(chan.hide_messages_before).to.not.be.undefined;
+			expect(eventsByType['channel.hidden']).to.have.length(1);
+			const evt = eventsByType['channel.hidden'][0];
+			expect(evt.cid).to.eql(greenChannel.cid);
+		});
+
+		it('blue channel should be marked as updated', () => {
+			const evts = eventsByType['channel.updated'].filter(
+				e => e.cid === blueChannel.cid,
+			);
+			expect(evts).to.have.length(1);
+			const evt = evts[0];
+			expect(evt.channel.created_at).to.not.eql(evt.channel.updated_at);
+			expect(evt.channel.color).to.eql('blue');
 		});
 
 		it('should include deleted channels', () => {
-			const msgs = syncReply.channels[greenChannel.cid].messages.concat(
-				syncReply.channels[blueChannel.cid].messages,
-			);
-			const deletedMessages = msgs
-				.filter(m => m.deleted_at != null)
-				.map(m => m.id)
-				.sort();
-			expect(deletedMessages).to.eql(deletedMessages);
+			const evts = eventsByType['message.deleted'];
+			const deletedMessageIds = evts.map(m => m.message.id).sort();
+			expect(deletedMessageIds).to.eql(deletedMessages);
 		});
 
 		it('messages should include new reactions', () => {
-			const msgs = syncReply.channels[blueChannel.cid].messages.filter(
-				m => m.id === messageWithReaction,
+			const evts = eventsByType['message.updated'].filter(
+				e => e.message.id === messageWithReaction,
 			);
-			expect(msgs).to.have.length(1);
-			expect(msgs[0].latest_reactions).to.have.length(1);
-			expect(msgs[0].reaction_counts).to.eql({ like: 1 });
+			expect(evts).to.have.length(1);
+			expect(evts[0].message.latest_reactions).to.have.length(1);
+			expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
 		});
 	});
 });
