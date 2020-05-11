@@ -22,7 +22,7 @@ const externalPackages = [
 	'isomorphic-ws',
 	'lodash',
 	'seamless-immutable',
-	'uuid/v4',
+	'uuid',
 	'base64-js',
 	'@babel/runtime/regenerator',
 	'@babel/runtime/helpers/asyncToGenerator',
