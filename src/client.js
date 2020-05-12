@@ -9,19 +9,12 @@ import { StableWSConnection } from './connection';
 
 import { isValidEventType } from './events';
 
-import {
-	JWTServerToken,
-	JWTUserToken,
-	UserFromToken,
-	DevToken,
-	CheckSignature,
-} from './signing';
+import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import http from 'http';
 import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
-import Immutable from 'seamless-immutable';
 import { TokenManager } from './token_manager';
 import { isFunction, chatCodes } from './utils';
 
@@ -38,7 +31,6 @@ export class StreamChat {
 	constructor(key, secretOrOptions, options) {
 		// set the key
 		this.key = key;
-		this.userToken = null;
 		this.secret = null;
 		this.listeners = {};
 		this.state = new ClientState();
@@ -181,7 +173,7 @@ export class StreamChat {
 	 *
 	 * @return {promise} Returns a promise that resolves when the connection is setup
 	 */
-	setUser = async (user, userTokenOrProvider) => {
+	setUser = (user, userTokenOrProvider) => {
 		if (this.userID) {
 			throw new Error(
 				'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -194,16 +186,15 @@ export class StreamChat {
 			throw new Error('The "id" field on the user is missing');
 		}
 
-		await this._setToken(user, userTokenOrProvider);
+		this._setToken(user, userTokenOrProvider);
 		this._setUser(user);
 		this.anonymous = false;
 
 		return this._setupConnection();
 	};
 
-	_setToken = async (user, userTokenOrProvider) => {
-		await this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
-	};
+	_setToken = (user, userTokenOrProvider) =>
+		this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
 	_setUser(user) {
 		// this one is used by the frontend
@@ -297,7 +288,6 @@ export class StreamChat {
 		}
 
 		this.anonymous = false;
-		this.userToken = null;
 
 		this.connectionEstablishedCount = 0;
 
@@ -309,7 +299,7 @@ export class StreamChat {
 		// reset client state
 		this.state = new ClientState();
 		// reset token manager
-		this.tokenManager.expire();
+		this.tokenManager.reset();
 
 		// close the WS connection
 		if (this.wsConnection) {
@@ -319,7 +309,7 @@ export class StreamChat {
 		return Promise.resolve();
 	}
 
-	setAnonymousUser = async () => {
+	setAnonymousUser = () => {
 		this.anonymous = true;
 		this.userID = uuidv4();
 		const anonymousUser = {
@@ -327,7 +317,7 @@ export class StreamChat {
 			anon: true,
 		};
 
-		await this._setToken(anonymousUser, '');
+		this._setToken(anonymousUser, '');
 		this._setUser(anonymousUser);
 
 		return this._setupConnection();
@@ -340,7 +330,7 @@ export class StreamChat {
 	 *
 	 * @return {promise} Returns a promise that resolves when the connection is setup
 	 */
-	setGuestUser = async user => {
+	async setGuestUser(user) {
 		let response;
 		this.anonymous = true;
 		try {
@@ -358,7 +348,7 @@ export class StreamChat {
 			...guestUser
 		} = response.user;
 		return await this.setUser(guestUser, response.access_token);
-	};
+	}
 
 	/**
 	 * createToken - Creates a token to authenticate this user. This function is used server side.
@@ -466,6 +456,7 @@ export class StreamChat {
 	}
 
 	doAxiosRequest = async (type, url, data, params = {}) => {
+		await this.tokenManager.tokenReady();
 		try {
 			let response;
 			this._logApiRequest(type, url, data, this._addClientParams(params));
@@ -499,7 +490,7 @@ export class StreamChat {
 					e.response.data.code === chatCodes.TOKEN_EXPIRED &&
 					!this.tokenManager.isStatic()
 				) {
-					await this.tokenManager.loadToken();
+					this.tokenManager.loadToken();
 					return await this.doAxiosRequest(type, url, params, data);
 				}
 				return this.handleResponse(e.response);
@@ -1326,7 +1317,7 @@ export class StreamChat {
 	}
 
 	_getToken() {
-		if (!this.tokenManager) return null;
+		if (!this.tokenManager || this.anonymous) return null;
 
 		return this.tokenManager.getToken();
 	}

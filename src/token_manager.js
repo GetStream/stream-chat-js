@@ -21,6 +21,7 @@ export class TokenManager {
 	 * - secret {string}
 	 */
 	constructor(options) {
+		this.loadTokenPromise = null;
 		if (options && options.secret) {
 			this.secret = options.secret;
 		}
@@ -53,14 +54,21 @@ export class TokenManager {
 		await this.loadToken();
 	};
 
-	expire = () => {
+	reset = () => {
 		this.token = null;
 		this.user = null;
+		this.loadTokenPromise = null;
 	};
 
 	// Validates the user token.
 	validateToken = (tokenOrProvider, user) => {
-		if (user && user.anon && tokenOrProvider === '') return;
+		// allow empty token for anon user
+		if (user && user.anon && !tokenOrProvider) return;
+
+		// Don't allow empty token for non-server side client.
+		if (!this.secret && !tokenOrProvider) {
+			throw new Error('User token can not be empty');
+		}
 
 		if (
 			tokenOrProvider &&
@@ -86,14 +94,20 @@ export class TokenManager {
 		}
 	};
 
-	loadToken = async () => {
-		if (this.type === 'static') {
-			return Promise.resolve();
-		}
+	tokenReady = () => this.loadTokenPromise;
 
-		this.token = await this.tokenProvider();
+	loadToken = () => {
+		this.loadTokenPromise = new Promise(async resolve => {
+			if (this.type === 'static') {
+				return resolve(this.token);
+			}
 
-		return this.token;
+			this.token = await this.tokenProvider();
+
+			resolve(this.token);
+		});
+
+		return this.loadTokenPromise;
 	};
 
 	getToken = () => {
@@ -101,7 +115,7 @@ export class TokenManager {
 			return this.token;
 		}
 
-		if (this.user && this.user.anon && this.token === '') {
+		if (this.user && this.user.anon && !this.token) {
 			return this.token;
 		}
 

@@ -223,6 +223,7 @@ export class StableWSConnection {
 	 * @return {promise} Promise that completes once the first health check message is received
 	 */
 	async _connect() {
+		await this.tokenManager.tokenReady();
 		this._setupConnectionPromise();
 		const wsURL = this._buildUrl();
 		this.ws = new isoWS(wsURL);
