@@ -1,5 +1,5 @@
 import isoWS from 'isomorphic-ws';
-import { sleep, chatCodes } from './utils';
+import { sleep } from './utils';
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
  * - the browser will sometimes report that you're online or offline
@@ -19,27 +19,18 @@ import { sleep, chatCodes } from './utils';
  */
 export class StableWSConnection {
 	constructor({
-		wsBaseURL,
+		wsURL,
 		clientID,
 		userID,
-		user,
-		userAgent,
-		apiKey,
-		tokenManager,
-		authType,
 		messageCallback,
 		recoverCallback,
+
 		eventCallback,
 		logger,
 	}) {
-		this.wsBaseURL = wsBaseURL;
+		this.wsURL = wsURL;
 		this.clientID = clientID;
 		this.userID = userID;
-		this.user = user;
-		this.authType = authType;
-		this.userAgent = userAgent;
-		this.apiKey = apiKey;
-		this.tokenManager = tokenManager;
 		/** consecutive failures influence the duration of the timeout */
 		this.consecutiveFailures = 0;
 		/** keep track of the total number of failures */
@@ -98,46 +89,14 @@ export class StableWSConnection {
 				},
 			);
 			return healthCheck;
-		} catch (error) {
+		} catch (e) {
 			this.isConnecting = false;
-			this.isHealthy = false;
-			this.consecutiveFailures += 1;
-			const _error = JSON.parse(error.message);
-			if (
-				_error.code === chatCodes.TOKEN_EXPIRED &&
-				!this.tokenManager.isStatic()
-			) {
-				this.logger(
-					'info',
-					'connection:connect() - WS failure due to expired token, so going to try to reload token and reconnect',
-					{
-						tags: ['connection'],
-					},
-				);
-
-				this._reconnect({ refreshToken: true });
-
-				return false;
-			}
-
-			if (!error.isWSFailure) {
+			if (!e.isWSFailure) {
 				// This is a permanent failure, throw the error...
-				throw error;
+				throw e;
 			}
 		}
 	}
-
-	_buildUrl = () => {
-		const params = {
-			user_id: this.user.id,
-			user_details: this.user,
-			user_token: this.tokenManager.getToken(),
-			server_determines_connection_id: true,
-		};
-		const qs = encodeURIComponent(JSON.stringify(params));
-		const token = this.tokenManager.getToken();
-		return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
-	};
 
 	/**
 	 * disconnect - Disconnect the connection and doesn't recover...
@@ -206,10 +165,7 @@ export class StableWSConnection {
 				},
 			);
 
-			ws.close(
-				chatCodes.WS_CLOSED_SUCCESS,
-				'Manually closed connection by calling client.disconnect()',
-			);
+			ws.close(1000, 'Manually closed connection by calling client.disconnect()');
 		} else {
 			this.logger(
 				'info',
@@ -232,30 +188,25 @@ export class StableWSConnection {
 	 * @return {promise} Promise that completes once the first health check message is received
 	 */
 	async _connect() {
-		await this.tokenManager.tokenReady();
 		this._setupConnectionPromise();
-		const wsURL = this._buildUrl();
-		this.ws = new isoWS(wsURL);
+		this.ws = new isoWS(this.wsURL);
 		this.ws.onopen = this.onopen.bind(this, this.wsID);
 		this.ws.onclose = this.onclose.bind(this, this.wsID);
 		this.ws.onerror = this.onerror.bind(this, this.wsID);
 		this.ws.onmessage = this.onmessage.bind(this, this.wsID);
-		const response = await this.connectionOpen;
 
+		const response = await this.connectionOpen;
 		this.connectionID = response.connection_id;
 
 		return response;
 	}
 
 	/**
-	 * _reconnect - Retry the connection to WS endpoint
+	 * _reconnect - Description
 	 *
-	 * @param {object} options Following options are available
-	 *
-	 * - `interval`	{int}			number of ms that function should wait before reconnecting
-	 * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
+	 * @param {int} interval number of ms to wait before connecting
 	 */
-	async _reconnect(options = {}) {
+	async _reconnect(interval) {
 		this.logger('info', 'connection:_reconnect() - Initiating the reconnect', {
 			tags: ['connection'],
 		});
@@ -273,10 +224,10 @@ export class StableWSConnection {
 
 		// reconnect in case of on error or on close
 		// also reconnect if the health check cycle fails
-		let interval = options.interval;
-		if (!interval) {
+		if (interval === undefined) {
 			interval = this._retryInterval();
 		}
+
 		// reconnect, or try again after a little while...
 		await sleep(interval);
 
@@ -303,12 +254,7 @@ export class StableWSConnection {
 				tags: ['connection'],
 			},
 		);
-
 		this._destroyCurrentWSConnection();
-
-		if (options.refreshToken) {
-			await this.tokenManager.loadToken();
-		}
 
 		try {
 			const open = await this._connect();
@@ -331,27 +277,10 @@ export class StableWSConnection {
 			}
 			this.isConnecting = false;
 			this.consecutiveFailures = 0;
-		} catch (error) {
+		} catch (e) {
 			this.isConnecting = false;
-			this.isHealthy = false;
-			this.consecutiveFailures += 1;
-
-			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
-				this.logger(
-					'info',
-					'connection:_reconnect() - WS failure due to expired token, so going to try to reload token and reconnect',
-					{
-						tags: ['connection'],
-					},
-				);
-
-				this._reconnect({ refreshToken: true });
-
-				return false;
-			}
-
 			// reconnect on WS failures, dont reconnect if there is a code bug
-			if (error.isWSFailure) {
+			if (e.isWSFailure) {
 				this.logger(
 					'info',
 					'connection:_reconnect() - WS failure, so going to try to reconnect',
@@ -397,7 +326,7 @@ export class StableWSConnection {
 				},
 			);
 			if (!this.isHealthy) {
-				this._reconnect({ interval: 10 });
+				this._reconnect(10);
 			}
 		}
 	};
@@ -435,7 +364,7 @@ export class StableWSConnection {
 	};
 
 	onclose = (wsID, event) => {
-		this.logger('info', 'connection:onclose() - onclose callback - ' + event.code, {
+		this.logger('info', 'connection:onclose() - onclose callback', {
 			tags: ['connection'],
 			event,
 			wsID,
@@ -443,7 +372,7 @@ export class StableWSConnection {
 
 		if (this.wsID !== wsID) return;
 
-		if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
+		if (event.code === 1000) {
 			// this is a permanent error raised by stream..
 			// usually caused by invalid auth details
 			const error = new Error(`WS connection reject with error ${event.reason}`);
@@ -598,12 +527,12 @@ export class StableWSConnection {
 	 *
 	 * @return {int} Duration to wait in milliseconds
 	 */
-	_retryInterval = () => {
+	_retryInterval() {
 		// try to reconnect in 0-5 seconds (random to spread out the load from failures)
 		const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
 		const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
 		return Math.floor(Math.random() * (max - min) + min);
-	};
+	}
 
 	/**
 	 * _setupPromise - sets up the this.connectOpen promise
