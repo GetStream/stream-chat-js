@@ -194,8 +194,8 @@ export class StableWSConnection {
 
 				ws.onclose = onclose;
 				// In case we don't receive close frame websocket server in time,
-				// lets not wait for more than 2 seconds.
-				setTimeout(onclose, 2000);
+				// lets not wait for more than 1 seconds.
+				setTimeout(onclose, 1000);
 			});
 
 			this.logger(
