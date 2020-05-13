@@ -1,3 +1,9 @@
+## May 13, 2020 - 1.9.0
+
+- Multi-tenant feature
+- Ws Disconnect improvements - forcefully assume closed after 1 sec
+- Silent message feature
+
 ## April 29, 2020 - 1.8.0
 - **Breaking:** updated typescript namespace to avoid conflict with getstream package
   - Fixes: GetStream/stream-js#258
