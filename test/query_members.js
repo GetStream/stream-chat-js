@@ -25,7 +25,7 @@ Promise.config({
 	},
 });
 
-describe.only('Query Members', function() {
+describe('Query Members', function() {
 	let mod = 'mod-' + uuidv4();
 	let rob = 'rob-' + uuidv4();
 	let rob2 = 'rob2-' + uuidv4();
