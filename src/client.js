@@ -365,11 +365,11 @@ export class StreamChat {
 		}
 		const extra = {};
 
-		const jwtOptions = {};
 		if (exp) {
-			jwtOptions.expiresIn = exp;
+			extra.exp = exp;
 		}
-		return JWTUserToken(this.secret, userID, extra, jwtOptions);
+
+		return JWTUserToken(this.secret, userID, extra, {});
 	}
 
 	/**
