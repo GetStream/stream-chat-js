@@ -298,6 +298,16 @@ export class StreamChat {
     hardDelete?: boolean,
   ): Promise<DeleteMessageAPIResponse>;
   verifyWebhook(requestBody: string | Int8Array | Buffer, xSignature: string): boolean;
+
+  // TODO: Add detailed types for following api responses
+  getPermission(name: string): Promise<APIResponse>;
+  createPermission(permissionData: object): Promise<APIResponse>;
+  updatePermission(name: string, permissionData: object): Promise<APIResponse>;
+  deletePermission(name: string): Promise<APIResponse>;
+  listPermissions(): Promise<APIResponse>;
+  createRole(name: string): Promise<APIResponse>;
+  listRoles(): Promise<APIResponse>;
+  deleteRole(name: string): Promise<APIResponse>;
 }
 
 export interface updateUserRequest {
@@ -528,6 +538,41 @@ export const AnyResource: ['*'];
 export const AnyRole: ['*'];
 export const MaxPriority: 999;
 export const MinPriority: 1;
+
+export const BuiltinRoles: {
+  Anonymous: 'anonymous';
+  Guest: 'guest';
+  User: 'user';
+  Admin: 'admin';
+  ChannelModerator: 'channel_moderator';
+  ChannelMember: 'channel_member';
+};
+
+export const BuiltinPermissions: {
+  CreateMessage: 'Create Message';
+  UpdateAnyMessage: 'Update Any Message';
+  UpdateOwnMessage: 'Update Own Message';
+  DeleteAnyMessage: 'Delete Any Message';
+  DeleteOwnMessage: 'Delete Own Message';
+  CreateChannel: 'Create Channel';
+  ReadAnyChannel: 'Read Any Channel';
+  ReadOwnChannel: 'Read Own Channel';
+  UpdateMembersAnyChannel: 'Update Members Any Channel';
+  UpdateMembersOwnChannel: 'Update Members Own Channel';
+  UpdateAnyChannel: 'Update Any Channel';
+  UpdateOwnChannel: 'Update Own Channel';
+  DeleteAnyChannel: 'Delete Any Channel';
+  DeleteOwnChannel: 'Delete Own Channel';
+  RunMessageAction: 'Run Message Action';
+  BanUser: 'Ban User';
+  UploadAttachment: 'Upload Attachment';
+  DeleteAnyAttachment: 'Delete Any Attachment';
+  DeleteOwnAttachment: 'Delete Own Attachment';
+  AddLinks: 'Add Links';
+  CreateReaction: 'Create Reaction';
+  DeleteAnyReaction: 'Delete Any Reaction';
+  DeleteOwnReaction: 'Delete Own Reaction';
+};
 
 export function JWTUserToken(
   apiSecret: string,
@@ -883,6 +928,7 @@ export interface ChannelConfigWithInfo
 
 export interface ChannelTypeConfig extends ChannelConfigWithInfo {
   permissions: Permission[];
+  roles: object;
 }
 
 export type CommandVariants =
