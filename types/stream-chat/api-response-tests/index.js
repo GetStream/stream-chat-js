@@ -24,7 +24,8 @@ const executables = [
 	{ f: rg.unflagUser, type: 'UnflagAPIResponse' },
 	{ f: rg.flagMessage, type: 'FlagAPIResponse' },
 	{ f: rg.unflagMessage, type: 'UnflagAPIResponse' },
-	{ f: rg.createChannelType, type: 'CreateChannelTypeAPIResponse' },
+	// createChannelType has a limit. So only run this when needed.
+	// { f: rg.createChannelType, type: 'CreateChannelTypeAPIResponse' },
 	{ f: rg.getChannelType, type: 'GetChannelTypeAPIResponse' },
 	{ f: rg.listChannelTypes, type: 'ListChannelTypesAPIResponse' },
 	// TODO: Fix the error which results from deleteChannelType api call:
