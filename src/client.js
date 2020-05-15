@@ -9,19 +9,14 @@ import { StableWSConnection } from './connection';
 
 import { isValidEventType } from './events';
 
-import {
-	JWTServerToken,
-	JWTUserToken,
-	UserFromToken,
-	DevToken,
-	CheckSignature,
-} from './signing';
+import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import http from 'http';
 import https from 'https';
 import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
-import Immutable from 'seamless-immutable';
+import { TokenManager } from './token_manager';
+import { isFunction, chatCodes } from './utils';
 
 function isReadableStream(obj) {
 	return (
@@ -32,20 +27,10 @@ function isReadableStream(obj) {
 	);
 }
 
-function isFunction(value) {
-	return (
-		value &&
-		(Object.prototype.toString.call(value) === '[object Function]' ||
-			'function' === typeof value ||
-			value instanceof Function)
-	);
-}
-
 export class StreamChat {
 	constructor(key, secretOrOptions, options) {
 		// set the key
 		this.key = key;
-		this.userToken = null;
 		this.secret = null;
 		this.listeners = {};
 		this.state = new ClientState();
@@ -94,11 +79,16 @@ export class StreamChat {
 		// WS connection is initialized when setUser is called
 		this.wsConnection = null;
 		this.wsPromise = null;
+		this.setUserPromise = null;
 		// keeps a reference to all the channels that are in use
 		this.activeChannels = {};
 		// mapping between channel groups and configs
 		this.configs = {};
 		this.anonymous = false;
+
+		// If its a server-side client, then lets initialize the tokenManager, since token will be
+		// generated from secret.
+		this.tokenManager = new TokenManager(this.secret);
 
 		/**
 		 * logger function should accept 3 parameters:
@@ -164,13 +154,13 @@ export class StreamChat {
 		this.wsBaseURL = this.baseURL.replace('http', 'ws');
 	}
 
-	_setupConnection() {
+	_setupConnection = () => {
 		this.UUID = uuidv4();
 		this.clientID = `${this.userID}--${this.UUID}`;
 		this.wsPromise = this.connect();
 		this._startCleaning();
 		return this.wsPromise;
-	}
+	};
 
 	_hasConnectionID = () => Boolean(this.connectionID);
 
@@ -182,7 +172,7 @@ export class StreamChat {
 	 *
 	 * @return {promise} Returns a promise that resolves when the connection is setup
 	 */
-	setUser(user, userToken) {
+	setUser = (user, userTokenOrProvider) => {
 		if (this.userID) {
 			throw new Error(
 				'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -195,30 +185,28 @@ export class StreamChat {
 			throw new Error('The "id" field on the user is missing');
 		}
 
-		this.userToken = userToken;
-
-		if (userToken == null && this.secret != null) {
-			this.userToken = this.createToken(this.userID);
-		}
-
-		if (this.userToken == null) {
-			throw new Error('both userToken and api secret are not provided');
-		}
-
-		const tokenUserId = UserFromToken(this.userToken);
-		if (
-			userToken != null &&
-			(tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)
-		) {
-			throw new Error(
-				'userToken does not have a user_id or is not matching with user.id',
-			);
-		}
+		const setTokenPromise = this._setToken(user, userTokenOrProvider);
 		this._setUser(user);
+
+		const wsPromise = this._setupConnection();
+
 		this.anonymous = false;
 
-		return this._setupConnection();
-	}
+		this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
+			.then(
+				result =>
+					// We only return connection promise;
+					result[1],
+			)
+			.catch(e => {
+				throw e;
+			});
+
+		return this.setUserPromise;
+	};
+
+	_setToken = (user, userTokenOrProvider) =>
+		this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
 	_setUser(user) {
 		// this one is used by the frontend
@@ -312,7 +300,6 @@ export class StreamChat {
 		}
 
 		this.anonymous = false;
-		this.userToken = null;
 
 		this.connectionEstablishedCount = 0;
 
@@ -323,6 +310,8 @@ export class StreamChat {
 		this.activeChannels = {};
 		// reset client state
 		this.state = new ClientState();
+		// reset token manager
+		this.tokenManager.reset();
 
 		// close the WS connection
 		if (this.wsConnection) {
@@ -332,15 +321,19 @@ export class StreamChat {
 		return Promise.resolve();
 	}
 
-	setAnonymousUser() {
+	setAnonymousUser = () => {
 		this.anonymous = true;
 		this.userID = uuidv4();
-		this._setUser({
+		const anonymousUser = {
 			id: this.userID,
 			anon: true,
-		});
+		};
+
+		this._setToken(anonymousUser, '');
+		this._setUser(anonymousUser);
+
 		return this._setupConnection();
-	}
+	};
 
 	/**
 	 * setGuestUser - Setup a temporary guest user
@@ -383,9 +376,11 @@ export class StreamChat {
 			throw Error(`tokens can only be created server-side using the API Secret`);
 		}
 		const extra = {};
-		if (exp != null) {
+
+		if (exp) {
 			extra.exp = exp;
 		}
+
 		return JWTUserToken(this.secret, userID, extra, {});
 	}
 
@@ -472,93 +467,69 @@ export class StreamChat {
 		});
 	}
 
-	async get(url, params) {
+	doAxiosRequest = async (type, url, data, params = {}) => {
+		await this.tokenManager.tokenReady();
 		try {
-			this._logApiRequest('get', url, {}, this._addClientParams(params));
-			const response = await axios.get(url, this._addClientParams(params));
-			this._logApiResponse('get', url, response);
+			let response;
+			this._logApiRequest(type, url, data, this._addClientParams(params));
+			switch (type) {
+				case 'get':
+					response = await axios.get(url, this._addClientParams(params));
+					break;
+				case 'delete':
+					response = await axios.delete(url, this._addClientParams(params));
+					break;
+				case 'post':
+					response = await axios.post(url, data, this._addClientParams());
+					break;
+				case 'put':
+					response = await axios.put(url, data, this._addClientParams());
+					break;
+				case 'patch':
+					response = await axios.patch(url, data, this._addClientParams());
+					break;
+				default:
+					break;
+			}
+			this._logApiResponse(type, url, response);
 
 			return this.handleResponse(response);
 		} catch (e) {
-			this._logApiError('get', url, e);
+			this._logApiError(type, url, e);
+
 			if (e.response) {
+				if (
+					e.response.data.code === chatCodes.TOKEN_EXPIRED &&
+					!this.tokenManager.isStatic()
+				) {
+					this.tokenManager.loadToken();
+					return await this.doAxiosRequest(type, url, params, data);
+				}
 				return this.handleResponse(e.response);
 			} else {
 				throw e;
 			}
 		}
+	};
+
+	get(url, params) {
+		return this.doAxiosRequest('get', url, null, params);
 	}
 
-	async put(url, data) {
-		let response;
-		try {
-			this._logApiRequest('put', url, data, this._addClientParams());
-			response = await axios.put(url, data, this._addClientParams());
-			this._logApiResponse('put', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('get', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	put(url, data) {
+		return this.doAxiosRequest('put', url, data);
 	}
 
-	async post(url, data) {
-		let response;
-		try {
-			this._logApiRequest('post', url, data, this._addClientParams());
-			response = await axios.post(url, data, this._addClientParams());
-			this._logApiResponse('post', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('post', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	post(url, data) {
+		return this.doAxiosRequest('post', url, data);
 	}
 
-	async patch(url, data) {
-		let response;
-		try {
-			this._logApiRequest('patch', url, data, this._addClientParams());
-			response = await axios.patch(url, data, this._addClientParams());
-			this._logApiResponse('patch', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('patch', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	patch(url, data) {
+		return this.doAxiosRequest('patch', url, data);
 	}
 
-	async delete(url, params) {
-		let response;
-		try {
-			this._logApiRequest('delete', url, {}, this._addClientParams());
-			response = await axios.delete(url, this._addClientParams(params));
-			this._logApiResponse('delete', url, response);
-
-			return this.handleResponse(response);
-		} catch (e) {
-			this._logApiError('delete', url, e);
-			if (e.response) {
-				return this.handleResponse(e.response);
-			} else {
-				throw e;
-			}
-		}
+	delete(url, params) {
+		return this.doAxiosRequest('delete', url, null, params);
 	}
 
 	async sendFile(url, uri, name, contentType, user) {
@@ -799,26 +770,15 @@ export class StreamChat {
 				'Call setUser or setAnonymousUser before starting the connection',
 			);
 		}
-		const params = {
-			client_id: client.client_id,
-			user_id: client.userID,
-			user_details: client._user,
-			user_token: client.userToken,
-			server_determines_connection_id: true,
-		};
-		const qs = encodeURIComponent(JSON.stringify(params));
-		const token = this._getToken();
-
-		const authType = this.getAuthType();
-		client.wsURL = `${client.wsBaseURL}/connect?json=${qs}&api_key=${
-			this.key
-		}&authorization=${token}&stream-auth-type=${authType}&x-stream-client=${this._userAgent()}`;
 
 		// The StableWSConnection handles all the reconnection logic.
 		this.wsConnection = new StableWSConnection({
-			wsURL: client.wsURL,
-			clientID: this.clientID,
-			userID: this.userID,
+			wsBaseURL: client.wsBaseURL,
+			tokenManager: client.tokenManager,
+			user: this._user,
+			authType: this.getAuthType(),
+			userAgent: this._userAgent(),
+			apiKey: this.key,
 			recoverCallback: this.recoverState,
 			messageCallback: this.handleEvent,
 			eventCallback: this.dispatchEvent,
@@ -852,11 +812,11 @@ export class StreamChat {
 		}
 
 		const defaultOptions = {
-			presence: true,
+			presence: false,
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		if (!this._hasConnectionID()) {
 			defaultOptions.presence = false;
@@ -891,7 +851,7 @@ export class StreamChat {
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
@@ -951,7 +911,7 @@ export class StreamChat {
 		}
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		return await this.get(this.baseURL + '/search', {
 			payload,
@@ -1369,16 +1329,9 @@ export class StreamChat {
 	}
 
 	_getToken() {
-		if (this.secret == null && this.userToken == null && !this.anonymous) {
-			throw new Error(
-				`Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
-			);
-		}
-		let token = '';
-		if (!this.anonymous) {
-			token = this.userToken != null ? this.userToken : JWTServerToken(this.secret);
-		}
-		return token;
+		if (!this.tokenManager || this.anonymous) return null;
+
+		return this.tokenManager.getToken();
 	}
 
 	_startCleaning() {

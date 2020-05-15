@@ -658,6 +658,9 @@ export class Channel {
 			if (this.getClient().userID === m.user.id) {
 				continue;
 			}
+			if (m.silent) {
+				continue;
+			}
 			if (lastRead == null) {
 				count++;
 				continue;
@@ -679,6 +682,9 @@ export class Channel {
 		let count = 0;
 		for (const m of this.state.messages) {
 			if (this.getClient().userID === m.user.id) {
+				continue;
+			}
+			if (m.silent) {
 				continue;
 			}
 			if (lastRead == null) {
