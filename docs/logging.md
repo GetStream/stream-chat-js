@@ -22,45 +22,45 @@ extraData contains tags array attached to log message. Tags can have one/many of
 It may also contains some extra data, some examples have been mentioned below:
 
 1. 
-    ```json
+    ```
     {
-		tags: ['api', 'api_request', 'client'],
-		url: string,
-		payload: object,
-		config: object
+		"tags": ["api", "api_request", "client"],
+		"url": "https://chat-us-east-1.stream-io-api.com/channels",
+		"payload": { /** payload */ },
+		"config": { /** conig object */ }
     }
     ```
 
 2. 
-    ```json
+    ```
     {
-		tags: ['api', 'api_response', 'client'],
-		url: string,
-		response: object
+		"tags": ["api", "api_response", "client"],
+		"url": "https://chat-us-east-1.stream-io-api.com/channels",
+		"response": { /** object */ }
     }
     ```
 
 3. 
-    ```json
+    ```
     {
-		tags: ['api', 'api_response', 'client'],
-		url: string,
-		error: object
+		"tags": ["api", "api_response", "client"],
+		"url": "https://chat-us-east-1.stream-io-api.com/channels",
+		"error": { /** error object */ }
     }
     ```
 
 4. 
-    ```json
+    ```
     {
-		tags: ['event', 'client'],
-		event: object
+		"tags": ["event", "client"],
+		"event": { /** event object */ }
     }
     ```
 
 5. 
-    ```json
+    ```
     {
-		tags: ['channel'],
-		channel: object
+		"tags": ["channel"],
+		"channel": { /** channel object */ }
     }
     ```
