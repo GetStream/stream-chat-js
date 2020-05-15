@@ -1,11 +1,11 @@
-const uuid4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const utils = require('../utils');
 
-const johnID = `john-${uuid4()}`;
+const johnID = `john-${uuidv4()}`;
 
 async function sendMessageReadEvent() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	const event = {
 		type: 'message.read',
@@ -16,7 +16,7 @@ async function sendMessageReadEvent() {
 
 async function keystroke() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 
 	return await channel.keystroke();
@@ -24,7 +24,7 @@ async function keystroke() {
 
 async function stopTyping() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 
 	return await channel.stopTyping();
