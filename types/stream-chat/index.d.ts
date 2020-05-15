@@ -278,10 +278,10 @@ export class StreamChat {
   muteUser(targetUserID: string): Promise<MuteAPIResponse>;
   unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
 
-  flagUser(userID: string, options: object): Promise<FlagAPIResponse>;
-  unflagUser(userID: string, options: object): Promise<UnflagAPIResponse>;
-  flagMessage(messageID: string, options: object): Promise<FlagAPIResponse>;
-  unflagMessage(messageID: string, options: object): Promise<UnflagAPIResponse>;
+  flagUser(userID: string, options?: object): Promise<FlagAPIResponse>;
+  unflagUser(userID: string, options?: object): Promise<UnflagAPIResponse>;
+  flagMessage(messageID: string, options?: object): Promise<FlagAPIResponse>;
+  unflagMessage(messageID: string, options?: object): Promise<UnflagAPIResponse>;
 
   createChannelType(data: ChannelData): Promise<CreateChannelTypeAPIResponse>;
   getChannelType(channelType: string): Promise<GetChannelTypeAPIResponse>;
