@@ -28,9 +28,9 @@ export async function getTestClientForUser(userID, status, options) {
 	return client;
 }
 
-export function createUserToken(userID) {
+export function createUserToken(userID, exp) {
 	const c = new StreamChat(apiKey, apiSecret);
-	return c.createToken(userID);
+	return c.createToken(userID, exp);
 }
 
 export function sleep(ms) {

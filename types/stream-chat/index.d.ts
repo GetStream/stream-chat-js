@@ -129,6 +129,11 @@ export interface ReactionResponse extends Reaction {
   created_at: string;
   updated_at: string;
 }
+export type Logger = (
+  log_level: 'info' | 'error',
+  message: string,
+  extraData?: object,
+) => void;
 export interface StreamChatOptions {
   /**
    * extraData contains tags array attached to log message. Tags can have one/many of following values:
@@ -161,11 +166,12 @@ export interface StreamChatOptions {
    * 		channel: object
    * }
    */
-  logger?(log_level: 'info' | 'error', message: string, extraData?: object): void;
+  logger?: Logger;
   [propName: string]: any;
 }
 export type EventHandler = (event: Event) => void;
 
+// client.js
 export class StreamChat {
   constructor(key: string, options?: StreamChatOptions);
   constructor(key: string, secret?: string, options?: StreamChatOptions);
@@ -180,7 +186,19 @@ export class StreamChat {
   user: OwnUserResponse;
   browser: boolean;
   wsConnection: StableWSConnection;
-
+  logger: Logger;
+  mutedChannels: ChannelMute[];
+  options: StreamChatOptions;
+  wsPromise: Promise<void>;
+  setUserPromise: Promise<void>;
+  activeChannels: {
+    [cid: string]: Channel;
+  };
+  configs: {
+    [channel_type: string]: object;
+  };
+  anonymous: boolean;
+  tokenManager: TokenManager;
   testPushSettings(userID: string, data: object): Promise<APIResponse>;
 
   deleteUser(userID: string, params?: object): Promise<DeleteUserAPIResponse>;
@@ -317,6 +335,7 @@ export interface updateUserRequest {
   };
   unset?: string[];
 }
+// client_state.js
 export class ClientState {
   constructor();
   updateUser(user: User): void;
@@ -324,6 +343,7 @@ export class ClientState {
   updateUserReference(user: User, channelID: string): void;
 }
 
+// channel.js
 export class Channel {
   constructor(client: StreamChat, type: string, id: string, data: ChannelData);
   type: string;
@@ -451,6 +471,7 @@ export interface ChannelMembership {
   created_at?: string;
   updated_at?: string;
 }
+// channel_state.js
 export class ChannelState {
   constructor(channel: Channel);
   watcher_count: number;
@@ -493,15 +514,10 @@ export interface ChannelData {
   members?: string[];
   [key: string]: any;
 }
+// connection.js
 export class StableWSConnection {
-  constructor(
-    wsURL: string,
-    clientID: string,
-    userID: string,
-    messageCallback: (event: WebSocket.OpenEvent) => void,
-    recoverCallback: (open: Promise<object>) => void,
-    eventCallback: (event: ConnectionChangeEvent) => void,
-  );
+  constructor(options: StableWSConnectionOptions);
+
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   onlineStatusChanged(event: OnlineStatusEvent): void;
@@ -511,6 +527,21 @@ export class StableWSConnection {
   onerror(wsID: number, event: WebSocket.ErrorEvent): void;
 }
 
+export interface StableWSConnectionOptions {
+  wsBaseURL: string;
+  clientID: string;
+  userID: string;
+  user: User;
+  messageCallback: (event: WebSocket.OpenEvent) => void;
+  recoverCallback: (open: Promise<object>) => void;
+  eventCallback: (event: ConnectionChangeEvent) => void;
+  userAgent: string;
+  apiKey: string;
+  tokenManager: TokenManager;
+  authType: string;
+  logger?: Logger;
+}
+// permissions.js
 export class Permission {
   constructor(
     name: string,
@@ -595,7 +626,25 @@ export function decodeBase64(s: string): string;
 
 export function isValidEventType(eventType: string): boolean;
 
+// utils.js
 export function logChatPromiseExecution(promise: Promise<any>, name: string): void;
+export function isFunction(value: any): boolean;
+
+// token_manager.js
+export class TokenManager {
+  constructor(secret?: string);
+
+  setTokenOrProvider(tokenOrProvider: TokenOrProvider, user: User): Promise<void>;
+  reset?(): void;
+  validateToken(tokenOrProvider: TokenOrProvider, user: User): void;
+  tokenReady(): Promise<string>;
+  loadToken(): Promise<string>;
+  getToken(): Promise<string>;
+  isStatic(): boolean;
+}
+
+export type TokenOrProvider = string | TokenProvider | null | undefined;
+export type TokenProvider = () => Promise<string>;
 
 export interface APIResponse {
   duration: string;
