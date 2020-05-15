@@ -24,8 +24,7 @@ const executables = [
 	{ f: rg.unflagUser, type: 'UnflagAPIResponse' },
 	{ f: rg.flagMessage, type: 'FlagAPIResponse' },
 	{ f: rg.unflagMessage, type: 'UnflagAPIResponse' },
-	// App has certain limit on creating channel type. So best to run this one
-	// only when needed and not on every build.
+	// createChannelType has a limit. So only run this when needed.
 	// { f: rg.createChannelType, type: 'CreateChannelTypeAPIResponse' },
 	{ f: rg.getChannelType, type: 'GetChannelTypeAPIResponse' },
 	{ f: rg.listChannelTypes, type: 'ListChannelTypesAPIResponse' },

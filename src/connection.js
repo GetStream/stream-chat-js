@@ -102,11 +102,7 @@ export class StableWSConnection {
 			this.isConnecting = false;
 			this.isHealthy = false;
 			this.consecutiveFailures += 1;
-			const _error = JSON.parse(error.message);
-			if (
-				_error.code === chatCodes.TOKEN_EXPIRED &&
-				!this.tokenManager.isStatic()
-			) {
+			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
 				this.logger(
 					'info',
 					'connection:connect() - WS failure due to expired token, so going to try to reload token and reconnect',
@@ -114,15 +110,20 @@ export class StableWSConnection {
 						tags: ['connection'],
 					},
 				);
-
-				this._reconnect({ refreshToken: true });
-
-				return false;
+				return this._reconnect({ refreshToken: true });
 			}
 
 			if (!error.isWSFailure) {
 				// This is a permanent failure, throw the error...
-				throw error;
+				// We are keeping the error consistent with http error.
+				throw new Error(
+					JSON.stringify({
+						code: error.code,
+						StatusCode: error.StatusCode,
+						message: error.message,
+						isWSFailure: error.isWSFailure,
+					}),
+				);
 			}
 		}
 	}
@@ -178,17 +179,26 @@ export class StableWSConnection {
 		const { ws } = this;
 		if (ws && ws.close && ws.readyState === ws.OPEN) {
 			isClosedPromise = new Promise(resolve => {
-				ws.onclose = () => {
+				const onclose = event => {
 					this.logger(
 						'info',
-						`connection:disconnect() - resolving isClosedPromise`,
+						`connection:disconnect() - resolving isClosedPromise ${
+							event ? 'with' : 'without'
+						} close frame`,
 						{
 							tags: ['connection'],
+							event,
 						},
 					);
 					resolve();
 				};
+
+				ws.onclose = onclose;
+				// In case we don't receive close frame websocket server in time,
+				// lets not wait for more than 1 seconds.
+				setTimeout(onclose, 1000);
 			});
+
 			this.logger(
 				'info',
 				`connection:disconnect() - Manually closed connection by calling client.disconnect()`,
@@ -326,7 +336,6 @@ export class StableWSConnection {
 			this.isConnecting = false;
 			this.isHealthy = false;
 			this.consecutiveFailures += 1;
-
 			if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
 				this.logger(
 					'info',
@@ -336,9 +345,7 @@ export class StableWSConnection {
 					},
 				);
 
-				this._reconnect({ refreshToken: true });
-
-				return false;
+				return this._reconnect({ refreshToken: true });
 			}
 
 			// reconnect on WS failures, dont reconnect if there is a code bug
@@ -350,6 +357,7 @@ export class StableWSConnection {
 						tags: ['connection'],
 					},
 				);
+
 				this._reconnect();
 			}
 		}
@@ -411,7 +419,13 @@ export class StableWSConnection {
 		// the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
 		// after that a ws.onclose..
 		if (!this.isResolved) {
-			this.resolvePromise(event);
+			const data = JSON.parse(event.data);
+			if (data.error != null) {
+				this.rejectPromise(this._errorFromWSEvent(data.error, false));
+				return;
+			} else {
+				this.resolvePromise(event);
+			}
 		}
 
 		// trigger the event..
@@ -520,7 +534,7 @@ export class StableWSConnection {
 	 * _errorFromWSEvent - Creates an error object for the WS event
 	 *
 	 */
-	_errorFromWSEvent = event => {
+	_errorFromWSEvent = (event, isWSFailure = true) => {
 		this.logger(
 			'error',
 			`connection:_errorFromWSEvent() - WS failed with code ${event.code}`,
@@ -530,9 +544,12 @@ export class StableWSConnection {
 			},
 		);
 
-		const error = new Error(`WS failed with code ${event.code}`);
+		const error = new Error(
+			`WS failed with code ${event.code} and reason - ${event.message}`,
+		);
 		error.code = event.code;
-		error.isWSFailure = true;
+		error.StatusCode = event.StatusCode;
+		error.isWSFailure = isWSFailure;
 		return error;
 	};
 
@@ -606,13 +623,18 @@ export class StableWSConnection {
 		this.connectionOpen = new Promise(function(resolve, reject) {
 			that.resolvePromise = resolve;
 			that.rejectPromise = reject;
-		}).then(e => {
-			const data = JSON.parse(e.data);
-			if (data.error != null) {
-				throw new Error(JSON.stringify(data.error));
-			}
-			return data;
-		});
+		}).then(
+			e => {
+				const data = JSON.parse(e.data);
+				if (data.error != null) {
+					throw new Error(JSON.stringify(data.error));
+				}
+				return data;
+			},
+			error => {
+				throw error;
+			},
+		);
 	};
 
 	/**

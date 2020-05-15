@@ -6,7 +6,7 @@ import chaiLike from 'chai-like';
 
 import assertArrays from 'chai-arrays';
 
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import { TokenManager } from '../src/token_manager';
 import sinon from 'sinon';
 
@@ -17,7 +17,7 @@ chai.use(chaiLike);
 
 describe('token_manager', function() {
 	it('allows empty token for server side client', () => {
-		const tm = new TokenManager({ secret: uuidv4() });
+		const tm = new TokenManager(uuidv4());
 		tm.getToken();
 	});
 

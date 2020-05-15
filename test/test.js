@@ -18,7 +18,7 @@ import {
 	createUsers,
 	sleep,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 chai.use(assertArrays);
@@ -699,11 +699,11 @@ describe('Chat', function() {
 			);
 		});
 
-		it('Tampering with token and user should fail', function(done) {
+		it('Tampering with token and user should fail', async function() {
 			const token = createUserToken('fake-daenerys');
 
 			const clientSide = getTestClient();
-			expect(() =>
+			await expect(
 				clientSide.setUser(
 					{
 						id: 'daenerys',
@@ -711,8 +711,7 @@ describe('Chat', function() {
 					},
 					token,
 				),
-			).to.throw();
-			done();
+			).to.be.rejectedWith(Error);
 		});
 
 		it('Secret based auth', async function() {
@@ -723,22 +722,19 @@ describe('Chat', function() {
 			});
 		});
 
-		it('No secret and no token should raise a client error', function(done) {
+		it('No secret and no token should raise a client error', async function() {
 			const client2 = getTestClient();
-			try {
+			await expect(
 				client2.setUser({
 					id: 'daenerys',
 					name: 'Mother of dragons',
-				});
-				done('should throw');
-			} catch {
-				done();
-			}
+				}),
+			).to.be.rejectedWith(Error);
 		});
 
-		it('Invalid user token', function(done) {
+		it('Invalid user token', async function() {
 			const client2 = getTestClient();
-			expect(() =>
+			await expect(
 				client2.setUser(
 					{
 						id: 'daenerys',
@@ -746,8 +742,7 @@ describe('Chat', function() {
 					},
 					'badtokenhere',
 				),
-			).to.throw();
-			done();
+			).to.be.rejectedWith(Error);
 		});
 
 		it('Invalid secret should fail setUser', async function() {

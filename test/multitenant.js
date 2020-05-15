@@ -1,5 +1,5 @@
 import { getTestClient, createUserToken, getTestClientForUser } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { BuiltinPermissions } from '../src';
@@ -389,7 +389,7 @@ describe('User teams field', function() {
 		const p = client.setUser({ id: userId, teams: ['alpha', 'bravo'] }, token);
 
 		await expect(p).to.be.rejectedWith(
-			'{"code":4,"message":"user teams cannot be changed at connection time","StatusCode":400,"duration":""}',
+			'user teams cannot be changed at connection time',
 		);
 	});
 

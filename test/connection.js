@@ -1,7 +1,7 @@
 import { StableWSConnection } from '../src/connection';
 import { sleep } from '../src/utils';
 import { getTestClientForUser, getTestClient, createUserToken } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 import chai from 'chai';
 const expect = chai.expect;
@@ -261,7 +261,9 @@ describe('Connection and reconnect behaviour', function() {
 
 	it('Http request with expired token should reload token', async () => {
 		const client = getTestClient(false);
-		await client.setUser({ id: 'thierry' }, () => createUserToken('thierry', 1));
+		await client.setUser({ id: 'thierry' }, () =>
+			createUserToken('thierry', Math.floor(Date.now() / 1000) + 1),
+		);
 
 		await sleep(2000);
 		const channel = client.channel('messaging', 'fjsdbfjsbdjfsbhjdbfhjdf');

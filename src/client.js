@@ -2,7 +2,7 @@
 /* global process */
 
 import axios from 'axios';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
@@ -79,6 +79,7 @@ export class StreamChat {
 		// WS connection is initialized when setUser is called
 		this.wsConnection = null;
 		this.wsPromise = null;
+		this.setUserPromise = null;
 		// keeps a reference to all the channels that are in use
 		this.activeChannels = {};
 		// mapping between channel groups and configs
@@ -87,9 +88,7 @@ export class StreamChat {
 
 		// If its a server-side client, then lets initialize the tokenManager, since token will be
 		// generated from secret.
-		this.tokenManager = new TokenManager({
-			secret: this.secret,
-		});
+		this.tokenManager = new TokenManager(this.secret);
 
 		/**
 		 * logger function should accept 3 parameters:
@@ -186,11 +185,24 @@ export class StreamChat {
 			throw new Error('The "id" field on the user is missing');
 		}
 
-		this._setToken(user, userTokenOrProvider);
+		const setTokenPromise = this._setToken(user, userTokenOrProvider);
 		this._setUser(user);
+
+		const wsPromise = this._setupConnection();
+
 		this.anonymous = false;
 
-		return this._setupConnection();
+		this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
+			.then(
+				result =>
+					// We only return connection promise;
+					result[1],
+			)
+			.catch(e => {
+				throw e;
+			});
+
+		return this.setUserPromise;
 	};
 
 	_setToken = (user, userTokenOrProvider) =>
@@ -800,11 +812,11 @@ export class StreamChat {
 		}
 
 		const defaultOptions = {
-			presence: true,
+			presence: false,
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		if (!this._hasConnectionID()) {
 			defaultOptions.presence = false;
@@ -839,7 +851,7 @@ export class StreamChat {
 		};
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
@@ -899,7 +911,7 @@ export class StreamChat {
 		}
 
 		// Make sure we wait for the connect promise if there is a pending one
-		await this.wsPromise;
+		await this.setUserPromise;
 
 		return await this.get(this.baseURL + '/search', {
 			payload,
@@ -1172,27 +1184,31 @@ export class StreamChat {
 		});
 	}
 
-	async flagMessage(messageID) {
+	async flagMessage(messageID, options = {}) {
 		return await this.post(this.baseURL + '/moderation/flag', {
 			target_message_id: messageID,
+			...options,
 		});
 	}
 
-	async flagUser(userID) {
+	async flagUser(userID, options = {}) {
 		return await this.post(this.baseURL + '/moderation/flag', {
 			target_user_id: userID,
+			...options,
 		});
 	}
 
-	async unflagMessage(messageID) {
+	async unflagMessage(messageID, options = {}) {
 		return await this.post(this.baseURL + '/moderation/unflag', {
 			target_message_id: messageID,
+			...options,
 		});
 	}
 
-	async unflagUser(userID) {
+	async unflagUser(userID, options = {}) {
 		return await this.post(this.baseURL + '/moderation/unflag', {
 			target_user_id: userID,
+			...options,
 		});
 	}
 

@@ -1,3 +1,17 @@
+## May 15, 2020 - 1.10.0
+
+- Token refresh functionality [#327](https://github.com/GetStream/stream-chat-js/pull/327)
+- Bump uuid version to `8.0.0` [d1957d9](https://github.com/GetStream/stream-chat-js/commit/d1957d97c10f459b0ba8131e1c187cecf19ae17e)
+- Updated typescript for multitenant feature [6160aa6](https://github.com/GetStream/stream-chat-js/commit/6160aa6ddb45aca46633818967495253343fb359)
+- Updated flag function signatures to allow server side flagging/unflagging [05c2281](https://github.com/GetStream/stream-chat-js/commit/05c22811780f801255e94a4180c1613438af6319)
+- Disabled presence by default for queryUsers endpoint [26616f5](https://github.com/GetStream/stream-chat-js/commit/26616f5b353b6f0cc8ea7dd87cf2d32e7058672e)
+
+## May 13, 2020 - 1.9.0
+
+- Multi-tenant feature
+- Ws Disconnect improvements - forcefully assume closed after 1 sec
+- Silent message feature
+
 ## April 29, 2020 - 1.8.0
 - **Breaking:** updated typescript namespace to avoid conflict with getstream package
   - Fixes: GetStream/stream-js#258

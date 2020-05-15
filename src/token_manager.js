@@ -10,21 +10,14 @@ export class TokenManager {
 	/**
 	 * Constructor
 	 *
-	 * @param {object} options
-	 *
-	 * Following options are available
-	 *
-	 * - tokenOrProvider {string | function}
-	 *      It could either be a string token or a provider function that returns a promise (which resolves to token)
-	 *      Provider function will be used to re-fetch the token, in case original token is expired.
-	 * - user {object}
-	 * - secret {string}
+	 * @param {object} secret
 	 */
-	constructor(options) {
+	constructor(secret) {
 		this.loadTokenPromise = null;
-		if (options && options.secret) {
-			this.secret = options.secret;
+		if (secret) {
+			this.secret = secret;
 		}
+
 		this.type = 'static';
 
 		if (this.secret) {
@@ -32,6 +25,12 @@ export class TokenManager {
 		}
 	}
 
+	/**
+	 * Set the static string token or token provider.
+	 * Token provider should return a token string or a promise which resolves to string token.
+	 *
+	 * @param {string | function} tokenOrProvider
+	 */
 	setTokenOrProvider = async (tokenOrProvider, user) => {
 		this.validateToken(tokenOrProvider, user);
 		this.user = user;
@@ -54,6 +53,10 @@ export class TokenManager {
 		await this.loadToken();
 	};
 
+	/**
+	 * Resets the token manager.
+	 * Useful for client disconnection or switching user.
+	 */
 	reset = () => {
 		this.token = null;
 		this.user = null;
@@ -94,8 +97,12 @@ export class TokenManager {
 		}
 	};
 
+	// Resolves when token is ready. This function is simply to check if loadToken is in progress, in which
+	// case a function should wait.
 	tokenReady = () => this.loadTokenPromise;
 
+	// Fetches a token from tokenProvider function and sets in tokenManager.
+	// In case of static token, it will simply resolve to static token.
 	loadToken = () => {
 		this.loadTokenPromise = new Promise(async resolve => {
 			if (this.type === 'static') {
@@ -110,6 +117,7 @@ export class TokenManager {
 		return this.loadTokenPromise;
 	};
 
+	// Returns a current token
 	getToken = () => {
 		if (this.token) {
 			return this.token;
