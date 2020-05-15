@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
 
 async function banUsers() {

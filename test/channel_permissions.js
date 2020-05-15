@@ -1,5 +1,5 @@
 import { getTestClient } from './utils';
-import { v4 as uuidv4 } from 'uuid';
+import uuidv4 from 'uuid/v4';
 import fs from 'fs';
 
 class Context {

@@ -1,12 +1,12 @@
-const { v4: uuidv4 } = require('uuid');
+const uuid4 = require('uuid/v4');
 const utils = require('../utils');
 
 async function updateUsers() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
-	const userID2 = uuidv4();
-	const userID3 = uuidv4();
-	const unique = uuidv4();
+	const userID = uuid4();
+	const userID2 = uuid4();
+	const userID3 = uuid4();
+	const unique = uuid4();
 
 	return await client.updateUsers([
 		{
@@ -29,8 +29,8 @@ async function updateUsers() {
 
 async function partialUpdateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
-	const unique = uuidv4();
+	const userID = uuid4();
+	const unique = uuid4();
 
 	await client.updateUsers([
 		{
@@ -53,10 +53,10 @@ async function partialUpdateUser() {
 
 async function partialUpdateUsers() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
-	const userID2 = uuidv4();
-	const userID3 = uuidv4();
-	const unique = uuidv4();
+	const userID = uuid4();
+	const userID2 = uuid4();
+	const userID3 = uuid4();
+	const unique = uuid4();
 
 	await client.updateUsers([
 		{
@@ -110,7 +110,7 @@ async function partialUpdateUsers() {
 
 async function deactivateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
+	const userID = uuid4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -121,7 +121,7 @@ async function deactivateUser() {
 
 async function reactivateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
+	const userID = uuid4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -134,7 +134,7 @@ async function reactivateUser() {
 
 async function deleteUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
+	const userID = uuid4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -145,13 +145,13 @@ async function deleteUser() {
 
 async function exportUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuidv4();
+	const userID = uuid4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
 	});
 
-	const id = uuidv4();
+	const id = uuid4();
 	const channel = client.channel('messaging', id, { created_by_id: userID });
 	await channel.create();
 	const { message } = await channel.sendMessage({
