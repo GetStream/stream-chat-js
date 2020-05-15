@@ -1,8 +1,7 @@
 import { getTestClient, createUserToken, getTestClientForUser } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import uuid from 'uuid';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -17,7 +16,7 @@ describe('Silent Messages', () => {
 	const serverSideClient = getTestClient(true);
 	const channelID = uuidv4();
 	const systemUser = { id: uuidv4() };
-	const otherUser = { id: uuid() };
+	const otherUser = { id: uuidv4() };
 	let otherUserClient;
 	let channel;
 	let silentMessage;
