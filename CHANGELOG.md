@@ -1,3 +1,7 @@
+## May 15, 2020 - 1.10.1
+
+- Reverting uuid version change from 1.10.0 due to incompatibility with react-native [issue](https://github.com/uuidjs/uuid#getrandomvalues-not-supported)
+
 ## May 15, 2020 - 1.10.0
 
 - Token refresh functionality [#327](https://github.com/GetStream/stream-chat-js/pull/327)
