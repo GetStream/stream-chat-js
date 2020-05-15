@@ -527,7 +527,7 @@ export class StableWSConnection {
   onerror(wsID: number, event: WebSocket.ErrorEvent): void;
 }
 
-export type StableWSConnectionOptions = {
+export interface StableWSConnectionOptions {
   wsBaseURL: string;
   clientID: string;
   userID: string;
@@ -540,7 +540,7 @@ export type StableWSConnectionOptions = {
   tokenManager: TokenManager;
   authType: string;
   logger?: Logger;
-};
+}
 // permissions.js
 export class Permission {
   constructor(
