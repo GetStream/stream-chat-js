@@ -183,6 +183,7 @@ export class StreamChat {
     [key: string]: Array<(event: Event) => any>;
   };
   state: ClientState;
+  userID: string;
   user: OwnUserResponse;
   browser: boolean;
   wsConnection: StableWSConnection;
