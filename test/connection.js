@@ -1,7 +1,7 @@
 import { StableWSConnection } from '../src/connection';
 import { sleep } from '../src/utils';
 import { getTestClientForUser, getTestClient, createUserToken } from './utils';
-import { v4 as uuidv4 } from 'uuid';
+import uuidv4 from 'uuid/v4';
 
 import chai from 'chai';
 const expect = chai.expect;

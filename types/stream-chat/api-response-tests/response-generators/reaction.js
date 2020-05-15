@@ -1,11 +1,11 @@
-const { v4: uuidv4 } = require('uuid');
+const uuid4 = require('uuid/v4');
 const utils = require('../utils');
 
-const johnID = `john-${uuidv4()}`;
+const johnID = `john-${uuid4()}`;
 
 async function sendReaction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -14,7 +14,7 @@ async function sendReaction() {
 
 async function deleteReaction() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -25,7 +25,7 @@ async function deleteReaction() {
 
 async function getReactions() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
 	await channel.watch();
 	const text = 'testing reactions list';
 	const data = await channel.sendMessage({ text });
