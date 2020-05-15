@@ -1224,27 +1224,31 @@ export class StreamChat {
 		});
 	}
 
-	async flagMessage(messageID) {
+	async flagMessage(messageID, options) {
 		return await this.post(this.baseURL + '/moderation/flag', {
 			target_message_id: messageID,
+			...options,
 		});
 	}
 
-	async flagUser(userID) {
+	async flagUser(userID, options) {
 		return await this.post(this.baseURL + '/moderation/flag', {
 			target_user_id: userID,
+			...options,
 		});
 	}
 
-	async unflagMessage(messageID) {
+	async unflagMessage(messageID, options) {
 		return await this.post(this.baseURL + '/moderation/unflag', {
 			target_message_id: messageID,
+			...options,
 		});
 	}
 
-	async unflagUser(userID) {
+	async unflagUser(userID, options) {
 		return await this.post(this.baseURL + '/moderation/unflag', {
 			target_user_id: userID,
+			...options,
 		});
 	}
 
