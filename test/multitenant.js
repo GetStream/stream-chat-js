@@ -672,4 +672,23 @@ describe('Full test', function() {
 			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
 		);
 	});
+
+	it('create and read channel', async function() {
+		let channel;
+		let jaap = 'jaap' + uuidv4();
+
+		const ss = await getTestClient(true);
+		await ss.updateUser({ id: jaap, teams: ['red', 'blue'] });
+		channel = ss.channel('messaging', uuidv4(), {
+			members: [jaap],
+			team: 'blue',
+			created_by_id: 'jaap',
+		});
+		await channel.create();
+
+		const jaapClient = await getTestClientForUser(jaap);
+		await jaapClient.channel('messaging', channel.id).query();
+	});
 });
+
+describe.only('jaap issue', function() {});
