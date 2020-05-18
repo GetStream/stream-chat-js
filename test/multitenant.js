@@ -690,5 +690,3 @@ describe('Full test', function() {
 		await jaapClient.channel('messaging', channel.id).query();
 	});
 });
-
-describe.only('jaap issue', function() {});
