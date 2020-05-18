@@ -444,7 +444,7 @@ describe('User teams field', function() {
 		await client.setUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4()).create();
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot query or create a channel for team """',
+			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team """',
 		);
 	});
 
@@ -453,7 +453,7 @@ describe('User teams field', function() {
 		await client.setUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4(), { team: 'tango' }).create();
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot query or create a channel for team "tango""',
+			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team "tango""',
 		);
 	});
 
@@ -671,5 +671,22 @@ describe('Full test', function() {
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
 		);
+	});
+
+	it('create and read channel', async function() {
+		let channel;
+		let jaap = 'jaap' + uuidv4();
+
+		const ss = await getTestClient(true);
+		await ss.updateUser({ id: jaap, teams: ['red', 'blue'] });
+		channel = ss.channel('messaging', uuidv4(), {
+			members: [jaap],
+			team: 'blue',
+			created_by_id: 'jaap',
+		});
+		await channel.create();
+
+		const jaapClient = await getTestClientForUser(jaap);
+		await jaapClient.channel('messaging', channel.id).query();
 	});
 });
