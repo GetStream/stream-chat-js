@@ -194,11 +194,11 @@ export class StreamChat {
 
 		this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
 			.then(
-				result =>
+				(result) =>
 					// We only return connection promise;
 					result[1],
 			)
-			.catch(e => {
+			.catch((e) => {
 				throw e;
 			});
 
@@ -412,7 +412,7 @@ export class StreamChat {
 		this.listeners[key].push(callback);
 		return {
 			unsubscribe: () => {
-				this.listeners[key] = this.listeners[key].filter(el => el !== callback);
+				this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
 			},
 		};
 	}
@@ -435,7 +435,7 @@ export class StreamChat {
 		this.logger('info', `Removing listener for ${key} event`, {
 			tags: ['event', 'client'],
 		});
-		this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+		this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
 	}
 
 	_logApiRequest(type, url, data, config) {
@@ -537,16 +537,18 @@ export class StreamChat {
 		let fileField;
 
 		const params = this._addClientParams();
-		if (isReadableStream(uri) || uri instanceof File) {
+		const isFileWebAPI = (input) =>
+			typeof window !== 'undefined' && 'File' in window && input instanceof File;
+		if (isReadableStream(uri) || isFileWebAPI(uri)) {
 			fileField = uri;
 		} else {
 			fileField = {
 				uri,
 				name: name || uri.split('/').reverse()[0],
 			};
-			if (contentType != null) {
-				fileField.type = contentType;
-			}
+		}
+		if (contentType != null) {
+			fileField.type = contentType;
 		}
 
 		if (user != null) {
@@ -587,7 +589,7 @@ export class StreamChat {
 		return data;
 	}
 
-	dispatchEvent = event => {
+	dispatchEvent = (event) => {
 		// client event handlers
 		this._handleClientEvent(event);
 
@@ -605,7 +607,7 @@ export class StreamChat {
 		}
 	};
 
-	handleEvent = messageEvent => {
+	handleEvent = (messageEvent) => {
 		// dispatch the event to the channel listeners
 		const jsonString = messageEvent.data;
 		const event = JSON.parse(jsonString);
@@ -629,7 +631,7 @@ export class StreamChat {
 			if (event.user.id === this.userID) {
 				this.user = { ...this.user, ...event.user };
 				// Updating only available properties in _user object.
-				Object.keys(event.user).forEach(function(key) {
+				Object.keys(event.user).forEach(function (key) {
 					if (key in client._user) {
 						client._user[key] = event.user[key];
 					}
@@ -655,7 +657,7 @@ export class StreamChat {
 
 	_muteStatus(cid) {
 		let muteStatus;
-		this.mutedChannels.forEach(function(mute) {
+		this.mutedChannels.forEach(function (mute) {
 			if (mute.channel.cid === cid) {
 				let muted = true;
 				if (mute.expires) {
@@ -680,7 +682,7 @@ export class StreamChat {
 		};
 	}
 
-	_callClientListeners = event => {
+	_callClientListeners = (event) => {
 		const client = this;
 		// gather and call the listeners
 		const listeners = [];
@@ -1272,7 +1274,7 @@ export class StreamChat {
 			'user',
 		];
 
-		reservedMessageFields.forEach(function(item) {
+		reservedMessageFields.forEach(function (item) {
 			if (clonedMessage[item] != null) {
 				delete clonedMessage[item];
 			}
