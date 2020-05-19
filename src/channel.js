@@ -1018,6 +1018,7 @@ export class Channel {
 					? this.state.last_message_at
 					: new Date();
 			this.state.read = this.state.read.set(this.getClient().user.id, {
+				user: this.getClient().user,
 				last_read,
 			});
 		}
