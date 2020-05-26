@@ -2,6 +2,7 @@ import { getTestClient, createUserToken, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { sleep } from '../src/utils';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -121,45 +122,59 @@ describe('Sync endpoint', () => {
 		);
 	});
 
-	describe('check sync response data', () => {
-		const eventsByType = {};
+	const eventsByType = {};
 
-		it('group events by type', () => {
-			syncReply.events.reduce((acc, e) => {
-				acc[e.type] = [...(acc[e.type] || []), e];
-				return acc;
-			}, eventsByType);
-		});
+	it('group events by type', () => {
+		syncReply.events.reduce((acc, e) => {
+			acc[e.type] = [...(acc[e.type] || []), e];
+			return acc;
+		}, eventsByType);
+	});
 
-		it('green channel should be marked as hidden', () => {
-			expect(eventsByType['channel.hidden']).to.have.length(1);
-			const evt = eventsByType['channel.hidden'][0];
-			expect(evt.cid).to.eql(greenChannel.cid);
-		});
+	it('green channel should be marked as hidden', () => {
+		expect(eventsByType['channel.hidden']).to.have.length(1);
+		const evt = eventsByType['channel.hidden'][0];
+		expect(evt.cid).to.eql(greenChannel.cid);
+	});
 
-		it('blue channel should be marked as updated', () => {
-			const evts = eventsByType['channel.updated'].filter(
-				e => e.cid === blueChannel.cid,
-			);
-			expect(evts).to.have.length(1);
-			const evt = evts[0];
-			expect(evt.channel.created_at).to.not.eql(evt.channel.updated_at);
-			expect(evt.channel.color).to.eql('blue');
-		});
+	it('blue channel should be marked as updated', () => {
+		const evts = eventsByType['channel.updated'].filter(
+			e => e.cid === blueChannel.cid,
+		);
+		expect(evts).to.have.length(1);
+		const evt = evts[0];
+		expect(evt.channel.created_at).to.not.eql(evt.channel.updated_at);
+		expect(evt.channel.color).to.eql('blue');
+		expect(evts[0].channel.created_by).to.not.be.null;
+	});
 
-		it('should include deleted channels', () => {
-			const evts = eventsByType['message.deleted'];
-			const deletedMessageIds = evts.map(m => m.message.id).sort();
-			expect(deletedMessageIds).to.eql(deletedMessages);
-		});
+	it('should include deleted channels', () => {
+		const evts = eventsByType['message.deleted'];
+		const deletedMessageIds = evts.map(m => m.message.id).sort();
+		expect(deletedMessageIds).to.eql(deletedMessages);
+		expect(evts[0].user).to.not.be.undefined;
+		expect(evts[0].message.user).to.not.be.undefined;
+	});
 
-		it('messages should include new reactions', () => {
-			const evts = eventsByType['message.updated'].filter(
-				e => e.message.id === messageWithReaction,
-			);
-			expect(evts).to.have.length(1);
-			expect(evts[0].message.latest_reactions).to.have.length(1);
-			expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
-		});
+	it('messages should include new reactions', () => {
+		const evts = eventsByType['message.updated'].filter(
+			e => e.message.id === messageWithReaction,
+		);
+		expect(evts).to.have.length(1);
+		expect(evts[0].message.latest_reactions).to.have.length(1);
+		expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
+		expect(evts[0].user).to.not.be.undefined;
+		expect(evts[0].message.user).to.not.be.undefined;
+	});
+
+	it('create and update a message', async () => {
+		const message = { id: uuidv4(), user_id: otherUserID };
+		const response = await blueChannel.sendMessage(message);
+		await sleep(100);
+		serverSideClient.updateMessage(message, otherUserID);
+		await sleep(100);
+		syncReply = await userClient.sync([blueChannel.cid], response.message.created_at);
+		expect(syncReply.events).to.have.length(1);
+		expect(syncReply.events[0].type).to.eql('message.new');
 	});
 });
