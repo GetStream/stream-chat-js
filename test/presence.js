@@ -105,7 +105,11 @@ describe('Presence', function() {
 					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
 					if (results.length === 3) {
-						const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
+						const expected = [
+							[1, 'user1'],
+							[2, 'james'],
+							[1, 'james'],
+						];
 						expect(results).to.deep.equal(expected);
 						resolve();
 					}
@@ -136,7 +140,11 @@ describe('Presence', function() {
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					// expect to see thierry join, james join and james leave
 					if (results.length === 3) {
-						const expected = [[1, 'user1'], [2, 'james'], [1, 'james']];
+						const expected = [
+							[1, 'user1'],
+							[2, 'james'],
+							[1, 'james'],
+						];
 						expect(results).to.deep.equal(expected);
 						resolve();
 					}

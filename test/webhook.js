@@ -99,6 +99,49 @@ describe('Webhooks', function() {
 		expect(event.channel_id).to.eq(chan.id);
 	});
 
+	it('should receive message flagged/unflagged event', async function() {
+		await chan.create();
+
+		// send a message
+		let sendMessageResp;
+		let [events] = await Promise.all([
+			promises.waitForEvents('message.new'),
+			(sendMessageResp = await chan.sendMessage({
+				text: 'flag candidate',
+				user: { id: tommasoID },
+			})),
+		]);
+		const msgNewEvent = events.pop();
+		expect(msgNewEvent).to.not.be.null;
+		expect(msgNewEvent.type).to.eq('message.new');
+		expect(msgNewEvent.channel_type).to.eq(chan.type);
+		expect(msgNewEvent.channel_id).to.eq(chan.id);
+
+		// expect message.flagged event
+		[events] = await Promise.all([
+			promises.waitForEvents('message.flagged'),
+			client.flagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
+		]);
+		const msgFlagEvent = events.pop();
+		expect(msgFlagEvent).to.not.be.null;
+		expect(msgFlagEvent.type).to.eq('message.flagged');
+		expect(msgFlagEvent.channel_type).to.eq(chan.type);
+		expect(msgFlagEvent.channel_id).to.eq(chan.id);
+		expect(msgFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+
+		// expect message.unflagged event
+		[events] = await Promise.all([
+			promises.waitForEvents('message.unflagged'),
+			client.unflagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
+		]);
+		const msgUnFlagEvent = events.pop();
+		expect(msgUnFlagEvent).to.not.be.null;
+		expect(msgUnFlagEvent.type).to.eq('message.unflagged');
+		expect(msgUnFlagEvent.channel_type).to.eq(chan.type);
+		expect(msgUnFlagEvent.channel_id).to.eq(chan.id);
+		expect(msgUnFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+	});
+
 	it('should receive new message event with members included', async function() {
 		await Promise.all([chan.addMembers([thierryID]), chan.addMembers([tommasoID])]);
 		const [events] = await Promise.all([

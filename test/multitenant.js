@@ -389,7 +389,7 @@ describe('User teams field', function() {
 		const p = client.setUser({ id: userId, teams: ['alpha', 'bravo'] }, token);
 
 		await expect(p).to.be.rejectedWith(
-			'{"code":4,"message":"user teams cannot be changed at connection time","StatusCode":400,"duration":""}',
+			'user teams cannot be changed at connection time',
 		);
 	});
 
@@ -444,7 +444,7 @@ describe('User teams field', function() {
 		await client.setUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4()).create();
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot query or create a channel for team """',
+			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team """',
 		);
 	});
 
@@ -453,7 +453,7 @@ describe('User teams field', function() {
 		await client.setUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4(), { team: 'tango' }).create();
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot query or create a channel for team "tango""',
+			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team "tango""',
 		);
 	});
 
@@ -626,5 +626,67 @@ describe('Full test', function() {
 		const response2 = await team2Client.queryChannels({ type: channelType });
 		expect(response2).to.have.length(1);
 		expect(response2[0].data.team).to.eql(team2);
+	});
+
+	it('query using wrong team should raise an error', async function() {
+		const p = team1Client.queryChannels({ type: channelType, team: team2 });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "search by team "red" is not allowed"',
+		);
+	});
+
+	it('query by allowed team should work fine', async function() {
+		const response = await team1Client.queryChannels({
+			type: channelType,
+			team: team1,
+		});
+		expect(response).to.have.length(1);
+		expect(response[0].data.team).to.eql(team1);
+	});
+
+	it('logical operator $nor is disallowed when filtering by team', async function() {
+		const p = team1Client.queryChannels({ $nor: [{ team: team1 }] });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use $nor operator when filtering by team"',
+		);
+	});
+
+	it('only $eq/$in are allowed', async function() {
+		let p = team1Client.queryChannels({ team: { $ne: team1 } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use operator "$ne" when filtering by team"',
+		);
+		p = team1Client.queryChannels({ team: { $nin: [team1] } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "cannot use operator "$nin" when filtering by team"',
+		);
+	});
+
+	it('wrong values type raise an error', async function() {
+		let p = team1Client.queryChannels({ team: { $eq: 1 } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
+		);
+		p = team1Client.queryChannels({ team: { $in: [1] } });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "field team expect string values',
+		);
+	});
+
+	it('create and read channel', async function() {
+		let channel;
+		let jaap = 'jaap' + uuidv4();
+
+		const ss = await getTestClient(true);
+		await ss.updateUser({ id: jaap, teams: ['red', 'blue'] });
+		channel = ss.channel('messaging', uuidv4(), {
+			members: [jaap],
+			team: 'blue',
+			created_by_id: 'jaap',
+		});
+		await channel.create();
+
+		const jaapClient = await getTestClientForUser(jaap);
+		await jaapClient.channel('messaging', channel.id).query();
 	});
 });

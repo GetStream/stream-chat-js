@@ -32,6 +32,11 @@ yarn add stream-chat
 
 Documentation for this JavaScript client are available at the [Stream website](https://getstream.io/chat/docs/?language=js)
 
+### More
+
+- [Logging](docs/logging.md)
+- [User Token](docs/userToken.md)
+
 ### Publishing a new version
 
 Note that you need 2FA enabled on NPM, publishing with Yarn gives error, use NPM directly for this:
