@@ -70,6 +70,7 @@ export interface Event<T = string> {
 export type UserPresenceChangedEvent = 'user.presence.changed';
 export type UserWatchingStartEvent = 'user.watching.start';
 export type UserWatchingStopEvent = 'user.watching.stop';
+export type UserDeletedEvent = 'user.deleted';
 export type UserUpdatedEvent = 'user.updated';
 export type UsedBannedEvent = 'user.banned';
 export type UserUnbannedEvent = 'user.unbanned';
