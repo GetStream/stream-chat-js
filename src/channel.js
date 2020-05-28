@@ -161,7 +161,7 @@ export class Channel {
 	/**
 	 * search - Query Members
 	 *
-	 * @param {object|string}  filterConditions object MongoDB style filters
+	 * @param {object}  filterConditions object MongoDB style filters
 	 * @param {object} sort             Sort options, for instance {created_at: -1}
 	 * @param {object} options        Option object, {limit: 10, offset:10}
 	 *
