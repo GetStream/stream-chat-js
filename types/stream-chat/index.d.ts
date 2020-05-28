@@ -33,7 +33,7 @@ export interface Attachment {
 export interface Message {
   text: string;
   attachments?: Attachment[];
-  mentioned_users?: User[];
+  mentioned_users?: string[];
   parent_id?: string;
   [propName: string]: any;
 }
@@ -237,7 +237,7 @@ export class StreamChat {
   errorFromResponse(response: APIResponse): Error;
 
   sendFile(
-    url: string | Buffer,
+    url: string | Buffer | File,
     uri: string,
     name?: string,
     contentType?: string,
@@ -393,13 +393,13 @@ export class Channel {
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
-    uri: string | Buffer,
+    uri: string | Buffer | File,
     name?: string,
     contentType?: string,
     user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
-    uri: string | Buffer,
+    uri: string | Buffer | File,
     name?: string,
     contentType?: string,
     user?: User,
