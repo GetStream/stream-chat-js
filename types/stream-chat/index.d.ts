@@ -427,6 +427,12 @@ export class Channel {
   delete(): Promise<DeleteChannelAPIResponse>;
   search(query: string | object, options: object): Promise<SearchAPIResponse>;
 
+  queryMembers(
+    filterConditions: object,
+    sort?: object,
+    options?: object,
+  ): Promise<MembersAPIResponse>;
+
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
 
@@ -669,6 +675,10 @@ export interface UpdateUsersAPIResponse extends APIResponse {
 
 export interface UsersAPIResponse extends APIResponse {
   users: UserResponse[];
+}
+
+export interface MembersAPIResponse extends APIResponse {
+  members: ChannelMemberResponse[];
 }
 
 export interface DeleteUserAPIResponse extends APIResponse {
