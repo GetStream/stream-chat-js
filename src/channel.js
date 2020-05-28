@@ -162,13 +162,15 @@ export class Channel {
 	 * search - Query Members
 	 *
 	 * @param {object|string}  filterConditions object MongoDB style filters
+	 * @param {object} sort             Sort options, for instance {created_at: -1}
 	 * @param {object} options        Option object, {limit: 10, offset:10}
 	 *
 	 * @return {object} search members response
 	 */
-	async queryMembers(filterConditions, options = {}) {
-		if (!options) {
-			options = {};
+	async queryMembers(filterConditions, sort = {}, options = {}) {
+		const sortFields = [];
+		for (const [k, v] of Object.entries(sort)) {
+			sortFields.push({ field: k, direction: v });
 		}
 		let id;
 		const type = this.type;
@@ -184,6 +186,7 @@ export class Channel {
 				type,
 				id,
 				members,
+				sort: sortFields,
 				filter_conditions: filterConditions,
 				...options,
 			},

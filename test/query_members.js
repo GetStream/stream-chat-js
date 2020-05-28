@@ -97,7 +97,7 @@ describe('Query Members', function() {
 		expect(results.members.length).to.be.equal(8);
 		const members = results.members;
 		for (let i = 0; i < results.length; i++) {
-			const result = channel.queryMembers({}, { limit: 1, offset: i });
+			const result = channel.queryMembers({}, {}, { limit: 1, offset: i });
 			expect(result.members.length).to.be.equal(1);
 			expect(members[i].user.id).to.be.equal(result.members[0].user.id);
 		}
