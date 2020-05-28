@@ -8,3 +8,4 @@ export * from './permissions';
 export * from './events';
 export * from './signing';
 export * from './base64.js';
+export * from './token_manager.js';
