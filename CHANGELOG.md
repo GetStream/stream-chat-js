@@ -1,3 +1,15 @@
+## May 28, 2020 - 1.11.0
+
+- Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321) [Docs](https://getstream.io/nessy/docs/chat_docs/channels/query_members)
+
+## May 28, 2020 - 1.10.3
+
+- Fixed typescript issues [a9fa49c](https://github.com/GetStream/stream-chat-js/commit/a9fa49c94fe3a730e91b5c3d199f658b6f69c834)
+
+## May 19, 2020 - 1.10.2
+
+- Fixing read status issue [3289ae2](https://github.com/GetStream/stream-chat-js/commit/3289ae28c6400290719c4f82ce6a7651f6f7f732)
+
 ## May 15, 2020 - 1.10.1
 
 - Reverting uuid version change from 1.10.0 due to incompatibility with react-native [issue](https://github.com/uuidjs/uuid#getrandomvalues-not-supported)
