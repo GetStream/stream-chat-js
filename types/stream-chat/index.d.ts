@@ -429,8 +429,8 @@ export class Channel {
 
   queryMembers(
     filterConditions: object,
-    sort: object,
-    options: object,
+    sort?: object,
+    options?: object,
   ): Promise<MembersAPIResponse>;
 
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
