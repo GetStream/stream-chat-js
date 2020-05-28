@@ -678,7 +678,7 @@ export interface UsersAPIResponse extends APIResponse {
 }
 
 export interface MembersAPIResponse extends APIResponse {
-  members: Member[];
+  members: ChannelMemberResponse[];
 }
 
 export interface DeleteUserAPIResponse extends APIResponse {
