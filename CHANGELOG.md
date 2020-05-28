@@ -1,6 +1,6 @@
 ## May 28, 2020 - 1.11.0
 
-- Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321) [Docs](https://getstream.io/nessy/docs/chat_docs/channels/query_members)
+- Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321)
 
 ## May 28, 2020 - 1.10.3
 
