@@ -1,3 +1,6 @@
+## May 29, 2020 - 1.11.1
+
+- Fixing issue with connection recovery and queryChannels api call [#340](https://github.com/GetStream/stream-chat-js/pull/340)
 ## May 28, 2020 - 1.11.0
 
 - Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321)
