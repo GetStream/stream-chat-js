@@ -327,6 +327,8 @@ export class StreamChat {
   createRole(name: string): Promise<APIResponse>;
   listRoles(): Promise<APIResponse>;
   deleteRole(name: string): Promise<APIResponse>;
+
+  _setupConnection(): ReturnType<StableWSConnection['connect']>;
 }
 
 export interface updateUserRequest {
