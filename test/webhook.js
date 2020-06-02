@@ -628,7 +628,20 @@ describe('Webhooks', function() {
 	});
 
 	it('user is deleted ("user.deleted")', async function() {
-		expect('not implemented').to.eq('implemeneted');
+		// Create a user to delete
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		// Delete the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.deleted'),
+			client.deleteUser(newUserID, {}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.deleted');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
 	});
 
 	it('user is banned ("user.banned")', async function() {
