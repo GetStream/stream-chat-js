@@ -52,7 +52,10 @@ describe('Query Members', function() {
 		});
 		await channel.create();
 		await channel.addModerators([mod]);
-		await channel.addMembers([rob, rob2, adam, banned]);
+		await channel.addMembers([rob]);
+		await channel.addMembers([rob2]);
+		await channel.addMembers([adam]);
+		await channel.addMembers([banned]);
 		await channel.inviteMembers([invited, pending, rejected]);
 
 		// mod bans user banned
