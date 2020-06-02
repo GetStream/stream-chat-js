@@ -606,14 +606,25 @@ describe('Webhooks', function() {
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.deactivated');
 		expect(event.user).to.be.an('object');
-		//expect(event.cid).to.eq(chan.cid);
-		//expect(event.message.user.id).to.eq(jaapID);
-		//expect(event.user).to.be.an('object');
-		//expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.be.eq(newUserID);
 	});
 
-	it('user is activated ("user.activated")', async function() {
-		expect('not implemented').to.eq('implemeneted');
+	it('user is reactivated ("user.reactivated")', async function() {
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await client.deactivateUser(newUserID, {
+			reason: 'the cat in the hat',
+		});
+
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.reactivated'),
+			client.reactivateUser(newUserID, {}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.reactivated');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
 	});
 
 	it('user is deleted ("user.deleted")', async function() {
