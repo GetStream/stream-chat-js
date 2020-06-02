@@ -1581,14 +1581,12 @@ describe('query by $autocomplete operator on channels.name', function() {
 	});
 
 	it('return 1 result', async function() {
-		const resp = await client
-			.queryChannels({
-				name: {
-				members: [user],
-					$autocomplete: channel.data.name.substring(0, 3),
-				},
-			})
-			.catch(e => console.log(e));
+		const resp = await client.queryChannels({
+			members: [user],
+			name: {
+				$autocomplete: channel.data.name.substring(0, 3),
+			},
+		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
