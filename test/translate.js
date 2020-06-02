@@ -1,4 +1,4 @@
-import { getTestClient, createUserToken, getTestClientForUser } from './utils';
+import { getTestClient, getTestClientForUser, newEventPromise } from './utils';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -56,6 +56,38 @@ describe('Message translation endpoint', function() {
 		expect(response.message.i18n.it_text).to.not.eql('');
 		expect(response.message.i18n.it_text).to.not.eql(response.message.text);
 	});
+
+	it('should send a message.updated event to other users', async () => {
+		const chanId = uuidv4();
+		const client1 = await getTestClientForUser(uuidv4());
+		const client2 = await getTestClientForUser(uuidv4());
+		const channel = client1.channel('messaging', chanId, {
+			created_by_id: client1.health.me.id,
+			members: [client1.health.me.id, client2.health.me.id],
+		});
+
+		await channel.query();
+
+		const chan2 = client2.channel('messaging', chanId);
+		await chan2.watch();
+
+		const p = new Promise(resolve => {
+			chan2.on('message.updated', event => {
+				resolve(event);
+			});
+		});
+
+		const response = await channel.sendMessage({
+			id: uuidv4(),
+			text: 'so how are you doing?',
+		});
+
+		await client1.translateMessage(response.message.id, 'it');
+
+		const event = await p;
+		expect(event.message.i18n.en_text).to.eql('so how are you doing?');
+		expect(event.message.i18n.it_text).to.eql('Allora, come stai?');
+	});
 });
 
 describe('Auto translation settings', function() {
@@ -101,6 +133,88 @@ describe('Auto translation settings', function() {
 		const p = channel.create();
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 5: GetOrCreateChannel failed with error: "channels with automatic translation can only be created server-side',
+		);
+	});
+});
+
+describe('Auto translation usage', function() {
+	const serverSideClient = getTestClient(true);
+	const channelId = uuidv4();
+	let frenchClient;
+	let englishClient;
+	const frenchUser = { id: uuidv4() };
+	const englishUser = { id: uuidv4() };
+	let messageId;
+
+	before(async () => {
+		await serverSideClient.updateAppSettings({ auto_translation_enabled: true });
+		frenchClient = await getTestClientForUser(frenchUser.id, null, {
+			language: 'fr',
+		});
+		englishClient = await getTestClientForUser(englishUser.id, null, {
+			language: 'en',
+		});
+
+		const channel = serverSideClient.channel('messaging', channelId, {
+			auto_translation_enabled: true,
+			members: [frenchUser.id, englishUser.id],
+			created_by_id: frenchUser.id,
+		});
+
+		await channel.create();
+	});
+
+	it('cannot use an invalid user language', async () => {
+		const p = getTestClientForUser(uuidv4(), null, { language: 'klingon' });
+		await expect(p).to.be.rejectedWith(
+			'{"code":4,"StatusCode":400,"message":"WS failed with code 4 and reason - user_details.language must be one of [af sq am ar az bn bs bg zh zh-TW hr cs da fa-AF nl en et fi fr fr-CA ka de el ha he hi hu id it ja ko lv ms no fa ps pl pt ro ru sr sk sl so es es-MX sw sv tl ta th tr uk ur vi]","isWSFailure":false}',
+		);
+	});
+
+	it('add a message in english and expect it back in french', async () => {
+		const chan = englishClient.channel('messaging', channelId);
+		await chan.query();
+		const response = await chan.sendMessage({
+			text: 'hey man, how are you doing today?',
+		});
+		expect(response.message.i18n.fr_text).to.not.eql('');
+	});
+
+	it('add a message in french and expect it back in english', async () => {
+		const chan = frenchClient.channel('messaging', channelId);
+		await chan.query();
+		const response = await chan.sendMessage({
+			text: 'Je ne parle pas (beaucoup de) français',
+		});
+		expect(response.message.i18n.en_text).to.not.eql('');
+		messageId = response.message.id;
+	});
+
+	it('update the message and expect new translation to be there', async () => {
+		const response = await frenchClient.updateMessage({
+			id: messageId,
+			text: 'Je parle français',
+		});
+		expect(response.message.i18n.en_text).to.eql('I speak French');
+		expect(response.message.i18n.fr_text).to.eql('Je parle français');
+	});
+
+	it('cannot write i18n directly', async () => {
+		const chan = englishClient.channel('messaging', channelId);
+		const p = chan.sendMessage({
+			text: 'hey man, how are you doing today?',
+			i18n: { hey: 123 },
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.i18n is a reserved field',
+		);
+		englishClient.updateMessage({
+			id: messageId,
+			text: 'Je parle français',
+			i18n: { hey: 123 },
+		});
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: SendMessage failed with error: "message.i18n is a reserved field',
 		);
 	});
 });
