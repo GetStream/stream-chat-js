@@ -1586,6 +1586,7 @@ describe('query by $autocomplete operator on channels.name', function() {
 		const resp = await client
 			.queryChannels({
 				name: {
+				members: [user],
 					$autocomplete: channel.data.name.substring(0, 3),
 				},
 			})
