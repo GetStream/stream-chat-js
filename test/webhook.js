@@ -547,10 +547,6 @@ describe('Webhooks', function() {
 		expect(event.target_user.id).to.eq(thierryID);
 	});
 
-	it('channel.deleted', async function() {
-		await Promise.all([promises.waitForEvents('channel.deleted'), chan.delete()]);
-	});
-
 	it('message is flagged', async function() {
 		var messageResponse = await chan.sendMessage({
 			text: 'hello world',
@@ -594,5 +590,45 @@ describe('Webhooks', function() {
 		expect(event.message.user.id).to.eq(jaapID);
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.eq(thierryID);
+	});
+
+	it('user is deactivated ("user.deactivated")', async function() {
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.deactivated'),
+			client.deactivateUser(newUserID, {
+				reason: 'the cat in the hat',
+			}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.deactivated');
+		expect(event.user).to.be.an('object');
+		//expect(event.cid).to.eq(chan.cid);
+		//expect(event.message.user.id).to.eq(jaapID);
+		//expect(event.user).to.be.an('object');
+		//expect(event.user.id).to.eq(thierryID);
+	});
+
+	it('user is activated ("user.activated")', async function() {
+		expect('not implemented').to.eq('implemeneted');
+	});
+
+	it('user is deleted ("user.deleted")', async function() {
+		expect('not implemented').to.eq('implemeneted');
+	});
+
+	it('user is banned ("user.banned")', async function() {
+		expect('not implemented').to.eq('implemeneted');
+	});
+
+	it('user is banned ("user.unbanned")', async function() {
+		expect('not implemented').to.eq('implemeneted');
+	});
+
+	it('channel.deleted', async function() {
+		await Promise.all([promises.waitForEvents('channel.deleted'), chan.delete()]);
 	});
 });
