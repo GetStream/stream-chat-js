@@ -36,7 +36,6 @@ describe('Query Members', function() {
 	let banned = 'banned-' + uuidv4();
 	let channel;
 	let ssClient;
-	let csClient;
 	before(async function() {
 		ssClient = await getServerTestClient();
 		await ssClient.updateUser({ id: rob, name: 'Robert' });
@@ -47,19 +46,13 @@ describe('Query Members', function() {
 		await ssClient.updateUser({ id: pending, name: 'Carlos' });
 		await ssClient.updateUser({ id: rejected, name: 'Joseph' });
 		await ssClient.updateUser({ id: banned, name: 'Evil' });
-		await createUsers([mod, rob, adam]);
 
-		csClient = await getTestClientForUser(rob);
 		channel = ssClient.channel('messaging', uuidv4(), {
 			created_by_id: mod,
 		});
 		await channel.create();
 		await channel.addModerators([mod]);
-		await channel.addMembers([rob]);
-		await channel.addMembers([rob2]);
-		await channel.addMembers([adam]);
-		await channel.addMembers([banned]);
-
+		await channel.addMembers([rob, rob2, adam, banned]);
 		await channel.inviteMembers([invited, pending, rejected]);
 
 		// mod bans user banned
@@ -81,10 +74,13 @@ describe('Query Members', function() {
 	});
 
 	it('autocomplete member with name Robert', async function() {
-		let results = await channel.queryMembers({ name: { $autocomplete: 'Rob' } });
-		expect(results.members.length).to.be.equal(2);
-		expect(results.members[0].user.id).to.be.equal(rob);
-		expect(results.members[1].user.id).to.be.equal(rob2);
+		const { members } = await channel.queryMembers({
+			name: { $autocomplete: 'Rob' },
+		});
+
+		expect(members.length).to.be.equal(2);
+		expect(members[0].user.id).to.be.equal(rob);
+		expect(members[1].user.id).to.be.equal(rob2);
 	});
 
 	it('query without filters return all the members', async function() {
