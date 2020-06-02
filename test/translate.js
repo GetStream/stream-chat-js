@@ -1,4 +1,4 @@
-import { getTestClient, getTestClientForUser, newEventPromise } from './utils';
+import { getTestClient, getTestClientForUser } from './utils';
 import uuidv4 from 'uuid/v4';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
