@@ -1566,6 +1566,35 @@ describe('$ne operator', function() {
 	});
 });
 
+describe('query by $autocomplete operator on channels.name', function() {
+	let client;
+	let channel;
+	let user = uuidv4();
+	before(async function() {
+		await createUsers([user]);
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [user],
+			name: uuidv4(),
+		});
+		await channel.create();
+	});
+
+	it('return 1 result', async function() {
+		console.log(channel.data.name);
+		console.log(channel.data.name.substring(0, 3));
+		const resp = await client
+			.queryChannels({
+				name: {
+					$autocomplete: channel.data.name.substring(0, 3),
+				},
+			})
+			.catch(e => console.log(e));
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+});
+
 describe('unread counts on hard delete messages', function() {
 	let channel;
 	let client;
