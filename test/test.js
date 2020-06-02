@@ -2772,7 +2772,10 @@ describe('Chat', () => {
 		});
 
 		it('empty list', async () => {
-			await channel.getMessagesById([]);
+			const p = channel.getMessagesById([]);
+			await expect(p).to.be.rejectedWith(
+				'StreamChat error code 4: GetManyMessages failed with error: "ids is a required field',
+			);
 		});
 
 		it('get one message and check reactions are populated', async () => {
