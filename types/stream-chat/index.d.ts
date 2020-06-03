@@ -387,9 +387,9 @@ export class Channel {
     url_enrichment: boolean;
     message_retention: string;
     max_message_length: number;
-    automod: string;
-    automod_behavior: string;
-    commands: object[];
+    automod: ChannelConfigAutomodTypes;
+    automod_behavior: ChannelConfigAutomodBehaviorTypes;
+    commands: CommandVariants[];
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
@@ -959,6 +959,8 @@ export interface ChannelConfigDBFields {
   updated_at: string;
 }
 
+export type ChannelConfigAutomodTypes = 'disabled' | 'simple' | 'AI';
+export type ChannelConfigAutomodBehaviorTypes = 'flag' | 'block';
 export interface ChannelConfigFields {
   name: string;
   typing_events: boolean;
@@ -972,7 +974,7 @@ export interface ChannelConfigFields {
   max_message_length: number;
   uploads: boolean;
   url_enrichment: boolean;
-  automod: 'disabled' | 'simple' | 'AI';
+  automod: ChannelConfigAutomodTypes;
   automod_behavior: 'flag' | 'block';
 }
 
