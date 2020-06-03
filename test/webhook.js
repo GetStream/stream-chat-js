@@ -645,11 +645,43 @@ describe('Webhooks', function() {
 	});
 
 	it('user is banned ("user.banned")', async function() {
-		expect('not implemented').to.eq('implemeneted');
+		// Create a user to ban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		// Ban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			client.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+		]);
+
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.banned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.reason).to.be.eq('testy mctestify');
 	});
 
-	it('user is banned ("user.unbanned")', async function() {
-		expect('not implemented').to.eq('implemeneted');
+	it('user is unbanned ("user.unbanned")', async function() {
+		// Create a user to ban/unban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await client.banUser(newUserID, {
+			reason: 'testy mctestify',
+			user_id: thierryID,
+		});
+
+		// Unban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.unbanned'),
+			client.unbanUser(newUserID),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.unbanned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
 	});
 
 	it('channel.deleted', async function() {
