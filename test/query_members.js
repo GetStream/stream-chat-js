@@ -70,27 +70,47 @@ describe('Query Members', function() {
 		await clientR.channel('messaging', channel.id).rejectInvite();
 	});
 
-	it('query members with multiple filters client side', async function() {
+	it('with multiple filters client side', async function() {
 		const csClient = await getTestClientForUser(mod);
 		const csChannel = csClient.channel('messaging', channel.id);
 		const { members } = await csChannel.queryMembers({
 			$or: [
-				{ name: { $autocomplete: 'Rob' } },
-				{ banned: true },
-				{ is_moderator: true },
-				{ $and: [{ name: { $q: 'Mar' } }, { invite: 'accepted' }] },
+				{ name: { $autocomplete: 'Rob' } }, // rob, rob2
+				{ banned: true }, // banned
+				{ is_moderator: true }, // mod
+				{
+					// invited
+					$and: [
+						{ name: { $q: 'Mar' } },
+						{ invite: 'accepted' },
+						{
+							$or: [
+								{ name: { $autocomplete: 'mar' } },
+								{ invite: 'rejected' },
+							],
+						},
+					],
+				},
+				{
+					// no match
+					$nor: [
+						{
+							$and: [{ name: { $q: 'Car' } }, { invite: 'accepted' }],
+						},
+					],
+				},
 			],
 		});
 
 		expect(members.length).to.be.equal(5);
-		expect(members[0].user.id).to.be.equal(rob);
-		expect(members[1].user.id).to.be.equal(rob2);
-		expect(members[2].user.id).to.be.equal(mod);
-		expect(members[3].user.id).to.be.equal(invited);
-		expect(members[4].user.id).to.be.equal(banned);
+		expect(members[0].user.id).to.be.equal(mod);
+		expect(members[1].user.id).to.be.equal(rob);
+		expect(members[2].user.id).to.be.equal(rob2);
+		expect(members[3].user.id).to.be.equal(banned);
+		expect(members[4].user.id).to.be.equal(invited);
 	});
 
-	it('query member with name Robert', async function() {
+	it('with name Robert', async function() {
 		const { members } = await channel.queryMembers({ name: 'Robert' });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(rob);
