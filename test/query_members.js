@@ -135,12 +135,12 @@ describe('Query Members', function() {
 		const { members } = await channel.queryMembers({});
 		expect(members.length).to.be.equal(8);
 		for (let i = 0; i < members.length; i++) {
-			const { members: single } = channel.queryMembers(
+			const { members: single } = await channel.queryMembers(
 				{},
 				{},
 				{ limit: 1, offset: i },
 			);
-			expect(members.length).to.be.equal(1);
+			expect(single.length).to.be.equal(1);
 			expect(members[i].user.id).to.be.equal(single[0].user.id);
 		}
 	});
