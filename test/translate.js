@@ -158,17 +158,10 @@ describe('Auto translation usage', function() {
 		const channel = serverSideClient.channel('messaging', channelId, {
 			auto_translation_enabled: true,
 			members: [frenchUser.id, englishUser.id],
-			created_by_id: frenchUser.id,
+			created_by: { language: 'fr', ...frenchUser },
 		});
 
 		await channel.create();
-	});
-
-	it('cannot use an invalid user language', async () => {
-		const p = getTestClientForUser(uuidv4(), null, { language: 'klingon' });
-		await expect(p).to.be.rejectedWith(
-			'{"code":4,"StatusCode":400,"message":"WS failed with code 4 and reason - user_details.language must be one of [af sq am ar az bn bs bg zh zh-TW hr cs da fa-AF nl en et fi fr fr-CA ka de el ha he hi hu id it ja ko lv ms no fa ps pl pt ro ru sr sk sl so es es-MX sw sv tl ta th tr uk ur vi]","isWSFailure":false}',
-		);
 	});
 
 	it('add a message in english and expect it back in french', async () => {
