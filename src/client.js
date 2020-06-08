@@ -1444,6 +1444,10 @@ export class StreamChat {
 		return this.delete(`${this.baseURL}/custom_role/${name}`);
 	}
 
+	/** sync - returns all events that happened for a list of channels since last sync
+	 * @param {array} channel_cids list of channel CIDs
+	 * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
+	 */
 	sync(channel_cids, last_sync_at) {
 		return this.post(`${this.baseURL}/sync`, { channel_cids, last_sync_at });
 	}
