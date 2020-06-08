@@ -440,7 +440,7 @@ describe('Watchers count', function() {
 
 		before(async function() {
 			newClient = await getTestClientForUser(users[2]);
-			newClientChannel = await newClient.channel('messaging', channelID);
+			newClientChannel = newClient.channel('messaging', channelID);
 			watchingStopEvent = newEventPromise(client, 'user.watching.stop');
 
 			const resp = await newClientChannel.watch();
