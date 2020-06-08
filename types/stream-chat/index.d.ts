@@ -469,6 +469,7 @@ export class Channel {
   hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
   getMessagesById(messageIds: string[]): Promise<GetMultipleMessagesAPIResponse>;
+  translateMessage(messageId: string, language: string): Promise<GetMessageAPIResponse>;
 
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;

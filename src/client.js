@@ -1248,6 +1248,19 @@ export class StreamChat {
 	}
 
 	/**
+	 * translateMessage - adds the translation to the message
+	 *
+	 * @param {string} messageId
+	 *
+	 * @return {object} Response that includes the message
+	 */
+	async translateMessage(messageId, language) {
+		return await this.post(this.baseURL + `/messages/${messageId}/translate`, {
+			language,
+		});
+	}
+
+	/**
 	 * updateMessage - Update the given message
 	 *
 	 * @param {object} message object, id needs to be specified
