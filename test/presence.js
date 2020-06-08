@@ -308,6 +308,28 @@ describe('Presence', function() {
 			runAndLogPromise(runTest);
 		});
 
+		it('Delete user', function(done) {
+			// same as above, but with the query channels endpoint
+			user1Client.on('user.deleted', event => {
+				console.log(event.type);
+				if (event.user.id === paulID) {
+					expect();
+					done();
+				}
+			});
+			async function runTest() {
+				await user1Client.queryChannels(
+					{},
+					{ last_message_at: -1 },
+					{ presence: true },
+				);
+				console.log(`deleting user ${paulID}`);
+				const serverClient = getTestClient(true);
+				serverClient.deleteUser(paulID);
+			}
+			runAndLogPromise(runTest);
+		});
+
 		// Invisible user support
 		it.skip('Invisible', function(done) {
 			user1Client.on('user.presence.changed', event => {
@@ -418,7 +440,7 @@ describe('Watchers count', function() {
 
 		before(async function() {
 			newClient = await getTestClientForUser(users[2]);
-			newClientChannel = await newClient.channel('messaging', channelID);
+			newClientChannel = newClient.channel('messaging', channelID);
 			watchingStopEvent = newEventPromise(client, 'user.watching.stop');
 
 			const resp = await newClientChannel.watch();

@@ -70,6 +70,7 @@ export interface Event<T = string> {
 export type UserPresenceChangedEvent = 'user.presence.changed';
 export type UserWatchingStartEvent = 'user.watching.start';
 export type UserWatchingStopEvent = 'user.watching.stop';
+export type UserDeletedEvent = 'user.deleted';
 export type UserUpdatedEvent = 'user.updated';
 export type UsedBannedEvent = 'user.banned';
 export type UserUnbannedEvent = 'user.unbanned';
@@ -387,9 +388,9 @@ export class Channel {
     url_enrichment: boolean;
     message_retention: string;
     max_message_length: number;
-    automod: string;
-    automod_behavior: string;
-    commands: object[];
+    automod: ChannelConfigAutomodTypes;
+    automod_behavior: ChannelConfigAutomodBehaviorTypes;
+    commands: CommandVariants[];
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
@@ -468,6 +469,7 @@ export class Channel {
   hide(userId?: string, clearHistory?: boolean): Promise<APIResponse>;
   show(userId?: string): Promise<APIResponse>;
   getMessagesById(messageIds: string[]): Promise<GetMultipleMessagesAPIResponse>;
+  translateMessage(messageId: string, language: string): Promise<GetMessageAPIResponse>;
 
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
@@ -959,6 +961,8 @@ export interface ChannelConfigDBFields {
   updated_at: string;
 }
 
+export type ChannelConfigAutomodTypes = 'disabled' | 'simple' | 'AI';
+export type ChannelConfigAutomodBehaviorTypes = 'flag' | 'block';
 export interface ChannelConfigFields {
   name: string;
   typing_events: boolean;
@@ -972,7 +976,7 @@ export interface ChannelConfigFields {
   max_message_length: number;
   uploads: boolean;
   url_enrichment: boolean;
-  automod: 'disabled' | 'simple' | 'AI';
+  automod: ChannelConfigAutomodTypes;
   automod_behavior: 'flag' | 'block';
 }
 
