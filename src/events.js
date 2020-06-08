@@ -3,6 +3,7 @@ export const EVENT_MAP = {
 	'user.watching.start': true,
 	'user.watching.stop': true,
 	'user.updated': true,
+	'user.deleted': true,
 	'typing.start': true,
 	'typing.stop': true,
 	'message.new': true,

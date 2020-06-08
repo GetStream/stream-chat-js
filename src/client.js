@@ -737,6 +737,9 @@ export class StreamChat {
 				type: 'connection.recovered',
 			});
 		}
+
+		this.wsPromise = Promise.resolve();
+		this.setUserPromise = Promise.resolve();
 	};
 
 	/*

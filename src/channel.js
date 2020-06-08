@@ -159,6 +159,41 @@ export class Channel {
 	}
 
 	/**
+	 * search - Query Members
+	 *
+	 * @param {object}  filterConditions object MongoDB style filters
+	 * @param {object} sort             Sort options, for instance {created_at: -1}
+	 * @param {object} options        Option object, {limit: 10, offset:10}
+	 *
+	 * @return {object} search members response
+	 */
+	async queryMembers(filterConditions, sort = {}, options = {}) {
+		const sortFields = [];
+		for (const [k, v] of Object.entries(sort)) {
+			sortFields.push({ field: k, direction: v });
+		}
+		let id;
+		const type = this.type;
+		let members;
+		if (this.id) {
+			id = this.id;
+		} else if (this.data && Array.isArray(this.data.members)) {
+			members = this.data.members;
+		}
+		// Return a list of members
+		return await this.getClient().get(this.getClient().baseURL + '/members', {
+			payload: {
+				type,
+				id,
+				members,
+				sort: sortFields,
+				filter_conditions: filterConditions,
+				...options,
+			},
+		});
+	}
+
+	/**
 	 * sendReaction - Send a reaction about a message
 	 *
 	 * @param {string} messageID the message id

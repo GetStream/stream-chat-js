@@ -1,3 +1,18 @@
+## May 29, 2020 - 1.11.1
+
+- Fixing issue with connection recovery and queryChannels api call [#340](https://github.com/GetStream/stream-chat-js/pull/340)
+## May 28, 2020 - 1.11.0
+
+- Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321)
+
+## May 28, 2020 - 1.10.3
+
+- Fixed typescript issues [a9fa49c](https://github.com/GetStream/stream-chat-js/commit/a9fa49c94fe3a730e91b5c3d199f658b6f69c834)
+
+## May 19, 2020 - 1.10.2
+
+- Fixing read status issue [3289ae2](https://github.com/GetStream/stream-chat-js/commit/3289ae28c6400290719c4f82ce6a7651f6f7f732)
+
 ## May 15, 2020 - 1.10.1
 
 - Reverting uuid version change from 1.10.0 due to incompatibility with react-native [issue](https://github.com/uuidjs/uuid#getrandomvalues-not-supported)
@@ -134,11 +149,13 @@
 - Support for system message for addMember/removeMember functionality
 - Throw clear errors when trying to build tokens without secret
 
-## October 25, 2019 - 1.2.0
+## November 28, 2019 - 1.2.0
+
+## November 22, 2019 - 1.1.8
 
 - Improve client.channel signature, support short-hand with only type and object as well as null or undefined ID (instead of only "")
 
-## October 25, 2019 - 1.1.5
+## October 25, 2019 - 1.1.7
 
 - Add support for member invites after channel creation.
 

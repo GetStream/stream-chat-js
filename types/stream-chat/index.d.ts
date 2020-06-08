@@ -33,7 +33,7 @@ export interface Attachment {
 export interface Message {
   text: string;
   attachments?: Attachment[];
-  mentioned_users?: User[];
+  mentioned_users?: string[];
   parent_id?: string;
   [propName: string]: any;
 }
@@ -70,6 +70,7 @@ export interface Event<T = string> {
 export type UserPresenceChangedEvent = 'user.presence.changed';
 export type UserWatchingStartEvent = 'user.watching.start';
 export type UserWatchingStopEvent = 'user.watching.stop';
+export type UserDeletedEvent = 'user.deleted';
 export type UserUpdatedEvent = 'user.updated';
 export type UsedBannedEvent = 'user.banned';
 export type UserUnbannedEvent = 'user.unbanned';
@@ -237,7 +238,7 @@ export class StreamChat {
   errorFromResponse(response: APIResponse): Error;
 
   sendFile(
-    url: string | Buffer,
+    url: string | Buffer | File,
     uri: string,
     name?: string,
     contentType?: string,
@@ -387,19 +388,19 @@ export class Channel {
     url_enrichment: boolean;
     message_retention: string;
     max_message_length: number;
-    automod: string;
-    automod_behavior: string;
-    commands: object[];
+    automod: ChannelConfigAutomodTypes;
+    automod_behavior: ChannelConfigAutomodBehaviorTypes;
+    commands: CommandVariants[];
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
-    uri: string | Buffer,
+    uri: string | Buffer | File,
     name?: string,
     contentType?: string,
     user?: User,
   ): Promise<FileUploadAPIResponse>;
   sendImage(
-    uri: string | Buffer,
+    uri: string | Buffer | File,
     name?: string,
     contentType?: string,
     user?: User,
@@ -426,6 +427,12 @@ export class Channel {
   ): Promise<UpdateChannelAPIResponse>;
   delete(): Promise<DeleteChannelAPIResponse>;
   search(query: string | object, options: object): Promise<SearchAPIResponse>;
+
+  queryMembers(
+    filterConditions: object,
+    sort?: object,
+    options?: object,
+  ): Promise<MembersAPIResponse>;
 
   acceptInvite(options: object): Promise<AcceptInviteAPIResponse>;
   rejectInvite(options: object): Promise<RejectInviteAPIResponse>;
@@ -669,6 +676,10 @@ export interface UpdateUsersAPIResponse extends APIResponse {
 
 export interface UsersAPIResponse extends APIResponse {
   users: UserResponse[];
+}
+
+export interface MembersAPIResponse extends APIResponse {
+  members: ChannelMemberResponse[];
 }
 
 export interface DeleteUserAPIResponse extends APIResponse {
@@ -949,6 +960,8 @@ export interface ChannelConfigDBFields {
   updated_at: string;
 }
 
+export type ChannelConfigAutomodTypes = 'disabled' | 'simple' | 'AI';
+export type ChannelConfigAutomodBehaviorTypes = 'flag' | 'block';
 export interface ChannelConfigFields {
   name: string;
   typing_events: boolean;
@@ -962,7 +975,7 @@ export interface ChannelConfigFields {
   max_message_length: number;
   uploads: boolean;
   url_enrichment: boolean;
-  automod: 'disabled' | 'simple' | 'AI';
+  automod: ChannelConfigAutomodTypes;
   automod_behavior: 'flag' | 'block';
 }
 
