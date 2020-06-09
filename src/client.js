@@ -16,7 +16,7 @@ import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
 import { TokenManager } from './token_manager';
-import { isFunction, chatCodes } from './utils';
+import { isFunction, chatCodes, sleep } from './utils';
 
 function isReadableStream(obj) {
 	return (
@@ -89,7 +89,6 @@ export class StreamChat {
 		// If its a server-side client, then lets initialize the tokenManager, since token will be
 		// generated from secret.
 		this.tokenManager = new TokenManager(this.secret);
-
 		/**
 		 * logger function should accept 3 parameters:
 		 * @param logLevel string
@@ -469,6 +468,12 @@ export class StreamChat {
 
 	doAxiosRequest = async (type, url, data, params = {}) => {
 		await this.tokenManager.tokenReady();
+
+		if (this.rateLimitResetTime) {
+			await sleep(this.rateLimitResetTime * 1000 - new Date());
+			this.rateLimitResetTime = undefined;
+		}
+
 		try {
 			let response;
 			this._logApiRequest(type, url, data, this._addClientParams(params));
@@ -498,13 +503,21 @@ export class StreamChat {
 			this._logApiError(type, url, e);
 
 			if (e.response) {
-				if (
-					e.response.data.code === chatCodes.TOKEN_EXPIRED &&
-					!this.tokenManager.isStatic()
-				) {
+				const code = e.response.data && e.response.data.code;
+				const headers = e.response.headers;
+				if (code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
 					this.tokenManager.loadToken();
 					return await this.doAxiosRequest(type, url, params, data);
 				}
+
+				if (
+					code === chatCodes.RATE_LIMITED &&
+					headers &&
+					headers['x-ratelimit-reset']
+				) {
+					this.rateLimitResetTime = e.response.headers['x-ratelimit-reset'];
+				}
+
 				return this.handleResponse(e.response);
 			} else {
 				throw e;

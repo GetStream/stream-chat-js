@@ -30,5 +30,6 @@ export function isFunction(value) {
 
 export const chatCodes = {
 	TOKEN_EXPIRED: 40,
+	RATE_LIMITED: 9,
 	WS_CLOSED_SUCCESS: 1000,
 };
