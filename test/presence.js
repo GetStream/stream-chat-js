@@ -80,7 +80,7 @@ describe('Presence', function() {
 		it('login as a different user', async function() {
 			const testClientP = await getTestClientForUser('jones');
 
-			testClientP.disconnect();
+			testClientP.disconnect(5000);
 			testClientP.setUser(
 				{
 					id: 'jimmy',
@@ -160,7 +160,7 @@ describe('Presence', function() {
 			// james start watching it
 			await channel.watch();
 			// Watching client goes offline
-			await james.disconnect();
+			await james.disconnect(5000);
 			await eventPromise;
 		});
 	});
@@ -200,7 +200,7 @@ describe('Presence', function() {
 		it('should be offline after disconnect', async function() {
 			const userID = `timmy-${uuidv4()}`;
 			const testClientP = await getTestClientForUser(userID, 'mystatus');
-			await testClientP.disconnect();
+			await testClientP.disconnect(5000);
 			const response = await user1Client.queryUsers({ id: { $in: [userID] } });
 			const timmy = response.users[0];
 			expect(timmy.id).to.equal(userID);
@@ -446,7 +446,7 @@ describe('Watchers count', function() {
 			const resp = await newClientChannel.watch();
 			expect(resp.watcher_count).to.eq(2);
 
-			await newClient.disconnect();
+			await newClient.disconnect(5000);
 		});
 
 		it('decrease watcher count', async function() {
@@ -504,7 +504,7 @@ describe('Count Anonymous users', function() {
 			if (i % 2 === 0) {
 				await clients[i].channel.stopWatching();
 			} else {
-				await clients[i].client.disconnect();
+				await clients[i].client.disconnect(5000);
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {
@@ -552,7 +552,7 @@ describe('Count Guest users using state', function() {
 			if (i % 2 === 0) {
 				await clients[i].channel.stopWatching();
 			} else {
-				clients[i].client.disconnect();
+				clients[i].client.disconnect(5000);
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {

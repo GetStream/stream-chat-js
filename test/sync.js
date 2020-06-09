@@ -76,7 +76,7 @@ describe('Sync endpoint', () => {
 	let lastEventAt;
 
 	it('disconnect', async () => {
-		await userClient.disconnect();
+		await userClient.disconnect(5000);
 		lastEventAt = new Date();
 	});
 

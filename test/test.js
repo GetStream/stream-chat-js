@@ -296,7 +296,7 @@ describe('Chat', () => {
 			const token = createUserToken(userID);
 			await client.setUser({ id: userID }, token);
 
-			await client.wsConnection.disconnect();
+			await client.wsConnection.disconnect(5000);
 			expect(client.wsConnection.isHealthy).to.equal(false);
 			expect(client.wsConnection.wsID).to.equal(2);
 			expect(client.wsConnection.ws).to.equal(undefined);
@@ -760,7 +760,7 @@ describe('Chat', () => {
 			const client2 = await getTestClientForUser('bob');
 			const chan = client2.channel('messaging', uuidv4());
 			await chan.watch();
-			await client2.disconnect();
+			await client2.disconnect(5000);
 
 			const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
 
@@ -774,7 +774,7 @@ describe('Chat', () => {
 
 			const anonClient = getTestClient(false);
 			await anonClient.setAnonymousUser();
-			await anonClient.disconnect();
+			await anonClient.disconnect(5000);
 
 			p = anonClient.addDevice('deviceID', 'apn');
 			await expect(p).to.be.rejectedWith(errorMsg);
@@ -784,11 +784,11 @@ describe('Chat', () => {
 			const client2 = await getTestClientForUser('bob');
 			const chan = client2.channel('messaging', uuidv4());
 			await chan.watch();
-			let disconnect = client2.disconnect();
+			let disconnect = client2.disconnect(5000);
 			await expect(disconnect).to.be.fulfilled;
 
 			// Lets try disconnect second time on same client.
-			disconnect = client2.disconnect();
+			disconnect = client2.disconnect(5000);
 			await expect(disconnect).to.be.fulfilled;
 
 			// Lets try deleting websocket connection object.

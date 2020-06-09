@@ -654,12 +654,12 @@ describe('App configs', function() {
 
 	it('Using a tampered token fails because of auth enabled', async function() {
 		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	it('Using dev token fails because of auth enabled', async function() {
 		await expectHTTPErrorCode(401, client2.setUser(user, client2.devToken(user.id)));
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	it('Disable auth checks', async function() {
@@ -671,12 +671,12 @@ describe('App configs', function() {
 
 	it('Using a tampered token does not fail because auth is disabled', async function() {
 		await client2.setUser(user, userToken);
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	it('Using dev token does not fail because auth is disabled', async function() {
 		await client2.setUser(user, client2.devToken(user.id));
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	it('Disable permission checks', async function() {
@@ -689,7 +689,7 @@ describe('App configs', function() {
 	it('A user can do super stuff because permission checks are off', async function() {
 		await client2.setUser(user, userToken);
 		await client2.channel('messaging', 'secret-place').watch();
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	it('Re-enable permission checks', async function() {
@@ -716,7 +716,7 @@ describe('App configs', function() {
 
 	it('Using a tampered token fails because auth is back on', async function() {
 		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
-		client2.disconnect();
+		client2.disconnect(5000);
 	});
 
 	describe('Push notifications', function() {

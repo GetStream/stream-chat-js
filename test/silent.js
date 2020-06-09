@@ -9,7 +9,7 @@ chai.use(chaiAsPromised);
 
 async function testUnreadCount(userId, expectedCount) {
 	const client = await getTestClientForUser(userId);
-	await client.disconnect();
+	await client.disconnect(5000);
 	expect(client.health.me.unread_count).to.eql(expectedCount);
 }
 

@@ -285,7 +285,7 @@ export class StreamChat {
 	/**
 	 * disconnect - closes the WS connection
 	 */
-	disconnect() {
+	disconnect(timeout) {
 		this.logger('info', 'client:disconnect() - Disconnecting the client', {
 			tags: ['connection', 'client'],
 		});
@@ -315,7 +315,7 @@ export class StreamChat {
 
 		// close the WS connection
 		if (this.wsConnection) {
-			return this.wsConnection.disconnect();
+			return this.wsConnection.disconnect(timeout);
 		}
 
 		return Promise.resolve();

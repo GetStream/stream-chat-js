@@ -232,7 +232,7 @@ describe('Mark all read server-side', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -264,7 +264,7 @@ describe('Mark all read server-side', function() {
 		expect(response.me.total_unread_count).to.eq(0);
 		expect(response.me.unread_count).to.eq(0);
 		expect(response.me.unread_channels).to.eq(0);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -344,7 +344,7 @@ describe('Mark all read', function() {
 		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
 		expect(response.me.unread_channels).to.eq(5);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -367,7 +367,7 @@ describe('Mark all read', function() {
 		const thierryClient = getTestClient(false);
 		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
 		await thierryClient.markAllRead();
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry connects and receives unread_count=0', async function() {
@@ -378,7 +378,7 @@ describe('Mark all read', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(0);
 		expect(response.me.unread_count).to.eq(0);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
