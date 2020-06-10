@@ -1,8 +1,9 @@
 import { StreamChat } from '../src';
 import chai from 'chai';
 const expect = chai.expect;
-const apiKey = '892s22ypvt6m';
-const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
+require('dotenv').config();
+const apiKey = process.env.STREAM_API_KEY;
+const apiSecret = process.env.STREAM_API_SECRET;
 
 export function getTestClient(serverSide) {
 	return new StreamChat(apiKey, serverSide ? apiSecret : null);
