@@ -214,7 +214,7 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): Promise<ConnectAPIResponse>;
+  setUser(user: User, userToken: string | Function): Promise<ConnectAPIResponse>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
