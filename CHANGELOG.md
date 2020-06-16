@@ -1,3 +1,7 @@
+## June 16, 2020 - 1.11.4
+
+- Fixing request retry logic upon token expiry [ab20729](https://github.com/GetStream/stream-chat-js/commit/ab20729dbff05f4e6270d98f736acb2deafae7a5)
+
 ## June 12, 2020 - 1.11.3
 
 - Fixing types for setUser function on client [36d04ec](https://github.com/GetStream/stream-chat-js/commit/36d04ec110d687760af8876a296897516c624739)
