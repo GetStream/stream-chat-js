@@ -503,7 +503,7 @@ export class StreamChat {
 					!this.tokenManager.isStatic()
 				) {
 					this.tokenManager.loadToken();
-					return await this.doAxiosRequest(type, url, params, data);
+					return await this.doAxiosRequest(type, url, data, params);
 				}
 				return this.handleResponse(e.response);
 			} else {
