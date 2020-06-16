@@ -661,6 +661,29 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.created_by_id).to.be.eq(thierryID);
+	});
+
+	it('user is banned from channel ("user.banned")', async function() {
+		// Create a user to ban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await chan.addMembers([newUserID]);
+
+		// Ban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			chan.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+		]);
+
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.banned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.created_by_id).to.be.eq(thierryID);
+		expect(event.channel_id).to.be.eq(chan.id);
 	});
 
 	it('user is unbanned ("user.unbanned")', async function() {
