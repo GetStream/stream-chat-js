@@ -3,8 +3,6 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
-import fs from 'fs';
 import {
 	createUserToken,
 	getTestClient,
@@ -12,9 +10,7 @@ import {
 	getTestClientForUser2,
 	createUsers,
 	runAndLogPromise,
-	sleep,
-	getServerTestClient,
-	newEventPromise,
+	createEventWaiter,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -372,7 +368,7 @@ describe('Watchers count', function() {
 	});
 
 	context('When watch is called', function() {
-		const watchStartEvent = newEventPromise(client, 'user.watching.start');
+		const watchStartEvent = createEventWaiter(client, 'user.watching.start');
 
 		it('increase watcher count', async function() {
 			const resp = await channel.watch();
@@ -396,7 +392,7 @@ describe('Watchers count', function() {
 		before(async function() {
 			newClient = await getTestClientForUser(users[1]);
 			newClientChannel = await newClient.channel('messaging', channelID);
-			watchStartEvent = newEventPromise(client, 'user.watching.start');
+			watchStartEvent = createEventWaiter(client, 'user.watching.start');
 			await newClientChannel.watch();
 		});
 
@@ -415,7 +411,7 @@ describe('Watchers count', function() {
 		});
 
 		context('When client calls stopWatching', function() {
-			const watchingStopEvent = newEventPromise(client, 'user.watching.stop');
+			const watchingStopEvent = createEventWaiter(client, 'user.watching.stop');
 
 			before(async function() {
 				await newClientChannel.stopWatching();
@@ -441,7 +437,7 @@ describe('Watchers count', function() {
 		before(async function() {
 			newClient = await getTestClientForUser(users[2]);
 			newClientChannel = newClient.channel('messaging', channelID);
-			watchingStopEvent = newEventPromise(client, 'user.watching.stop');
+			watchingStopEvent = createEventWaiter(client, 'user.watching.stop');
 
 			const resp = await newClientChannel.watch();
 			expect(resp.watcher_count).to.eq(2);

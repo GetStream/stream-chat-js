@@ -6,7 +6,7 @@ import {
 	createUserToken,
 	expectHTTPErrorCode,
 	sleep,
-	newEventPromise,
+	createEventWaiter,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -331,7 +331,7 @@ describe('channel muteStatus', function() {
 	});
 
 	it('add mute update internal mute state', async function() {
-		const muteUpdatedEvent = newEventPromise(
+		const muteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
 		);
@@ -356,7 +356,7 @@ describe('channel muteStatus', function() {
 	});
 
 	it('remove mute update internal mute state', async function() {
-		const UnmuteUpdatedEvent = newEventPromise(
+		const UnmuteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
 		);
@@ -370,7 +370,7 @@ describe('channel muteStatus', function() {
 	});
 
 	it('muteStatus properly detect expired mutes', async function() {
-		const MuteUpdatedEvent = newEventPromise(
+		const MuteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
 		);

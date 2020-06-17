@@ -6,6 +6,7 @@ import {
 	createUserToken,
 	sleep,
 	createUsers,
+	createEventWaiter,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -485,7 +486,14 @@ describe('Unread on connect', function() {
 		const previousLastRead = chan.state.read[thierryID].last_read;
 		let resp = chan.countUnread();
 		expect(resp).to.eq(1);
-		await chan.markRead();
+
+		const waiter = createEventWaiter(chan, [
+			'notification.mark_read',
+			'message.read',
+		]);
+		chan.markRead();
+		await waiter;
+
 		resp = chan.countUnread();
 		expect(resp).to.eq(0);
 		expect(chan.state.read).to.be.an('object');

@@ -8,7 +8,7 @@ import {
 	getTestClientForUser,
 	getServerTestClient,
 	sleep,
-	newEventPromise,
+	createEventWaiter,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -1295,7 +1295,7 @@ describe('Unread state for non members', function() {
 		const unreadCount = c.countUnread();
 		expect(unreadCount).to.be.equal(0);
 		await chan.sendMessage({ text: 'Test Message 4' });
-		await newEventPromise(client, 'message.new');
+		await createEventWaiter(client, 'message.new');
 		expect(c.countUnread()).to.be.equal(1);
 	});
 });
