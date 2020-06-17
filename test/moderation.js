@@ -352,7 +352,7 @@ describe('channel muteStatus', function() {
 		const c = await getTestClientForUser(userID);
 		expect(c.health.me.channel_mutes.length).to.be.equal(1);
 		expect(c.health.me.channel_mutes[0].channel.cid).to.be.equal(channel.cid);
-		await c.disconnect();
+		await c.disconnect(5000);
 	});
 
 	it('remove mute update internal mute state', async function() {

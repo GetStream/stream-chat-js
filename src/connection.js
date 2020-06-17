@@ -144,7 +144,7 @@ export class StableWSConnection {
 	 * disconnect - Disconnect the connection and doesn't recover...
 	 *
 	 */
-	disconnect() {
+	disconnect(timeout) {
 		this.logger(
 			'info',
 			`connection:disconnect() - Closing the websocket connection for wsID ${this.wsID}`,
@@ -196,7 +196,7 @@ export class StableWSConnection {
 				ws.onclose = onclose;
 				// In case we don't receive close frame websocket server in time,
 				// lets not wait for more than 1 seconds.
-				setTimeout(onclose, 1000);
+				setTimeout(onclose, timeout != null ? timeout : 1000);
 			});
 
 			this.logger(

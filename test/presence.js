@@ -76,7 +76,7 @@ describe('Presence', function() {
 		it('login as a different user', async function() {
 			const testClientP = await getTestClientForUser('jones');
 
-			testClientP.disconnect();
+			testClientP.disconnect(5000);
 			testClientP.setUser(
 				{
 					id: 'jimmy',
@@ -93,6 +93,7 @@ describe('Presence', function() {
 			const b = user1Client.channel('messaging', id, {
 				members: ['doug', 'claire', 'user1', 'james'],
 			});
+			await b.create();
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
@@ -127,6 +128,7 @@ describe('Presence', function() {
 			const b = user1Client.channel('messaging', id, {
 				members: ['doug', 'claire', 'user1', 'james'],
 			});
+			await b.create();
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
@@ -154,7 +156,7 @@ describe('Presence', function() {
 			// james start watching it
 			await channel.watch();
 			// Watching client goes offline
-			await james.disconnect();
+			await james.disconnect(5000);
 			await eventPromise;
 		});
 	});
@@ -194,7 +196,7 @@ describe('Presence', function() {
 		it('should be offline after disconnect', async function() {
 			const userID = `timmy-${uuidv4()}`;
 			const testClientP = await getTestClientForUser(userID, 'mystatus');
-			await testClientP.disconnect();
+			await testClientP.disconnect(5000);
 			const response = await user1Client.queryUsers({ id: { $in: [userID] } });
 			const timmy = response.users[0];
 			expect(timmy.id).to.equal(userID);
@@ -278,7 +280,6 @@ describe('Presence', function() {
 			});
 			// same as above, but with the query channels endpoint
 			user1Client.on('user.presence.changed', event => {
-				console.log(event.type);
 				if (event.user.id === paulID) {
 					expect(event.user.status).to.equal('rallying fremen');
 					expect(event.user.online).to.equal(true);
@@ -298,7 +299,6 @@ describe('Presence', function() {
 				// start out as offline
 				expect(r[0].state.members[paulID].user.online).to.equal(false);
 				expect(user1Client.state.users[paulID].online).to.equal(false);
-				console.log('waiting for connect..... event');
 				await getTestClientForUser(paulID, 'rallying fremen');
 			}
 			runAndLogPromise(runTest);
@@ -442,7 +442,7 @@ describe('Watchers count', function() {
 			const resp = await newClientChannel.watch();
 			expect(resp.watcher_count).to.eq(2);
 
-			await newClient.disconnect();
+			await newClient.disconnect(5000);
 		});
 
 		it('decrease watcher count', async function() {
@@ -500,7 +500,7 @@ describe('Count Anonymous users', function() {
 			if (i % 2 === 0) {
 				await clients[i].channel.stopWatching();
 			} else {
-				await clients[i].client.disconnect();
+				await clients[i].client.disconnect(5000);
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {
@@ -548,7 +548,7 @@ describe('Count Guest users using state', function() {
 			if (i % 2 === 0) {
 				await clients[i].channel.stopWatching();
 			} else {
-				clients[i].client.disconnect();
+				clients[i].client.disconnect(5000);
 			}
 			const resp = await channel.query({ state: true });
 			if (i !== nClients - 1) {

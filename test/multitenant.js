@@ -356,7 +356,7 @@ describe('User teams field', function() {
 	before(async function() {
 		const client = getTestClient(false);
 		await client.setUser({ id: userId }, token);
-		await client.disconnect();
+		await client.disconnect(5000);
 	});
 
 	after(async () => {
