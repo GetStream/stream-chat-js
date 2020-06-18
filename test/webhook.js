@@ -600,6 +600,7 @@ describe('Webhooks', function() {
 			promises.waitForEvents('user.deactivated'),
 			client.deactivateUser(newUserID, {
 				reason: 'the cat in the hat',
+				created_by_id: thierryID,
 			}),
 		]);
 		const event = events[0];
@@ -607,6 +608,7 @@ describe('Webhooks', function() {
 		expect(event.type).to.eq('user.deactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.created_by_id).to.be.eq(thierryID);
 	});
 
 	it('user is reactivated ("user.reactivated")', async function() {
@@ -618,13 +620,16 @@ describe('Webhooks', function() {
 
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.reactivated'),
-			client.reactivateUser(newUserID, {}),
+			client.reactivateUser(newUserID, {
+				created_by_id: thierryID,
+			}),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.reactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.created_by_id).to.be.eq(thierryID);
 	});
 
 	it('user is deleted ("user.deleted")', async function() {
