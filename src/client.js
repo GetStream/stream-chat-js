@@ -139,6 +139,7 @@ export class StreamChat {
 		 * }
 		 */
 		this.logger = isFunction(options.logger) ? options.logger : () => {};
+		this.resolveConnectionEstablished = null;
 	}
 
 	devToken(userID) {
@@ -740,6 +741,7 @@ export class StreamChat {
 
 		this.wsPromise = Promise.resolve();
 		this.setUserPromise = Promise.resolve();
+		this._confirmWsConnection();
 	};
 
 	/*
@@ -790,6 +792,9 @@ export class StreamChat {
 
 		const handshake = await this.wsConnection.connect();
 		this.connectionID = this.wsConnection.connectionID;
+
+		this._confirmWsConnection();
+
 		return handshake;
 	}
 
@@ -821,8 +826,11 @@ export class StreamChat {
 		// Make sure we wait for the connect promise if there is a pending one
 		await this.setUserPromise;
 
-		if (!this._hasConnectionID()) {
-			defaultOptions.presence = false;
+		if (!this._hasConnectionID() && options.presence) {
+			await this._wsConnectionConfirmation(
+				7000,
+				'Presence on queryUsers api requires an active websocket connection, which could not be established. Please try again!',
+			);
 		}
 
 		// Return a list of users
@@ -839,6 +847,34 @@ export class StreamChat {
 
 		return data;
 	}
+
+	_wsConnectionConfirmation = (waitFor, failureMsg) => {
+		if (this.connectionEstablished) {
+			return this.connectionEstablished;
+		}
+
+		this.connectionEstablished = new Promise((resolve, reject) => {
+			let maxWait;
+			this.resolveConnectionEstablished = () => {
+				this.connectionEstablished = null;
+				maxWait && clearTimeout(maxWait);
+				resolve();
+			};
+
+			// Don't wait forever
+			if (waitFor) {
+				maxWait = setTimeout(() => {
+					reject(failureMsg);
+				}, waitFor);
+			}
+		});
+
+		return this.connectionEstablished;
+	};
+
+	_confirmWsConnection = () => {
+		this.resolveConnectionEstablished && this.resolveConnectionEstablished();
+	};
 
 	async queryChannels(filterConditions, sort = {}, options = {}) {
 		const sortFields = [];
@@ -858,8 +894,14 @@ export class StreamChat {
 
 		if (!this._hasConnectionID()) {
 			defaultOptions.watch = false;
-		}
 
+			if (options.watch || options.presence) {
+				await this._wsConnectionConfirmation(
+					7000,
+					'Watch or Presence on queryChannels api requires an active websocket connection, which could not be established. Please try again!',
+				);
+			}
+		}
 		// Return a list of channels
 		const payload = {
 			filter_conditions: filterConditions,

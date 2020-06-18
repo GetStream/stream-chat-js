@@ -464,6 +464,7 @@ export class StableWSConnection {
 			);
 		} else {
 			this.consecutiveFailures += 1;
+			this.isConnecting = false;
 			this.totalFailures += 1;
 			this._setHealth(false);
 
