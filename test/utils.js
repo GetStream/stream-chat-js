@@ -89,22 +89,29 @@ export async function createUsers(userIDs) {
 	for (const userID of userIDs) {
 		users.push({ id: userID });
 	}
-	const response = await serverClient.updateUsers(users);
-	return response;
+	return await serverClient.updateUsers(users);
 }
 
-export function newEventPromise(client, event, count = 1) {
-	let currentCount = 0;
-	const events = [];
+export function createEventWaiter(clientOrChannel, eventTypes) {
+	const capturedEvents = [];
+
+	if (typeof eventTypes === 'string' || eventTypes instanceof String) {
+		eventTypes = [eventTypes];
+	}
 
 	return new Promise(resolve => {
-		client.on(event, function(data) {
-			events.push(data);
-			currentCount += 1;
-			if (currentCount >= count) {
-				client.off(event);
-				resolve(events);
+		const handler = event => {
+			console.log(event.type);
+			const i = eventTypes.indexOf(event.type);
+			if (i !== -1) {
+				eventTypes.splice(i, 1);
+				capturedEvents.push(event);
 			}
-		});
+			if (eventTypes.length === 0) {
+				clientOrChannel.off(handler);
+				resolve(capturedEvents);
+			}
+		};
+		clientOrChannel.on(handler);
 	});
 }
