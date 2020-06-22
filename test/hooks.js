@@ -5,7 +5,7 @@ import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
 
-describe.only('before message send hook', () => {
+describe('before message send hook', () => {
 	const client = getTestClient(true);
 	let server;
 	let handler = data => {
