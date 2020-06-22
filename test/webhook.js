@@ -375,10 +375,14 @@ describe('Webhooks', function() {
 	});
 
 	it('member.added', async function() {
-		await Promise.all([
+		const [events] = await Promise.all([
 			promises.waitForEvents('member.added'),
 			chan.addMembers([jaapID]),
 		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('member.added');
+		expect(event.user.id).to.eq(jaapID);
 	});
 
 	it('member.updated', async function() {
@@ -710,6 +714,17 @@ describe('Webhooks', function() {
 		expect(event.type).to.eq('user.unbanned');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
+	});
+
+	it('channel.truncate webhook fires', async function() {
+		const [events] = await Promise.all([
+			promises.waitForEvents('channel.truncated'),
+			chan.truncate(),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('channel.truncated');
+		expect(event.channel).to.be.an('object');
 	});
 
 	it('channel.deleted', async function() {

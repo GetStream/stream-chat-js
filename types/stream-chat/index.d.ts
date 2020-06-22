@@ -214,7 +214,7 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): Promise<ConnectAPIResponse>;
+  setUser(user: User, userToken: TokenOrProvider): Promise<ConnectAPIResponse>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
@@ -473,7 +473,10 @@ export class Channel {
 
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
+
+  sync(channel_cids: string[], last_sync_at: string): Promise<SyncAPIResponse>;
 }
+
 export interface ChannelMembership {
   user: UserResponse;
   role: string;
@@ -872,6 +875,10 @@ export interface GetMessageAPIResponse extends APIResponse {
 
 export interface GetMultipleMessagesAPIResponse extends APIResponse {
   messages: MessageResponse[];
+}
+
+export interface SyncAPIResponse extends APIResponse {
+  events: Event[];
 }
 
 export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}

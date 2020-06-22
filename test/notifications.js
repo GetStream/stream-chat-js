@@ -6,6 +6,7 @@ import {
 	createUserToken,
 	sleep,
 	createUsers,
+	createEventWaiter,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -232,7 +233,7 @@ describe('Mark all read server-side', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -264,7 +265,7 @@ describe('Mark all read server-side', function() {
 		expect(response.me.total_unread_count).to.eq(0);
 		expect(response.me.unread_count).to.eq(0);
 		expect(response.me.unread_channels).to.eq(0);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -344,7 +345,7 @@ describe('Mark all read', function() {
 		expect(response.me.total_unread_count).to.eq(5);
 		expect(response.me.unread_count).to.eq(5);
 		expect(response.me.unread_channels).to.eq(5);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -367,7 +368,7 @@ describe('Mark all read', function() {
 		const thierryClient = getTestClient(false);
 		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
 		await thierryClient.markAllRead();
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry connects and receives unread_count=0', async function() {
@@ -378,7 +379,7 @@ describe('Mark all read', function() {
 		);
 		expect(response.me.total_unread_count).to.eq(0);
 		expect(response.me.unread_count).to.eq(0);
-		await thierryClient.disconnect();
+		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry checks unread counts via query channel', async function() {
@@ -485,7 +486,14 @@ describe('Unread on connect', function() {
 		const previousLastRead = chan.state.read[thierryID].last_read;
 		let resp = chan.countUnread();
 		expect(resp).to.eq(1);
-		await chan.markRead();
+
+		const waiter = createEventWaiter(chan, [
+			'notification.mark_read',
+			'message.read',
+		]);
+		chan.markRead();
+		await waiter;
+
 		resp = chan.countUnread();
 		expect(resp).to.eq(0);
 		expect(chan.state.read).to.be.an('object');

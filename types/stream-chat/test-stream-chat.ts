@@ -47,6 +47,7 @@ client.on('message.new', eventHandler);
 client.off('message.new', eventHandler);
 
 client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<ConnectAPIResponse>
+client.setUser({ id: 'john', phone: 2 }, async () => 'token'); // $ExpectType Promise<ConnectAPIResponse>
 client.setAnonymousUser(); // $ExpectType Promise<void>
 client.setGuestUser({ id: 'steven' }); // $ExpectType Promise<void>
 
