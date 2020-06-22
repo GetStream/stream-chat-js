@@ -612,7 +612,7 @@ describe('Webhooks', function() {
 		expect(event.type).to.eq('user.deactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
-		expect(event.created_by_id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(thierryID);
 	});
 
 	it('user is reactivated ("user.reactivated")', async function() {
@@ -633,7 +633,7 @@ describe('Webhooks', function() {
 		expect(event.type).to.eq('user.reactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
-		expect(event.created_by_id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(thierryID);
 	});
 
 	it('user is deleted ("user.deleted")', async function() {
@@ -670,7 +670,7 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
-		expect(event.created_by_id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(thierryID);
 	});
 
 	it('user is banned from channel ("user.banned")', async function() {
@@ -691,7 +691,7 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
-		expect(event.created_by_id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(thierryID);
 		expect(event.channel_id).to.be.eq(chan.id);
 	});
 
