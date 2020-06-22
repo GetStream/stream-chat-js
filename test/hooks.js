@@ -5,7 +5,7 @@ import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
 
-describe('before message send hook', () => {
+describe.only('before message send hook', () => {
 	const client = getTestClient(true);
 	let server;
 	let handler = data => {
@@ -49,6 +49,13 @@ describe('before message send hook', () => {
 		await sleep(100);
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
 		await chan.create();
+	});
+
+	after(async () => {
+		await client.updateAppSettings({
+			before_message_send_hook_url: '',
+		});
+		await client.getAppSettings();
 	});
 
 	it('when not enabled hook is not called', async () => {
