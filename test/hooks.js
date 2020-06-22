@@ -84,6 +84,8 @@ describe('before message send hook', () => {
 		expect(called).to.eql(true);
 	});
 
+	let messageId;
+
 	it('return nothing should be OK', async () => {
 		let called = false;
 		setHandler(() => {
@@ -94,6 +96,39 @@ describe('before message send hook', () => {
 		const response = await p;
 		expect(response.message.user.id).to.eql(tommasoID);
 		expect(called).to.eql(true);
+		messageId = response.message.id;
+	});
+
+	it('should be called when updating a message too', async () => {
+		let called = false;
+		setHandler(() => {
+			called = true;
+			return JSON.stringify('');
+		});
+		const p = client.updateMessage({ id: messageId, text: uuidv4() }, tommasoID);
+		const response = await p;
+		expect(response.message.user.id).to.eql(tommasoID);
+		expect(called).to.eql(true);
+	});
+
+	it('rewrite from update', async () => {
+		setHandler(data => {
+			data.message.text = 'bad bad bad';
+			return JSON.stringify(data);
+		});
+		const p = client.updateMessage({ id: messageId, text: uuidv4() }, tommasoID);
+		const response = await p;
+		expect(response.message.text).to.eql('bad bad bad');
+	});
+
+	it('return an error from update', async () => {
+		setHandler(data => {
+			data.message.type = 'error';
+			return JSON.stringify(data);
+		});
+		const p = client.updateMessage({ id: messageId, text: uuidv4() }, tommasoID);
+		const response = await p;
+		expect(response.message.type).to.eql('error');
 	});
 
 	it('add a custom field should work', async () => {
@@ -101,7 +136,10 @@ describe('before message send hook', () => {
 			data.message.myCustomThingie = 42;
 			return JSON.stringify(data);
 		});
-		const p = chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } });
+		const p = chan.sendMessage({
+			text: "hello, here's my CC information 1234 1234 1234 1234",
+			user: { id: tommasoID },
+		});
 		const response = await p;
 		expect(response.message.user.id).to.eql(tommasoID);
 		expect(response.message.myCustomThingie).to.eql(42);
@@ -146,7 +184,7 @@ describe('before message send hook', () => {
 
 	it('should let the message go on timeout', async () => {
 		setHandler(async data => {
-			await sleep(1001);
+			await sleep(1501);
 			data.message.type = 'error';
 			return JSON.stringify(data);
 		});
