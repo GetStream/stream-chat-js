@@ -671,6 +671,7 @@ describe('Webhooks', function() {
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
 		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.ban_count).to.be.eq(1);
 	});
 
 	it('user is banned from channel ("user.banned")', async function() {
@@ -693,6 +694,7 @@ describe('Webhooks', function() {
 		expect(event.reason).to.be.eq('testy mctestify');
 		expect(event.created_by.id).to.be.eq(thierryID);
 		expect(event.channel_id).to.be.eq(chan.id);
+		expect(event.ban_count).to.be.eq(1);
 	});
 
 	it('user is unbanned ("user.unbanned")', async function() {
