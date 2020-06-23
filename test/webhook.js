@@ -122,24 +122,51 @@ describe('Webhooks', function() {
 			promises.waitForEvents('message.flagged'),
 			client.flagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
 		]);
-		const msgFlagEvent = events.pop();
-		expect(msgFlagEvent).to.not.be.null;
-		expect(msgFlagEvent.type).to.eq('message.flagged');
-		expect(msgFlagEvent.channel_type).to.eq(chan.type);
-		expect(msgFlagEvent.channel_id).to.eq(chan.id);
-		expect(msgFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+		const userFlaggedEvent = events.pop();
+		expect(userFlaggedEvent).to.not.be.null;
+		expect(userFlaggedEvent.type).to.eq('message.flagged');
+		expect(userFlaggedEvent.channel_type).to.eq(chan.type);
+		expect(userFlaggedEvent.channel_id).to.eq(chan.id);
+		expect(userFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
+		console.log(JSON.stringify(userFlaggedEvent));
+		expect(userFlaggedEvent.flag_count).to.eq(1);
 
 		// expect message.unflagged event
 		[events] = await Promise.all([
 			promises.waitForEvents('message.unflagged'),
 			client.unflagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
 		]);
-		const msgUnFlagEvent = events.pop();
-		expect(msgUnFlagEvent).to.not.be.null;
-		expect(msgUnFlagEvent.type).to.eq('message.unflagged');
-		expect(msgUnFlagEvent.channel_type).to.eq(chan.type);
-		expect(msgUnFlagEvent.channel_id).to.eq(chan.id);
-		expect(msgUnFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+		const userUnFlaggedEvent = events.pop();
+		expect(userUnFlaggedEvent).to.not.be.null;
+		expect(userUnFlaggedEvent.type).to.eq('message.unflagged');
+		expect(userUnFlaggedEvent.channel_type).to.eq(chan.type);
+		expect(userUnFlaggedEvent.channel_id).to.eq(chan.id);
+		expect(userUnFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
+		expect(userUnFlaggedEvent.flag_count).to.eq(0);
+	});
+
+	it('should receive user flagged/unflagged event', async function() {
+		await chan.create();
+
+		// expect user.flagged event
+		let [events] = await Promise.all([
+			promises.waitForEvents('user.flagged'),
+			client.flagUser(tommasoID, { user_id: tommasoID }),
+		]);
+		const userFlaggedEvent = events.pop();
+		expect(userFlaggedEvent).to.not.be.null;
+		expect(userFlaggedEvent.type).to.eq('user.flagged');
+		expect(userFlaggedEvent.flag_count).to.eq(1);
+
+		// expect user.unflagged event
+		[events] = await Promise.all([
+			promises.waitForEvents('user.unflagged'),
+			client.unflagUser(tommasoID, { user_id: tommasoID }),
+		]);
+		const userUnFlaggedEvent = events.pop();
+		expect(userUnFlaggedEvent).to.not.be.null;
+		expect(userUnFlaggedEvent.type).to.eq('user.unflagged');
+		expect(userUnFlaggedEvent.flag_count).to.eq(0);
 	});
 
 	it('should receive new message event with members included', async function() {
