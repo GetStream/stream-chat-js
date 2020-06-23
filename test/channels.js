@@ -444,7 +444,9 @@ describe('Channels - members', function() {
 					{ state: true },
 				);
 				expect(channels.length).to.be.equal(2);
-				expect(channels[0].data.last_message_at).to.be.equal(last_message);
+				expect(channels[0].data.last_message_at.getTime()).to.be.equal(
+					last_message.getTime(),
+				);
 			}
 			channel1Messages.push(results[0].message);
 			channel2Messages.push(msg2.message);
