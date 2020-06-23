@@ -56,6 +56,7 @@ describe('before message send hook', () => {
 			before_message_send_hook_url: '',
 		});
 		await client.getAppSettings();
+		server.close();
 	});
 
 	it('when not enabled hook is not called', async () => {
