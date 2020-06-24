@@ -1726,6 +1726,30 @@ describe('channel message search', function() {
 		expect(response.results[0].message.unique).to.equal(unique);
 	});
 
+	it('search by message type', async function() {
+		const unique = uuidv4();
+		const channel = authClient.channel('messaging', uuidv4(), {
+			unique,
+		});
+		await channel.create();
+		const regular = await channel.sendMessage({ text: 'regular' });
+		const reply = await channel.sendMessage({
+			text: 'reply',
+			parent_id: regular.message.id,
+		});
+
+		let response = await channel.search({ type: 'regular' });
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(regular.message.id);
+
+		response = await channel.search({ type: 'reply' });
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(reply.message.id);
+
+		response = await channel.search({ type: { $in: ['reply', 'regular'] } });
+		expect(response.results.length).to.equal(2);
+	});
+
 	it('query message text and custom field', async function() {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
