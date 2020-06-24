@@ -391,7 +391,7 @@ export class Channel {
     max_message_length: number;
     automod: ChannelConfigAutomodTypes;
     automod_behavior: ChannelConfigAutomodBehaviorTypes;
-    commands: CommandVariants[];
+    commands: CommandResponse[];
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
