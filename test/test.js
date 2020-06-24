@@ -563,6 +563,28 @@ describe('Chat', () => {
 			expect(response.results[0].message.unique).to.be.undefined;
 		});
 
+		it.only('query messages with empty text', async () => {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			const attachments = [
+				{
+					type: 'hashtag',
+					name: 'awesome',
+					awesome: true,
+				},
+			];
+			const resp = await channel.sendMessage({ attachments });
+
+			const channelFilters = { unique };
+			const messageFilters = { text: '' };
+			const response = await authClient.search(channelFilters, messageFilters);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(resp.message.id);
+		});
+
 		it('Basic Query using $q syntax', async () => {
 			// add a very special message
 			const channel = authClient.channel('messaging', 'poppins');
