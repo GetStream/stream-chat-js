@@ -661,7 +661,11 @@ describe('Webhooks', function() {
 		// Ban the user
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.banned'),
-			client.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+			client.banUser(newUserID, {
+				reason: 'testy mctestify',
+				user_id: thierryID,
+				timeout: 120,
+			}),
 		]);
 
 		const event = events[0];
@@ -670,6 +674,7 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.expiration).to.not.be.null;
 		expect(event.created_by.id).to.be.eq(thierryID);
 	});
 
