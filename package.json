@@ -115,6 +115,7 @@
     "test-api-dts": "node types/stream-chat/api-response-tests/index.js && npx prettier --write 'types/stream-chat/api-response-tests/data.ts' .eslintrc.json .prettierrc .babelrc && tsc types/stream-chat/api-response-tests/data.ts && rm types/stream-chat/api-response-tests/data.js && dtslint types/stream-chat",
     "eslint": "npx eslint '**/*.{js,md}' --max-warnings 0",
     "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js --async-stack-traces",
+    "test-local": "STREAM_LOCAL_TEST_RUN=true NODE_ENV=test mocha --exit --bail --timeout 15000 --require @babel/register test/*.js --async-stack-traces",
     "testall": "NODE_ENV=test mocha --exit --timeout 3000 --require @babel/register test/*.js --async-stack-traces",
     "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 15000 --require test-entry.js test/test.js",
     "lint": "npx prettier --list-different '**/*.{js,ts,css,scss,json}' .eslintrc.json .prettierrc .babelrc && npx eslint 'src/*.js' --max-warnings 0",

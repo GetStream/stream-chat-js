@@ -565,4 +565,49 @@ describe('Webhooks', function() {
 	it('channel.deleted', async function() {
 		await Promise.all([promises.waitForEvents('channel.deleted'), chan.delete()]);
 	});
+
+	it('message is flagged', async function() {
+		var messageResponse = await chan.sendMessage({
+			text: 'hello world',
+			user_id: jaapID,
+		});
+		const [events] = await Promise.all([
+			promises.waitForEvents('message.flagged'),
+			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('message.flagged');
+		expect(event.message).to.be.an('object');
+		expect(event.cid).to.eq(chan.cid);
+		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.eq(thierryID);
+	});
+
+	it('message is unflagged', async function() {
+		var messageResponse = await chan.sendMessage({
+			text: 'hello world',
+			user_id: jaapID,
+		});
+		await Promise.all([
+			promises.waitForEvents('message.flagged'),
+			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+		]);
+		const [events] = await Promise.all([
+			promises.waitForEvents('message.unflagged'),
+			client.unflagMessage(messageResponse.message.id, {
+				user_id: thierryID,
+				reason: 'the cat in the hat',
+			}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('message.unflagged');
+		expect(event.message).to.be.an('object');
+		expect(event.cid).to.eq(chan.cid);
+		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.eq(thierryID);
+	});
 });
