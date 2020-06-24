@@ -1,8 +1,9 @@
 import { StreamChat } from '../src';
 import chai from 'chai';
 const expect = chai.expect;
-const apiKey = '892s22ypvt6m';
-const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
+require('dotenv').config();
+const apiKey = process.env.STREAM_API_KEY;
+const apiSecret = process.env.STREAM_API_SECRET;
 
 export function getTestClient(serverSide) {
 	return new StreamChat(apiKey, serverSide ? apiSecret : null);
@@ -88,22 +89,29 @@ export async function createUsers(userIDs) {
 	for (const userID of userIDs) {
 		users.push({ id: userID });
 	}
-	const response = await serverClient.updateUsers(users);
-	return response;
+	return await serverClient.updateUsers(users);
 }
 
-export function newEventPromise(client, event, count = 1) {
-	let currentCount = 0;
-	const events = [];
+export function createEventWaiter(clientOrChannel, eventTypes) {
+	const capturedEvents = [];
+
+	if (typeof eventTypes === 'string' || eventTypes instanceof String) {
+		eventTypes = [eventTypes];
+	}
 
 	return new Promise(resolve => {
-		client.on(event, function(data) {
-			events.push(data);
-			currentCount += 1;
-			if (currentCount >= count) {
-				client.off(event);
-				resolve(events);
+		const handler = event => {
+			console.log(event.type);
+			const i = eventTypes.indexOf(event.type);
+			if (i !== -1) {
+				eventTypes.splice(i, 1);
+				capturedEvents.push(event);
 			}
-		});
+			if (eventTypes.length === 0) {
+				clientOrChannel.off(handler);
+				resolve(capturedEvents);
+			}
+		};
+		clientOrChannel.on(handler);
 	});
 }

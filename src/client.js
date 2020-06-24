@@ -285,7 +285,7 @@ export class StreamChat {
 	/**
 	 * disconnect - closes the WS connection
 	 */
-	disconnect() {
+	disconnect(timeout) {
 		this.logger('info', 'client:disconnect() - Disconnecting the client', {
 			tags: ['connection', 'client'],
 		});
@@ -315,7 +315,7 @@ export class StreamChat {
 
 		// close the WS connection
 		if (this.wsConnection) {
-			return this.wsConnection.disconnect();
+			return this.wsConnection.disconnect(timeout);
 		}
 
 		return Promise.resolve();
@@ -503,7 +503,7 @@ export class StreamChat {
 					!this.tokenManager.isStatic()
 				) {
 					this.tokenManager.loadToken();
-					return await this.doAxiosRequest(type, url, params, data);
+					return await this.doAxiosRequest(type, url, data, params);
 				}
 				return this.handleResponse(e.response);
 			} else {
@@ -1248,6 +1248,19 @@ export class StreamChat {
 	}
 
 	/**
+	 * translateMessage - adds the translation to the message
+	 *
+	 * @param {string} messageId
+	 *
+	 * @return {object} Response that includes the message
+	 */
+	async translateMessage(messageId, language) {
+		return await this.post(this.baseURL + `/messages/${messageId}/translate`, {
+			language,
+		});
+	}
+
+	/**
 	 * updateMessage - Update the given message
 	 *
 	 * @param {object} message object, id needs to be specified
@@ -1429,5 +1442,13 @@ export class StreamChat {
 	 */
 	deleteRole(name) {
 		return this.delete(`${this.baseURL}/custom_role/${name}`);
+	}
+
+	/** sync - returns all events that happened for a list of channels since last sync
+	 * @param {array} channel_cids list of channel CIDs
+	 * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
+	 */
+	sync(channel_cids, last_sync_at) {
+		return this.post(`${this.baseURL}/sync`, { channel_cids, last_sync_at });
 	}
 }

@@ -234,7 +234,7 @@ describe('Connection and reconnect behaviour', function() {
 		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
 		const wsID = conn.wsID;
-		conn.disconnect();
+		conn.disconnect(5000);
 		expect(conn.isHealthy).to.equal(false);
 		expect(conn.wsID).to.equal(wsID + 1);
 		expect(conn.ws).to.equal(undefined);

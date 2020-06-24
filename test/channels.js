@@ -8,7 +8,7 @@ import {
 	getTestClientForUser,
 	getServerTestClient,
 	sleep,
-	newEventPromise,
+	createEventWaiter,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -1295,7 +1295,7 @@ describe('Unread state for non members', function() {
 		const unreadCount = c.countUnread();
 		expect(unreadCount).to.be.equal(0);
 		await chan.sendMessage({ text: 'Test Message 4' });
-		await newEventPromise(client, 'message.new');
+		await createEventWaiter(client, 'message.new');
 		expect(c.countUnread()).to.be.equal(1);
 	});
 });
@@ -1563,6 +1563,32 @@ describe('$ne operator', function() {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
+	});
+});
+
+describe('query by $autocomplete operator on channels.name', function() {
+	let client;
+	let channel;
+	let user = uuidv4();
+	before(async function() {
+		await createUsers([user]);
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [user],
+			name: uuidv4(),
+		});
+		await channel.create();
+	});
+
+	it('return 1 result', async function() {
+		const resp = await client.queryChannels({
+			members: [user],
+			name: {
+				$autocomplete: channel.data.name.substring(0, 8),
+			},
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 });
 

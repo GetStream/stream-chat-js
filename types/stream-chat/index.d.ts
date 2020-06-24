@@ -70,6 +70,7 @@ export interface Event<T = string> {
 export type UserPresenceChangedEvent = 'user.presence.changed';
 export type UserWatchingStartEvent = 'user.watching.start';
 export type UserWatchingStopEvent = 'user.watching.stop';
+export type UserDeletedEvent = 'user.deleted';
 export type UserUpdatedEvent = 'user.updated';
 export type UsedBannedEvent = 'user.banned';
 export type UserUnbannedEvent = 'user.unbanned';
@@ -213,7 +214,7 @@ export class StreamChat {
   getAuthType(): string;
 
   setBaseURL(baseURL: string): void;
-  setUser(user: User, userToken: string): Promise<ConnectAPIResponse>;
+  setUser(user: User, userToken: TokenOrProvider): Promise<ConnectAPIResponse>;
 
   updateAppSettings(options: object): Promise<object>;
   getAppSettings(): Promise<object>;
@@ -311,6 +312,7 @@ export class StreamChat {
   deleteChannelType(channelType: string): Promise<DeleteChannelTypeAPIResponse>;
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
 
+  translateMessage(messageId: string, language: string): Promise<GetMessageAPIResponse>;
   updateMessage(message: Message, user: string | User): Promise<UpdateMessageAPIResponse>;
   deleteMessage(
     messageID: string,
@@ -387,9 +389,9 @@ export class Channel {
     url_enrichment: boolean;
     message_retention: string;
     max_message_length: number;
-    automod: string;
-    automod_behavior: string;
-    commands: object[];
+    automod: ChannelConfigAutomodTypes;
+    automod_behavior: ChannelConfigAutomodBehaviorTypes;
+    commands: CommandResponse[];
   };
   sendMessage(message: Message): Promise<SendMessageAPIResponse>;
   sendFile(
@@ -471,7 +473,10 @@ export class Channel {
 
   mute(options?: object): Promise<MuteChannelAPIResponse>;
   unmute(options?: object): Promise<UnmuteAPIResponse>;
+
+  sync(channel_cids: string[], last_sync_at: string): Promise<SyncAPIResponse>;
 }
+
 export interface ChannelMembership {
   user: UserResponse;
   role: string;
@@ -872,6 +877,10 @@ export interface GetMultipleMessagesAPIResponse extends APIResponse {
   messages: MessageResponse[];
 }
 
+export interface SyncAPIResponse extends APIResponse {
+  events: Event[];
+}
+
 export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}
 
 export interface ChannelMemberResponse {
@@ -959,6 +968,8 @@ export interface ChannelConfigDBFields {
   updated_at: string;
 }
 
+export type ChannelConfigAutomodTypes = 'disabled' | 'simple' | 'AI';
+export type ChannelConfigAutomodBehaviorTypes = 'flag' | 'block';
 export interface ChannelConfigFields {
   name: string;
   typing_events: boolean;
@@ -972,7 +983,7 @@ export interface ChannelConfigFields {
   max_message_length: number;
   uploads: boolean;
   url_enrichment: boolean;
-  automod: 'disabled' | 'simple' | 'AI';
+  automod: ChannelConfigAutomodTypes;
   automod_behavior: 'flag' | 'block';
 }
 
