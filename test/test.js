@@ -563,7 +563,7 @@ describe('Chat', () => {
 			expect(response.results[0].message.unique).to.be.undefined;
 		});
 
-		it.only('query messages with empty text', async () => {
+		it('query messages with empty text', async () => {
 			const unique = uuidv4();
 			const channel = authClient.channel('messaging', uuidv4(), {
 				unique,
