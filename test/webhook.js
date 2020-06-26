@@ -567,6 +567,7 @@ describe('Webhooks', function() {
 	});
 
 	it('message is flagged', async function() {
+		await chan.create();
 		var messageResponse = await chan.sendMessage({
 			text: 'hello world',
 			user_id: jaapID,
