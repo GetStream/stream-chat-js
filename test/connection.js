@@ -248,7 +248,7 @@ describe('Connection and reconnect behaviour', function() {
 		}
 	});
 
-	it('Provider based expired tokens should should invoke loadToken and reconnect', async () => {
+	it.skip('Provider based expired tokens should should invoke loadToken and reconnect', async () => {
 		const conn = await createTestWSConnection(tokenProvider);
 		await conn.tokenManager.loadToken();
 
