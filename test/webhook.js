@@ -122,24 +122,51 @@ describe('Webhooks', function() {
 			promises.waitForEvents('message.flagged'),
 			client.flagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
 		]);
-		const msgFlagEvent = events.pop();
-		expect(msgFlagEvent).to.not.be.null;
-		expect(msgFlagEvent.type).to.eq('message.flagged');
-		expect(msgFlagEvent.channel_type).to.eq(chan.type);
-		expect(msgFlagEvent.channel_id).to.eq(chan.id);
-		expect(msgFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+		const userFlaggedEvent = events.pop();
+		expect(userFlaggedEvent).to.not.be.null;
+		expect(userFlaggedEvent.type).to.eq('message.flagged');
+		expect(userFlaggedEvent.channel_type).to.eq(chan.type);
+		expect(userFlaggedEvent.channel_id).to.eq(chan.id);
+		expect(userFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
+		console.log(JSON.stringify(userFlaggedEvent));
+		expect(userFlaggedEvent.total_flags).to.eq(1);
 
 		// expect message.unflagged event
 		[events] = await Promise.all([
 			promises.waitForEvents('message.unflagged'),
 			client.unflagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
 		]);
-		const msgUnFlagEvent = events.pop();
-		expect(msgUnFlagEvent).to.not.be.null;
-		expect(msgUnFlagEvent.type).to.eq('message.unflagged');
-		expect(msgUnFlagEvent.channel_type).to.eq(chan.type);
-		expect(msgUnFlagEvent.channel_id).to.eq(chan.id);
-		expect(msgUnFlagEvent.message.id).to.eq(sendMessageResp.message.id);
+		const userUnFlaggedEvent = events.pop();
+		expect(userUnFlaggedEvent).to.not.be.null;
+		expect(userUnFlaggedEvent.type).to.eq('message.unflagged');
+		expect(userUnFlaggedEvent.channel_type).to.eq(chan.type);
+		expect(userUnFlaggedEvent.channel_id).to.eq(chan.id);
+		expect(userUnFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
+		expect(userUnFlaggedEvent.total_flags).to.eq(0);
+	});
+
+	it('should receive user flagged/unflagged event', async function() {
+		await chan.create();
+
+		// expect user.flagged event
+		let [events] = await Promise.all([
+			promises.waitForEvents('user.flagged'),
+			client.flagUser(tommasoID, { user_id: tommasoID }),
+		]);
+		const userFlaggedEvent = events.pop();
+		expect(userFlaggedEvent).to.not.be.null;
+		expect(userFlaggedEvent.type).to.eq('user.flagged');
+		expect(userFlaggedEvent.total_flags).to.eq(1);
+
+		// expect user.unflagged event
+		[events] = await Promise.all([
+			promises.waitForEvents('user.unflagged'),
+			client.unflagUser(tommasoID, { user_id: tommasoID }),
+		]);
+		const userUnFlaggedEvent = events.pop();
+		expect(userUnFlaggedEvent).to.not.be.null;
+		expect(userUnFlaggedEvent.type).to.eq('user.unflagged');
+		expect(userUnFlaggedEvent.total_flags).to.eq(0);
 	});
 
 	it('should receive new message event with members included', async function() {
@@ -549,6 +576,173 @@ describe('Webhooks', function() {
 		expect(event.user.id).to.eq(jaapID);
 		expect(event.target_user).to.be.an('object');
 		expect(event.target_user.id).to.eq(thierryID);
+	});
+
+	it('message is flagged', async function() {
+		var messageResponse = await chan.sendMessage({
+			text: 'hello world',
+			user_id: jaapID,
+		});
+		const [events] = await Promise.all([
+			promises.waitForEvents('message.flagged'),
+			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('message.flagged');
+		expect(event.message).to.be.an('object');
+		expect(event.cid).to.eq(chan.cid);
+		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.eq(thierryID);
+	});
+
+	it('message is unflagged', async function() {
+		var messageResponse = await chan.sendMessage({
+			text: 'hello world',
+			user_id: jaapID,
+		});
+		await Promise.all([
+			promises.waitForEvents('message.flagged'),
+			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+		]);
+		const [events] = await Promise.all([
+			promises.waitForEvents('message.unflagged'),
+			client.unflagMessage(messageResponse.message.id, {
+				user_id: thierryID,
+				reason: 'the cat in the hat',
+			}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('message.unflagged');
+		expect(event.message).to.be.an('object');
+		expect(event.cid).to.eq(chan.cid);
+		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.eq(thierryID);
+	});
+
+	it('user is deactivated ("user.deactivated")', async function() {
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.deactivated'),
+			client.deactivateUser(newUserID, {
+				reason: 'the cat in the hat',
+				created_by_id: thierryID,
+			}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.deactivated');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.created_by.id).to.be.eq(thierryID);
+	});
+
+	it('user is reactivated ("user.reactivated")', async function() {
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await client.deactivateUser(newUserID, {
+			reason: 'the cat in the hat',
+		});
+
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.reactivated'),
+			client.reactivateUser(newUserID, {
+				created_by_id: thierryID,
+			}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.reactivated');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.created_by.id).to.be.eq(thierryID);
+	});
+
+	it('user is deleted ("user.deleted")', async function() {
+		// Create a user to delete
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		// Delete the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.deleted'),
+			client.deleteUser(newUserID, {}),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.deleted');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+	});
+
+	it('user is banned ("user.banned")', async function() {
+		// Create a user to ban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+
+		// Ban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			client.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+		]);
+
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.banned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.total_bans).to.be.eq(1);
+	});
+
+	it('user is banned from channel ("user.banned")', async function() {
+		// Create a user to ban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await chan.addMembers([newUserID]);
+
+		// Ban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.banned'),
+			chan.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+		]);
+
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.banned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
+		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.channel_id).to.be.eq(chan.id);
+		expect(event.total_bans).to.be.eq(1);
+	});
+
+	it('user is unbanned ("user.unbanned")', async function() {
+		// Create a user to ban/unban
+		const newUserID = uuidv4();
+		await client.updateUser({ id: newUserID });
+		await client.banUser(newUserID, {
+			reason: 'testy mctestify',
+			user_id: thierryID,
+		});
+
+		// Unban the user
+		const [events] = await Promise.all([
+			promises.waitForEvents('user.unbanned'),
+			client.unbanUser(newUserID),
+		]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.type).to.eq('user.unbanned');
+		expect(event.user).to.be.an('object');
+		expect(event.user.id).to.be.eq(newUserID);
 	});
 
 	it('channel.truncate webhook fires', async function() {
