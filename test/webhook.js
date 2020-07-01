@@ -1,6 +1,6 @@
 import chai from 'chai';
 import http from 'http';
-import { getTestClient, getTestClientForUser, sleep } from './utils';
+import { createUserToken, getTestClient, getTestClientForUser, sleep } from './utils';
 import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
@@ -67,16 +67,17 @@ describe('Webhooks', function() {
 			res.writeHead(200, { 'Content-Type': 'text/plain' });
 		});
 
-		await server.listen(4322, '127.0.0.1');
-		await client.updateAppSettings({
-			webhook_url: 'http://127.0.0.1:4322/',
-		});
-		await sleep(100);
 		await client.updateUser({ id: thierryID });
 		await client.updateUser({ id: tommasoID });
 		await client.updateUser({ id: horatiuID });
 		await client.updateUser({ id: jaapID });
 		await chan.create();
+
+		await server.listen(4322, '127.0.0.1');
+		await client.updateAppSettings({
+			webhook_url: 'http://127.0.0.1:4322/',
+		});
+		await sleep(100);
 	});
 
 	after(async () => {
@@ -661,6 +662,28 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.created_by.id).to.be.eq(thierryID);
+	});
+
+	it('user created using setUser trigger webhook event', async function() {
+		const client = getTestClient(false);
+		const newUserID = uuidv4();
+		client.setUser({ id: newUserID }, createUserToken(newUserID));
+
+		const [events] = await Promise.all([promises.waitForEvents('user.updated')]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.user.id).to.be.eq(newUserID);
+	});
+
+	it('user updated using setUser trigger webhook event', async function() {
+		const client = getTestClient(false);
+		client.setUser({ id: tommasoID, cto: true }, createUserToken(tommasoID));
+
+		const [events] = await Promise.all([promises.waitForEvents('user.updated')]);
+		const event = events[0];
+		expect(event).to.not.be.null;
+		expect(event.user.id).to.be.eq(tommasoID);
+		expect(event.user.cto).to.be.eq(true);
 	});
 
 	it('user is deleted ("user.deleted")', async function() {
