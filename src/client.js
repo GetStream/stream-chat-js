@@ -12,7 +12,6 @@ import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import http from 'http';
 import https from 'https';
-import fetch, { Headers } from 'cross-fetch';
 import FormData from 'form-data';
 import pkg from '../package.json';
 import { TokenManager } from './token_manager';
@@ -56,6 +55,7 @@ export class StreamChat {
 
 		const defaultOptions = {
 			timeout: 3000,
+			withCredentials: false, // making sure cookies are not sent
 		};
 
 		if (this.node) {
@@ -69,6 +69,8 @@ export class StreamChat {
 			delete this.options.httpAgent;
 			delete this.options.httpsAgent;
 		}
+
+		this.reqest = axios.create(this.options);
 
 		this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
 
@@ -467,26 +469,27 @@ export class StreamChat {
 		});
 	}
 
-	doAxiosRequest = async (type, url, data, params = {}) => {
+	doAxiosRequest = async (type, url, data, options = {}) => {
 		await this.tokenManager.tokenReady();
+		const requestConfig = this._enrichAxiosOptions(options);
 		try {
 			let response;
-			this._logApiRequest(type, url, data, this._addClientParams(params));
+			this._logApiRequest(type, url, data, requestConfig);
 			switch (type) {
 				case 'get':
-					response = await axios.get(url, this._addClientParams(params));
+					response = await this.reqest.get(url, requestConfig);
 					break;
 				case 'delete':
-					response = await axios.delete(url, this._addClientParams(params));
+					response = await this.reqest.delete(url, requestConfig);
 					break;
 				case 'post':
-					response = await axios.post(url, data, this._addClientParams());
+					response = await this.reqest.post(url, data, requestConfig);
 					break;
 				case 'put':
-					response = await axios.put(url, data, this._addClientParams());
+					response = await this.reqest.put(url, data, requestConfig);
 					break;
 				case 'patch':
-					response = await axios.patch(url, data, this._addClientParams());
+					response = await this.reqest.patch(url, data, requestConfig);
 					break;
 				default:
 					break;
@@ -503,7 +506,7 @@ export class StreamChat {
 					!this.tokenManager.isStatic()
 				) {
 					this.tokenManager.loadToken();
-					return await this.doAxiosRequest(type, url, data, params);
+					return await this.doAxiosRequest(type, url, data, options);
 				}
 				return this.handleResponse(e.response);
 			} else {
@@ -513,7 +516,7 @@ export class StreamChat {
 	};
 
 	get(url, params) {
-		return this.doAxiosRequest('get', url, null, params);
+		return this.doAxiosRequest('get', url, null, { params });
 	}
 
 	put(url, data) {
@@ -529,14 +532,13 @@ export class StreamChat {
 	}
 
 	delete(url, params) {
-		return this.doAxiosRequest('delete', url, null, params);
+		return this.doAxiosRequest('delete', url, null, { params });
 	}
 
-	async sendFile(url, uri, name, contentType, user) {
+	sendFile(url, uri, name, contentType, user) {
 		const data = new FormData();
 		let fileField;
 
-		const params = this._addClientParams();
 		if (isReadableStream(uri) || uri instanceof File) {
 			fileField = uri;
 		} else {
@@ -553,16 +555,14 @@ export class StreamChat {
 			data.append('user', JSON.stringify(user));
 		}
 		data.append('file', fileField);
-		const response = await fetch(`${url}?api_key=${this.key}`, {
-			method: 'post',
-			body: data,
-			headers: new Headers({
-				Authorization: params.headers.Authorization,
-				'stream-auth-type': this.getAuthType(),
-			}),
+		return this.doAxiosRequest('post', url, data, {
+			headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
+			config: {
+				timeout: 0,
+				maxContentLength: Infinity,
+				maxBodyLength: Infinity,
+			},
 		});
-		response.data = await response.json();
-		return this.handleResponse(response);
 	}
 
 	errorFromResponse(response) {
@@ -1329,14 +1329,13 @@ export class StreamChat {
 	 */
 	_isUsingServerAuth = () => !!this.secret;
 
-	_addClientParams(params = {}) {
+	_enrichAxiosOptions(options = { params: {}, headers: {}, config: {} }) {
 		const token = this._getToken();
 
 		return {
-			...this.options,
 			params: {
 				user_id: this.userID,
-				...params,
+				...options.params,
 				api_key: this.key,
 				connection_id: this.connectionID,
 			},
@@ -1344,7 +1343,9 @@ export class StreamChat {
 				Authorization: token,
 				'stream-auth-type': this.getAuthType(),
 				'x-stream-client': this._userAgent(),
+				...options.headers,
 			},
+			...options.config,
 		};
 	}
 
