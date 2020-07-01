@@ -70,7 +70,7 @@ export class StreamChat {
 			delete this.options.httpsAgent;
 		}
 
-		this.reqest = axios.create(this.options);
+		this.request = axios.create(this.options);
 
 		this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
 
@@ -477,19 +477,19 @@ export class StreamChat {
 			this._logApiRequest(type, url, data, requestConfig);
 			switch (type) {
 				case 'get':
-					response = await this.reqest.get(url, requestConfig);
+					response = await this.request.get(url, requestConfig);
 					break;
 				case 'delete':
-					response = await this.reqest.delete(url, requestConfig);
+					response = await this.request.delete(url, requestConfig);
 					break;
 				case 'post':
-					response = await this.reqest.post(url, data, requestConfig);
+					response = await this.request.post(url, data, requestConfig);
 					break;
 				case 'put':
-					response = await this.reqest.put(url, data, requestConfig);
+					response = await this.request.put(url, data, requestConfig);
 					break;
 				case 'patch':
-					response = await this.reqest.patch(url, data, requestConfig);
+					response = await this.request.patch(url, data, requestConfig);
 					break;
 				default:
 					break;
