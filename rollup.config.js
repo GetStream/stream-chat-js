@@ -1,5 +1,6 @@
 // @flow
 import babel from 'rollup-plugin-babel';
+import { DEFAULT_EXTENSIONS } from '@babel/core';
 import external from 'rollup-plugin-peer-deps-external';
 import commonjs from 'rollup-plugin-commonjs';
 import scss from 'rollup-plugin-scss';
@@ -7,6 +8,7 @@ import json from 'rollup-plugin-json';
 import url from 'rollup-plugin-url';
 import resolve from 'rollup-plugin-node-resolve';
 import { terser } from 'rollup-plugin-terser';
+import typescript from 'rollup-plugin-typescript2';
 
 import replace from 'rollup-plugin-replace';
 
@@ -81,6 +83,7 @@ const normalBundle = {
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
+			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
 			output: pkg.style,
@@ -88,6 +91,7 @@ const normalBundle = {
 		commonjs(),
 		url(),
 		json(),
+		typescript(),
 	],
 };
 const browserBundle = {
@@ -114,6 +118,7 @@ const browserBundle = {
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
+			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
 			output: pkg.style,
@@ -121,6 +126,7 @@ const browserBundle = {
 		commonjs(),
 		url(),
 		json(),
+		typescript(),
 	],
 };
 const fullBrowserBundle = {
@@ -143,6 +149,7 @@ const fullBrowserBundle = {
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
+			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
 			output: pkg.style,
@@ -153,6 +160,7 @@ const fullBrowserBundle = {
 		url(),
 		json(),
 		terser(),
+		typescript(),
 	],
 };
 

@@ -1,6 +1,11 @@
 {
-  "plugins": ["babel", "markdown", "sonarjs"],
-  "extends": ["eslint:recommended", "plugin:sonarjs/recommended"],
+  "plugins": ["babel", "markdown", "sonarjs", "prettier", "@typescript-eslint"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:sonarjs/recommended",
+    "plugin:@typescript-eslint/recommended",
+    "prettier/@typescript-eslint"
+  ],
   "rules": {
     "no-console": 0,
     "no-class-assign": 0,
@@ -30,7 +35,7 @@
     "node": true,
     "browser": true
   },
-  "parser": "babel-eslint",
+  "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "sourceType": "module",
     "ecmaVersion": 2018,
