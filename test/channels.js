@@ -1294,8 +1294,9 @@ describe('Unread state for non members', function() {
 		await c.watch();
 		const unreadCount = c.countUnread();
 		expect(unreadCount).to.be.equal(0);
+		const waiter = createEventWaiter(client, 'message.new');
 		await chan.sendMessage({ text: 'Test Message 4' });
-		await createEventWaiter(client, 'message.new');
+		await waiter;
 		expect(c.countUnread()).to.be.equal(1);
 	});
 });
