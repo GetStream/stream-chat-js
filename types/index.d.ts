@@ -683,6 +683,7 @@ declare module 'connection' {
   import isoWS from 'isomorphic-ws';
 }
 declare module 'signing' {
+  import { Secret, SignOptions } from 'jsonwebtoken';
   /**
    * Creates the JWT token that can be used for a UserSession
    * @method JWTUserSessionToken
@@ -695,16 +696,16 @@ declare module 'signing' {
    * @return {string} JWT Token
    */
   export function JWTUserToken(
-    apiSecret: string,
+    apiSecret: Secret,
     userId: string,
-    extraData?: object | undefined,
-    jwtOptions?: object | undefined,
+    extraData?: Record<string, unknown>,
+    jwtOptions?: SignOptions,
   ): string;
-  export function JWTServerToken(apiSecret: any, jwtOptions?: {}): never;
+  export function JWTServerToken(apiSecret: Secret, jwtOptions?: SignOptions): string;
   /**
    * @return {string}
    */
-  export function UserFromToken(token: any): string;
+  export function UserFromToken(token: string): string;
   /**
    *
    * @param userId {string} the id of the user
@@ -740,7 +741,7 @@ declare module 'token_manager' {
     loadTokenPromise: Promise<any> | null;
     secret: object;
     type: string;
-    token: any;
+    token: string;
     /**
      * Set the static string token or token provider.
      * Token provider should return a token string or a promise which resolves to string token.
@@ -758,7 +759,7 @@ declare module 'token_manager' {
     validateToken: (tokenOrProvider: any, user: any) => void;
     tokenReady: () => Promise<any> | null;
     loadToken: () => Promise<any>;
-    getToken: () => any;
+    getToken: () => string;
     isStatic: () => boolean;
   }
 }
@@ -1172,12 +1173,12 @@ declare module 'client' {
         user_id: any;
       };
       headers: {
-        Authorization: any;
+        Authorization: string | null;
         'stream-auth-type': string;
         'x-stream-client': string;
       };
     };
-    _getToken(): any;
+    _getToken(): string | null;
     _startCleaning(): void;
     verifyWebhook(requestBody: any, xSignature: any): boolean;
     /** getPermission - gets the definition for a permission
