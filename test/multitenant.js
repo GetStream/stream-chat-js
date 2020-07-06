@@ -675,7 +675,7 @@ describe('Full test', function() {
 
 	it('create and read channel', async function() {
 		let channel;
-		let jaap = 'jaap' + uuidv4();
+		const jaap = 'jaap' + uuidv4();
 
 		const ss = await getTestClient(true);
 		await ss.updateUser({ id: jaap, teams: ['red', 'blue'] });

@@ -112,18 +112,18 @@ describe('Moderation', function() {
 });
 
 describe('mute channels', function() {
-	let user1 = uuidv4();
-	let user2 = uuidv4();
+	const user1 = uuidv4();
+	const user2 = uuidv4();
 	let client1;
-	let mutedChannelId = uuidv4();
+	const mutedChannelId = uuidv4();
 	it('mute channel and expect notification)', async function() {
 		await createUsers([user1, user2]);
 		client1 = await getTestClientForUser(user1);
 
 		const eventPromise = new Promise(resolve => {
-			let onChannelMute = e => {
+			const onChannelMute = e => {
 				expect(e.me.channel_mutes.length).to.equal(1);
-				let mute = e.me.channel_mutes[0];
+				const mute = e.me.channel_mutes[0];
 				expect(mute.created_at).to.not.be.undefined;
 				expect(mute.updated_at).to.not.be.undefined;
 				expect(mute.user.id).to.equal(user1);
@@ -137,7 +137,7 @@ describe('mute channels', function() {
 			client1.on('notification.channel_mutes_updated', onChannelMute);
 		});
 
-		let channel = client1.channel('messaging', mutedChannelId, {
+		const channel = client1.channel('messaging', mutedChannelId, {
 			members: [user1, user2],
 		});
 		await channel.create();
@@ -162,7 +162,7 @@ describe('mute channels', function() {
 	});
 
 	it('sending messages to muted channels dont increment unread counts', async function() {
-		let client2 = await getTestClientForUser(user2);
+		const client2 = await getTestClientForUser(user2);
 		await client2
 			.channel('messaging', mutedChannelId)
 			.sendMessage({ text: 'message to muted channel' });
@@ -204,7 +204,7 @@ describe('mute channels', function() {
 
 	it('unmute channel ', async function() {
 		const eventPromise = new Promise(resolve => {
-			let onChannelMute = e => {
+			const onChannelMute = e => {
 				expect(e.me.channel_mutes.length).to.equal(0);
 				resolve();
 				//cleanup
@@ -227,7 +227,7 @@ describe('mute channels', function() {
 	});
 
 	it('muted and mute_expires_at are reserved fields', async function() {
-		let channel = client1.channel('messaging', uuidv4(), {
+		const channel = client1.channel('messaging', uuidv4(), {
 			muted: true,
 			mute_expires_at: new Date(),
 		});
@@ -321,7 +321,7 @@ describe('mute channels', function() {
 
 describe('channel muteStatus', function() {
 	let channel;
-	let userID = uuidv4();
+	const userID = uuidv4();
 	let client;
 
 	before(async function() {

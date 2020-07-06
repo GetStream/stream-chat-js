@@ -8,9 +8,7 @@ const expect = chai.expect;
 describe('before message send hook', () => {
 	const client = getTestClient(true);
 	let server;
-	let handler = data => {
-		return JSON.stringify(data.message);
-	};
+	let handler = data => JSON.stringify(data.message);
 	let chan;
 	const channelID = `fun-${uuidv4()}`;
 	const tommasoID = `tommaso-${uuidv4()}`;

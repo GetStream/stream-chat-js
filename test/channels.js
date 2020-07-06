@@ -32,7 +32,7 @@ Promise.config({
 describe('query by frozen', function() {
 	let client;
 	let channel;
-	let user = uuidv4();
+	const user = uuidv4();
 	before(async function() {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
@@ -416,11 +416,11 @@ describe('Channels - members', function() {
 		const channelId = `channel-messages-cache-${unique}`;
 		const channel2Id = `channel-messages-cache2-${unique}`;
 		const channel = tommasoClient.channel('messaging', channelId, {
-			unique: unique,
+			unique,
 		});
 		await channel.create();
 		const channel2 = tommasoClient.channel('messaging', channel2Id, {
-			unique: unique,
+			unique,
 		});
 		await channel2.create();
 
@@ -439,7 +439,7 @@ describe('Channels - members', function() {
 					last_message = msg2.message.created_at;
 				}
 				const channels = await tommasoClient.queryChannels(
-					{ unique: unique },
+					{ unique },
 					{ last_message_at: -1 },
 					{ state: true },
 				);
@@ -742,7 +742,7 @@ describe('Query Channels and sort by unread', function() {
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
-		let result = await tommasoClient.queryChannels(
+		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{ has_unread: 1, last_message_at: -1 },
 		);
@@ -1011,19 +1011,19 @@ describe('hard delete messages', function() {
 	});
 
 	it('query the channel should also return correct results', async function() {
-		let channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 	});
 
 	it('validate channel.last_message_at correctly updated', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 
-		let messages = [];
+		const messages = [];
 		for (let i = 0; i < 10; i++) {
 			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
 		}
@@ -1043,12 +1043,12 @@ describe('hard delete messages', function() {
 	});
 
 	it('validate first channel message', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 
-		let messages = [];
+		const messages = [];
 		for (let i = 0; i < 10; i++) {
 			messages.push(await theChannel.sendMessage({ text: 'hi' + i }));
 		}
@@ -1068,7 +1068,7 @@ describe('hard delete messages', function() {
 	});
 
 	it('hard delete threads should work fine', async function() {
-		let channels = await client.queryChannels({ cid: 'messaging:' + channelID });
+		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
@@ -1089,7 +1089,7 @@ describe('query channels by field $exists', function() {
 	const testID = uuidv4();
 	let client;
 
-	let channelCID = function(i) {
+	const channelCID = function(i) {
 		return 'messaging:' + i + '-' + testID;
 	};
 	//create 10 channels, even index contains even custom field and odd index contains odd custom field
@@ -1097,7 +1097,7 @@ describe('query channels by field $exists', function() {
 		await createUsers([creator]);
 		client = await getTestClientForUser(creator);
 		for (let i = 0; i < 10; i++) {
-			let custom = {};
+			const custom = {};
 			custom['field' + i] = i;
 			custom['testid'] = testID;
 			if (i % 2 === 0) {
@@ -1129,9 +1129,7 @@ describe('query channels by field $exists', function() {
 		});
 		expect(resp.length).to.be.equal(5);
 		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
+			resp.map(c => c.cid),
 		).to.be.eql([
 			channelCID(8),
 			channelCID(6),
@@ -1148,9 +1146,7 @@ describe('query channels by field $exists', function() {
 		});
 		expect(resp.length).to.be.equal(5);
 		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
+			resp.map(c => c.cid),
 		).to.be.eql([
 			channelCID(9),
 			channelCID(7),
@@ -1167,9 +1163,7 @@ describe('query channels by field $exists', function() {
 		});
 		expect(resp.length).to.be.equal(10);
 		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
+			resp.map(c => c.cid),
 		).to.be.eql([
 			channelCID(9),
 			channelCID(8),
@@ -1199,9 +1193,7 @@ describe('query channels by field $exists', function() {
 		});
 		expect(resp.length).to.be.equal(10);
 		expect(
-			resp.map(c => {
-				return c.cid;
-			}),
+			resp.map(c => c.cid),
 		).to.be.eql([
 			channelCID(9),
 			channelCID(8),
@@ -1218,8 +1210,8 @@ describe('query channels by field $exists', function() {
 });
 
 describe('query channels members $nin', function() {
-	let creator = uuidv4();
-	let membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
+	const creator = uuidv4();
+	const membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
 	let client;
 
 	before(async function() {
@@ -1325,7 +1317,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('with the parameter', async function() {
-		const list = await client.queryChannels({ unique: unique });
+		const list = await client.queryChannels({ unique });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1334,7 +1326,7 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('without parameters', async function() {
-		let list = await client.queryChannels({ unique: unique }, { last_updated: -1 });
+		const list = await client.queryChannels({ unique }, { last_updated: -1 });
 
 		expect(list.length).equal(channels.length);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1343,8 +1335,8 @@ describe('Query channels using last_updated', function() {
 	});
 
 	it('filtering by the parameter', async function() {
-		let list = await client.queryChannels({
-			unique: unique,
+		const list = await client.queryChannels({
+			unique,
 			last_updated: channels[0].data.created_at,
 		});
 
@@ -1383,7 +1375,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom string field subset', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			color: { $in: ['red'] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1393,7 +1385,7 @@ describe('Channels op $in with custom fields', function() {
 	it('query $in on custom string $or custom $in int', async function() {
 		const channels = await user1Client.queryChannels({
 			$or: [{ color: { $in: ['red'] } }, { customField: { $in: [6] } }],
-			unique: unique,
+			unique,
 		});
 		expect(channels.length).to.be.equal(2);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId2}`);
@@ -1403,7 +1395,7 @@ describe('Channels op $in with custom fields', function() {
 	it('query $in on custom string field full set out of order', async function() {
 		const channels = await user1Client.queryChannels({
 			color: { $in: ['red', 'blue'] },
-			unique: unique,
+			unique,
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
@@ -1411,7 +1403,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom int field subset', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			age: { $in: [30] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1420,7 +1412,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom int field full set out of order', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			age: { $in: [31, 30] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1429,7 +1421,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom array field subset', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			array: { $in: [[1]] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1438,7 +1430,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom array field full set out of order', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			array: { $in: [[2], [1]] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1447,7 +1439,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom object field subset', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			object: { $in: [{ a: 1 }] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1456,7 +1448,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom object field full set out of order', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			object: { $in: [{ a: 1 }, { b: 1 }] },
 		});
 		expect(channels.length).to.be.equal(1);
@@ -1465,7 +1457,7 @@ describe('Channels op $in with custom fields', function() {
 
 	it('query $in on custom field (wrong value types)', async function() {
 		const channels = await user1Client.queryChannels({
-			unique: unique,
+			unique,
 			object: { $in: [3] },
 		});
 		expect(channels.length).to.be.equal(0);
@@ -1474,14 +1466,14 @@ describe('Channels op $in with custom fields', function() {
 
 describe('$ne operator', function() {
 	let client;
-	let channels = [];
-	let unique = uuidv4();
-	let creator = uuidv4();
+	const channels = [];
+	const unique = uuidv4();
+	const creator = uuidv4();
 
 	before(async function() {
 		client = await getTestClientForUser(creator);
 		for (let i = 1; i < 5; i++) {
-			let c = client.channel('messaging', uuidv4(), {
+			const c = client.channel('messaging', uuidv4(), {
 				unique,
 				number: i,
 				string: i.toString(),
@@ -1494,8 +1486,8 @@ describe('$ne operator', function() {
 	});
 
 	it('query $ne on reserved fields', async function() {
-		let response = await client.queryChannels({
-			unique: unique,
+		const response = await client.queryChannels({
+			unique,
 			id: { $ne: channels[0].id },
 		});
 		expect(response.length).to.be.equal(3);
@@ -1509,14 +1501,14 @@ describe('$ne operator', function() {
 	it('query $ne with invalid type on reserved fields', async function() {
 		await expectHTTPErrorCode(
 			400,
-			client.queryChannels({ unique: unique, id: { $ne: 1 } }),
+			client.queryChannels({ unique, id: { $ne: 1 } }),
 			'StreamChat error code 4: QueryChannels failed with error: "field `id` contains type number. expecting string"',
 		);
 	});
 
 	it('query $ne on custom int fields', async function() {
-		let response = await client.queryChannels({
-			unique: unique,
+		const response = await client.queryChannels({
+			unique,
 			number: { $ne: channels[0].data.number },
 		});
 		expect(response.length).to.be.equal(3);
@@ -1528,8 +1520,8 @@ describe('$ne operator', function() {
 	});
 
 	it('query $ne on custom string fields', async function() {
-		let response = await client.queryChannels({
-			unique: unique,
+		const response = await client.queryChannels({
+			unique,
 			string: { $ne: channels[0].data.string },
 		});
 		expect(response.length).to.be.equal(3);
@@ -1541,8 +1533,8 @@ describe('$ne operator', function() {
 	});
 
 	it('query $ne on custom object fields', async function() {
-		let response = await client.queryChannels({
-			unique: unique,
+		const response = await client.queryChannels({
+			unique,
 			object: { $ne: channels[0].data.object },
 		});
 		expect(response.length).to.be.equal(3);
@@ -1554,8 +1546,8 @@ describe('$ne operator', function() {
 	});
 
 	it('query $ne on custom array fields', async function() {
-		let response = await client.queryChannels({
-			unique: unique,
+		const response = await client.queryChannels({
+			unique,
 			array: { $ne: channels[0].data.array },
 		});
 		expect(response.length).to.be.equal(3);
@@ -1570,7 +1562,7 @@ describe('$ne operator', function() {
 describe('query by $autocomplete operator on channels.name', function() {
 	let client;
 	let channel;
-	let user = uuidv4();
+	const user = uuidv4();
 	before(async function() {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
@@ -1623,30 +1615,30 @@ describe('unread counts on hard delete messages', function() {
 	});
 
 	it('validates unread counts for all the users', async function() {
-		let tommasoClient = await getTestClientForUser(tommaso);
+		const tommasoClient = await getTestClientForUser(tommaso);
 		// expect 0 conts since tommaso is the sender
 		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
 
-		let thierryClient = await getTestClientForUser(thierry);
+		const thierryClient = await getTestClientForUser(thierry);
 		// expect 2 counts since we deleted the first message
 		expect(thierryClient.health.me.unread_count).to.be.equal(2);
 		expect(thierryClient.health.me.unread_channels).to.be.equal(1);
 
-		let nickClient = await getTestClientForUser(nick);
+		const nickClient = await getTestClientForUser(nick);
 		// expect 2 counts since  we deleted the first message
 		expect(nickClient.health.me.unread_count).to.be.equal(2);
 		expect(nickClient.health.me.unread_channels).to.be.equal(1);
 	});
 
 	it('nick and thierry mark the channel as read', async function() {
-		let nickClient = await getTestClientForUser(nick);
-		let nickChannel = nickClient.channel(channel.type, channel.id);
+		const nickClient = await getTestClientForUser(nick);
+		const nickChannel = nickClient.channel(channel.type, channel.id);
 		await nickChannel.watch();
 		await nickChannel.markRead();
 
-		let thierryClient = await getTestClientForUser(thierry);
-		let thierryChannel = thierryClient.channel(channel.type, channel.id);
+		const thierryClient = await getTestClientForUser(thierry);
+		const thierryChannel = thierryClient.channel(channel.type, channel.id);
 		await thierryChannel.watch();
 		await thierryChannel.markRead();
 	});
@@ -1657,17 +1649,17 @@ describe('unread counts on hard delete messages', function() {
 	});
 
 	it('unread counts should be zero for all the users', async function() {
-		let tommasoClient = await getTestClientForUser(tommaso);
+		const tommasoClient = await getTestClientForUser(tommaso);
 		// expect 0 conts since tommaso is the sender
 		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
 		expect(tommasoClient.health.me.unread_channels).to.be.equal(0);
 
-		let thierryClient = await getTestClientForUser(thierry);
+		const thierryClient = await getTestClientForUser(thierry);
 		// expect 2 counts since we deleted the first message
 		expect(thierryClient.health.me.unread_count).to.be.equal(0);
 		expect(thierryClient.health.me.unread_channels).to.be.equal(0);
 
-		let nickClient = await getTestClientForUser(nick);
+		const nickClient = await getTestClientForUser(nick);
 		// expect 2 counts since we deleted the first message
 		expect(nickClient.health.me.unread_count).to.be.equal(0);
 		expect(nickClient.health.me.unread_channels).to.be.equal(0);
@@ -1760,7 +1752,7 @@ describe('channel message search', function() {
 		await channel.sendMessage({ text: 'hi', unique });
 		await channel.sendMessage({ text: 'hi' });
 
-		const messageFilters = { text: 'hi', unique: unique };
+		const messageFilters = { text: 'hi', unique };
 		const response = await channel.search(messageFilters);
 		expect(response.results.length).to.equal(1);
 		expect(response.results[0].message.unique).to.equal(unique);
@@ -1874,8 +1866,8 @@ describe('channel message search', function() {
 });
 
 describe('search on deleted channels', function() {
-	let user = uuidv4();
-	let channelId = uuidv4();
+	const user = uuidv4();
+	const channelId = uuidv4();
 	let channel;
 	let client;
 	before(async function() {
@@ -1895,7 +1887,7 @@ describe('search on deleted channels', function() {
 	});
 
 	it('search by text', async function() {
-		let resp = await channel.search('supercalifragilisticexpialidocious');
+		const resp = await channel.search('supercalifragilisticexpialidocious');
 		expect(resp.results.length).to.be.equal(5);
 	});
 
@@ -1908,7 +1900,7 @@ describe('search on deleted channels', function() {
 	});
 
 	it('search on previously deleted chanel', async function() {
-		let resp = await channel.search('supercalifragilisticexpialidocious');
+		const resp = await channel.search('supercalifragilisticexpialidocious');
 		expect(resp.results.length).to.be.equal(0);
 	});
 });
@@ -1916,7 +1908,7 @@ describe('search on deleted channels', function() {
 describe('pagination with invalid offset', function() {
 	let channel;
 	let client;
-	let user = uuidv4();
+	const user = uuidv4();
 	before(async function() {
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4());
