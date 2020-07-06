@@ -80,6 +80,7 @@ const normalBundle = {
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
 		external(),
+		typescript(),
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
@@ -91,7 +92,6 @@ const normalBundle = {
 		commonjs(),
 		url(),
 		json(),
-		typescript(),
 	],
 };
 const browserBundle = {
@@ -115,6 +115,7 @@ const browserBundle = {
 		}),
 		browserIgnore,
 		external(),
+		typescript(),
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
@@ -126,7 +127,6 @@ const browserBundle = {
 		commonjs(),
 		url(),
 		json(),
-		typescript(),
 	],
 };
 const fullBrowserBundle = {
@@ -146,6 +146,7 @@ const fullBrowserBundle = {
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
 		external(),
+		typescript(),
 		babel({
 			runtimeHelpers: true,
 			exclude: 'node_modules/**',
@@ -160,7 +161,6 @@ const fullBrowserBundle = {
 		url(),
 		json(),
 		terser(),
-		typescript(),
 	],
 };
 
