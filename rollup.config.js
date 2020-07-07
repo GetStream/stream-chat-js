@@ -17,6 +17,8 @@ import pkg from './package.json';
 import process from 'process';
 process.env.NODE_ENV = 'production';
 
+const nodeModulesDirectory = 'node_modules/**';
+
 const externalPackages = [
 	'axios',
 	'cross-fetch',
@@ -54,12 +56,13 @@ const browserIgnore = {
 };
 
 const baseConfig = {
-	input: 'src/index.js',
+	input: 'src/index.ts',
 	cache: false,
 	watch: {
 		chokidar: false,
 	},
 };
+
 const normalBundle = {
 	...baseConfig,
 	output: [
@@ -83,7 +86,7 @@ const normalBundle = {
 		typescript(),
 		babel({
 			runtimeHelpers: true,
-			exclude: 'node_modules/**',
+			exclude: nodeModulesDirectory,
 			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
@@ -94,6 +97,7 @@ const normalBundle = {
 		json(),
 	],
 };
+
 const browserBundle = {
 	...baseConfig,
 	output: [
@@ -118,7 +122,7 @@ const browserBundle = {
 		typescript(),
 		babel({
 			runtimeHelpers: true,
-			exclude: 'node_modules/**',
+			exclude: nodeModulesDirectory,
 			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
@@ -129,6 +133,7 @@ const browserBundle = {
 		json(),
 	],
 };
+
 const fullBrowserBundle = {
 	...baseConfig,
 	output: [
@@ -149,7 +154,7 @@ const fullBrowserBundle = {
 		typescript(),
 		babel({
 			runtimeHelpers: true,
-			exclude: 'node_modules/**',
+			exclude: nodeModulesDirectory,
 			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
 		}),
 		scss({
