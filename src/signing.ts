@@ -2,6 +2,8 @@ import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { encodeBase64, decodeBase64 } from './base64';
 
+type ExtraData = Record<string, unknown>;
+
 /**
  * Creates the JWT token that can be used for a UserSession
  * @method JWTUserSessionToken
@@ -16,14 +18,14 @@ import { encodeBase64, decodeBase64 } from './base64';
 export function JWTUserToken(
   apiSecret: Secret,
   userId: string,
-  extraData: Record<string, unknown> = {},
+  extraData: ExtraData = {},
   jwtOptions: SignOptions = {},
 ): string {
   if (typeof userId !== 'string') {
     throw new TypeError('userId should be a string');
   }
 
-  const payload: { user_id: string } & Record<string, unknown> = {
+  const payload: { user_id: string } & ExtraData = {
     user_id: userId,
     ...extraData,
   };
