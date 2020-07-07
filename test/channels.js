@@ -1128,9 +1128,7 @@ describe('query channels by field $exists', function() {
 			even: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(
-			resp.map(c => c.cid),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(8),
 			channelCID(6),
 			channelCID(4),
@@ -1145,9 +1143,7 @@ describe('query channels by field $exists', function() {
 			even: { $exists: false },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(
-			resp.map(c => c.cid),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(7),
 			channelCID(5),
@@ -1162,9 +1158,7 @@ describe('query channels by field $exists', function() {
 			cid: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(
-			resp.map(c => c.cid),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),
@@ -1192,9 +1186,7 @@ describe('query channels by field $exists', function() {
 			$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(
-			resp.map(c => c.cid),
-		).to.be.eql([
+		expect(resp.map(c => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),
