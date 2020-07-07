@@ -135,5 +135,8 @@
     "hooks": {
       "pre-commit": "./dotgit/hooks/pre-commit-format.sh && dotgit/hooks/pre-commit-reject-binaries.py"
     }
+  },
+  "engines": {
+    "node": "10 || 12 || >=14"
   }
 }
