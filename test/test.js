@@ -534,7 +534,7 @@ describe('Chat', () => {
 			await channel.sendMessage({ text: 'hi' });
 
 			const channelFilters = { unique };
-			const messageFilters = { text: 'hi', unique: unique };
+			const messageFilters = { text: 'hi', unique };
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.equal(unique);
@@ -2654,9 +2654,7 @@ describe('Chat', () => {
 				await channel.show();
 			});
 
-			it('receives event', () => {
-				return expect(event).to.be.fulfilled;
-			});
+			it('receives event', () => expect(event).to.be.fulfilled);
 
 			it('removes messages for the channel', () => {
 				expect(channel.state.messages).to.have.length(0);
@@ -2955,7 +2953,7 @@ describe('Chat', () => {
 describe('paginate order with id_gt{,e}', () => {
 	let channel;
 	let client;
-	let user = uuidv4();
+	const user = uuidv4();
 	before(async () => {
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4());

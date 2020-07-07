@@ -44,7 +44,6 @@ module.exports = {
 		for (const userID of userIDs) {
 			users.push({ id: userID });
 		}
-		const response = await serverClient.updateUsers(users);
-		return response;
+		return await serverClient.updateUsers(users);
 	},
 };

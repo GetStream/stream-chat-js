@@ -707,8 +707,8 @@ export interface SearchAPIResponse extends APIResponse {
   }>;
 }
 
-export interface BanUserAPIResponse extends APIResponse {}
-export interface UnbanUserAPIResponse extends APIResponse {}
+export type BanUserAPIResponse = APIResponse
+export type UnbanUserAPIResponse = APIResponse
 
 export interface MuteAPIResponse extends APIResponse {
   mute: MuteUserResponse;
@@ -721,7 +721,7 @@ export interface MuteChannelAPIResponse extends APIResponse {
   channel_mute: ChannelMute;
 }
 
-export interface UnmuteAPIResponse extends APIResponse {}
+export type UnmuteAPIResponse = APIResponse
 
 export interface FlagAPIResponse extends APIResponse {
   flag: FlagResponse;
@@ -743,7 +743,7 @@ export interface UpdateChannelTypeAPIResponse extends ChannelConfig, APIResponse
   permissions: Permission[];
 }
 
-export interface DeleteChannelTypeAPIResponse extends APIResponse {}
+export type DeleteChannelTypeAPIResponse = APIResponse
 
 export interface ListChannelTypesAPIResponse extends APIResponse {
   channel_types: {
@@ -759,7 +759,7 @@ export interface FileUploadAPIResponse extends APIResponse {
   file: string;
 }
 
-export interface DeleteFileAPIResponse extends APIResponse {}
+export type DeleteFileAPIResponse = APIResponse
 
 export interface SendEventAPIResponse<T = string> extends APIResponse {
   event: Event<T>;
@@ -788,18 +788,18 @@ export interface TruncateChannelAPIResponse extends APIResponse {
   channel: ChannelResponse;
 }
 
-export interface AcceptInviteAPIResponse extends UpdateChannelAPIResponse {}
-export interface RejectInviteAPIResponse extends UpdateChannelAPIResponse {}
-export interface AddMembersAPIResponse extends UpdateChannelAPIResponse {}
-export interface AddModeratorsAPIResponse extends UpdateChannelAPIResponse {}
-export interface RemoveMembersAPIResponse extends UpdateChannelAPIResponse {}
-export interface RemoteModeratorsAPIResponse extends UpdateChannelAPIResponse {}
+export type AcceptInviteAPIResponse = UpdateChannelAPIResponse
+export type RejectInviteAPIResponse = UpdateChannelAPIResponse
+export type AddMembersAPIResponse = UpdateChannelAPIResponse
+export type AddModeratorsAPIResponse = UpdateChannelAPIResponse
+export type RemoveMembersAPIResponse = UpdateChannelAPIResponse
+export type RemoteModeratorsAPIResponse = UpdateChannelAPIResponse
 
 export interface MarkReadAPIResponse extends APIResponse {
   event: Event<MessageReadEvent>;
 }
 
-export interface StopWatchingAPIResponse extends APIResponse {}
+export type StopWatchingAPIResponse = APIResponse
 export interface GetRepliesAPIResponse extends APIResponse {
   messages: MessageResponse[];
 }
@@ -881,7 +881,7 @@ export interface SyncAPIResponse extends APIResponse {
   events: Event[];
 }
 
-export interface ConnectAPIResponse extends Event<HealthCheckEvent> {}
+export type ConnectAPIResponse = Event<HealthCheckEvent>
 
 export interface ChannelMemberResponse {
   user_id?: string;
@@ -896,7 +896,7 @@ export interface ChannelMemberResponse {
 }
 
 // @deprecated - Please use ChannelMemberResponse
-export interface Member extends ChannelMemberResponse {}
+export type Member = ChannelMemberResponse
 export interface ChannelResponse {
   cid: string;
   id: string;
@@ -929,7 +929,7 @@ export interface MuteResponse {
   updated_at?: string;
 }
 
-export interface MuteUserResponse extends MuteResponse {}
+export type MuteUserResponse = MuteResponse
 export interface ChannelMute {
   user: UserResponse;
   channel?: Channel;

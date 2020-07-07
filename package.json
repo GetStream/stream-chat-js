@@ -36,7 +36,7 @@
   ],
   "dependencies": {
     "@babel/runtime": "^7.3.1",
-    "@types/seamless-immutable": "7.1.10",
+    "@types/seamless-immutable": "7.1.12",
     "@types/ws": "^6.0.3",
     "axios": "^0.18.1",
     "base64-js": "^1.3.1",
@@ -135,5 +135,8 @@
     "hooks": {
       "pre-commit": "./dotgit/hooks/pre-commit-format.sh && dotgit/hooks/pre-commit-reject-binaries.py"
     }
+  },
+  "engines": {
+    "node": "10 || 12 || >=14"
   }
 }

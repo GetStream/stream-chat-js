@@ -1805,7 +1805,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const response = await channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(response.message.html).to.equal(html);
@@ -1818,7 +1818,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const sendPromise = channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(sendPromise).to.be.rejectedWith('message.html');
