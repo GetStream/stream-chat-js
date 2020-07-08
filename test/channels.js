@@ -1353,7 +1353,7 @@ describe('Query channels using last_updated', function() {
 	});
 });
 
-describe.only('Channels op $contains with custom fields', function() {
+describe('Channels op $contains with custom fields', function() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	const channelId = uuidv4();
