@@ -1353,6 +1353,82 @@ describe('Query channels using last_updated', function() {
 	});
 });
 
+describe('Channels op $in/$nin with custom fields', function() {
+	const channels = [];
+	const user = uuidv4();
+	let client;
+	before(async function() {
+		client = await getTestClientForUser(user);
+		for (let i = 0; i < 5; i++) {
+			const iStr = i.toString();
+			const object = {};
+			object[i.toString()] = i;
+			const channel = client.channel('messaging', uuidv4(), {
+				members: [user],
+				number: i,
+				string: iStr,
+				array: [iStr],
+				object: object,
+			});
+			await channel.create();
+			channels.push(channel);
+		}
+	});
+
+	it('query $in on custom number field', async function() {
+		let resp = await client.queryChannels(
+			{ members: { $in: [user] }, number: { $in: [0, 1] } },
+			{ number: 1 },
+		);
+		expect(resp.length).to.be.equal(2);
+		expect(resp[0].cid).to.be.equal(channels[0].cid);
+		expect(resp[1].cid).to.be.equal(channels[1].cid);
+	});
+
+	it('query $in on custom string field', async function() {
+		let resp = await client.queryChannels(
+			{ members: { $in: [user] }, string: { $in: ['0', '1'] } },
+			{ number: 1 },
+		);
+		expect(resp.length).to.be.equal(2);
+		expect(resp[0].cid).to.be.equal(channels[0].cid);
+		expect(resp[1].cid).to.be.equal(channels[1].cid);
+	});
+
+	it('query $in on custom array field', async function() {
+		let resp = await client.queryChannels({
+			members: { $in: [user] },
+			array: { $in: [['0']] },
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channels[0].cid);
+	});
+
+	it('query $in on custom object field', async function() {
+		let resp = await client.queryChannels({
+			members: { $in: [user] },
+			object: { $in: [{ '2': 2 }] },
+		});
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].cid).to.be.equal(channels[2].cid);
+	});
+
+	it('query $nin on number object field', async function() {
+		let resp = await client.queryChannels(
+			{
+				members: { $in: [user] },
+				object: { $nin: [{ '0': 0 }] },
+			},
+			{ number: 1 },
+		);
+		expect(resp.length).to.be.equal(4);
+		expect(resp[0].cid).to.be.equal(channels[1].cid);
+		expect(resp[1].cid).to.be.equal(channels[2].cid);
+		expect(resp[2].cid).to.be.equal(channels[3].cid);
+		expect(resp[3].cid).to.be.equal(channels[4].cid);
+	});
+});
+
 describe('Channels op $contains with custom fields', function() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
@@ -1388,6 +1464,16 @@ describe('Channels op $contains with custom fields', function() {
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
+	});
+
+	it('query $contains on reserved field should raise an error', async function() {
+		await expect(
+			user1Client.queryChannels({
+				type: { $contains: 'b' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "$contains is not allowed in reversed fields"',
+		);
 	});
 
 	it('query $contains on custom string $or custom $contains int', async function() {
