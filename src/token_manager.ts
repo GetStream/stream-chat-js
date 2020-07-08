@@ -1,5 +1,6 @@
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
+import { User, TokenOrProvider } from '../types/types';
 
 /**
  * TokenManager
@@ -7,12 +8,18 @@ import { isFunction } from './utils';
  * Handles all the operations around user token.
  */
 export class TokenManager {
+  loadTokenPromise: Promise<string> | null;
+  type: 'static' | 'provider';
+  secret?: string;
+  token?: string | null;
+  tokenProvider?: TokenOrProvider;
+  user?: User | null;
   /**
    * Constructor
    *
    * @param {object} secret
    */
-  constructor(secret) {
+  constructor(secret?: string) {
     this.loadTokenPromise = null;
     if (secret) {
       this.secret = secret;
@@ -31,7 +38,10 @@ export class TokenManager {
    *
    * @param {string | function} tokenOrProvider
    */
-  setTokenOrProvider = async (tokenOrProvider, user) => {
+  setTokenOrProvider = async (
+    tokenOrProvider: TokenOrProvider,
+    user: User,
+  ): Promise<void> => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -57,14 +67,14 @@ export class TokenManager {
    * Resets the token manager.
    * Useful for client disconnection or switching user.
    */
-  reset = () => {
+  reset = (): void => {
     this.token = null;
     this.user = null;
     this.loadTokenPromise = null;
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider, user) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: User): void => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 
@@ -99,26 +109,28 @@ export class TokenManager {
 
   // Resolves when token is ready. This function is simply to check if loadToken is in progress, in which
   // case a function should wait.
-  tokenReady = () => this.loadTokenPromise;
+  tokenReady = (): Promise<string> | null => this.loadTokenPromise;
 
   // Fetches a token from tokenProvider function and sets in tokenManager.
   // In case of static token, it will simply resolve to static token.
-  loadToken = () => {
+  loadToken = (): Promise<string> => {
+    // eslint-disable-next-line no-async-promise-executor
     this.loadTokenPromise = new Promise(async resolve => {
-      if (this.type === 'static') {
+      if (this.type === 'static' && this.token) {
         return resolve(this.token);
       }
 
-      this.token = await this.tokenProvider();
-
-      resolve(this.token);
+      if (this.tokenProvider && typeof this.tokenProvider !== 'string') {
+        this.token = await this.tokenProvider();
+        resolve(this.token);
+      }
     });
 
     return this.loadTokenPromise;
   };
 
   // Returns a current token
-  getToken = () => {
+  getToken = (): string | undefined | null => {
     if (this.token) {
       return this.token;
     }
@@ -136,5 +148,5 @@ export class TokenManager {
     );
   };
 
-  isStatic = () => this.type === 'static';
+  isStatic = (): boolean => this.type === 'static';
 }
