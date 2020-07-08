@@ -1353,7 +1353,7 @@ describe('Query channels using last_updated', function() {
 	});
 });
 
-describe('Channels op $in with custom fields', function() {
+describe.only('Channels op $contains with custom fields', function() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	const channelId = uuidv4();
@@ -1381,18 +1381,18 @@ describe('Channels op $in with custom fields', function() {
 		await channel2.create();
 	});
 
-	it('query $in on custom string field subset', async function() {
+	it('query $contains on custom string field subset', async function() {
 		const channels = await user1Client.queryChannels({
 			unique: unique,
-			color: { $in: ['red'] },
+			color: { $contains: 'red' },
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom string $or custom $in int', async function() {
+	it('query $contains on custom string $or custom $contains int', async function() {
 		const channels = await user1Client.queryChannels({
-			$or: [{ color: { $in: ['red'] } }, { customField: { $in: [6] } }],
+			$or: [{ color: { $contains: 'red' } }, { customField: { $contains: 6 } }],
 			unique: unique,
 		});
 		expect(channels.length).to.be.equal(2);
@@ -1400,73 +1400,37 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[1].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom string field full set out of order', async function() {
+	it('query $contains on custom int field subset', async function() {
 		const channels = await user1Client.queryChannels({
-			color: { $in: ['red', 'blue'] },
 			unique: unique,
+			age: { $contains: 30 },
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom int field subset', async function() {
+	it('query $contains on custom array field subset', async function() {
 		const channels = await user1Client.queryChannels({
 			unique: unique,
-			age: { $in: [30] },
+			array: { $contains: [1] },
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom int field full set out of order', async function() {
+	it('query $contains on custom object field subset', async function() {
 		const channels = await user1Client.queryChannels({
 			unique: unique,
-			age: { $in: [31, 30] },
+			object: { $contains: { a: 1 } },
 		});
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom array field subset', async function() {
+	it('query $contains on custom field (wrong value types)', async function() {
 		const channels = await user1Client.queryChannels({
 			unique: unique,
-			array: { $in: [[1]] },
-		});
-		expect(channels.length).to.be.equal(1);
-		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
-	});
-
-	it('query $in on custom array field full set out of order', async function() {
-		const channels = await user1Client.queryChannels({
-			unique: unique,
-			array: { $in: [[2], [1]] },
-		});
-		expect(channels.length).to.be.equal(1);
-		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
-	});
-
-	it('query $in on custom object field subset', async function() {
-		const channels = await user1Client.queryChannels({
-			unique: unique,
-			object: { $in: [{ a: 1 }] },
-		});
-		expect(channels.length).to.be.equal(1);
-		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
-	});
-
-	it('query $in on custom object field full set out of order', async function() {
-		const channels = await user1Client.queryChannels({
-			unique: unique,
-			object: { $in: [{ a: 1 }, { b: 1 }] },
-		});
-		expect(channels.length).to.be.equal(1);
-		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
-	});
-
-	it('query $in on custom field (wrong value types)', async function() {
-		const channels = await user1Client.queryChannels({
-			unique: unique,
-			object: { $in: [3] },
+			object: { $contains: 3 },
 		});
 		expect(channels.length).to.be.equal(0);
 	});
