@@ -46,6 +46,22 @@ export class StableWSConnection {
   clientID: Constructor['clientID'];
   userID: Constructor['userID'];
   user: Constructor['user'];
+  userAgent: Constructor['userAgent'];
+  authType: Constructor['authType'];
+  apiKey: Constructor['apiKey'];
+  tokenManager: Constructor['tokenManager'];
+  messageCallback: Constructor['messageCallback'];
+  recoverCallback: Constructor['recoverCallback'];
+  eventCallback: Constructor['eventCallback'];
+  logger: Constructor['logger'];
+  consecutiveFailures: number;
+  totalFailures: number;
+  isConnecting: boolean;
+  isHealthy: boolean;
+  wsID: number;
+  lastEvent: null;
+  healthCheckInterval: number;
+  monitorInterval: number;
 
   constructor({
     wsBaseURL,
