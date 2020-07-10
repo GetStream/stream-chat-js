@@ -92,3 +92,10 @@ export type ReactionResponse<T> = Reaction<T> & {
   created_at: string;
   updated_at: string;
 };
+export type TokenOrProvider = string | TokenProvider | null | undefined;
+export type TokenProvider = () => Promise<string>;
+
+export type ConnectionChangeEvent = {
+  type: 'connection.changed' | 'connection.recovered';
+  online?: boolean;
+};
