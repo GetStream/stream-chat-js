@@ -5,8 +5,16 @@ export type User<T = { [key: string]: unknown }> = T & {
   role?: string;
 };
 
+export type TokenOrProvider = string | TokenProvider | null | undefined;
+export type TokenProvider = () => Promise<string>;
+
+export type ConnectionChangeEvent = {
+  type: 'connection.changed' | 'connection.recovered';
+  online?: boolean;
+};
+
 export type Logger = (
-  log_level: 'info' | 'error',
+  logLevel: 'info' | 'error',
   message: string,
   extraData?: Record<string, unknown>,
 ) => void;
