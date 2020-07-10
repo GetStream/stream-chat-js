@@ -1,5 +1,10 @@
 import SeamlessImmutable from 'seamless-immutable';
 
+export type APIResponse = {
+  duration: string;
+  [key: string]: unknown;
+};
+
 export type User<T = { [key: string]: unknown }> = T & {
   id: string;
   role?: string;
@@ -63,6 +68,18 @@ export type MessageResponse<
   status?: string;
 };
 
+export type SendMessageAPIResponse = APIResponse & {
+  message: MessageResponse;
+};
+
+export type SendEventAPIResponse<T = string> = APIResponse & {
+  event: Event<T>;
+};
+
+export type SearchAPIResponse = APIResponse & {
+  results: { message: MessageResponse }[];
+};
+
 export type Configs = {
   [channel_type: string]: Record<string, unknown>;
 };
@@ -74,7 +91,7 @@ export type ChannelData = {
   [key: string]: unknown;
 };
 
-export type ChannelResponse = {
+export type ChannelResponse<T = { [key: string]: unknown }> = T & {
   cid: string;
   id: string;
   name?: string;
@@ -90,8 +107,20 @@ export type ChannelResponse = {
   member_count?: number;
   invites?: string[];
   config?: ChannelConfigWithInfo;
-  // Additional properties defined on channel
-  [key: string]: unknown;
+};
+
+export type UpdateChannelAPIResponse<ChannelType, MessageType> = APIResponse & {
+  channel: ChannelResponse<ChannelType>;
+  message?: MessageResponse<MessageType>;
+  members: ChannelMemberResponse[];
+};
+
+export type DeleteChannelAPIResponse<T> = APIResponse & {
+  channel: ChannelResponse<T>;
+};
+
+export type TruncateChannelAPIResponse<T> = APIResponse & {
+  channel: ChannelResponse<T>;
 };
 
 export type ImmutableMessageResponse<
@@ -153,6 +182,12 @@ export type ReactionResponse<T> = Reaction<T> & {
   created_at: string;
   updated_at: string;
 };
+
+export type ReactionAPIResponse<T> = APIResponse & {
+  message: MessageResponse;
+  reaction: ReactionResponse<T>;
+};
+
 export type TokenOrProvider = string | TokenProvider | null | undefined;
 export type TokenProvider = () => Promise<string>;
 
