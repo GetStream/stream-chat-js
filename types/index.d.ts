@@ -684,6 +684,7 @@ declare module 'connection' {
 }
 declare module 'signing' {
   import { Secret, SignOptions } from 'jsonwebtoken';
+  type ExtraData = Record<string, unknown>;
   /**
    * Creates the JWT token that can be used for a UserSession
    * @method JWTUserSessionToken
@@ -698,7 +699,7 @@ declare module 'signing' {
   export function JWTUserToken(
     apiSecret: Secret,
     userId: string,
-    extraData?: Record<string, unknown>,
+    extraData?: ExtraData,
     jwtOptions?: SignOptions,
   ): string;
   export function JWTServerToken(apiSecret: Secret, jwtOptions?: SignOptions): string;
