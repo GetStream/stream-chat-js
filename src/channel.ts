@@ -3,7 +3,7 @@ import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution } from './utils';
 import { StreamChat } from 'client';
-import { ChannelData, ChannelResponse, EventHandler, Message } from '../types/types';
+import type { ChannelData, ChannelResponse, EventHandler, Message } from '../types/types';
 
 /**
  * Channel - The Channel class manages it's own state.

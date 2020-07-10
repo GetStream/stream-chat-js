@@ -1,6 +1,6 @@
 import isoWS from 'isomorphic-ws';
 import { sleep, chatCodes } from './utils';
-import { ConnectionChangeEvent, Logger, User } from '../types/types';
+import type { ConnectionChangeEvent, Logger, User } from '../types/types';
 import { TokenManager } from 'token_manager';
 import WebSocket from 'isomorphic-ws';
 
