@@ -19,7 +19,7 @@ function byDate(a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate
 }
 
 export class ChannelState<UserType, MessageType, ReactionType> {
-  _channel: Channel;
+  _channel: Channel<UserType, MessageType, ReactionType>;
   watcher_count: number;
   typing: Immutable.ImmutableObject<{ [key: string]: Immutable.Immutable<Event> }>;
   read: Immutable.ImmutableObject<{
@@ -38,7 +38,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   }>;
   membership: Immutable.ImmutableObject<ChannelMembership>;
   last_message_at: Date | null;
-  constructor(channel: Channel) {
+  constructor(channel: Channel<UserType, MessageType, ReactionType>) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = Immutable<{ [key: string]: Immutable.Immutable<Event> }>({});

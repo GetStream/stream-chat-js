@@ -5,14 +5,6 @@ export type User<T = { [key: string]: unknown }> = T & {
   role?: string;
 };
 
-export type TokenOrProvider = string | TokenProvider | null | undefined;
-export type TokenProvider = () => Promise<string>;
-
-export type ConnectionChangeEvent = {
-  type: 'connection.changed' | 'connection.recovered';
-  online?: boolean;
-};
-
 export type Logger = (
   logLevel: 'info' | 'error',
   message: string,
@@ -71,6 +63,37 @@ export type MessageResponse<
   status?: string;
 };
 
+export type Configs = {
+  [channel_type: string]: Record<string, unknown>;
+};
+
+export type ChannelData = {
+  name?: string;
+  image?: string;
+  members?: string[];
+  [key: string]: unknown;
+};
+
+export type ChannelResponse = {
+  cid: string;
+  id: string;
+  name?: string;
+  image?: string;
+  type: string;
+  last_message_at?: string;
+  created_by?: UserResponse;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
+  frozen: boolean;
+  members?: ChannelMemberResponse[];
+  member_count?: number;
+  invites?: string[];
+  config?: ChannelConfigWithInfo;
+  // Additional properties defined on channel
+  [key: string]: unknown;
+};
+
 export type ImmutableMessageResponse<
   T = { [key: string]: unknown },
   ReactionType = { [key: string]: unknown }
@@ -111,12 +134,12 @@ export interface ChannelMemberResponse {
   updated_at?: string;
 }
 
-export interface ChannelMembership {
+export type ChannelMembership = {
   user?: UserResponse;
   role?: string;
   created_at?: string;
   updated_at?: string;
-}
+};
 
 export type Reaction<T = { [key: string]: unknown }> = T & {
   type: string;
@@ -129,4 +152,11 @@ export type Reaction<T = { [key: string]: unknown }> = T & {
 export type ReactionResponse<T> = Reaction<T> & {
   created_at: string;
   updated_at: string;
+};
+export type TokenOrProvider = string | TokenProvider | null | undefined;
+export type TokenProvider = () => Promise<string>;
+
+export type ConnectionChangeEvent = {
+  type: 'connection.changed' | 'connection.recovered';
+  online?: boolean;
 };
