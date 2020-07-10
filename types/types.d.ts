@@ -1,3 +1,5 @@
+import SeamlessImmutable from 'seamless-immutable';
+
 export type User<T = { [key: string]: unknown }> = T & {
   id: string;
   role?: string;
@@ -60,6 +62,34 @@ export type MessageResponse<
   deleted_at?: string;
   status?: string;
 };
+
+export type ImmutableMessageResponse<
+  T = { [key: string]: unknown },
+  ReactionType = { [key: string]: unknown }
+> = SeamlessImmutable.Immutable<
+  T & {
+    __html: string;
+    id: string;
+    text: string;
+    attachments?: Attachment[];
+    parent_id?: string;
+    mentioned_users?: UserResponse[];
+    command?: string;
+    user?: User;
+    html: string;
+    type: string;
+    latest_reactions?: ReactionResponse<ReactionType>[];
+    own_reactions?: ReactionResponse<ReactionType>[];
+    reaction_counts?: { [key: string]: number };
+    reaction_scores?: { [key: string]: number };
+    show_in_channel?: boolean;
+    reply_count?: number;
+    created_at: Date;
+    updated_at: Date;
+    deleted_at?: string;
+    status: string;
+  }
+>;
 
 export interface ChannelMemberResponse {
   user_id?: string;

@@ -7,7 +7,8 @@ import type {
   ChannelMemberResponse,
   ChannelMembership,
   ReactionResponse,
-} from './definitions/types';
+  ImmutableMessageResponse,
+} from '../types/types';
 
 /**
  * ChannelState - A container class for the channel state.
@@ -24,13 +25,9 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   read: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<{ user: User<UserType>; last_read: Date }>;
   }>;
-  messages: Immutable.ImmutableArray<
-    ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-  >;
+  messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
   threads: Immutable.ImmutableObject<{
-    [key: string]: Immutable.ImmutableArray<
-      ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-    >;
+    [key: string]: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
   }>;
   mutedUsers: Immutable.ImmutableArray<User<UserType>>;
   watchers: Immutable.ImmutableObject<{
@@ -50,11 +47,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
     }>({});
     this.messages = Immutable([]);
     this.threads = Immutable<{
-      [key: string]: Immutable.ImmutableArray<
-        ReturnType<
-          ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']
-        >
-      >;
+      [key: string]: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
     }>({});
     // a list of users to hide messages from
     this.mutedUsers = Immutable([]);
@@ -86,7 +79,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
    * @param {object} message an Immutable message object
    *
    */
-  messageToImmutable(message: MessageResponse<MessageType, ReactionType>) {
+  messageToImmutable(message: MessageResponse<MessageType, ReactionType>): ImmutableMessageResponse<MessageType, ReactionType> {
     return Immutable({
       ...message,
       __html: message.html,
@@ -109,9 +102,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
     initializing = false,
   ) {
     // parse all the new message dates and add __html for react
-    const parsedMessages: ReturnType<
-      ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']
-    >[] = [];
+    const parsedMessages: ImmutableMessageResponse<MessageType, ReactionType>[] = [];
     for (const message of newMessages) {
       if (initializing && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
@@ -198,9 +189,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   }
 
   _addReactionToMessage(
-    message: Immutable.Immutable<
-      ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-    >,
+    message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>,
     reaction: ReactionResponse<ReactionType>,
   ) {
     const idMatch = !!message.id && message.id === reaction.message_id;
@@ -227,9 +216,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   }
 
   _removeReactionFromMessage(
-    message: Immutable.Immutable<
-      ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-    >,
+    message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>,
     reaction: ReactionResponse<ReactionType>,
   ) {
     const filterReaction = (old: ReactionResponse<ReactionType>[]) =>
@@ -296,17 +283,11 @@ export class ChannelState<UserType, MessageType, ReactionType> {
    *
    */
   _addToMessageList(
-    messages: Immutable.ImmutableArray<
-      ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-    >,
-    newMessage: ReturnType<
-      ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']
-    >,
+    messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>,
+    newMessage: ImmutableMessageResponse<MessageType, ReactionType>,
   ) {
     let updated = false;
-    let newMessages: Immutable.ImmutableArray<ReturnType<
-      ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']
-    >> = Immutable([]);
+    let newMessages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>> = Immutable([]);
 
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
@@ -357,9 +338,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   }
 
   removeMessageFromArray = (
-    msgArray: Immutable.ImmutableArray<
-      ReturnType<ChannelState<UserType, MessageType, ReactionType>['messageToImmutable']>
-    >,
+    msgArray: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>,
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter(
