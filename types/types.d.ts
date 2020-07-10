@@ -61,7 +61,38 @@ export type MessageResponse<
   status?: string;
 };
 
-export interface ChannelMemberResponse {
+export type Configs = {
+  [channel_type: string]: Record<string, unknown>;
+};
+
+export type ChannelData = {
+  name?: string;
+  image?: string;
+  members?: string[];
+  [key: string]: unknown;
+};
+
+export type ChannelResponse = {
+  cid: string;
+  id: string;
+  name?: string;
+  image?: string;
+  type: string;
+  last_message_at?: string;
+  created_by?: UserResponse;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
+  frozen: boolean;
+  members?: ChannelMemberResponse[];
+  member_count?: number;
+  invites?: string[];
+  config?: ChannelConfigWithInfo;
+  // Additional properties defined on channel
+  [key: string]: unknown;
+};
+
+export type ChannelMemberResponse = {
   user_id?: string;
   user?: UserResponse;
   is_moderator?: boolean;
@@ -71,14 +102,14 @@ export interface ChannelMemberResponse {
   role?: string;
   created_at?: string;
   updated_at?: string;
-}
+};
 
-export interface ChannelMembership {
+export type ChannelMembership = {
   user?: UserResponse;
   role?: string;
   created_at?: string;
   updated_at?: string;
-}
+};
 
 export type Reaction<T = { [key: string]: unknown }> = T & {
   type: string;
