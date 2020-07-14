@@ -1,5 +1,5 @@
 import SeamlessImmutable from 'seamless-immutable';
-import type { Channel } from 'channel';
+import { Channel } from '../src/channel';
 
 export type APIResponse = {
   duration: string;
@@ -26,6 +26,49 @@ export type Logger = (
   message: string,
   extraData?: Record<string, unknown>,
 ) => void;
+
+export type EventTypes =
+  | 'all'
+  | 'user.presence.changed'
+  | 'user.watching.start'
+  | 'user.watching.stop'
+  | 'user.deleted'
+  | 'user.updated'
+  | 'user.banned'
+  | 'user.unbanned'
+  | 'typing.start'
+  | 'typing.stop'
+  | 'message.new'
+  | 'message.updated'
+  | 'message.deleted'
+  | 'message.read'
+  | 'reaction.new'
+  | 'reaction.deleted'
+  | 'reaction.updated'
+  | 'member.added'
+  | 'member.updated'
+  | 'member.removed'
+  | 'channel.created'
+  | 'channel.updated'
+  | 'channel.deleted'
+  | 'channel.truncated'
+  | 'channel.hidden'
+  | 'channel.muted'
+  | 'channel.unmuted'
+  | 'channel.visible'
+  | 'health.check'
+  | 'notification.message_new'
+  | 'notification.mark_read'
+  | 'notification.invited'
+  | 'notification.invite_accepted'
+  | 'notification.added_to_channel'
+  | 'notification.removed_from_channel'
+  | 'notification.channel_deleted'
+  | 'notification.channel_mutes_updated'
+  | 'notification.channel_truncated'
+  | 'notification.mutes_updated'
+  | 'connection.changed'
+  | 'connection.recovered';
 
 export type Event<T = string, U = { [key: string]: unknown }> = U & {
   type: T;
@@ -77,6 +120,36 @@ export type MessageResponse<
   updated_at: string;
   deleted_at?: string;
   status?: string;
+  silent?: boolean;
+};
+
+export type SendMessageAPIResponse = APIResponse & {
+  message: MessageResponse;
+};
+
+export type SendEventAPIResponse<T = string> = APIResponse & {
+  event: Event<T>;
+};
+
+type MessageReadEvent = 'message.read';
+export type MarkReadAPIResponse = APIResponse & {
+  event: Event<MessageReadEvent>;
+};
+
+export type GetRepliesAPIResponse = APIResponse & {
+  messages: MessageResponse[];
+};
+
+export type GetReactionsAPIResponse<ReactionType> = APIResponse & {
+  reactions: ReactionResponse<ReactionType>[];
+};
+
+export type GetMultipleMessagesAPIResponse = APIResponse & {
+  messages: MessageResponse[];
+};
+
+export type SearchAPIResponse = APIResponse & {
+  results: { message: MessageResponse }[];
 };
 
 export type SendMessageAPIResponse = APIResponse & {
@@ -146,6 +219,7 @@ export type ChannelAPIResponse<ChannelType> = APIResponse & {
   watchers?: User[];
   read?: ReadResponse[];
   members: ChannelMemberResponse[];
+  membership?: ChannelMembership;
 };
 
 export type UpdateChannelAPIResponse<ChannelType, MessageType> = APIResponse & {
@@ -187,6 +261,7 @@ export type ImmutableMessageResponse<
     updated_at: Date;
     deleted_at?: string;
     status: string;
+    silent?: boolean;
   }
 >;
 
@@ -223,9 +298,9 @@ type Mute = {
   updated_at: string;
 };
 
-type ChannelMute<UserType, MessageType, ReactionType> = {
+export type ChannelMute<UserType, MessageType, ReactionType, ChannelType> = {
   user: UserResponse<UserType>;
-  channel?: Channel<UserType, MessageType, ReactionType>; // TODO: what we gonna do bout this?
+  channel?: Channel<UserType, MessageType, ReactionType, ChannelType>;
   expires?: string;
   created_at?: string;
   updated_at?: string;
@@ -243,19 +318,30 @@ type Device = DeviceFields & {
   [key: string]: unknown;
 };
 
-type OwnUserResponse = UserResponse & {
+export type OwnUserResponse<
+  UserType,
+  MessageType,
+  ReactionType,
+  ChannelType
+> = UserResponse & {
   devices: Device[];
   unread_count: number;
   total_unread_count: number;
   unread_channels: number;
   mutes: Mute[];
-  channel_mutes: ChannelMute[];
+  channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
 };
 
-export type MuteChannelAPIResponse = APIResponse & {
+export type MuteChannelAPIResponse<
+  UserType,
+  MessageType,
+  ReactionType,
+  ChannelType
+> = APIResponse & {
   mute: MuteResponse;
-  own_user: OwnUserResponse;
-  channel_mute: ChannelMute;
+  own_user: OwnUserResponse<UserType, MessageType, ReactionType, ChannelType>;
+  channel_mute: ChannelMute<UserType, MessageType, ReactionType, ChannelType>;
+  channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
 };
 
 export type Reaction<T = { [key: string]: unknown }> = T & {
