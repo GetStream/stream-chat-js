@@ -1,6 +1,6 @@
 import isoWS from 'isomorphic-ws';
 import { sleep, chatCodes } from './utils';
-import { ConnectionChangeEvent, Logger, User } from '../types/types';
+import type { ConnectionChangeEvent, Logger, User } from '../types/types';
 import { TokenManager } from 'token_manager';
 import WebSocket from 'isomorphic-ws';
 
@@ -27,7 +27,7 @@ type Constructor = {
   apiKey: string;
   tokenManager: TokenManager;
   authType: 'anonymous' | 'jwt';
-  messageCallback: (messageEvent: WebSocket.OpenEvent) => void;
+  messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (open?: ConnectionOpen) => Promise<void>;
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
