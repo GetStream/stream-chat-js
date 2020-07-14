@@ -97,6 +97,13 @@ describe('Presence', function() {
 			const results = [];
 			const eventPromise = new Promise(resolve => {
 				b.on('all', e => {
+					// We sometimes get other events which don't have a watcher_count or
+					// user. In which case this crashes. Ignore these events, and just
+					// filter down to relevant ones.
+					if (!e.watcher_count || !e.user) {
+						return;
+					}
+
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
