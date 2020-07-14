@@ -96,7 +96,7 @@ describe('Presence', function() {
 			await b.create();
 			const results = [];
 			const eventPromise = new Promise(resolve => {
-				b.on('all', e => {
+				const handler = e => {
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
@@ -109,7 +109,10 @@ describe('Presence', function() {
 						expect(results).to.deep.equal(expected);
 						resolve();
 					}
-				});
+				};
+
+				b.on('user.watching.start', handler);
+				b.on('user.watching.stop', handler);
 			});
 
 			// user1 starts watching
