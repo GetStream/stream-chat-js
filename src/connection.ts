@@ -13,7 +13,7 @@ const isErrorEvent = (
   res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
 ): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).message !== undefined;
 
-type ConnectionOpen = {
+export type ConnectionOpen = {
   connection_id?: string;
   [key: string]: unknown;
 };
@@ -27,7 +27,7 @@ type Constructor = {
   apiKey: string;
   tokenManager: TokenManager;
   authType: 'anonymous' | 'jwt';
-  messageCallback: (messageEvent: WebSocket.OpenEvent) => void;
+  messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (open?: ConnectionOpen) => Promise<void>;
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
