@@ -4,6 +4,8 @@ export const EVENT_MAP = {
   'user.watching.stop': true,
   'user.updated': true,
   'user.deleted': true,
+  'user.banned': true,
+  'user.unbanned': true,
   'typing.start': true,
   'typing.stop': true,
   'message.new': true,
@@ -12,6 +14,7 @@ export const EVENT_MAP = {
   'message.read': true,
   'reaction.new': true,
   'reaction.deleted': true,
+  'reaction.updated': true,
   'member.added': true,
   'member.updated': true,
   'member.removed': true,
@@ -22,6 +25,7 @@ export const EVENT_MAP = {
   'channel.truncated': true,
   'channel.created': true,
   'channel.hidden': true,
+  'channel.visible': true,
   'health.check': true,
   'notification.message_new': true,
   'notification.mark_read': true,
@@ -39,7 +43,5 @@ export const EVENT_MAP = {
 };
 
 const IS_VALID_EVENT_MAP_TYPE = { ...EVENT_MAP, all: true };
-
-export const isValidEventType = (
-  eventType: keyof typeof IS_VALID_EVENT_MAP_TYPE,
-): boolean => IS_VALID_EVENT_MAP_TYPE[eventType] || false;
+export const isValidEventType = (eventType: string): boolean =>
+  IS_VALID_EVENT_MAP_TYPE[eventType as keyof typeof IS_VALID_EVENT_MAP_TYPE] || false;

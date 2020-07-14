@@ -18,8 +18,8 @@ function byDate(a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate
   return a.created_at.getTime() - b.created_at.getTime();
 }
 
-export class ChannelState<UserType, MessageType, ReactionType> {
-  _channel: Channel<UserType, MessageType, ReactionType>;
+export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
+  _channel: Channel<UserType, MessageType, ReactionType, ChannelType>;
   watcher_count: number;
   typing: Immutable.ImmutableObject<{ [key: string]: Immutable.Immutable<Event> }>;
   read: Immutable.ImmutableObject<{
@@ -38,7 +38,7 @@ export class ChannelState<UserType, MessageType, ReactionType> {
   }>;
   membership: Immutable.ImmutableObject<ChannelMembership>;
   last_message_at: Date | null;
-  constructor(channel: Channel<UserType, MessageType, ReactionType>) {
+  constructor(channel: Channel<UserType, MessageType, ReactionType, ChannelType>) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = Immutable<{ [key: string]: Immutable.Immutable<Event> }>({});

@@ -1,13 +1,23 @@
 import SeamlessImmutable from 'seamless-immutable';
+import { Channel } from '../src/channel';
 
 export type APIResponse = {
   duration: string;
   [key: string]: unknown;
 };
 
-export type User<T = { [key: string]: unknown }> = T & {
+export type User<T = { [key: string]: unknown }> = Partial<T> & {
   id: string;
+  anon?: boolean;
   role?: string;
+};
+export type UserResponse<T> = User<T> & {
+  created_at?: string;
+  updated_at?: string;
+  last_active?: string;
+  deleted_at?: string;
+  deactivated_at?: string;
+  online: boolean;
 };
 
 export type Logger = (
@@ -16,9 +26,52 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
+export type EventTypes =
+  | 'all'
+  | 'user.presence.changed'
+  | 'user.watching.start'
+  | 'user.watching.stop'
+  | 'user.deleted'
+  | 'user.updated'
+  | 'user.banned'
+  | 'user.unbanned'
+  | 'typing.start'
+  | 'typing.stop'
+  | 'message.new'
+  | 'message.updated'
+  | 'message.deleted'
+  | 'message.read'
+  | 'reaction.new'
+  | 'reaction.deleted'
+  | 'reaction.updated'
+  | 'member.added'
+  | 'member.updated'
+  | 'member.removed'
+  | 'channel.created'
+  | 'channel.updated'
+  | 'channel.deleted'
+  | 'channel.truncated'
+  | 'channel.hidden'
+  | 'channel.muted'
+  | 'channel.unmuted'
+  | 'channel.visible'
+  | 'health.check'
+  | 'notification.message_new'
+  | 'notification.mark_read'
+  | 'notification.invited'
+  | 'notification.invite_accepted'
+  | 'notification.added_to_channel'
+  | 'notification.removed_from_channel'
+  | 'notification.channel_deleted'
+  | 'notification.channel_mutes_updated'
+  | 'notification.channel_truncated'
+  | 'notification.mutes_updated'
+  | 'connection.changed'
+  | 'connection.recovered';
+
 export type Event<T = string, U = { [key: string]: unknown }> = U & {
-  cid: string;
   type: T;
+  cid?: string;
   message?: MessageResponse;
   reaction?: ReactionResponse;
   channel?: ChannelResponse;
@@ -66,6 +119,7 @@ export type MessageResponse<
   updated_at: string;
   deleted_at?: string;
   status?: string;
+  silent?: boolean;
 };
 
 export type SendMessageAPIResponse = APIResponse & {
@@ -74,6 +128,23 @@ export type SendMessageAPIResponse = APIResponse & {
 
 export type SendEventAPIResponse<T = string> = APIResponse & {
   event: Event<T>;
+};
+
+type MessageReadEvent = 'message.read';
+export type MarkReadAPIResponse = APIResponse & {
+  event: Event<MessageReadEvent>;
+};
+
+export type GetRepliesAPIResponse = APIResponse & {
+  messages: MessageResponse[];
+};
+
+export type GetReactionsAPIResponse<ReactionType> = APIResponse & {
+  reactions: ReactionResponse<ReactionType>[];
+};
+
+export type GetMultipleMessagesAPIResponse = APIResponse & {
+  messages: MessageResponse[];
 };
 
 export type SearchAPIResponse = APIResponse & {
@@ -107,6 +178,21 @@ export type ChannelResponse<T = { [key: string]: unknown }> = T & {
   member_count?: number;
   invites?: string[];
   config?: ChannelConfigWithInfo;
+};
+
+export interface ReadResponse {
+  user: UserResponse;
+  last_read: string;
+}
+
+export type ChannelAPIResponse<ChannelType> = APIResponse & {
+  channel: ChannelResponse<ChannelType>;
+  messages: MessageResponse[];
+  watcher_count?: number;
+  watchers?: User[];
+  read?: ReadResponse[];
+  members: ChannelMemberResponse[];
+  membership?: ChannelMembership;
 };
 
 export type UpdateChannelAPIResponse<ChannelType, MessageType> = APIResponse & {
@@ -148,10 +234,11 @@ export type ImmutableMessageResponse<
     updated_at: Date;
     deleted_at?: string;
     status: string;
+    silent?: boolean;
   }
 >;
 
-export interface ChannelMemberResponse {
+export type ChannelMemberResponse = {
   user_id?: string;
   user?: UserResponse;
   is_moderator?: boolean;
@@ -161,13 +248,67 @@ export interface ChannelMemberResponse {
   role?: string;
   created_at?: string;
   updated_at?: string;
-}
+};
 
 export type ChannelMembership = {
   user?: UserResponse;
   role?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+type MuteResponse = {
+  user: UserResponse;
+  target?: UserResponse;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type Mute = {
+  user: UserResponse;
+  target: UserResponse;
+  created_at: string;
+  updated_at: string;
+};
+
+type ChannelMute<UserType, MessageType, ReactionType, ChannelType> = {
+  user: UserResponse;
+  channel?: Channel<UserType, MessageType, ReactionType, ChannelType>;
+  expires?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type DeviceFields = {
+  push_providers: string;
+  id: string;
+};
+
+type Device = DeviceFields & {
+  id: string;
+  provider: string;
+  user: User;
+  [key: string]: unknown;
+};
+
+type OwnUserResponse<UserType, MessageType, ReactionType, ChannelType> = UserResponse & {
+  devices: Device[];
+  unread_count: number;
+  total_unread_count: number;
+  unread_channels: number;
+  mutes: Mute[];
+  channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
+};
+
+export type MuteChannelAPIResponse<
+  UserType,
+  MessageType,
+  ReactionType,
+  ChannelType
+> = APIResponse & {
+  mute: MuteResponse;
+  own_user: OwnUserResponse<UserType, MessageType, ReactionType, ChannelType>;
+  channel_mute: ChannelMute<UserType, MessageType, ReactionType, ChannelType>;
 };
 
 export type Reaction<T = { [key: string]: unknown }> = T & {
