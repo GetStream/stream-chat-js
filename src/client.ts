@@ -25,22 +25,44 @@ import {
   Event,
   EventHandler,
   ChannelMute,
-  ChannelFilters,
+  QueryFilters,
   ChannelSort,
   ChannelOptions,
   AscDesc,
-  ChannelResponse,
   ChannelAPIResponse,
   ChannelData,
+  AppSettings,
+  CheckPushResponse,
+  TestPushDataInput,
+  UserFilters,
+  UserSort,
+  UserOptions,
+  SearchOptions,
+  SearchPayload,
+  MessageResponse,
+  ReactionResponse,
+  BanUserOptions,
+  UnBanUserOptions,
+  MuteUserResponse,
+  FlagMessageOptions,
+  FlagMessageResponse,
+  MarkAllReadOptions,
+  StreamChatOptions,
+  CreateChannelOptions,
+  CreateChannelResponse,
+  GetChannelTypeResponse,
+  UpdateChannelOptions,
+  UpdateChannelResponse,
+  ListChannelResponse,
+  APIResponse,
+  Message,
 } from '../types/types';
 import WebSocket from 'ws';
-import { ChannelState } from 'channel_state';
-import { stringify } from 'querystring';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
   return (
-    (obj as Buffer) !== null &&
-    typeof (obj as Buffer) === 'object' &&
+    obj !== null &&
+    typeof obj === 'object' &&
     // @ts-expect-error
     typeof (obj as Buffer)._read === 'function' &&
     // @ts-expect-error
@@ -48,19 +70,23 @@ function isReadableStream(obj: string | Buffer | File): obj is Buffer {
   );
 }
 
-type StreamChatOptions = AxiosRequestConfig & { logger?: Logger; browser?: boolean };
-
 function isString(x: unknown): x is string {
-  return typeof x === 'string';
+  return typeof x === 'string' || x instanceof String;
 }
 
-export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
+export class StreamChat<
+  UserType,
+  MessageType,
+  ReactionType,
+  ChannelType,
+  AttachmentType
+> {
   key: string;
   secret?: string;
   // TODO: FIX event unknown
   listeners: { [key: string]: Array<(event: Event) => void> };
   state: ClientState<UserType>;
-  mutedChannels: ChannelMute<UserType, MessageType, ReactionType>[];
+  mutedChannels: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
   browser: boolean;
   node: boolean;
   options: StreamChatOptions;
@@ -68,7 +94,9 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
   wsConnection: StableWSConnection | null;
   wsPromise: Promise<void | ConnectionOpen> | null;
   setUserPromise: Promise<void | ConnectionOpen> | null;
-  activeChannels: { [key: string]: Channel<UserType, MessageType, ReactionType> };
+  activeChannels: {
+    [key: string]: Channel<UserType, MessageType, ReactionType, ChannelType>;
+  };
   configs: Configs;
   anonymous: boolean;
   tokenManager: TokenManager;
@@ -307,13 +335,13 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
 	 */
-  async updateAppSettings(options) {
-    if (options.apn_config && options.apn_config.p12_cert) {
+  async updateAppSettings(options: AppSettings) {
+    if (options.apn_config?.p12_cert) {
       options.apn_config.p12_cert = Buffer.from(options.apn_config.p12_cert).toString(
         'base64',
       );
     }
-    return await this.patch(this.baseURL + '/app', options);
+    return await this.patch<{ duration: string }>(this.baseURL + '/app', options);
   }
 
   /**
@@ -335,8 +363,8 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
 				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
 			}
 	 */
-  async testPushSettings(userID, data = {}) {
-    return await this.post(this.baseURL + '/check_push', {
+  async testPushSettings(userID: string, data: TestPushDataInput = {}) {
+    return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
       ...(data.messageID ? { message_id: data.messageID } : {}),
       ...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
@@ -903,14 +931,18 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    *
    * @return {object} User Query Response
    */
-  async queryUsers(filterConditions, sort, options) {
+  async queryUsers(
+    filterConditions: UserFilters,
+    sort: UserSort<User<UserType>>,
+    options: UserOptions,
+  ) {
     if (!sort) {
       sort = {};
     }
     if (!options) {
       options = {};
     }
-    const sortFields = [];
+    const sortFields: Array<{ field: string; direction?: AscDesc }> = [];
     for (const [k, v] of Object.entries(sort)) {
       sortFields.push({ field: k, direction: v });
     }
@@ -927,7 +959,10 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     }
 
     // Return a list of users
-    const data = await this.get(this.baseURL + '/users', {
+    const data = await this.get<{
+      duration: string;
+      users: Array<UserResponse<UserType>>;
+    }>(this.baseURL + '/users', {
       payload: {
         filter_conditions: filterConditions,
         sort: sortFields,
@@ -942,7 +977,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
   }
 
   async queryChannels(
-    filterConditions: ChannelFilters,
+    filterConditions: QueryFilters,
     sort: ChannelSort = {},
     options: ChannelOptions = {},
   ) {
@@ -981,7 +1016,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
       },
     );
 
-    const channels: ChannelResponse<ChannelType>[] = [];
+    const channels: Channel<UserType, MessageType, ReactionType, ChannelType>[] = [];
 
     // update our cache of the configs
     for (const channelState of data.channels) {
@@ -1007,9 +1042,13 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    *
    * @return {object} search messages response
    */
-  async search(filterConditions, query, options = {}) {
+  async search(
+    filterConditions: QueryFilters,
+    query: string | QueryFilters,
+    options: SearchOptions = {},
+  ) {
     // Return a list of channels
-    const payload = {
+    const payload: SearchPayload = {
       filter_conditions: filterConditions,
       ...options,
     };
@@ -1024,7 +1063,10 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     // Make sure we wait for the connect promise if there is a pending one
     await this.setUserPromise;
 
-    return await this.get(this.baseURL + '/search', {
+    return await this.get<{
+      duration: string;
+      results: Array<MessageResponse<MessageType, ReactionType>>;
+    }>(this.baseURL + '/search', {
       payload,
     });
   }
@@ -1101,7 +1143,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
     if (channelID == null || channelID === '') {
-      return new Channel<UserType, MessageType, ReactionType>(
+      return new Channel<UserType, MessageType, ReactionType, ChannelType>(
         this,
         channelType,
         undefined,
@@ -1110,7 +1152,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     }
     // support channel("messaging", {options})
     if (typeof channelID === 'object' && arguments.length === 2) {
-      return new Channel<UserType, MessageType, ReactionType>(
+      return new Channel<UserType, MessageType, ReactionType, ChannelType>(
         this,
         channelType,
         undefined,
@@ -1132,7 +1174,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
       }
       return channel;
     }
-    const channel = new Channel<UserType, MessageType, ReactionType>(
+    const channel = new Channel<UserType, MessageType, ReactionType, ChannelType>(
       this,
       channelType,
       channelID,
@@ -1232,7 +1274,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
 
     return await this.patch<{
       duration: string;
-      users: { [key: string]: User<UserType> };
+      users: { [key: string]: UserResponse<UserType> };
     }>(this.baseURL + '/users', {
       users,
     });
@@ -1244,27 +1286,35 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
   ) {
     return await this.delete<{
       duration: string;
-      user: User<UserType>;
+      user: UserResponse<UserType>;
     }>(this.baseURL + `/users/${userID}`, params);
   }
 
   async reactivateUser(userID: string, options?: { restore_messages?: boolean }) {
     return await this.post<{
       duration: string;
-      user: User<UserType>;
+      user: UserResponse<UserType>;
     }>(this.baseURL + `/users/${userID}/reactivate`, {
       ...options,
     });
   }
 
-  async deactivateUser(userID, options) {
-    return await this.post(this.baseURL + `/users/${userID}/deactivate`, {
-      ...options,
-    });
+  async deactivateUser(userID: string, options?: { mark_messages_deleted?: boolean }) {
+    return await this.post<{ duration: string; user: UserResponse<UserType> }>(
+      this.baseURL + `/users/${userID}/deactivate`,
+      {
+        ...options,
+      },
+    );
   }
 
-  async exportUser(userID, options) {
-    return await this.get(this.baseURL + `/users/${userID}/export`, {
+  async exportUser(userID: string, options?: Record<string, unknown>) {
+    return await this.get<{
+      duration: string;
+      messages: Array<MessageResponse<MessageType>>;
+      reactions: Array<ReactionResponse<ReactionType>>;
+      user: UserResponse<UserType>;
+    }>(this.baseURL + `/users/${userID}/export`, {
       ...options,
     });
   }
@@ -1275,8 +1325,8 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    * @param options
    * @returns {Promise<*>}
    */
-  async banUser(targetUserID, options) {
-    return await this.post(this.baseURL + '/moderation/ban', {
+  async banUser(targetUserID: string, options?: BanUserOptions<UserType>) {
+    return await this.post<{ duration: string }>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
     });
@@ -1287,8 +1337,8 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    * @param targetUserID
    * @returns {Promise<*>}
    */
-  async unbanUser(targetUserID, options) {
-    return await this.delete(this.baseURL + '/moderation/ban', {
+  async unbanUser(targetUserID: string, options: UnBanUserOptions) {
+    return await this.delete<{ duration: string }>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
     });
@@ -1300,11 +1350,14 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    * @param [userID] Only used with serverside auth
    * @returns {Promise<*>}
    */
-  async muteUser(targetID, userID = null) {
-    return await this.post(this.baseURL + '/moderation/mute', {
-      target_id: targetID,
-      ...(userID ? { user_id: userID } : {}),
-    });
+  async muteUser(targetID: string, userID?: string) {
+    return await this.post<MuteUserResponse<UserType>>(
+      this.baseURL + '/moderation/mute',
+      {
+        target_id: targetID,
+        ...(userID ? { user_id: userID } : {}),
+      },
+    );
   }
 
   /** unmuteUser - unmutes a user
@@ -1313,39 +1366,51 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    * @param [currentUserID] Only used with serverside auth
    * @returns {Promise<*>}
    */
-  async unmuteUser(targetID, currentUserID = null) {
-    return await this.post(this.baseURL + '/moderation/unmute', {
+  async unmuteUser(targetID: string, currentUserID?: string) {
+    return await this.post<{ duration: string }>(this.baseURL + '/moderation/unmute', {
       target_id: targetID,
       ...(currentUserID ? { user_id: currentUserID } : {}),
     });
   }
 
-  async flagMessage(messageID, options = {}) {
-    return await this.post(this.baseURL + '/moderation/flag', {
-      target_message_id: messageID,
-      ...options,
-    });
+  async flagMessage(targetMessageID: string, options: FlagMessageOptions<UserType> = {}) {
+    return await this.post<FlagMessageResponse<UserType>>(
+      this.baseURL + '/moderation/flag',
+      {
+        target_message_id: targetMessageID,
+        ...options,
+      },
+    );
   }
 
-  async flagUser(userID, options = {}) {
-    return await this.post(this.baseURL + '/moderation/flag', {
-      target_user_id: userID,
-      ...options,
-    });
+  async flagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
+    return await this.post<FlagMessageResponse<UserType>>(
+      this.baseURL + '/moderation/flag',
+      {
+        target_user_id: userID,
+        ...options,
+      },
+    );
   }
 
-  async unflagMessage(messageID, options = {}) {
-    return await this.post(this.baseURL + '/moderation/unflag', {
-      target_message_id: messageID,
-      ...options,
-    });
+  async unflagMessage(messageID: string, options: FlagMessageOptions<UserType> = {}) {
+    return await this.post<FlagMessageResponse<UserType>>(
+      this.baseURL + '/moderation/unflag',
+      {
+        target_message_id: messageID,
+        ...options,
+      },
+    );
   }
 
-  async unflagUser(userID, options = {}) {
-    return await this.post(this.baseURL + '/moderation/unflag', {
-      target_user_id: userID,
-      ...options,
-    });
+  async unflagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
+    return await this.post<FlagMessageResponse<UserType>>(
+      this.baseURL + '/moderation/unflag',
+      {
+        target_user_id: userID,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -1353,31 +1418,38 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    *
    * @return {Promise} Description
    */
-  async markAllRead(data = {}) {
-    const response = await this.post(this.baseURL + '/channels/read', {
+  async markAllRead(data: MarkAllReadOptions<UserType> = {}) {
+    await this.post<{ duration: string }>(this.baseURL + '/channels/read', {
       ...data,
     });
   }
 
-  createChannelType(data) {
+  createChannelType(data: CreateChannelOptions) {
     const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.post(this.baseURL + '/channeltypes', channelData);
+    return this.post<CreateChannelResponse>(this.baseURL + '/channeltypes', channelData);
   }
 
-  getChannelType(channelType) {
-    return this.get(this.baseURL + `/channeltypes/${channelType}`);
+  getChannelType(channelType: string) {
+    return this.get<GetChannelTypeResponse>(
+      this.baseURL + `/channeltypes/${channelType}`,
+    );
   }
 
-  updateChannelType(channelType, data) {
-    return this.put(this.baseURL + `/channeltypes/${channelType}`, data);
+  updateChannelType(channelType: string, data: UpdateChannelOptions) {
+    return this.put<UpdateChannelResponse>(
+      this.baseURL + `/channeltypes/${channelType}`,
+      data,
+    );
   }
 
-  deleteChannelType(channelType) {
-    return this.delete(this.baseURL + `/channeltypes/${channelType}`);
+  deleteChannelType(channelType: string) {
+    return this.delete<{ duration: string }>(
+      this.baseURL + `/channeltypes/${channelType}`,
+    );
   }
 
   listChannelTypes() {
-    return this.get(this.baseURL + `/channeltypes`);
+    return this.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
   }
 
   /**
@@ -1387,10 +1459,13 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    *
    * @return {object} Response that includes the message
    */
-  async translateMessage(messageId, language) {
-    return await this.post(this.baseURL + `/messages/${messageId}/translate`, {
-      language,
-    });
+  async translateMessage(messageId: string, language: string) {
+    return await this.post<APIResponse & MessageResponse<MessageType>>(
+      this.baseURL + `/messages/${messageId}/translate`,
+      {
+        language,
+      },
+    );
   }
 
   /**
@@ -1400,7 +1475,10 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    *
    * @return {object} Response that includes the message
    */
-  async updateMessage(message, userId) {
+  async updateMessage(
+    message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>,
+    userId?: string | { id: string },
+  ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMesssage');
     }
@@ -1408,7 +1486,18 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     const clonedMessage = Object.assign({}, message);
     delete clonedMessage.id;
 
-    const reservedMessageFields = [
+    const reservedMessageFields: Array<
+      | 'latest_reactions'
+      | 'own_reactions'
+      | 'reply_count'
+      | 'reaction_counts'
+      | 'created_at'
+      | 'updated_at'
+      | 'html'
+      | 'command'
+      | 'type'
+      | 'user'
+    > = [
       'latest_reactions',
       'own_reactions',
       'reply_count',
@@ -1428,27 +1517,36 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     });
 
     if (userId != null) {
-      if (typeof userId == 'string' || userId instanceof String) {
+      if (isString(userId)) {
         clonedMessage.user_id = userId;
       } else {
-        clonedMessage.user = { id: userId.id };
+        clonedMessage.user = { id: userId.id } as User<UserType>;
       }
     }
-    return await this.post(this.baseURL + `/messages/${message.id}`, {
+    return await this.post<{
+      duration: string;
+      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+    }>(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
     });
   }
 
-  async deleteMessage(messageID, hardDelete) {
+  async deleteMessage(messageID: string, hardDelete?: boolean) {
     let params = {};
     if (hardDelete) {
       params = { hard: true };
     }
-    return await this.delete(this.baseURL + `/messages/${messageID}`, params);
+    return await this.delete<{
+      duration: string;
+      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+    }>(this.baseURL + `/messages/${messageID}`, params);
   }
 
-  async getMessage(messageID) {
-    return await this.get(this.baseURL + `/messages/${messageID}`);
+  async getMessage(messageID: string) {
+    return await this.get<{
+      duration: string;
+      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+    }>(this.baseURL + `/messages/${messageID}`);
   }
 
   _userAgent() {
@@ -1507,8 +1605,8 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
     }, 500);
   }
 
-  verifyWebhook(requestBody, xSignature) {
-    return CheckSignature(requestBody, this.secret, xSignature);
+  verifyWebhook(requestBody: string, xSignature: string) {
+    return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
   }
 
   /** getPermission - gets the definition for a permission
@@ -1516,7 +1614,7 @@ export class StreamChat<UserType, MessageType, ReactionType, ChannelType> {
    * @param {string} name
    * @returns {Promise<*>}
    */
-  getPermission(name) {
+  getPermission(name: string) {
     return this.get(`${this.baseURL}/custom_permission/${name}`);
   }
 
