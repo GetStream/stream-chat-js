@@ -178,7 +178,6 @@ export type SendEventAPIResponse<T = string> = APIResponse & {
   event: Event<T>;
 };
 
-type MessageReadEvent = 'message.read';
 export type MarkReadAPIResponse = APIResponse & {
   event: Event<MessageReadEvent>;
 };
@@ -613,6 +612,14 @@ export type GetChannelTypeResponse = Omit<
 };
 
 export type CreateChannelResponse = Omit<GetChannelTypeResponse, 'commands'>;
+
+export type CustomPermissionOptions = {
+  name: string;
+  resource: string;
+  owner?: boolean;
+  same_team?: boolean;
+  condition?: string;
+};
 
 export type AppSettings = {
   apn_config?: {

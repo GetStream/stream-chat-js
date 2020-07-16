@@ -55,7 +55,7 @@ import {
   UpdateChannelResponse,
   ListChannelResponse,
   APIResponse,
-  Message,
+  CustomPermissionOptions,
 } from '../types/types';
 import WebSocket from 'ws';
 
@@ -341,7 +341,7 @@ export class StreamChat<
         'base64',
       );
     }
-    return await this.patch<{ duration: string }>(this.baseURL + '/app', options);
+    return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
   /**
@@ -933,8 +933,8 @@ export class StreamChat<
    */
   async queryUsers(
     filterConditions: UserFilters,
-    sort: UserSort<User<UserType>>,
-    options: UserOptions,
+    sort?: UserSort<User<UserType>>,
+    options?: UserOptions,
   ) {
     if (!sort) {
       sort = {};
@@ -959,10 +959,11 @@ export class StreamChat<
     }
 
     // Return a list of users
-    const data = await this.get<{
-      duration: string;
-      users: Array<UserResponse<UserType>>;
-    }>(this.baseURL + '/users', {
+    const data = await this.get<
+      APIResponse & {
+        users: Array<UserResponse<UserType>>;
+      }
+    >(this.baseURL + '/users', {
       payload: {
         filter_conditions: filterConditions,
         sort: sortFields,
@@ -1063,10 +1064,11 @@ export class StreamChat<
     // Make sure we wait for the connect promise if there is a pending one
     await this.setUserPromise;
 
-    return await this.get<{
-      duration: string;
-      results: Array<MessageResponse<MessageType, ReactionType>>;
-    }>(this.baseURL + '/search', {
+    return await this.get<
+      APIResponse & {
+        results: Array<MessageResponse<MessageType, ReactionType>>;
+      }
+    >(this.baseURL + '/search', {
       payload,
     });
   }
@@ -1226,10 +1228,11 @@ export class StreamChat<
       userMap[userObject.id] = userObject;
     }
 
-    return await this.post<{
-      duration: string;
-      users: { [key: string]: User<UserType> };
-    }>(this.baseURL + '/users', {
+    return await this.post<
+      APIResponse & {
+        users: { [key: string]: User<UserType> };
+      }
+    >(this.baseURL + '/users', {
       users: userMap,
     });
   }
@@ -1272,10 +1275,11 @@ export class StreamChat<
       }
     }
 
-    return await this.patch<{
-      duration: string;
-      users: { [key: string]: UserResponse<UserType> };
-    }>(this.baseURL + '/users', {
+    return await this.patch<
+      APIResponse & {
+        users: { [key: string]: UserResponse<UserType> };
+      }
+    >(this.baseURL + '/users', {
       users,
     });
   }
@@ -1284,23 +1288,25 @@ export class StreamChat<
     userID: string,
     params?: { hard_delete?: boolean; mark_messages_deleted?: boolean },
   ) {
-    return await this.delete<{
-      duration: string;
-      user: UserResponse<UserType>;
-    }>(this.baseURL + `/users/${userID}`, params);
+    return await this.delete<
+      APIResponse & {
+        user: UserResponse<UserType>;
+      }
+    >(this.baseURL + `/users/${userID}`, params);
   }
 
   async reactivateUser(userID: string, options?: { restore_messages?: boolean }) {
-    return await this.post<{
-      duration: string;
-      user: UserResponse<UserType>;
-    }>(this.baseURL + `/users/${userID}/reactivate`, {
+    return await this.post<
+      APIResponse & {
+        user: UserResponse<UserType>;
+      }
+    >(this.baseURL + `/users/${userID}/reactivate`, {
       ...options,
     });
   }
 
   async deactivateUser(userID: string, options?: { mark_messages_deleted?: boolean }) {
-    return await this.post<{ duration: string; user: UserResponse<UserType> }>(
+    return await this.post<APIResponse & { user: UserResponse<UserType> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       {
         ...options,
@@ -1309,12 +1315,13 @@ export class StreamChat<
   }
 
   async exportUser(userID: string, options?: Record<string, unknown>) {
-    return await this.get<{
-      duration: string;
-      messages: Array<MessageResponse<MessageType>>;
-      reactions: Array<ReactionResponse<ReactionType>>;
-      user: UserResponse<UserType>;
-    }>(this.baseURL + `/users/${userID}/export`, {
+    return await this.get<
+      APIResponse & {
+        messages: Array<MessageResponse<MessageType>>;
+        reactions: Array<ReactionResponse<ReactionType>>;
+        user: UserResponse<UserType>;
+      }
+    >(this.baseURL + `/users/${userID}/export`, {
       ...options,
     });
   }
@@ -1326,7 +1333,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   async banUser(targetUserID: string, options?: BanUserOptions<UserType>) {
-    return await this.post<{ duration: string }>(this.baseURL + '/moderation/ban', {
+    return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
     });
@@ -1338,7 +1345,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   async unbanUser(targetUserID: string, options: UnBanUserOptions) {
-    return await this.delete<{ duration: string }>(this.baseURL + '/moderation/ban', {
+    return await this.delete<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
     });
@@ -1367,7 +1374,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   async unmuteUser(targetID: string, currentUserID?: string) {
-    return await this.post<{ duration: string }>(this.baseURL + '/moderation/unmute', {
+    return await this.post<APIResponse>(this.baseURL + '/moderation/unmute', {
       target_id: targetID,
       ...(currentUserID ? { user_id: currentUserID } : {}),
     });
@@ -1419,7 +1426,7 @@ export class StreamChat<
    * @return {Promise} Description
    */
   async markAllRead(data: MarkAllReadOptions<UserType> = {}) {
-    await this.post<{ duration: string }>(this.baseURL + '/channels/read', {
+    await this.post<APIResponse>(this.baseURL + '/channels/read', {
       ...data,
     });
   }
@@ -1443,9 +1450,7 @@ export class StreamChat<
   }
 
   deleteChannelType(channelType: string) {
-    return this.delete<{ duration: string }>(
-      this.baseURL + `/channeltypes/${channelType}`,
-    );
+    return this.delete<APIResponse>(this.baseURL + `/channeltypes/${channelType}`);
   }
 
   listChannelTypes() {
@@ -1523,10 +1528,11 @@ export class StreamChat<
         clonedMessage.user = { id: userId.id } as User<UserType>;
       }
     }
-    return await this.post<{
-      duration: string;
-      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
-    }>(this.baseURL + `/messages/${message.id}`, {
+    return await this.post<
+      APIResponse & {
+        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+      }
+    >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
     });
   }
@@ -1536,17 +1542,19 @@ export class StreamChat<
     if (hardDelete) {
       params = { hard: true };
     }
-    return await this.delete<{
-      duration: string;
-      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
-    }>(this.baseURL + `/messages/${messageID}`, params);
+    return await this.delete<
+      APIResponse & {
+        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+      }
+    >(this.baseURL + `/messages/${messageID}`, params);
   }
 
   async getMessage(messageID: string) {
-    return await this.get<{
-      duration: string;
-      message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
-    }>(this.baseURL + `/messages/${messageID}`);
+    return await this.get<
+      APIResponse & {
+        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+      }
+    >(this.baseURL + `/messages/${messageID}`);
   }
 
   _userAgent() {
@@ -1615,7 +1623,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   getPermission(name: string) {
-    return this.get(`${this.baseURL}/custom_permission/${name}`);
+    return this.get<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
   }
 
   /** createPermission - creates a custom permission
@@ -1623,8 +1631,10 @@ export class StreamChat<
    * @param {object} permissionData the permission data
    * @returns {Promise<*>}
    */
-  createPermission(permissionData) {
-    return this.post(`${this.baseURL}/custom_permission`, { ...permissionData });
+  createPermission(permissionData: CustomPermissionOptions) {
+    return this.post<APIResponse>(`${this.baseURL}/custom_permission`, {
+      ...permissionData,
+    });
   }
 
   /** updatePermission - updates an existing custom permission
@@ -1633,8 +1643,8 @@ export class StreamChat<
    * @param {object} permissionData the permission data
    * @returns {Promise<*>}
    */
-  updatePermission(name, permissionData) {
-    return this.post(`${this.baseURL}/custom_permission/${name}`, {
+  updatePermission(name: string, permissionData: CustomPermissionOptions) {
+    return this.post<APIResponse>(`${this.baseURL}/custom_permission/${name}`, {
       ...permissionData,
     });
   }
@@ -1644,8 +1654,8 @@ export class StreamChat<
    * @param {name}
    * @returns {Promise<*>}
    */
-  deletePermission(name) {
-    return this.delete(`${this.baseURL}/custom_permission/${name}`);
+  deletePermission(name: string) {
+    return this.delete<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
   }
 
   /** listPermissions - returns the list of custom permissions for this application
@@ -1653,7 +1663,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   listPermissions() {
-    return this.get(`${this.baseURL}/custom_permission`);
+    return this.get<APIResponse>(`${this.baseURL}/custom_permission`);
   }
 
   /** createRole - creates a custom role
@@ -1661,8 +1671,8 @@ export class StreamChat<
    * @param {string} name the new role name
    * @returns {Promise<*>}
    */
-  createRole(name) {
-    return this.post(`${this.baseURL}/custom_role`, { name });
+  createRole(name: string) {
+    return this.post<APIResponse>(`${this.baseURL}/custom_role`, { name });
   }
 
   /** listRoles - returns the list of custom roles for this application
@@ -1670,7 +1680,7 @@ export class StreamChat<
    * @returns {Promise<*>}
    */
   listRoles() {
-    return this.get(`${this.baseURL}/custom_role`);
+    return this.get<APIResponse>(`${this.baseURL}/custom_role`);
   }
 
   /** deleteRole - deletes a custom role
@@ -1678,15 +1688,18 @@ export class StreamChat<
    * @param {string} name the role name
    * @returns {Promise<*>}
    */
-  deleteRole(name) {
-    return this.delete(`${this.baseURL}/custom_role/${name}`);
+  deleteRole(name: string) {
+    return this.delete<APIResponse>(`${this.baseURL}/custom_role/${name}`);
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
    * @param {array} channel_cids list of channel CIDs
    * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
    */
-  sync(channel_cids, last_sync_at) {
-    return this.post(`${this.baseURL}/sync`, { channel_cids, last_sync_at });
+  sync(channel_cids: string[], last_sync_at: string) {
+    return this.post<APIResponse & { events: Event[] }>(`${this.baseURL}/sync`, {
+      channel_cids,
+      last_sync_at,
+    });
   }
 }
