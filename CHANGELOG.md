@@ -1,3 +1,21 @@
+## July 16, 2020 - 1.13.2
+
+- Removing cross-fetch from rollup externals [c7dafb0](https://github.com/GetStream/stream-chat-js/commit/c7dafb0f83bd24a02a03f52add7c27b6ccdb683b)
+
+## July 16, 2020 - 1.13.1
+
+- Changing ws issue logs to warn level [1836606](https://github.com/GetStream/stream-chat-js/commit/1836606acca3690f0223f4434006be8f4c1bc5d1)
+
+## July 8, 2020 - 1.13.0
+
+- Add size comparison action [#361](https://github.com/GetStream/stream-chat-js/pull/361)
+- Drop cross-fetch and use Axios for uploads, use local instance of Axios [#365](https://github.com/GetStream/stream-chat-js/pull/365)
+- Drop support for node v11, v13 [#372](https://github.com/GetStream/stream-chat-js/pull/372)
+
+## June 24, 2020 - 1.12.1
+
+- Fixing typescript for channel.getCommands [52e562a](https://github.com/GetStream/stream-chat-js/commit/52e562af1922e5d4e56ab3ba312fe70bf7b562e1)
+
 ## June 23, 2020 - 1.12.0
 
 - Adding sync endpoint for offline support [eb4793f](https://github.com/GetStream/stream-chat-js/commit/eb4793ff9bce1f4b2f698efe853e43772f9e6a7d#diff-cf27c1d543e886c89cd9ac8b8aeaf05bR1451)
@@ -20,6 +38,7 @@
 ## May 29, 2020 - 1.11.1
 
 - Fixing issue with connection recovery and queryChannels api call [#340](https://github.com/GetStream/stream-chat-js/pull/340)
+
 ## May 28, 2020 - 1.11.0
 
 - Introducing queryMembers endpoint [#321](https://github.com/GetStream/stream-chat-js/pull/321)
@@ -51,6 +70,7 @@
 - Silent message feature
 
 ## April 29, 2020 - 1.8.0
+
 - **Breaking:** updated typescript namespace to avoid conflict with getstream package
   - Fixes: GetStream/stream-js#258
 
@@ -79,6 +99,7 @@
 ## April 2, 2020 - 1.6.2
 
 - Adding (missing) following permission constants in typescript file [5b08dec](https://github.com/GetStream/stream-chat-js/commit/5b08dec04e623e940fb5cdffaa2e1ed9410731ae#diff-5b99411a607296a74a128d9535a49dbe)
+
   - Allow
   - Deny
   - AnyResource
@@ -94,13 +115,14 @@
 ## March 27, 2020 - 1.6.1
 
 - Reverting [c5413c0](https://github.com/GetStream/stream-chat-js/commit/c5413c07e6743e056b04ade7ccacebeb0f2b1b4f)
-  
+
   Commit description: Avoid duplication of reaction, by adding check for existing reaction
-  
+
   Reason:
-    1. latest_reactions only contain 10 reactions. So the added check is not sufficient.
-    2. It will need handle remove reactions as well.
-    3. own_reactions doesn't contain user object always. So that use case will need handling as well.
+
+  1. latest_reactions only contain 10 reactions. So the added check is not sufficient.
+  2. It will need handle remove reactions as well.
+  3. own_reactions doesn't contain user object always. So that use case will need handling as well.
 
 ## March 27, 2020 - 1.6.0
 
@@ -124,7 +146,7 @@
 
 ## March 10, 2020 - 1.4.0
 
-- Support filtering by messages custom fields  - [#264](https://github.com/GetStream/stream-chat-js/pull/264)
+- Support filtering by messages custom fields - [#264](https://github.com/GetStream/stream-chat-js/pull/264)
 
 ## March 3, 2020 - 1.3.4
 
@@ -147,7 +169,7 @@
 
 ## January 25, 2020 - 1.3.0
 
-- Added tests for channels operator $in with custom fields - [1896d98](https://github.com/GetStream/stream-chat-js/commit/1896d98a98968a920b3c1539e50649fa7a33462f)
+- Added tests for channels operator \$in with custom fields - [1896d98](https://github.com/GetStream/stream-chat-js/commit/1896d98a98968a920b3c1539e50649fa7a33462f)
 - Fixed types (in typescript declaration file) for sendReaction function in channel - [e0aa1fa](https://github.com/GetStream/stream-chat-js/commit/e0aa1fa90e8bcc4fde595ea06ef04feea866da8b)
 - Fixed types (in typescript declaration file) for sendFile and sendImage functions - [346048f](https://github.com/GetStream/stream-chat-js/commit/346048fa274bf7289f0bb56541e45764f27136ee)
 - Added `getMessagesById` endpoint for channel - [cdc2a8e](https://github.com/GetStream/stream-chat-js/commit/cdc2a8ec503bf72a5da6ac3b0d988875926e0bbe)
