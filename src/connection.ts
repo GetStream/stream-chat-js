@@ -1,6 +1,12 @@
 import isoWS from 'isomorphic-ws';
 import { sleep, chatCodes } from './utils';
-import type { ConnectionChangeEvent, Logger, User } from '../types/types';
+import {
+  ConnectionChangeEvent,
+  Logger,
+  User,
+  ConnectionOpen,
+  UnknownType,
+} from '../types/types';
 import { TokenManager } from 'token_manager';
 import WebSocket from 'isomorphic-ws';
 
@@ -13,22 +19,17 @@ const isErrorEvent = (
   res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
 ): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).message !== undefined;
 
-export type ConnectionOpen = {
-  connection_id?: string;
-  [key: string]: unknown;
-};
-
-type Constructor = {
+type Constructor<UserType = UnknownType> = {
   wsBaseURL: string;
   clientID: string;
   userID: string;
-  user: User;
+  user: User<UserType>;
   userAgent: string;
   apiKey: string;
-  tokenManager: TokenManager;
+  tokenManager: TokenManager<UserType>;
   authType: 'anonymous' | 'jwt';
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-  recoverCallback: (open?: ConnectionOpen) => Promise<void>;
+  recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
 };
@@ -50,19 +51,19 @@ type Constructor = {
  * - state can be recovered by querying the channel again
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
-export class StableWSConnection {
-  wsBaseURL: Constructor['wsBaseURL'];
-  clientID: Constructor['clientID'];
-  userID: Constructor['userID'];
-  user: Constructor['user'];
-  userAgent: Constructor['userAgent'];
-  authType: Constructor['authType'];
-  apiKey: Constructor['apiKey'];
-  tokenManager: Constructor['tokenManager'];
-  messageCallback: Constructor['messageCallback'];
-  recoverCallback: Constructor['recoverCallback'];
-  eventCallback: Constructor['eventCallback'];
-  logger: Constructor['logger'];
+export class StableWSConnection<UserType> {
+  wsBaseURL: Constructor<UserType>['wsBaseURL'];
+  clientID: Constructor<UserType>['clientID'];
+  userID: Constructor<UserType>['userID'];
+  user: Constructor<UserType>['user'];
+  userAgent: Constructor<UserType>['userAgent'];
+  authType: Constructor<UserType>['authType'];
+  apiKey: Constructor<UserType>['apiKey'];
+  tokenManager: Constructor<UserType>['tokenManager'];
+  messageCallback: Constructor<UserType>['messageCallback'];
+  recoverCallback: Constructor<UserType>['recoverCallback'];
+  eventCallback: Constructor<UserType>['eventCallback'];
+  logger: Constructor<UserType>['logger'];
 
   consecutiveFailures: number;
   healthCheckInterval: number;
@@ -72,11 +73,17 @@ export class StableWSConnection {
   monitorInterval: number;
   totalFailures: number;
   connectionID?: string;
-  connectionOpen?: Promise<ConnectionOpen | undefined>;
+  connectionOpen?: Promise<ConnectionOpen<UserType> | undefined>;
   healthCheckIntervalRef?: NodeJS.Timeout;
   isResolved?: boolean;
   monitorIntervalRef?: NodeJS.Timeout;
-  rejectPromise?: (reason?: unknown) => void;
+  rejectPromise?: (
+    reason?: Error & {
+      code?: string | number;
+      StatusCode?: string | number;
+      isWSFailure?: boolean;
+    },
+  ) => void;
   resolvePromise?: (value?: WebSocket.MessageEvent) => void;
   ws?: isoWS;
   wsID: number;
@@ -94,7 +101,7 @@ export class StableWSConnection {
     recoverCallback,
     eventCallback,
     logger,
-  }: Constructor) {
+  }: Constructor<UserType>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
     this.userID = userID;
@@ -107,40 +114,33 @@ export class StableWSConnection {
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
     this.totalFailures = 0;
-
     /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
     /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
-
     /** Callback when the connection fails and recovers */
     this.recoverCallback = recoverCallback;
     this.messageCallback = messageCallback;
     this.eventCallback = eventCallback;
-
     this.logger = logger;
-
     /** Incremented when a new WS connection is made */
     this.wsID = 1;
-
     /** Store the last event time for health checks */
     this.lastEvent = null;
-
     /** Send a health check message every 30 seconds */
     this.healthCheckInterval = 30 * 1000;
     /** Every second we verify that we didn't miss any health checks */
     this.monitorInterval = 1 * 1000;
-
     this._listenForConnectionChanges();
   }
 
   /**
    * connect - Connect to the WS URL
    *
-   * @return {promise} Promise that completes once the first health check message is received
+   * @return {Promise<ConnectionOpen<UserType> | void>} Promise that completes once the first health check message is received
    */
-  async connect(): Promise<ConnectionOpen | void> {
-    let healthCheck: ConnectionOpen | undefined;
+  async connect() {
+    let healthCheck: ConnectionOpen<UserType> | undefined;
     if (this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
@@ -235,7 +235,7 @@ export class StableWSConnection {
       this.ws.removeAllListeners();
     }
 
-    let isClosedPromise;
+    let isClosedPromise: Promise<void>;
     // and finally close...
     // Assigning to local here because we will remove it from this before the
     // promise resolves.
@@ -293,9 +293,9 @@ export class StableWSConnection {
   /**
    * _connect - Connect to the WS endpoint
    *
-   * @return {promise} Promise that completes once the first health check message is received
+   * @return {Promise<ConnectionOpen<UserType> | undefined>} Promise that completes once the first health check message is received
    */
-  async _connect(): Promise<ConnectionOpen | undefined> {
+  async _connect() {
     await this.tokenManager.tokenReady();
     this._setupConnectionPromise();
     const wsURL = this._buildUrl();
@@ -317,7 +317,7 @@ export class StableWSConnection {
   /**
    * _reconnect - Retry the connection to WS endpoint
    *
-   * @param {object} options Following options are available
+   * @param {{ interval?: number; refreshToken?: boolean }} options Following options are available
    *
    * - `interval`	{int}			number of ms that function should wait before reconnecting
    * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
@@ -425,7 +425,7 @@ export class StableWSConnection {
   /**
    * onlineStatusChanged - this function is called when the browser connects or disconnects from the internet.
    *
-   * @param {object} event Event with type online or offline
+   * @param {Event} event Event with type online or offline
    *
    */
   onlineStatusChanged = (event: Event) => {
@@ -561,12 +561,12 @@ export class StableWSConnection {
    * _setHealth - Sets the connection to healthy or unhealthy.
    * Broadcasts an event in case the connection status changed.
    *
-   * @param {bool} healthy boolean indicating if the connection is healthy or not
+   * @param {boolean} healthy boolean indicating if the connection is healthy or not
    *
    */
   _setHealth = (healthy: boolean) => {
     if (healthy && !this.isHealthy) {
-      // yee we are online:
+      // yes we are online:
       this.isHealthy = true;
       this.eventCallback({
         type: 'connection.changed',
@@ -611,7 +611,11 @@ export class StableWSConnection {
       `WS failed with code ${isCloseEvent(event) ? event.code : 'unknown'} and reason - ${
         isErrorEvent(event) ? event.message : 'unknown'
       }`,
-    ) as Error & { code?: string | number; StatusCode?: unknown; isWSFailure?: boolean };
+    ) as Error & {
+      code?: string | number;
+      StatusCode?: string | number;
+      isWSFailure?: boolean;
+    };
     error.code = isCloseEvent(event) ? event.code : undefined;
     /**
      * StatusCode does not exist on any event types but has been left
@@ -674,9 +678,9 @@ export class StableWSConnection {
   /**
    * _retryInterval - A retry interval which increases after consecutive failures
    *
-   * @return {int} Duration to wait in milliseconds
+   * @return {number} Duration to wait in milliseconds
    */
-  _retryInterval = (): number => {
+  _retryInterval = () => {
     // try to reconnect in 0-5 seconds (random to spread out the load from failures)
     const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
     const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
@@ -696,7 +700,9 @@ export class StableWSConnection {
     }).then(
       e => {
         if (e.data && typeof e.data === 'string') {
-          const data = JSON.parse(e.data) as ConnectionOpen;
+          const data = JSON.parse(e.data) as ConnectionOpen<UserType> & {
+            error?: unknown;
+          };
           if (data && data.error != null) {
             throw new Error(JSON.stringify(data.error));
           }

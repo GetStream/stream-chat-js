@@ -1,25 +1,26 @@
+import { Secret } from 'jsonwebtoken';
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
-import { User, TokenOrProvider } from '../types/types';
+import { User, TokenOrProvider, UnknownType } from '../types/types';
 
 /**
  * TokenManager
  *
  * Handles all the operations around user token.
  */
-export class TokenManager {
+export class TokenManager<UserType = UnknownType> {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
-  secret?: string;
-  token?: string | null;
+  secret?: Secret;
+  token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: User | null;
+  user?: User<UserType>;
   /**
    * Constructor
    *
-   * @param {object} secret
+   * @param {Secret} secret
    */
-  constructor(secret?: string) {
+  constructor(secret?: Secret) {
     this.loadTokenPromise = null;
     if (secret) {
       this.secret = secret;
@@ -36,9 +37,10 @@ export class TokenManager {
    * Set the static string token or token provider.
    * Token provider should return a token string or a promise which resolves to string token.
    *
-   * @param {string | function} tokenOrProvider
+   * @param {TokenOrProvider} tokenOrProvider
+   * @param {User<UserType>} user
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: User) => {
+  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: User<UserType>) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -65,13 +67,13 @@ export class TokenManager {
    * Useful for client disconnection or switching user.
    */
   reset = () => {
-    this.token = null;
-    this.user = null;
+    this.token = undefined;
+    this.user = undefined;
     this.loadTokenPromise = null;
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: User) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: User<UserType>) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 

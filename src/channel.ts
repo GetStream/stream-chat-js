@@ -33,7 +33,7 @@ import {
 /**
  * Channel - The Channel class manages it's own state.
  */
-export class Channel<UserType, MessageType, ReactionType, ChannelType> {
+export class Channel<ChannelType, MessageType, ReactionType, UserType> {
   _client: StreamChat;
   type: string;
   id: string | undefined;

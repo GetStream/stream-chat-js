@@ -2,11 +2,13 @@ import SeamlessImmutable from 'seamless-immutable';
 import { Channel } from '../src/channel';
 import { AxiosRequestConfig } from 'axios';
 
+type UnknownType = { [key: string]: unknown };
+
 export type APIResponse = {
   duration: string;
 };
 
-export type User<T = { [key: string]: unknown }> = Partial<T> & {
+export type User<T = UnknownType> = Partial<T> & {
   id: string;
   anon?: boolean;
   role?: string;
@@ -70,16 +72,24 @@ export type EventTypes =
   | 'connection.changed'
   | 'connection.recovered';
 
-export type Event<T = string, U = { [key: string]: unknown }> = U & {
-  type: T;
+export type Event<
+  EventTypeName = string,
+  EventType = UnknownType,
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = EventType & {
+  type: EventTypeName;
   cid?: string;
-  message?: MessageResponse;
-  reaction?: ReactionResponse;
-  channel?: ChannelResponse;
+  message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+  reaction?: ReactionResponse<ReactionType>;
+  channel?: ChannelResponse<ChannelType, UserType>;
   member?: ChannelMemberResponse;
-  user?: UserResponse;
+  user?: UserResponse<UserType>;
   user_id?: string;
-  me?: OwnUserResponse;
+  me?: OwnUserResponse<UserType, MessageType, ReactionType, ChannelType>;
   watcher_count?: number;
   unread_count?: number;
   online?: boolean;
@@ -104,7 +114,7 @@ export type Field = {
   value?: string;
 };
 
-export type Attachment<T = { [key: string]: unknown }> = T & {
+export type Attachment<T = UnknownType> = T & {
   actions?: Action[];
   asset_url?: string;
   author_icon?: string;
@@ -126,10 +136,10 @@ export type Attachment<T = { [key: string]: unknown }> = T & {
 };
 
 type MessageBase<
-  T = { [key: string]: unknown },
-  AttachmentType = { [key: string]: unknown },
-  UserType = { [key: string]: unknown }
-> = T & {
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  UserType = UnknownType
+> = MessageType & {
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   id?: string;
@@ -140,20 +150,20 @@ type MessageBase<
 };
 
 export type Message<
-  T = { [key: string]: unknown },
-  AttachmentType = { [key: string]: unknown },
-  UserType = { [key: string]: unknown }
+  T = UnknownType,
+  AttachmentType = UnknownType,
+  UserType = UnknownType
 > = MessageBase<T, AttachmentType, UserType> & {
   mentioned_users?: string[];
   user?: User<UserType>;
 };
 
 export type MessageResponse<
-  T = { [key: string]: unknown },
-  ReactionType = { [key: string]: unknown },
-  AttachmentType = { [key: string]: unknown },
-  UserType = { [key: string]: unknown }
-> = MessageBase<T, AttachmentType, UserType> & {
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = MessageBase<MessageType, AttachmentType, UserType> & {
   command?: string;
   created_at?: string;
   deleted_at?: string;
@@ -168,6 +178,27 @@ export type MessageResponse<
   type?: string;
   user?: UserResponse<UserType>;
   updated_at?: string;
+};
+
+export type ChannelResponse<
+  ChannelType = UnknownType,
+  UserType = UnknownType
+> = ChannelType & {
+  cid: string;
+  id: string;
+  name?: string;
+  image?: string;
+  type: string;
+  last_message_at?: string;
+  created_by?: UserResponse<UserType>;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string;
+  frozen: boolean;
+  members?: ChannelMemberResponse[];
+  member_count?: number;
+  invites?: string[];
+  config?: ChannelConfigWithInfo;
 };
 
 export type SendMessageAPIResponse = APIResponse & {
@@ -235,24 +266,6 @@ export type ChannelData = {
   [key: string]: unknown;
 };
 
-export type hannelResponse<T = { [key: string]: unknown }> = T & {
-  cid: string;
-  id: string;
-  name?: string;
-  image?: string;
-  type: string;
-  last_message_at?: string;
-  created_by?: UserResponse;
-  created_at?: string;
-  updated_at?: string;
-  deleted_at?: string;
-  frozen: boolean;
-  members?: ChannelMemberResponse[];
-  member_count?: number;
-  invites?: string[];
-  config?: ChannelConfigWithInfo;
-};
-
 export interface ReadResponse {
   user: UserResponse;
   last_read: string;
@@ -283,37 +296,40 @@ export type TruncateChannelAPIResponse<T> = APIResponse & {
 };
 
 export type ImmutableMessageResponse<
-  T = { [key: string]: unknown },
-  ReactionType = { [key: string]: unknown }
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
 > = SeamlessImmutable.Immutable<
-  T & {
+  Omit<
+    MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+    'created_at' | 'updated_at' | 'status'
+  > & {
     __html: string;
-    id: string;
-    text: string;
-    attachments?: Attachment[];
-    parent_id?: string;
-    mentioned_users?: UserResponse[];
-    command?: string;
-    user?: User;
-    html: string;
-    type: string;
-    latest_reactions?: ReactionResponse<ReactionType>[];
-    own_reactions?: ReactionResponse<ReactionType>[];
-    reaction_counts?: { [key: string]: number };
-    reaction_scores?: { [key: string]: number };
-    show_in_channel?: boolean;
-    reply_count?: number;
     created_at: Date;
     updated_at: Date;
-    deleted_at?: string;
     status: string;
-    silent?: boolean;
   }
 >;
 
-export type ChannelMemberResponse = {
+export type ParsedMessageResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+  'created_at' | 'updated_at' | 'status'
+> & {
+  __html: string;
+  created_at: Date;
+  updated_at: Date;
+  status: string;
+};
+
+export type ChannelMemberResponse<UserType = UnknownType> = {
   user_id?: string;
-  user?: UserResponse;
+  user?: UserResponse<UserType>;
   is_moderator?: boolean;
   invited?: boolean;
   invite_accepted_at?: string;
@@ -323,8 +339,8 @@ export type ChannelMemberResponse = {
   updated_at?: string;
 };
 
-export type ChannelMembership = {
-  user?: UserResponse;
+export type ChannelMembership<UserType = UnknownType> = {
+  user?: UserResponse<UserType>;
   role?: string;
   created_at?: string;
   updated_at?: string;
@@ -353,14 +369,13 @@ export type ChannelMute<UserType, MessageType, ReactionType, ChannelType> = {
 };
 
 type DeviceFields = {
-  push_providers: string;
-  id: string;
+  push_providers?: string;
+  id?: string;
 };
 
 type Device = DeviceFields & {
-  id: string;
-  provider: string;
-  user: User;
+  provider?: string;
+  user?: User;
   [key: string]: unknown;
 };
 
@@ -390,7 +405,7 @@ export type MuteChannelAPIResponse<
   channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
 };
 
-export type Reaction<T = { [key: string]: unknown }> = T & {
+export type Reaction<T = UnknownType> = T & {
   type: string;
   message_id?: string;
   user_id?: string;
@@ -417,7 +432,7 @@ export type ConnectionChangeEvent = {
   online?: boolean;
 };
 
-export type Permission = {
+export type PermissionObject = {
   action?: 'Deny' | 'Allow';
   name?: string;
   owner?: boolean;
@@ -570,7 +585,7 @@ export type CreateChannelOptions = {
   message_retention?: string;
   mutes?: boolean;
   name?: string;
-  permissions?: Permission[];
+  permissions?: PermissionObject[];
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
@@ -676,3 +691,81 @@ export type StreamChatOptions = AxiosRequestConfig & {
   logger?: Logger;
   browser?: boolean;
 };
+
+export interface CommandResponse {
+  name?: string;
+  description?: string;
+  args?: string;
+  set?: string;
+}
+
+export type ConnectionOpen<UserType> = {
+  connection_id: string;
+  cid?: string;
+  me?: {
+    id?: string;
+    role?: string;
+    created_at?: string;
+    updated_at?: string;
+    last_active?: string;
+    online?: boolean;
+    invisible?: boolean;
+    devices?: Device[];
+    mutes?: Mute<UserType>[];
+    unread_count?: number;
+    total_unread_count?: number;
+    name?: string;
+    image?: string;
+  };
+  created_at?: string;
+};
+
+export type ExtraData = Record<string, unknown>;
+
+export type CommandVariants =
+  | 'all'
+  | 'fun_set'
+  | 'moderation_set'
+  | 'giphy'
+  | 'imgur'
+  | 'flag'
+  | 'ban'
+  | 'unban'
+  | 'mute'
+  | 'unmute';
+
+export type ChannelConfigDBFields = {
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChannelConfigAutomodTypes = 'disabled' | 'simple' | 'AI';
+
+export type ChannelConfigAutomodBehaviorTypes = 'flag' | 'block';
+
+export type ChannelConfigFields = {
+  name?: string;
+  typing_events?: boolean;
+  read_events?: boolean;
+  connect_events?: boolean;
+  reactions?: boolean;
+  replies?: boolean;
+  search?: boolean;
+  mutes?: boolean;
+  message_retention?: string;
+  max_message_length?: number;
+  uploads?: boolean;
+  url_enrichment?: boolean;
+  automod?: ChannelConfigAutomodTypes;
+  automod_behavior?: 'flag' | 'block';
+};
+
+export type ChannelConfig = ChannelConfigFields &
+  ChannelConfigDBFields & {
+    commands?: CommandVariants[];
+  };
+
+export type ChannelConfigWithInfo = ChannelConfigFields &
+  ChannelConfigDBFields & {
+    commands?: CommandResponse[];
+  };

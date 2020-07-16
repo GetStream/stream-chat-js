@@ -1,18 +1,17 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { encodeBase64, decodeBase64 } from './base64';
-
-type ExtraData = Record<string, unknown>;
+import { ExtraData } from '../types/types';
 
 /**
  * Creates the JWT token that can be used for a UserSession
- * @method JWTUserSessionToken
+ * @method JWTUserToken
  * @memberof signing
  * @private
- * @param {string} apiSecret - API Secret key
+ * @param {Secret} apiSecret - API Secret key
  * @param {string} userId - The user_id key in the JWT payload
- * @param {object} [extraData] - Extra that should be part of the JWT token
- * @param {object} [jwtOptions] - Options that can be past to jwt.sign
+ * @param {ExtraData} [extraData] - Extra that should be part of the JWT token
+ * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
  * @return {string} JWT Token
  */
 export function JWTUserToken(
@@ -20,7 +19,7 @@ export function JWTUserToken(
   userId: string,
   extraData: ExtraData = {},
   jwtOptions: SignOptions = {},
-): string {
+) {
   if (typeof userId !== 'string') {
     throw new TypeError('userId should be a string');
   }
@@ -44,7 +43,7 @@ export function JWTUserToken(
   return jwt.sign(payload, apiSecret, opts);
 }
 
-export function JWTServerToken(apiSecret: Secret, jwtOptions: SignOptions = {}): string {
+export function JWTServerToken(apiSecret: Secret, jwtOptions: SignOptions = {}) {
   const payload = {
     server: true,
   };
@@ -56,10 +55,7 @@ export function JWTServerToken(apiSecret: Secret, jwtOptions: SignOptions = {}):
   return jwt.sign(payload, apiSecret, opts);
 }
 
-/**
- * @return {string}
- */
-export function UserFromToken(token: string): string {
+export function UserFromToken(token: string) {
   const fragments = token.split('.');
   if (fragments.length !== 3) {
     return '';
@@ -67,15 +63,15 @@ export function UserFromToken(token: string): string {
   const b64Payload = fragments[1];
   const payload = decodeBase64(b64Payload);
   const data = JSON.parse(payload);
-  return data.user_id;
+  return data.user_id as string;
 }
 
 /**
  *
- * @param userId {string} the id of the user
+ * @param {string} userId the id of the user
  * @return {string}
  */
-export function DevToken(userId: string): string {
+export function DevToken(userId: string) {
   return [
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', //{"alg": "HS256", "typ": "JWT"}
     encodeBase64(JSON.stringify({ user_id: userId })),
@@ -85,12 +81,12 @@ export function DevToken(userId: string): string {
 
 /**
  *
- * @param body {string} the signed message
- * @param secret {string} the shared secret used to generate the signature (Stream API secret)
- * @param signature {string} the signature to validate
+ * @param {string} body the signed message
+ * @param {string} secret the shared secret used to generate the signature (Stream API secret)
+ * @param {string} signature the signature to validate
  * @return {boolean}
  */
-export function CheckSignature(body: string, secret: string, signature: string): boolean {
+export function CheckSignature(body: string, secret: string, signature: string) {
   const key = Buffer.from(secret, 'ascii');
   const hash = crypto
     .createHmac('sha256', key)

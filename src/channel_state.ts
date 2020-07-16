@@ -1,6 +1,6 @@
 import Immutable, { ImmutableDate } from 'seamless-immutable';
 import { Channel } from 'channel';
-import type {
+import {
   Event,
   User,
   MessageResponse,
@@ -8,54 +8,95 @@ import type {
   ChannelMembership,
   ReactionResponse,
   ImmutableMessageResponse,
+  UnknownType,
+  UserResponse,
+  ParsedMessageResponse,
 } from '../types/types';
+
+const byDate = (a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate }) =>
+  a.created_at.getTime() - b.created_at.getTime();
 
 /**
  * ChannelState - A container class for the channel state.
  */
-
-function byDate(a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate }) {
-  return a.created_at.getTime() - b.created_at.getTime();
-}
-
-export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
+export class ChannelState<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> {
+  // TODO: This is likely wrong typing
   _channel: Channel<UserType, MessageType, ReactionType, ChannelType>;
   watcher_count: number;
-  typing: Immutable.ImmutableObject<{ [key: string]: Immutable.Immutable<Event> }>;
+  typing: Immutable.ImmutableObject<{
+    [key: string]: Immutable.Immutable<
+      Event<
+        'typing.start',
+        AttachmentType,
+        ChannelType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >;
+  }>;
   read: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<{ user: User<UserType>; last_read: Date }>;
+    [key: string]: Immutable.Immutable<{ user: UserResponse<UserType>; last_read: Date }>;
   }>;
-  messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
+  messages: Immutable.ImmutableArray<
+    ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+  >;
   threads: Immutable.ImmutableObject<{
-    [key: string]: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
+    [key: string]: Immutable.ImmutableArray<
+      ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >;
   }>;
-  mutedUsers: Immutable.ImmutableArray<User<UserType>>;
+  mutedUsers: Immutable.ImmutableArray<UserResponse<UserType>>;
   watchers: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<User<UserType>>;
+    [key: string]: Immutable.Immutable<UserResponse<UserType>>;
   }>;
   members: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<ChannelMemberResponse>;
+    [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
   }>;
-  membership: Immutable.ImmutableObject<ChannelMembership>;
+  membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
+
+  // TODO: IS THIS MISSING STUFF??? ATTACHMENT??????
   constructor(channel: Channel<UserType, MessageType, ReactionType, ChannelType>) {
     this._channel = channel;
     this.watcher_count = 0;
-    this.typing = Immutable<{ [key: string]: Immutable.Immutable<Event> }>({});
+    this.typing = Immutable<{
+      [key: string]: Immutable.Immutable<
+        Event<
+          'typing.start',
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >
+      >;
+    }>({});
     this.read = Immutable<{
-      [key: string]: Immutable.Immutable<{ user: User<UserType>; last_read: Date }>;
+      [key: string]: Immutable.Immutable<{
+        user: UserResponse<UserType>;
+        last_read: Date;
+      }>;
     }>({});
     this.messages = Immutable([]);
     this.threads = Immutable<{
-      [key: string]: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
+      [key: string]: Immutable.ImmutableArray<
+        ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      >;
     }>({});
     // a list of users to hide messages from
     this.mutedUsers = Immutable([]);
     this.watchers = Immutable<{ [key: string]: Immutable.Immutable<User<UserType>> }>({});
     this.members = Immutable<{
-      [key: string]: Immutable.Immutable<ChannelMemberResponse>;
+      [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
     }>({});
-    this.membership = Immutable<ChannelMembership>({});
+    this.membership = Immutable<ChannelMembership<UserType>>({});
     this.last_message_at =
       channel.state.last_message_at != null
         ? new Date(channel.state.last_message_at)
@@ -68,26 +109,10 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
    * @param {object} newMessage A new message
    *
    */
-  addMessageSorted(newMessage: MessageResponse<MessageType, ReactionType>) {
+  addMessageSorted(
+    newMessage: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+  ) {
     return this.addMessagesSorted([newMessage]);
-  }
-
-  /**
-   * messageToImmutable - Takes the message object. Parses the dates, sets __html
-   * and sets the status to received if missing. Returns an immutable message object
-   *
-   * @param {object} message an Immutable message object
-   *
-   */
-  messageToImmutable(message: MessageResponse<MessageType, ReactionType>): ImmutableMessageResponse<MessageType, ReactionType> {
-    return Immutable({
-      ...message,
-      __html: message.html,
-      // parse the date..
-      created_at: new Date(message.created_at),
-      updated_at: new Date(message.updated_at),
-      status: message.status || 'received',
-    });
   }
 
   /**
@@ -98,20 +123,37 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse<MessageType, ReactionType>[],
+    newMessages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[],
     initializing = false,
   ) {
     // parse all the new message dates and add __html for react
-    const parsedMessages: ImmutableMessageResponse<MessageType, ReactionType>[] = [];
+    const parsedMessages: ParsedMessageResponse<
+      MessageType,
+      AttachmentType,
+      ReactionType,
+      UserType
+    >[] = [];
     for (const message of newMessages) {
-      if (initializing && this.threads[message.id]) {
+      if (initializing && message.id && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
         // then in that case we remove thread related to this message from threads object.
         // This way we can ensure that we don't have any stale data in thread object
         // and consumer can refetch the replies.
         this.threads = this.threads.without(message.id);
       }
-      const parsedMsg = this.messageToImmutable(message);
+      const parsedMsg: ParsedMessageResponse<
+        MessageType,
+        AttachmentType,
+        ReactionType,
+        UserType
+      > = {
+        ...message,
+        __html: message.html,
+        // parse the date..
+        created_at: message.created_at ? new Date(message.created_at) : new Date(),
+        updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+        status: message.status || 'received',
+      };
       parsedMessages.push(parsedMsg);
       if (
         this.last_message_at &&
@@ -154,7 +196,7 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
 
   addReaction(
     reaction: ReactionResponse<ReactionType>,
-    message?: MessageResponse<MessageType, ReactionType>,
+    message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ) {
     const { messages } = this;
     if (!message) return;
@@ -189,7 +231,9 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
   }
 
   _addReactionToMessage(
-    message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>,
+    message: Immutable.Immutable<
+      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >,
     reaction: ReactionResponse<ReactionType>,
   ) {
     const idMatch = !!message.id && message.id === reaction.message_id;
@@ -216,7 +260,9 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
   }
 
   _removeReactionFromMessage(
-    message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>,
+    message: Immutable.Immutable<
+      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >,
     reaction: ReactionResponse<ReactionType>,
   ) {
     const filterReaction = (old: ReactionResponse<ReactionType>[]) =>
@@ -230,7 +276,7 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
 
   removeReaction(
     reaction: ReactionResponse<ReactionType>,
-    message?: MessageResponse<MessageType, ReactionType>,
+    message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ) {
     const { messages } = this;
     if (!message) return;
@@ -283,11 +329,23 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
    *
    */
   _addToMessageList(
-    messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>,
-    newMessage: ImmutableMessageResponse<MessageType, ReactionType>,
+    messages: Immutable.ImmutableArray<
+      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >,
+    newMessage: ImmutableMessageResponse<
+      MessageType,
+      AttachmentType,
+      ReactionType,
+      UserType
+    >,
   ) {
     let updated = false;
-    let newMessages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>> = Immutable([]);
+    let newMessages: Immutable.ImmutableArray<ImmutableMessageResponse<
+      MessageType,
+      AttachmentType,
+      ReactionType,
+      UserType
+    >> = Immutable([]);
 
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
@@ -338,7 +396,9 @@ export class ChannelState<UserType, MessageType, ReactionType, ChannelType> {
   }
 
   removeMessageFromArray = (
-    msgArray: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>,
+    msgArray: Immutable.ImmutableArray<
+      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >,
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter(

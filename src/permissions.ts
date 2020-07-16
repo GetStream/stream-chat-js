@@ -1,3 +1,7 @@
+import { PermissionObject } from '../types/types';
+
+type RequiredPermissionObject = Required<PermissionObject>;
+
 export const Allow = 'Allow';
 export const Deny = 'Deny';
 export const AnyResource = ['*'];
@@ -9,19 +13,19 @@ export const MinPriority = 1;
 // defined in BuiltinPermissions to configure your channel types
 
 export class Permission {
-  name: string;
-  action: string;
-  owner: boolean;
-  priority: number;
-  resources: string[];
-  roles: string[];
+  name: RequiredPermissionObject['name'];
+  action: RequiredPermissionObject['action'];
+  owner: RequiredPermissionObject['owner'];
+  priority: RequiredPermissionObject['priority'];
+  resources: RequiredPermissionObject['resources'];
+  roles: RequiredPermissionObject['roles'];
   constructor(
     name: string,
     priority: number,
     resources = AnyResource,
     roles = AnyRole,
     owner = false,
-    action = Allow,
+    action: RequiredPermissionObject['action'] = Allow,
   ) {
     this.name = name;
     this.action = action;
