@@ -535,8 +535,9 @@ export class StableWSConnection {
 	 *
 	 */
 	_errorFromWSEvent = (event, isWSFailure = true) => {
+		// Keeping this `warn` level log, to avoid cluttering of error logs from ws failures.
 		this.logger(
-			'error',
+			'warn',
 			`connection:_errorFromWSEvent() - WS failed with code ${event.code}`,
 			{
 				tags: ['connection'],
