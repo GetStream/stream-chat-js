@@ -69,7 +69,7 @@ describe('Moderation', function() {
 				resolve();
 			});
 		});
-		const response = await client1.muteUser(user2, { timeout: 10 });
+		const response = await client1.muteUser(user2, null, { timeout: 10 });
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
 		expect(response.mute.expires).to.not.be.undefined;
