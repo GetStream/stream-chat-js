@@ -2,24 +2,25 @@
 /* global process */
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
-import uuidv4 from 'uuid/v4';
-import { Channel } from './channel';
-import { ClientState } from './client_state';
-import { StableWSConnection, ConnectionOpen } from './connection';
-
-import { isValidEventType } from './events';
-
-import { JWTUserToken, DevToken, CheckSignature } from './signing';
+import FormData from 'form-data';
 import http from 'http';
 import https from 'https';
-import FormData from 'form-data';
+import uuidv4 from 'uuid/v4';
+import WebSocket from 'ws';
+import { Channel } from './channel';
+import { ClientState } from './client_state';
+import { StableWSConnection } from './connection';
+import { isValidEventType } from './events';
+import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import pkg from '../package.json';
 import { TokenManager } from './token_manager';
 import { isFunction, chatCodes } from './utils';
+
 import {
   Configs,
   Logger,
   User,
+  ConnectionOpen,
   TokenOrProvider,
   UserResponse,
   Event,
@@ -57,7 +58,6 @@ import {
   APIResponse,
   CustomPermissionOptions,
 } from '../types/types';
-import WebSocket from 'ws';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
   return (
@@ -75,31 +75,49 @@ function isString(x: unknown): x is string {
 }
 
 export class StreamChat<
-  UserType,
+  AttachmentType,
+  ChannelType,
+  EventTypeName,
+  EventType,
   MessageType,
   ReactionType,
-  ChannelType,
-  AttachmentType
+  UserType
 > {
   key: string;
   secret?: string;
   // TODO: FIX event unknown
   listeners: { [key: string]: Array<(event: Event) => void> };
   state: ClientState<UserType>;
-  mutedChannels: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
+  mutedChannels: ChannelMute<
+    AttachmentType,
+    ChannelType,
+    EventTypeName,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
   browser: boolean;
   node: boolean;
   options: StreamChatOptions;
   axiosInstance: AxiosInstance;
-  wsConnection: StableWSConnection | null;
-  wsPromise: Promise<void | ConnectionOpen> | null;
-  setUserPromise: Promise<void | ConnectionOpen> | null;
+  wsConnection: StableWSConnection<UserType> | null;
+  wsPromise: Promise<void | ConnectionOpen<UserType>> | null;
+  setUserPromise: Promise<void | ConnectionOpen<UserType>> | null;
   activeChannels: {
-    [key: string]: Channel<UserType, MessageType, ReactionType, ChannelType>;
+    [key: string]: Channel<
+      AttachmentType,
+      ChannelType,
+      EventTypeName,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
   };
   configs: Configs;
   anonymous: boolean;
-  tokenManager: TokenManager;
+  tokenManager: TokenManager<UserType>;
   logger: Logger;
   baseURL?: string;
   wsBaseURL?: string;
@@ -649,7 +667,7 @@ export class StreamChat<
     return this.doAxiosRequest<T>('delete', url, null, { params });
   }
 
-  sendFile(
+  sendFile<T>(
     url: string,
     uri: string | Buffer | File,
     name?: string,
@@ -675,7 +693,7 @@ export class StreamChat<
       data.append('user', JSON.stringify(user));
     }
     data.append('file', fileField);
-    return this.doAxiosRequest('post', url, data, {
+    return this.doAxiosRequest<T>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
         timeout: 0,
@@ -733,7 +751,17 @@ export class StreamChat<
     this.dispatchEvent(event);
   };
 
-  _handleClientEvent(event: Event) {
+  _handleClientEvent(
+    event: Event<
+      EventTypeName,
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     const client = this;
     this.logger(
       'info',
@@ -746,8 +774,8 @@ export class StreamChat<
 
     // update the client.state with any changes to users
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user.id === this.userID) {
-        this.user = { ...this.user, ...event.user };
+      if (event.user?.id === this.userID) {
+        this.user = this.user && { ...this.user, ...event.user };
         // Updating only available properties in _user object.
         Object.keys(event.user).forEach(function(key) {
           if (client._user && key in client._user) {
@@ -1010,14 +1038,27 @@ export class StreamChat<
       ...options,
     };
 
-    const data = await this.get<{ channels: ChannelAPIResponse<ChannelType>[] }>(
-      this.baseURL + '/channels',
-      {
-        payload,
-      },
-    );
+    const data = await this.get<{
+      channels: ChannelAPIResponse<
+        ChannelType,
+        AttachmentType,
+        MessageType,
+        ReactionType,
+        UserType
+      >[];
+    }>(this.baseURL + '/channels', {
+      payload,
+    });
 
-    const channels: Channel<UserType, MessageType, ReactionType, ChannelType>[] = [];
+    const channels: Channel<
+      AttachmentType,
+      ChannelType,
+      EventTypeName,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >[] = [];
 
     // update our cache of the configs
     for (const channelState of data.channels) {
@@ -1066,7 +1107,9 @@ export class StreamChat<
 
     return await this.get<
       APIResponse & {
-        results: Array<MessageResponse<MessageType, ReactionType>>;
+        results: Array<
+          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+        >;
       }
     >(this.baseURL + '/search', {
       payload,
@@ -1114,7 +1157,15 @@ export class StreamChat<
     });
   }
 
-  _addChannelConfig(channelState: ChannelAPIResponse<ChannelType>) {
+  _addChannelConfig(
+    channelState: ChannelAPIResponse<
+      ChannelType,
+      AttachmentType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     this.configs[channelState.channel.type] = channelState.channel.config;
   }
 
@@ -1145,21 +1196,27 @@ export class StreamChat<
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
     if (channelID == null || channelID === '') {
-      return new Channel<UserType, MessageType, ReactionType, ChannelType>(
-        this,
-        channelType,
-        undefined,
-        custom || {},
-      );
+      return new Channel<
+        AttachmentType,
+        ChannelType,
+        EventTypeName,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >(this, channelType, undefined, custom || {});
     }
     // support channel("messaging", {options})
     if (typeof channelID === 'object' && arguments.length === 2) {
-      return new Channel<UserType, MessageType, ReactionType, ChannelType>(
-        this,
-        channelType,
-        undefined,
-        channelID,
-      );
+      return new Channel<
+        AttachmentType,
+        ChannelType,
+        EventTypeName,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >(this, channelType, undefined, channelID);
     }
 
     if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
@@ -1176,12 +1233,15 @@ export class StreamChat<
       }
       return channel;
     }
-    const channel = new Channel<UserType, MessageType, ReactionType, ChannelType>(
-      this,
-      channelType,
-      channelID,
-      custom,
-    );
+    const channel = new Channel<
+      AttachmentType,
+      ChannelType,
+      EventTypeName,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >(this, channelType, channelID, custom);
     this.activeChannels[channel.cid] = channel;
 
     return channel;
@@ -1317,8 +1377,10 @@ export class StreamChat<
   async exportUser(userID: string, options?: Record<string, unknown>) {
     return await this.get<
       APIResponse & {
-        messages: Array<MessageResponse<MessageType>>;
-        reactions: Array<ReactionResponse<ReactionType>>;
+        messages: Array<
+          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+        >;
+        reactions: Array<ReactionResponse<ReactionType, UserType>>;
         user: UserResponse<UserType>;
       }
     >(this.baseURL + `/users/${userID}/export`, {
@@ -1465,12 +1527,11 @@ export class StreamChat<
    * @return {object} Response that includes the message
    */
   async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & MessageResponse<MessageType>>(
-      this.baseURL + `/messages/${messageId}/translate`,
-      {
-        language,
-      },
-    );
+    return await this.post<
+      APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+    >(this.baseURL + `/messages/${messageId}/translate`, {
+      language,
+    });
   }
 
   /**

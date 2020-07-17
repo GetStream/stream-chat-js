@@ -1,14 +1,14 @@
 import isoWS from 'isomorphic-ws';
-import { sleep, chatCodes } from './utils';
+import WebSocket from 'isomorphic-ws';
+import { chatCodes, sleep } from './utils';
+import { TokenManager } from 'token_manager';
 import {
   ConnectionChangeEvent,
-  Logger,
-  User,
   ConnectionOpen,
+  Logger,
   UnknownType,
+  User,
 } from '../types/types';
-import { TokenManager } from 'token_manager';
-import WebSocket from 'isomorphic-ws';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (

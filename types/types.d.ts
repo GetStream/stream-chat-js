@@ -84,12 +84,20 @@ export type Event<
   type: EventTypeName;
   cid?: string;
   message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
-  reaction?: ReactionResponse<ReactionType>;
+  reaction?: ReactionResponse<ReactionType, UserType>;
   channel?: ChannelResponse<ChannelType, UserType>;
-  member?: ChannelMemberResponse;
+  member?: ChannelMemberResponse<UserType>;
   user?: UserResponse<UserType>;
   user_id?: string;
-  me?: OwnUserResponse<UserType, MessageType, ReactionType, ChannelType>;
+  me?: OwnUserResponse<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   watcher_count?: number;
   unread_count?: number;
   online?: boolean;
@@ -98,7 +106,25 @@ export type Event<
   received_at?: string | Date;
 };
 
-export type EventHandler = (event: Event) => void;
+export type EventHandler<
+  EventTypeName = string,
+  EventType = UnknownType,
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = (
+  event: Event<
+    EventTypeName,
+    EventType,
+    AttachmentType,
+    ChannelType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+) => void;
 
 export type Action = {
   name?: string;
@@ -150,10 +176,10 @@ type MessageBase<
 };
 
 export type Message<
-  T = UnknownType,
+  MessageType = UnknownType,
   AttachmentType = UnknownType,
   UserType = UnknownType
-> = MessageBase<T, AttachmentType, UserType> & {
+> = MessageBase<MessageType, AttachmentType, UserType> & {
   mentioned_users?: string[];
   user?: User<UserType>;
 };
@@ -167,9 +193,9 @@ export type MessageResponse<
   command?: string;
   created_at?: string;
   deleted_at?: string;
-  latest_reactions?: ReactionResponse<ReactionType>[];
+  latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
-  own_reactions?: ReactionResponse<ReactionType>[];
+  own_reactions?: ReactionResponse<ReactionType, UserType>[];
   reaction_counts?: { [key: string]: number };
   reaction_scores?: { [key: string]: number };
   reply_count?: number;
@@ -178,6 +204,23 @@ export type MessageResponse<
   type?: string;
   user?: UserResponse<UserType>;
   updated_at?: string;
+};
+
+export type ParsedMessageResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+  'created_at' | 'updated_at' | 'status'
+> & {
+  __html: string;
+  // created_at: Date;
+  // updated_at: Date;
+  created_at: Date | SeamlessImmutable.ImmutableDate;
+  updated_at: Date | SeamlessImmutable.ImmutableDate;
+  status: string;
 };
 
 export type ChannelResponse<
@@ -195,46 +238,46 @@ export type ChannelResponse<
   updated_at?: string;
   deleted_at?: string;
   frozen: boolean;
-  members?: ChannelMemberResponse[];
+  members?: ChannelMemberResponse<UserType>[];
   member_count?: number;
   invites?: string[];
   config?: ChannelConfigWithInfo;
 };
 
-export type SendMessageAPIResponse = APIResponse & {
-  message: MessageResponse;
+export type SendMessageAPIResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
 };
 
 export type SendEventAPIResponse<T = string> = APIResponse & {
   event: Event<T>;
 };
 
-export type MarkReadAPIResponse = APIResponse & {
-  event: Event<MessageReadEvent>;
+export type SendImageAPIResponse = APIResponse & { file: string };
+export type SendFileAPIResponse = SendImageAPIResponse;
+
+export type GetMultipleMessagesAPIResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
 };
 
-export type GetRepliesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
-};
-
-export type GetReactionsAPIResponse<ReactionType> = APIResponse & {
-  reactions: ReactionResponse<ReactionType>[];
-};
-
-export type GetMultipleMessagesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
-};
-
-export type SearchAPIResponse = APIResponse & {
-  results: { message: MessageResponse }[];
-};
-
-export type SendMessageAPIResponse = APIResponse & {
-  message: MessageResponse;
-};
-
-export type SendEventAPIResponse<T = string> = APIResponse & {
-  event: Event<T>;
+export type SearchAPIResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  results: {
+    message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+  }[];
 };
 
 type MessageReadEvent = 'message.read';
@@ -243,20 +286,21 @@ export type MarkReadAPIResponse = APIResponse & {
   event: Event<MessageReadEvent>;
 };
 
-export type GetRepliesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
+export type GetRepliesAPIResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
 };
 
-export type GetReactionsAPIResponse<ReactionType> = APIResponse & {
-  reactions: ReactionResponse<ReactionType>[];
-};
-
-export type SearchAPIResponse = APIResponse & {
-  results: { message: MessageResponse }[];
+export type GetReactionsAPIResponse<ReactionType, UserType> = APIResponse & {
+  reactions: ReactionResponse<ReactionType, UserType>[];
 };
 
 export type Configs = {
-  [channel_type: string]: Record<string, unknown>;
+  [channel_type: string]: ExtraData;
 };
 
 export type ChannelData = {
@@ -266,33 +310,51 @@ export type ChannelData = {
   [key: string]: unknown;
 };
 
-export interface ReadResponse {
-  user: UserResponse;
+export interface ReadResponse<UserType> {
+  user: UserResponse<UserType>;
   last_read: string;
 }
 
-export type ChannelAPIResponse<ChannelType> = APIResponse & {
-  channel: ChannelResponse<ChannelType>;
-  messages: MessageResponse[];
+export type ChannelAPIResponse<
+  ChannelType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, UserType>;
+  messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
   watcher_count?: number;
-  watchers?: User[];
-  read?: ReadResponse[];
-  members: ChannelMemberResponse[];
-  membership?: ChannelMembership;
+  watchers?: UserResponse<UserType>[];
+  read?: ReadResponse<UserType>[];
+  members: ChannelMemberResponse<UserType>[];
+  membership?: ChannelMembership<UserType>;
 };
 
-export type UpdateChannelAPIResponse<ChannelType, MessageType> = APIResponse & {
-  channel: ChannelResponse<ChannelType>;
-  message?: MessageResponse<MessageType>;
-  members: ChannelMemberResponse[];
+export type UpdateChannelAPIResponse<
+  ChannelType,
+  AttachmentType,
+  MessageType,
+  ReactionType,
+  UserType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, UserType>;
+  message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+  members: ChannelMemberResponse<UserType>[];
 };
 
-export type DeleteChannelAPIResponse<T> = APIResponse & {
-  channel: ChannelResponse<T>;
+export type DeleteChannelAPIResponse<
+  ChannelType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, UserType>;
 };
 
-export type TruncateChannelAPIResponse<T> = APIResponse & {
-  channel: ChannelResponse<T>;
+export type TruncateChannelAPIResponse<
+  ChannelType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, UserType>;
 };
 
 export type ImmutableMessageResponse<
@@ -312,19 +374,8 @@ export type ImmutableMessageResponse<
   }
 >;
 
-export type ParsedMessageResponse<
-  MessageType = UnknownType,
-  AttachmentType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Omit<
-  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
-  'created_at' | 'updated_at' | 'status'
-> & {
-  __html: string;
-  created_at: Date;
-  updated_at: Date;
-  status: string;
+export type ChannelMemberAPIResponse<UserType = UnknownType> = APIResponse & {
+  members: ChannelMemberResponse<UserType>[];
 };
 
 export type ChannelMemberResponse<UserType = UnknownType> = {
@@ -360,9 +411,25 @@ type Mute<UserType> = {
   updated_at: string;
 };
 
-export type ChannelMute<UserType, MessageType, ReactionType, ChannelType> = {
+export type ChannelMute<
+  AttachmentType,
+  ChannelType,
+  EventType,
+  EventTypeName,
+  MessageType,
+  ReactionType,
+  UserType
+> = {
   user: UserResponse<UserType>;
-  channel?: Channel<UserType, MessageType, ReactionType, ChannelType>;
+  channel?: Channel<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   expires?: string;
   created_at?: string;
   updated_at?: string;
@@ -373,54 +440,103 @@ type DeviceFields = {
   id?: string;
 };
 
-type Device = DeviceFields & {
+type Device<UserType> = DeviceFields & {
   provider?: string;
-  user?: User;
+  user?: UserResponse<UserType>;
   [key: string]: unknown;
 };
 
 export type OwnUserResponse<
-  UserType,
-  MessageType,
-  ReactionType,
-  ChannelType
-> = UserResponse & {
-  devices: Device[];
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  EventType = UnknownType,
+  EventTypeName = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = UserResponse<UserType> & {
+  devices: Device<UserType>[];
   unread_count: number;
   total_unread_count: number;
   unread_channels: number;
-  mutes: Mute[];
-  channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
+  mutes: Mute<UserType>[];
+  channel_mutes: ChannelMute<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
 };
 
 export type MuteChannelAPIResponse<
-  UserType,
+  AttachmentType,
+  ChannelType,
+  EventType,
+  EventTypeName,
   MessageType,
   ReactionType,
-  ChannelType
+  UserType
 > = APIResponse & {
-  mute: MuteResponse;
-  own_user: OwnUserResponse<UserType, MessageType, ReactionType, ChannelType>;
-  channel_mute: ChannelMute<UserType, MessageType, ReactionType, ChannelType>;
-  channel_mutes: ChannelMute<UserType, MessageType, ReactionType, ChannelType>[];
+  mute: MuteResponse<UserType>;
+  own_user: OwnUserResponse<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel_mute: ChannelMute<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel_mutes: ChannelMute<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
 };
 
-export type Reaction<T = UnknownType> = T & {
+export type Reaction<
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = ReactionType & {
   type: string;
   message_id?: string;
   user_id?: string;
-  user?: User;
+  user?: UserResponse<UserType>;
   score?: number;
 };
 
-export type ReactionResponse<T> = Reaction<T> & {
+export type ReactionResponse<ReactionType, UserType> = Reaction<
+  ReactionType,
+  UserType
+> & {
   created_at: string;
   updated_at: string;
 };
 
-export type ReactionAPIResponse<T> = APIResponse & {
-  message: MessageResponse;
-  reaction: ReactionResponse<T>;
+export type ReactionAPIResponse<
+  ReactionType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+  reaction: ReactionResponse<ReactionType, UserType>;
 };
 
 export type TokenOrProvider = string | TokenProvider | null | undefined;
@@ -530,7 +646,7 @@ export type UnBanUserOptions = {
 export type BanUserOptions<UserType> = UnBanUserOptions & {
   reason?: string;
   timeout?: number;
-  user?: User<UserType>;
+  user?: UserResponse<UserType>;
   user_id?: string;
 };
 
@@ -540,7 +656,7 @@ export type FlagMessageOptions<UserType> = {
   created_by?: string;
   target_message_id?: string;
   target_user_id?: string;
-  user?: User<UserType>;
+  user?: UserResponse<UserType>;
   user_id?: string;
 };
 
@@ -570,7 +686,7 @@ export type MuteUserResponse<UserType> = {
 export type MarkAllReadOptions<UserType> = {
   client_id?: string;
   connection_id?: string;
-  user?: User<UserType>;
+  user?: UserResponse<UserType>;
   user_id?: string;
 };
 
@@ -665,7 +781,7 @@ export type CheckPushInput<UserType> = {
   firebase_data_template?: string;
   firebase_template?: string;
   message_id?: string;
-  user?: User<UserType>;
+  user?: UserResponse<UserType>;
   user_id?: string;
 };
 
@@ -710,7 +826,7 @@ export type ConnectionOpen<UserType> = {
     last_active?: string;
     online?: boolean;
     invisible?: boolean;
-    devices?: Device[];
+    devices?: Device<UserType>[];
     mutes?: Mute<UserType>[];
     unread_count?: number;
     total_unread_count?: number;

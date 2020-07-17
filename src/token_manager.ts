@@ -1,7 +1,7 @@
 import { Secret } from 'jsonwebtoken';
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
-import { User, TokenOrProvider, UnknownType } from '../types/types';
+import { TokenOrProvider, UnknownType, User } from '../types/types';
 
 /**
  * TokenManager

@@ -1,20 +1,21 @@
-import Immutable, { ImmutableDate } from 'seamless-immutable';
+import Immutable from 'seamless-immutable';
 import { Channel } from 'channel';
 import {
-  Event,
-  User,
-  MessageResponse,
-  ChannelMemberResponse,
   ChannelMembership,
-  ReactionResponse,
-  ImmutableMessageResponse,
-  UnknownType,
-  UserResponse,
+  ChannelMemberResponse,
+  Event,
+  MessageResponse,
   ParsedMessageResponse,
+  ReactionResponse,
+  UnknownType,
+  User,
+  UserResponse,
 } from '../types/types';
 
-const byDate = (a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate }) =>
-  a.created_at.getTime() - b.created_at.getTime();
+const byDate = (
+  a: { created_at: Date | Immutable.ImmutableDate },
+  b: { created_at: Date | Immutable.ImmutableDate },
+) => a.created_at.getTime() - b.created_at.getTime();
 
 /**
  * ChannelState - A container class for the channel state.
@@ -22,17 +23,28 @@ const byDate = (a: { created_at: ImmutableDate }, b: { created_at: ImmutableDate
 export class ChannelState<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
+  EventType = UnknownType,
+  EventTypeName = UnknownType,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
 > {
   // TODO: This is likely wrong typing
-  _channel: Channel<UserType, MessageType, ReactionType, ChannelType>;
+  _channel: Channel<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    EventTypeName,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   watcher_count: number;
   typing: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<
       Event<
         'typing.start',
+        EventType,
         AttachmentType,
         ChannelType,
         MessageType,
@@ -63,13 +75,24 @@ export class ChannelState<
   last_message_at: Date | null;
 
   // TODO: IS THIS MISSING STUFF??? ATTACHMENT??????
-  constructor(channel: Channel<UserType, MessageType, ReactionType, ChannelType>) {
+  constructor(
+    channel: Channel<
+      AttachmentType,
+      ChannelType,
+      EventType,
+      EventTypeName,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = Immutable<{
       [key: string]: Immutable.Immutable<
         Event<
           'typing.start',
+          EventType,
           AttachmentType,
           ChannelType,
           MessageType,
@@ -141,19 +164,15 @@ export class ChannelState<
         // and consumer can refetch the replies.
         this.threads = this.threads.without(message.id);
       }
-      const parsedMsg: ParsedMessageResponse<
-        MessageType,
-        AttachmentType,
-        ReactionType,
-        UserType
-      > = {
+      const parsedMsg = {
         ...message,
         __html: message.html,
         // parse the date..
         created_at: message.created_at ? new Date(message.created_at) : new Date(),
         updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
         status: message.status || 'received',
-      };
+      } as ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+
       parsedMessages.push(parsedMsg);
       if (
         this.last_message_at &&
@@ -172,7 +191,7 @@ export class ChannelState<
         this.messages = this._addToMessageList(this.messages, message);
       }
       // add to the thread if applicable..
-      const parentID = message.parent_id;
+      const parentID: string | undefined = message.parent_id;
       if (parentID) {
         const thread = this.threads[parentID] || Immutable([]);
         const threadMessages = this._addToMessageList(thread, message);
@@ -195,7 +214,7 @@ export class ChannelState<
   }
 
   addReaction(
-    reaction: ReactionResponse<ReactionType>,
+    reaction: ReactionResponse<ReactionType, UserType>,
     message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ) {
     const { messages } = this;
@@ -232,9 +251,10 @@ export class ChannelState<
 
   _addReactionToMessage(
     message: Immutable.Immutable<
-      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+      {}
     >,
-    reaction: ReactionResponse<ReactionType>,
+    reaction: ReactionResponse<ReactionType, UserType>,
   ) {
     const idMatch = !!message.id && message.id === reaction.message_id;
 
@@ -244,15 +264,17 @@ export class ChannelState<
 
     let newMessage = this._removeReactionFromMessage(message, reaction);
     if (this._channel.getClient().userID === reaction.user?.id) {
-      newMessage = newMessage.update('own_reactions', (old = []) =>
-        old.concat([reaction]),
+      newMessage = newMessage.update(
+        'own_reactions',
+        (old: ReactionResponse<ReactionType, UserType>[]) => old.concat([reaction]),
       );
     }
-    newMessage = newMessage.update('latest_reactions', (old = []) =>
-      old.concat([reaction]),
+    newMessage = newMessage.update(
+      'latest_reactions',
+      (old: ReactionResponse<ReactionType, UserType>[]) => old.concat([reaction]),
     );
 
-    newMessage = newMessage.updateIn(['reaction_counts', reaction.type], old =>
+    newMessage = newMessage.updateIn(['reaction_counts', reaction.type], (old: number) =>
       old ? old + 1 : 1,
     );
 
@@ -261,11 +283,12 @@ export class ChannelState<
 
   _removeReactionFromMessage(
     message: Immutable.Immutable<
-      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+      {}
     >,
-    reaction: ReactionResponse<ReactionType>,
+    reaction: ReactionResponse<ReactionType, UserType>,
   ) {
-    const filterReaction = (old: ReactionResponse<ReactionType>[]) =>
+    const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
       old.filter(
         item => item.type !== reaction.type || item.user?.id !== reaction.user?.id,
       );
@@ -275,7 +298,7 @@ export class ChannelState<
   }
 
   removeReaction(
-    reaction: ReactionResponse<ReactionType>,
+    reaction: ReactionResponse<ReactionType, UserType>,
     message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ) {
     const { messages } = this;
@@ -294,7 +317,7 @@ export class ChannelState<
         let messageWithReaction = this._removeReactionFromMessage(msg, reaction);
         messageWithReaction = messageWithReaction.updateIn(
           ['reaction_counts', reaction.type],
-          old => (old ? old - 1 : 0),
+          (old: number) => (old ? old - 1 : 0),
         );
 
         this.threads = this.threads.set(parent_id, thread.set(i, messageWithReaction));
@@ -312,7 +335,7 @@ export class ChannelState<
         let messageWithReaction = this._removeReactionFromMessage(msg, reaction);
         messageWithReaction = messageWithReaction.updateIn(
           ['reaction_counts', reaction.type],
-          old => (old ? old - 1 : 0),
+          (old: number) => (old ? old - 1 : 0),
         );
 
         this.messages = messages.set(i, messageWithReaction);
@@ -330,9 +353,9 @@ export class ChannelState<
    */
   _addToMessageList(
     messages: Immutable.ImmutableArray<
-      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
     >,
-    newMessage: ImmutableMessageResponse<
+    newMessage: ParsedMessageResponse<
       MessageType,
       AttachmentType,
       ReactionType,
@@ -340,7 +363,7 @@ export class ChannelState<
     >,
   ) {
     let updated = false;
-    let newMessages: Immutable.ImmutableArray<ImmutableMessageResponse<
+    let newMessages: Immutable.ImmutableArray<ParsedMessageResponse<
       MessageType,
       AttachmentType,
       ReactionType,
@@ -397,7 +420,7 @@ export class ChannelState<
 
   removeMessageFromArray = (
     msgArray: Immutable.ImmutableArray<
-      ImmutableMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>
     >,
     msg: { id: string; parent_id?: string },
   ) => {
@@ -424,7 +447,9 @@ export class ChannelState<
     const now = new Date();
     // prevent old users from showing up as typing
     for (const [userID, lastEvent] of Object.entries(this.typing)) {
-      const since = now.getTime() - new Date(lastEvent.received_at).getTime();
+      const since =
+        typeof lastEvent.received_at === 'string' &&
+        now.getTime() - new Date(lastEvent.received_at).getTime();
       if (since > 7000) {
         this.typing = this.typing.without(userID);
         this._channel.getClient().dispatchEvent({
