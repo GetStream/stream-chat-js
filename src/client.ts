@@ -78,7 +78,6 @@ function isString(x: unknown): x is string {
 export class StreamChat<
   AttachmentType,
   ChannelType,
-  EventTypeName,
   EventType,
   MessageType,
   ReactionType,
@@ -92,7 +91,6 @@ export class StreamChat<
   mutedChannels: ChannelMute<
     AttachmentType,
     ChannelType,
-    EventTypeName,
     EventType,
     MessageType,
     ReactionType,
@@ -109,7 +107,6 @@ export class StreamChat<
     [key: string]: Channel<
       AttachmentType,
       ChannelType,
-      EventTypeName,
       EventType,
       MessageType,
       ReactionType,
@@ -728,7 +725,6 @@ export class StreamChat<
 
   dispatchEvent = (
     event: Event<
-      EventTypeName,
       EventType,
       AttachmentType,
       ChannelType,
@@ -1054,7 +1050,6 @@ export class StreamChat<
     const channels: Channel<
       AttachmentType,
       ChannelType,
-      EventTypeName,
       EventType,
       MessageType,
       ReactionType,
@@ -1196,7 +1191,6 @@ export class StreamChat<
       return new Channel<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -1208,7 +1202,6 @@ export class StreamChat<
       return new Channel<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -1233,7 +1226,6 @@ export class StreamChat<
     const channel = new Channel<
       AttachmentType,
       ChannelType,
-      EventTypeName,
       EventType,
       MessageType,
       ReactionType,

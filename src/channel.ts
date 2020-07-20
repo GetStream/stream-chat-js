@@ -41,7 +41,6 @@ export class Channel<
   AttachmentType,
   ChannelType,
   EventType,
-  EventTypeName,
   MessageType,
   ReactionType,
   UserType
@@ -50,7 +49,6 @@ export class Channel<
     AttachmentType,
     ChannelType,
     EventType,
-    EventTypeName,
     MessageType,
     ReactionType,
     UserType
@@ -70,7 +68,6 @@ export class Channel<
   state: ChannelState<
     AttachmentType,
     ChannelType,
-    EventTypeName,
     EventType,
     MessageType,
     ReactionType,
@@ -97,7 +94,6 @@ export class Channel<
       AttachmentType,
       ChannelType,
       EventType,
-      EventTypeName,
       MessageType,
       ReactionType,
       UserType
@@ -130,7 +126,6 @@ export class Channel<
     this.state = new ChannelState<
       AttachmentType,
       ChannelType,
-      EventTypeName,
       EventType,
       MessageType,
       ReactionType,
@@ -151,7 +146,6 @@ export class Channel<
     AttachmentType,
     ChannelType,
     EventType,
-    EventTypeName,
     MessageType,
     ReactionType,
     UserType
@@ -634,7 +628,6 @@ export class Channel<
         AttachmentType,
         ChannelType,
         EventType,
-        EventTypeName,
         MessageType,
         ReactionType,
         UserType
@@ -1162,7 +1155,6 @@ export class Channel<
 
   _handleChannelEvent(
     event: Event<
-      EventTypeName,
       EventType,
       AttachmentType,
       ChannelType,

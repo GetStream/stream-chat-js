@@ -21,7 +21,6 @@ const byDate = (
 export class ChannelState<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
-  EventTypeName = string,
   EventType = UnknownType,
   MessageType = UnknownType,
   ReactionType = UnknownType,
@@ -30,7 +29,6 @@ export class ChannelState<
   _channel: Channel<
     AttachmentType,
     ChannelType,
-    EventTypeName,
     EventType,
     MessageType,
     ReactionType,
@@ -39,15 +37,7 @@ export class ChannelState<
   watcher_count: number;
   typing: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<
-      Event<
-        'typing.start',
-        EventType,
-        AttachmentType,
-        ChannelType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>
     >;
   }>;
   read: Immutable.ImmutableObject<{
@@ -58,7 +48,6 @@ export class ChannelState<
       ChannelState<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -72,7 +61,6 @@ export class ChannelState<
         ChannelState<
           AttachmentType,
           ChannelType,
-          EventTypeName,
           EventType,
           MessageType,
           ReactionType,
@@ -96,7 +84,6 @@ export class ChannelState<
     channel: Channel<
       AttachmentType,
       ChannelType,
-      EventTypeName,
       EventType,
       MessageType,
       ReactionType,
@@ -107,15 +94,7 @@ export class ChannelState<
     this.watcher_count = 0;
     this.typing = Immutable<{
       [key: string]: Immutable.Immutable<
-        Event<
-          'typing.start',
-          EventType,
-          AttachmentType,
-          ChannelType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
+        Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>
       >;
     }>({});
     this.read = Immutable<{
@@ -131,7 +110,6 @@ export class ChannelState<
           ChannelState<
             AttachmentType,
             ChannelType,
-            EventTypeName,
             EventType,
             MessageType,
             ReactionType,
@@ -203,7 +181,6 @@ export class ChannelState<
       ChannelState<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -305,7 +282,6 @@ export class ChannelState<
         ChannelState<
           AttachmentType,
           ChannelType,
-          EventTypeName,
           EventType,
           MessageType,
           ReactionType,
@@ -346,7 +322,6 @@ export class ChannelState<
         ChannelState<
           AttachmentType,
           ChannelType,
-          EventTypeName,
           EventType,
           MessageType,
           ReactionType,
@@ -417,8 +392,8 @@ export class ChannelState<
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isnt found
    *
-   * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
-   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
+   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
    *
    */
   _addToMessageList(
@@ -427,7 +402,6 @@ export class ChannelState<
         ChannelState<
           AttachmentType,
           ChannelType,
-          EventTypeName,
           EventType,
           MessageType,
           ReactionType,
@@ -439,7 +413,6 @@ export class ChannelState<
       ChannelState<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -452,7 +425,6 @@ export class ChannelState<
       ChannelState<
         AttachmentType,
         ChannelType,
-        EventTypeName,
         EventType,
         MessageType,
         ReactionType,
@@ -517,7 +489,6 @@ export class ChannelState<
         ChannelState<
           AttachmentType,
           ChannelType,
-          EventTypeName,
           EventType,
           MessageType,
           ReactionType,
@@ -559,7 +530,7 @@ export class ChannelState<
           type: 'typing.stop',
           user: { id: userID },
           cid: this._channel.cid,
-        } as Event<EventTypeName, EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>);
+        } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>);
       }
     }
   }
