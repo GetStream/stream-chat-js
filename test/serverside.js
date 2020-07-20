@@ -2092,6 +2092,12 @@ describe('Channel types', function() {
 			// shouldn't change from default
 			expect(response.search).to.have.true;
 			expect(response.max_message_length).to.be.eq(5000);
+
+			// revert the config
+			await client.updateChannelType('messaging', {
+				mutes: true,
+				reactions: true,
+			});
 		});
 
 		it('updating a not existing one should fail', async function() {
