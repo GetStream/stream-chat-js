@@ -7,7 +7,7 @@ import {
   ConnectionOpen,
   Logger,
   UnknownType,
-  User,
+  UserResponse,
 } from '../types/types';
 
 // Type guards to check WebSocket error type
@@ -23,7 +23,7 @@ type Constructor<UserType = UnknownType> = {
   wsBaseURL: string;
   clientID: string;
   userID: string;
-  user: User<UserType>;
+  user: UserResponse<UserType>;
   userAgent: string;
   apiKey: string;
   tokenManager: TokenManager<UserType>;

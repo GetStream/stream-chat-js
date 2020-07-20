@@ -58,6 +58,7 @@ import {
   APIResponse,
   CustomPermissionOptions,
   SearchAPIResponse,
+  ChannelResponse,
 } from '../types/types';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
@@ -957,8 +958,8 @@ export class StreamChat<
    * @return {object} User Query Response
    */
   async queryUsers(
-    filterConditions: UserFilters,
-    sort?: UserSort<User<UserType>>,
+    filterConditions: UserFilters<UserType>,
+    sort?: UserSort<UserType>,
     options?: UserOptions,
   ) {
     if (!sort) {
@@ -1003,7 +1004,7 @@ export class StreamChat<
   }
 
   async queryChannels(
-    filterConditions: QueryFilters,
+    filterConditions: QueryFilters<ChannelResponse<ChannelType, UserType>>,
     sort: ChannelSort = {},
     options: ChannelOptions = {},
   ) {
@@ -1081,8 +1082,12 @@ export class StreamChat<
    * @return {object} search messages response
    */
   async search(
-    filterConditions: QueryFilters,
-    query: string | QueryFilters,
+    filterConditions: QueryFilters<ChannelResponse<ChannelType, UserType>>,
+    query:
+      | string
+      | QueryFilters<
+          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+        >,
     options: SearchOptions = {},
   ) {
     // Return a list of channels

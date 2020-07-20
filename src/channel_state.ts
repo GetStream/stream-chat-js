@@ -79,7 +79,6 @@ export class ChannelState<
   membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
 
-  // TODO: IS THIS MISSING STUFF??? ATTACHMENT??????
   constructor(
     channel: Channel<
       AttachmentType,

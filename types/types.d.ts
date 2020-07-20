@@ -177,7 +177,7 @@ export type Message<
   UserType = UnknownType
 > = MessageBase<MessageType, AttachmentType, UserType> & {
   mentioned_users?: string[];
-  user?: User<UserType>;
+  user?: UserResponse<UserType>;
 };
 
 export type MessageResponse<
@@ -221,6 +221,7 @@ export type ChannelResponse<
   member_count?: number;
   invites?: string[];
   config?: ChannelConfigWithInfo;
+  created_by_id?: string;
 };
 
 export type SendMessageAPIResponse<
@@ -282,11 +283,10 @@ export type Configs = {
   [channel_type: string]: ExtraData;
 };
 
-export type ChannelData = {
+export type ChannelData<ChannelType = UnknownType> = ChannelType & {
   name?: string;
   image?: string;
   members?: string[];
-  [key: string]: unknown;
 };
 
 export interface ReadResponse<UserType> {
@@ -555,11 +555,15 @@ export type QueryFilter<T> = T & {
   $or?: ArrayTwoOrMore<RequireAtLeastOne<QueryFilter<T>>>;
 };
 
-export type QueryFilters<T = {}> = {
-  [key: string]: PrimitiveFilter | RequireAtLeastOne<QueryFilter<T>>;
+export type QueryFilters<QueryField = Record<string, unknown>, Operators = {}> = {
+  [K in keyof QueryField]?: PrimitiveFilter | RequireAtLeastOne<QueryFilter<Operators>>;
 };
 
-export type ChannelSort = {
+export type Sort<T> = {
+  [P in keyof T]?: AscDesc;
+};
+
+export type ChannelSort<ChannelType = Record<string, unknown>> = Sort<ChannelType> & {
   last_updated?: AscDesc;
   last_message_at?: AscDesc;
   updated_at?: AscDesc;
@@ -567,7 +571,6 @@ export type ChannelSort = {
   member_count?: AscDesc;
   unread_count?: AscDesc;
   has_unread?: AscDesc;
-  [key: string]: AscDesc | undefined;
 };
 
 export type ChannelOptions = {
@@ -581,11 +584,12 @@ export type ChannelOptions = {
   last_message_ids?: { [key: string]: string };
 };
 
-export type UserFilters = QueryFilters<{ $autoComplete?: string }>;
+export type UserFilters<UserType = UnknownType> = QueryFilters<
+  UserResponse<UserType>,
+  { $autoComplete?: string }
+>;
 
-export type UserSort<T> = {
-  [P in keyof T]?: AscDesc;
-};
+export type UserSort<UserType> = Sort<UserResponse<UserType>>;
 
 export type UserOptions = {
   limit?: number;
@@ -598,12 +602,20 @@ export type SearchOptions = {
   offset?: number;
 };
 
-export type SearchPayload = SearchOptions & {
+export type SearchPayload<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = SearchOptions & {
   client_id?: string;
   connection_id?: string;
-  filter_conditions?: QueryFilters;
+  filter_conditions?: QueryFilters<ChannelResponse<ChannelType, UserType>>;
   query?: string;
-  message_filter_conditions?: QueryFilters;
+  message_filter_conditions?: QueryFilters<
+    MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+  >;
 };
 
 export type UnBanUserOptions = {
@@ -856,3 +868,25 @@ export type ChannelConfigWithInfo = ChannelConfigFields &
   ChannelConfigDBFields & {
     commands?: CommandResponse[];
   };
+
+export type InviteOptions<
+  AttachmentType,
+  ChannelType,
+  MessageType,
+  ReactionType,
+  UserType
+> = {
+  add_members?: string[];
+  add_moderators?: string[];
+  client_id?: string;
+  connection_id?: string;
+  data?: Omit<ChannelResponse<ChannelType, UserType>, 'id' | 'cid'>;
+  demote_moderators?: string[];
+  invites?: string[];
+  message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+  reject_invite?: boolean;
+  accept_invite?: boolean;
+  remove_members?: string[];
+  user?: UserResponse<UserType>;
+  user_id?: string;
+};
