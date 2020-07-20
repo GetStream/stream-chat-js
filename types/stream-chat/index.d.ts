@@ -295,7 +295,7 @@ export class StreamChat {
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
 
-  muteUser(targetUserID: string): Promise<MuteAPIResponse>;
+  muteUser(targetUserID: string, options?: object): Promise<MuteAPIResponse>;
   unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
 
   flagUser(userID: string, options?: object): Promise<FlagAPIResponse>;

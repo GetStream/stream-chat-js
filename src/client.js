@@ -1165,12 +1165,15 @@ export class StreamChat {
 	 *
 	 * @param targetID
 	 * @param [userID] Only used with serverside auth
+	 * @param options
 	 * @returns {Promise<*>}
 	 */
-	async muteUser(targetID, userID = null) {
+	async muteUser(targetID, userID = null, options) {
+		const timeout = options ? options.timeout : undefined;
 		return await this.post(this.baseURL + '/moderation/mute', {
 			target_id: targetID,
 			...(userID ? { user_id: userID } : {}),
+			...(timeout ? { timeout } : {}),
 		});
 	}
 
