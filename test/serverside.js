@@ -2077,6 +2077,23 @@ describe('Channel types', function() {
 		let channelType, channelTypeName;
 		let channelPermissions;
 
+		it('default is fine', async function() {
+			const response = await client.updateChannelType('messaging', {
+				mutes: false,
+				reactions: false,
+				replies: true,
+			});
+
+			// as changed
+			expect(response.reactions).to.have.false;
+			expect(response.mutes).to.have.false;
+			expect(response.replies).to.have.true;
+
+			// shouldn't change from default
+			expect(response.search).to.have.true;
+			expect(response.max_message_length).to.be.eq(5000);
+		});
+
 		it('updating a not existing one should fail', async function() {
 			await expectHTTPErrorCode(404, client.updateChannelType(`${uuidv4()}`, {}));
 		});
