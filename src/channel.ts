@@ -70,8 +70,8 @@ export class Channel<
   state: ChannelState<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -130,8 +130,8 @@ export class Channel<
     this.state = new ChannelState<
       AttachmentType,
       ChannelType,
-      EventType,
       EventTypeName,
+      EventType,
       MessageType,
       ReactionType,
       UserType

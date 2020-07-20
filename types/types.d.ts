@@ -92,8 +92,8 @@ export type Event<
   me?: OwnUserResponse<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -204,21 +204,6 @@ export type MessageResponse<
   type?: string;
   user?: UserResponse<UserType>;
   updated_at?: string;
-};
-
-export type ParsedMessageResponse<
-  MessageType = UnknownType,
-  AttachmentType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Omit<
-  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
-  'created_at' | 'updated_at' | 'status'
-> & {
-  __html: string;
-  created_at: Date | SeamlessImmutable.ImmutableDate;
-  updated_at: Date | SeamlessImmutable.ImmutableDate;
-  status: string;
 };
 
 export type ChannelResponse<
@@ -412,8 +397,8 @@ type Mute<UserType> = {
 export type ChannelMute<
   AttachmentType,
   ChannelType,
-  EventType,
   EventTypeName,
+  EventType,
   MessageType,
   ReactionType,
   UserType
@@ -422,8 +407,8 @@ export type ChannelMute<
   channel?: Channel<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -447,8 +432,8 @@ type Device<UserType> = DeviceFields & {
 export type OwnUserResponse<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
-  EventType = UnknownType,
   EventTypeName = UnknownType,
+  EventType = UnknownType,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
@@ -461,8 +446,8 @@ export type OwnUserResponse<
   channel_mutes: ChannelMute<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -472,8 +457,8 @@ export type OwnUserResponse<
 export type MuteChannelAPIResponse<
   AttachmentType,
   ChannelType,
-  EventType,
   EventTypeName,
+  EventType,
   MessageType,
   ReactionType,
   UserType
@@ -482,8 +467,8 @@ export type MuteChannelAPIResponse<
   own_user: OwnUserResponse<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -491,8 +476,8 @@ export type MuteChannelAPIResponse<
   channel_mute: ChannelMute<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
@@ -500,8 +485,8 @@ export type MuteChannelAPIResponse<
   channel_mutes: ChannelMute<
     AttachmentType,
     ChannelType,
-    EventType,
     EventTypeName,
+    EventType,
     MessageType,
     ReactionType,
     UserType
