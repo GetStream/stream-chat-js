@@ -1160,7 +1160,17 @@ export class Channel<
     this.listeners[key] = this.listeners[key].filter(value => value !== callback);
   }
 
-  _handleChannelEvent(event: Event) {
+  _handleChannelEvent(
+    event: Event<
+      EventTypeName,
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     // TODO type event!!
     const channel = this;
     this._client.logger(

@@ -419,7 +419,7 @@ declare module "src/client" {
     import { ClientState } from "src/client_state";
     import { StableWSConnection } from "src/connection";
     import { TokenManager } from "src/token_manager";
-    import { Configs, Logger, User, ConnectionOpen, TokenOrProvider, UserResponse, Event, EventHandler, ChannelMute, QueryFilters, ChannelSort, ChannelOptions, ChannelAPIResponse, ChannelData, AppSettings, CheckPushResponse, TestPushDataInput, UserFilters, UserSort, UserOptions, SearchOptions, MessageResponse, ReactionResponse, BanUserOptions, UnBanUserOptions, MuteUserResponse, FlagMessageOptions, FlagMessageResponse, MarkAllReadOptions, StreamChatOptions, CreateChannelOptions, GetChannelTypeResponse, UpdateChannelOptions, UpdateChannelResponse, ListChannelResponse, APIResponse, CustomPermissionOptions } from '../types/types';
+    import { Configs, Logger, User, ConnectionOpen, TokenOrProvider, UserResponse, Event, EventHandler, ChannelMute, QueryFilters, ChannelSort, ChannelOptions, ChannelAPIResponse, ChannelData, AppSettings, CheckPushResponse, TestPushDataInput, UserFilters, UserSort, UserOptions, SearchOptions, MessageResponse, ReactionResponse, BanUserOptions, UnBanUserOptions, MuteUserResponse, FlagMessageOptions, FlagMessageResponse, MarkAllReadOptions, StreamChatOptions, CreateChannelOptions, GetChannelTypeResponse, UpdateChannelOptions, UpdateChannelResponse, ListChannelResponse, APIResponse, CustomPermissionOptions, SearchAPIResponse } from '../types/types';
     export class StreamChat<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType> {
         key: string;
         secret?: string;
@@ -589,9 +589,9 @@ declare module "src/client" {
             code?: number | undefined;
         };
         handleResponse<T>(response: AxiosResponse<T>): T;
-        dispatchEvent: (event: Event) => void;
+        dispatchEvent: (event: Event<EventTypeName, EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void;
         handleEvent: (messageEvent: WebSocket.MessageEvent) => void;
-        _handleClientEvent(event: Event<EventTypeName, EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
+        _handleClientEvent(event: Event): void;
         _muteStatus(cid: string): {
             muted: boolean;
             createdAt: null;
@@ -623,9 +623,7 @@ declare module "src/client" {
          *
          * @return {object} search messages response
          */
-        search(filterConditions: QueryFilters, query: string | QueryFilters, options?: SearchOptions): Promise<APIResponse & {
-            results: Array<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
-        }>;
+        search(filterConditions: QueryFilters, query: string | QueryFilters, options?: SearchOptions): Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * addDevice - Adds a push device for a user.
          *
@@ -1326,7 +1324,7 @@ declare module "src/channel" {
          */
         off(eventType: EventTypes, callback: EventHandler): void;
         off(callback: EventHandler): void;
-        _handleChannelEvent(event: Event): void;
+        _handleChannelEvent(event: Event<EventTypeName, EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
         _callChannelListeners: (event: Event) => void;
         /**
          * _channelURL - Returns the channel url

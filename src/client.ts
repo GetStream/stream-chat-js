@@ -57,6 +57,7 @@ import {
   ListChannelResponse,
   APIResponse,
   CustomPermissionOptions,
+  SearchAPIResponse,
 } from '../types/types';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
@@ -725,7 +726,17 @@ export class StreamChat<
     return data;
   }
 
-  dispatchEvent = (event: Event) => {
+  dispatchEvent = (
+    event: Event<
+      EventTypeName,
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) => {
     // client event handlers
     this._handleClientEvent(event);
 
@@ -751,17 +762,7 @@ export class StreamChat<
     this.dispatchEvent(event);
   };
 
-  _handleClientEvent(
-    event: Event<
-      EventTypeName,
-      EventType,
-      AttachmentType,
-      ChannelType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-  ) {
+  _handleClientEvent(event: Event) {
     const client = this;
     this.logger(
       'info',
@@ -1106,11 +1107,7 @@ export class StreamChat<
     await this.setUserPromise;
 
     return await this.get<
-      APIResponse & {
-        results: Array<
-          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
-        >;
-      }
+      SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
     >(this.baseURL + '/search', {
       payload,
     });

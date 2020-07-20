@@ -216,8 +216,6 @@ export type ParsedMessageResponse<
   'created_at' | 'updated_at' | 'status'
 > & {
   __html: string;
-  // created_at: Date;
-  // updated_at: Date;
   created_at: Date | SeamlessImmutable.ImmutableDate;
   updated_at: Date | SeamlessImmutable.ImmutableDate;
   status: string;
