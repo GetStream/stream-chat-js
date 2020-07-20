@@ -2093,11 +2093,15 @@ describe('Channel types', function() {
 			expect(response.search).to.have.true;
 			expect(response.max_message_length).to.be.eq(5000);
 
-			// revert the config
-			await client.updateChannelType('messaging', {
+			// revert the config and check if correctly reverted
+			const reverted = await client.updateChannelType('messaging', {
 				mutes: true,
 				reactions: true,
 			});
+
+			expect(reverted.reactions).to.have.true;
+			expect(reverted.mutes).to.have.true;
+			expect(reverted.replies).to.have.true;
 		});
 
 		it('updating a not existing one should fail', async function() {
