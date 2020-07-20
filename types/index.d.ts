@@ -8,48 +8,43 @@ declare module "src/base64" {
 declare module "src/channel_state" {
     import Immutable from 'seamless-immutable';
     import { Channel } from "src/channel";
-    import type { Event, User, MessageResponse, ChannelMemberResponse, ChannelMembership, ReactionResponse, ImmutableMessageResponse } from '../types/types';
-    export class ChannelState<UserType, MessageType, ReactionType> {
-        _channel: Channel<UserType, MessageType, ReactionType>;
+    import { ChannelMembership, ChannelMemberResponse, Event, MessageResponse, ParsedMessageResponse, ReactionResponse, UnknownType, UserResponse } from '../types/types';
+    /**
+     * ChannelState - A container class for the channel state.
+     */
+    export class ChannelState<AttachmentType = UnknownType, ChannelType = UnknownType, EventType = UnknownType, EventTypeName = UnknownType, MessageType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> {
+        _channel: Channel<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>;
         watcher_count: number;
         typing: Immutable.ImmutableObject<{
-            [key: string]: Immutable.Immutable<Event>;
+            [key: string]: Immutable.Immutable<Event<'typing.start', EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>>;
         }>;
         read: Immutable.ImmutableObject<{
             [key: string]: Immutable.Immutable<{
-                user: User<UserType>;
+                user: UserResponse<UserType>;
                 last_read: Date;
             }>;
         }>;
-        messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
+        messages: Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         threads: Immutable.ImmutableObject<{
-            [key: string]: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>;
+            [key: string]: Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         }>;
-        mutedUsers: Immutable.ImmutableArray<User<UserType>>;
+        mutedUsers: Immutable.ImmutableArray<UserResponse<UserType>>;
         watchers: Immutable.ImmutableObject<{
-            [key: string]: Immutable.Immutable<User<UserType>>;
+            [key: string]: Immutable.Immutable<UserResponse<UserType>>;
         }>;
         members: Immutable.ImmutableObject<{
-            [key: string]: Immutable.Immutable<ChannelMemberResponse>;
+            [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
         }>;
-        membership: Immutable.ImmutableObject<ChannelMembership>;
+        membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
         last_message_at: Date | null;
-        constructor(channel: Channel<UserType, MessageType, ReactionType>);
+        constructor(channel: Channel<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>);
         /**
          * addMessageSorted - Add a message to the state
          *
          * @param {object} newMessage A new message
          *
          */
-        addMessageSorted(newMessage: MessageResponse<MessageType, ReactionType>): void;
-        /**
-         * messageToImmutable - Takes the message object. Parses the dates, sets __html
-         * and sets the status to received if missing. Returns an immutable message object
-         *
-         * @param {object} message an Immutable message object
-         *
-         */
-        messageToImmutable(message: MessageResponse<MessageType, ReactionType>): ImmutableMessageResponse<MessageType, ReactionType>;
+        addMessageSorted(newMessage: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>): void;
         /**
          * addMessagesSorted - Add the list of messages to state and resorts the messages
          *
@@ -57,65 +52,11 @@ declare module "src/channel_state" {
          * @param {boolean} initializing   Weather channel is being initialized.
          *
          */
-        addMessagesSorted(newMessages: MessageResponse<MessageType, ReactionType>[], initializing?: boolean): void;
-        addReaction(reaction: ReactionResponse<ReactionType>, message?: MessageResponse<MessageType, ReactionType>): void;
-        _addReactionToMessage(message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>, reaction: ReactionResponse<ReactionType>): false | Immutable.ImmutableObject<{
-            __html: string;
-            id: string;
-            text: string;
-            attachments?: any[] | undefined;
-            parent_id?: string | undefined;
-            mentioned_users?: any[] | undefined;
-            command?: string | undefined;
-            user?: User<{
-                [key: string]: unknown;
-            }> | undefined;
-            html: string;
-            type: string;
-            latest_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            own_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            reaction_counts?: {
-                [key: string]: number;
-            } | undefined;
-            reaction_scores?: {
-                [key: string]: number;
-            } | undefined;
-            show_in_channel?: boolean | undefined;
-            reply_count?: number | undefined;
-            created_at: Date;
-            updated_at: Date;
-            deleted_at?: string | undefined;
-            status: string;
-        }>;
-        _removeReactionFromMessage(message: Immutable.Immutable<ImmutableMessageResponse<MessageType, ReactionType>>, reaction: ReactionResponse<ReactionType>): Immutable.ImmutableObject<{
-            __html: string;
-            id: string;
-            text: string;
-            attachments?: any[] | undefined;
-            parent_id?: string | undefined;
-            mentioned_users?: any[] | undefined;
-            command?: string | undefined;
-            user?: User<{
-                [key: string]: unknown;
-            }> | undefined;
-            html: string;
-            type: string;
-            latest_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            own_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            reaction_counts?: {
-                [key: string]: number;
-            } | undefined;
-            reaction_scores?: {
-                [key: string]: number;
-            } | undefined;
-            show_in_channel?: boolean | undefined;
-            reply_count?: number | undefined;
-            created_at: Date;
-            updated_at: Date;
-            deleted_at?: string | undefined;
-            status: string;
-        }>;
-        removeReaction(reaction: ReactionResponse<ReactionType>, message?: MessageResponse<MessageType, ReactionType>): void;
+        addMessagesSorted(newMessages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[], initializing?: boolean): void;
+        addReaction(reaction: ReactionResponse<ReactionType, UserType>, message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>): void;
+        _addReactionToMessage(message: Immutable.Immutable<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>, {}>, reaction: ReactionResponse<ReactionType, UserType>): any;
+        _removeReactionFromMessage(message: Immutable.Immutable<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>, {}>, reaction: ReactionResponse<ReactionType, UserType>): any;
+        removeReaction(reaction: ReactionResponse<ReactionType, UserType>, message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>): void;
         /**
          * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isnt found
          *
@@ -123,34 +64,7 @@ declare module "src/channel_state" {
          * @param {object} newMessage The new message
          *
          */
-        _addToMessageList(messages: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>, newMessage: ImmutableMessageResponse<MessageType, ReactionType>): Immutable.ImmutableArray<Immutable.Immutable<MessageType & {
-            __html: string;
-            id: string;
-            text: string;
-            attachments?: any[] | undefined;
-            parent_id?: string | undefined;
-            mentioned_users?: any[] | undefined;
-            command?: string | undefined;
-            user?: User<{
-                [key: string]: unknown;
-            }> | undefined;
-            html: string;
-            type: string;
-            latest_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            own_reactions?: ReactionResponse<ReactionType>[] | undefined;
-            reaction_counts?: {
-                [key: string]: number;
-            } | undefined;
-            reaction_scores?: {
-                [key: string]: number;
-            } | undefined;
-            show_in_channel?: boolean | undefined;
-            reply_count?: number | undefined;
-            created_at: Date;
-            updated_at: Date;
-            deleted_at?: string | undefined;
-            status: string;
-        }, {}>>;
+        _addToMessageList(messages: Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>, newMessage: ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>): Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * removeMessage - Description
          *
@@ -162,39 +76,12 @@ declare module "src/channel_state" {
             id: string;
             parent_id?: string;
         }): boolean;
-        removeMessageFromArray: (msgArray: Immutable.ImmutableArray<ImmutableMessageResponse<MessageType, ReactionType>>, msg: {
+        removeMessageFromArray: (msgArray: Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>, msg: {
             id: string;
             parent_id?: string;
         }) => {
             removed: boolean;
-            result: Immutable.ImmutableArray<Immutable.Immutable<MessageType & {
-                __html: string;
-                id: string;
-                text: string;
-                attachments?: any[] | undefined;
-                parent_id?: string | undefined;
-                mentioned_users?: any[] | undefined;
-                command?: string | undefined;
-                user?: User<{
-                    [key: string]: unknown;
-                }> | undefined;
-                html: string;
-                type: string;
-                latest_reactions?: ReactionResponse<ReactionType>[] | undefined;
-                own_reactions?: ReactionResponse<ReactionType>[] | undefined;
-                reaction_counts?: {
-                    [key: string]: number;
-                } | undefined;
-                reaction_scores?: {
-                    [key: string]: number;
-                } | undefined;
-                show_in_channel?: boolean | undefined;
-                reply_count?: number | undefined;
-                created_at: Date;
-                updated_at: Date;
-                deleted_at?: string | undefined;
-                status: string;
-            }, {}>>;
+            result: Immutable.ImmutableArray<ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         };
         /**
          * filterErrorMessages - Removes error messages from the channel state.
@@ -215,6 +102,8 @@ declare module "src/events" {
         'user.watching.stop': boolean;
         'user.updated': boolean;
         'user.deleted': boolean;
+        'user.banned': boolean;
+        'user.unbanned': boolean;
         'typing.start': boolean;
         'typing.stop': boolean;
         'message.new': boolean;
@@ -223,6 +112,7 @@ declare module "src/events" {
         'message.read': boolean;
         'reaction.new': boolean;
         'reaction.deleted': boolean;
+        'reaction.updated': boolean;
         'member.added': boolean;
         'member.updated': boolean;
         'member.removed': boolean;
@@ -233,6 +123,7 @@ declare module "src/events" {
         'channel.truncated': boolean;
         'channel.created': boolean;
         'channel.hidden': boolean;
+        'channel.visible': boolean;
         'health.check': boolean;
         'notification.message_new': boolean;
         'notification.mark_read': boolean;
@@ -247,171 +138,135 @@ declare module "src/events" {
         'connection.changed': boolean;
         'connection.recovered': boolean;
     };
-    const IS_VALID_EVENT_MAP_TYPE: {
-        all: boolean;
-        'user.presence.changed': boolean;
-        'user.watching.start': boolean;
-        'user.watching.stop': boolean;
-        'user.updated': boolean;
-        'user.deleted': boolean;
-        'typing.start': boolean;
-        'typing.stop': boolean;
-        'message.new': boolean;
-        'message.updated': boolean;
-        'message.deleted': boolean;
-        'message.read': boolean;
-        'reaction.new': boolean;
-        'reaction.deleted': boolean;
-        'member.added': boolean;
-        'member.updated': boolean;
-        'member.removed': boolean;
-        'channel.updated': boolean;
-        'channel.muted': boolean;
-        'channel.unmuted': boolean;
-        'channel.deleted': boolean;
-        'channel.truncated': boolean;
-        'channel.created': boolean;
-        'channel.hidden': boolean;
-        'health.check': boolean;
-        'notification.message_new': boolean;
-        'notification.mark_read': boolean;
-        'notification.invited': boolean;
-        'notification.invite_accepted': boolean;
-        'notification.added_to_channel': boolean;
-        'notification.removed_from_channel': boolean;
-        'notification.mutes_updated': boolean;
-        'notification.channel_deleted': boolean;
-        'notification.channel_truncated': boolean;
-        'notification.channel_mutes_updated': boolean;
-        'connection.changed': boolean;
-        'connection.recovered': boolean;
-    };
-    export const isValidEventType: (eventType: keyof typeof IS_VALID_EVENT_MAP_TYPE) => boolean;
+    export const isValidEventType: (eventType: string) => boolean;
 }
 declare module "src/utils" {
     /**
      * logChatPromiseExecution - utility function for logging the execution of a promise..
      *  use this when you want to run the promise and handle errors by logging a warning
      *
-     * @param {Promise<unknown>} promise The promise you want to run and log
+     * @param {Promise<T>} promise The promise you want to run and log
      * @param {string} name    A descriptive name of what the promise does for log output
      *
      */
-    export function logChatPromiseExecution(promise: Promise<unknown>, name: string): void;
+    export function logChatPromiseExecution<T>(promise: Promise<T>, name: string): void;
     export const sleep: (m: number) => Promise<void>;
-    export function isFunction(value: Function | unknown): value is Function;
+    export function isFunction<T>(value: Function | T): value is Function;
     export const chatCodes: {
         TOKEN_EXPIRED: number;
         WS_CLOSED_SUCCESS: number;
     };
 }
 declare module "src/client_state" {
+    import Immutable from 'seamless-immutable';
+    import { UnknownType, UserResponse } from '../types/types';
     /**
      * ClientState - A container class for the client state.
      */
-    export class ClientState {
-        users: Immutable.ImmutableObject<{}>;
-        userChannelReferences: {};
-        updateUsers(users: any): void;
-        updateUser(user: any): void;
-        updateUserReference(user: any, channelID: any): void;
+    export class ClientState<UserType = UnknownType> {
+        users: Immutable.ImmutableObject<{
+            [key: string]: Immutable.Immutable<UserResponse<UserType>>;
+        }>;
+        userChannelReferences: {
+            [key: string]: {
+                [key: string]: boolean;
+            };
+        };
+        constructor();
+        updateUsers(users: UserResponse<UserType>[]): void;
+        updateUser(user?: UserResponse<UserType>): void;
+        updateUserReference(user: UserResponse<UserType>, channelID: string): void;
     }
-    import Immutable from "seamless-immutable";
 }
 declare module "src/signing" {
     import { Secret, SignOptions } from 'jsonwebtoken';
-    type ExtraData = Record<string, unknown>;
+    import { ExtraData } from '../types/types';
     /**
      * Creates the JWT token that can be used for a UserSession
-     * @method JWTUserSessionToken
+     * @method JWTUserToken
      * @memberof signing
      * @private
-     * @param {string} apiSecret - API Secret key
+     * @param {Secret} apiSecret - API Secret key
      * @param {string} userId - The user_id key in the JWT payload
-     * @param {object} [extraData] - Extra that should be part of the JWT token
-     * @param {object} [jwtOptions] - Options that can be past to jwt.sign
+     * @param {ExtraData} [extraData] - Extra that should be part of the JWT token
+     * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
      * @return {string} JWT Token
      */
     export function JWTUserToken(apiSecret: Secret, userId: string, extraData?: ExtraData, jwtOptions?: SignOptions): string;
     export function JWTServerToken(apiSecret: Secret, jwtOptions?: SignOptions): string;
-    /**
-     * @return {string}
-     */
     export function UserFromToken(token: string): string;
     /**
      *
-     * @param userId {string} the id of the user
+     * @param {string} userId the id of the user
      * @return {string}
      */
     export function DevToken(userId: string): string;
     /**
      *
-     * @param body {string} the signed message
-     * @param secret {string} the shared secret used to generate the signature (Stream API secret)
-     * @param signature {string} the signature to validate
+     * @param {string} body the signed message
+     * @param {string} secret the shared secret used to generate the signature (Stream API secret)
+     * @param {string} signature the signature to validate
      * @return {boolean}
      */
     export function CheckSignature(body: string, secret: string, signature: string): boolean;
 }
 declare module "src/token_manager" {
-    import { User, TokenOrProvider } from '../types/types';
+    import { Secret } from 'jsonwebtoken';
+    import { TokenOrProvider, UnknownType, User } from '../types/types';
     /**
      * TokenManager
      *
      * Handles all the operations around user token.
      */
-    export class TokenManager {
+    export class TokenManager<UserType = UnknownType> {
         loadTokenPromise: Promise<string> | null;
         type: 'static' | 'provider';
-        secret?: string;
-        token?: string | null;
+        secret?: Secret;
+        token?: string;
         tokenProvider?: TokenOrProvider;
-        user?: User | null;
+        user?: User<UserType>;
         /**
          * Constructor
          *
-         * @param {object} secret
+         * @param {Secret} secret
          */
-        constructor(secret?: string);
+        constructor(secret?: Secret);
         /**
          * Set the static string token or token provider.
          * Token provider should return a token string or a promise which resolves to string token.
          *
-         * @param {string | function} tokenOrProvider
+         * @param {TokenOrProvider} tokenOrProvider
+         * @param {User<UserType>} user
          */
-        setTokenOrProvider: (tokenOrProvider: TokenOrProvider, user: User) => Promise<void>;
+        setTokenOrProvider: (tokenOrProvider: TokenOrProvider, user: User<UserType>) => Promise<void>;
         /**
          * Resets the token manager.
          * Useful for client disconnection or switching user.
          */
         reset: () => void;
-        validateToken: (tokenOrProvider: TokenOrProvider, user: User) => void;
+        validateToken: (tokenOrProvider: TokenOrProvider, user: User<UserType>) => void;
         tokenReady: () => Promise<string> | null;
         loadToken: () => Promise<string>;
-        getToken: () => string | null | undefined;
+        getToken: () => string | undefined;
         isStatic: () => boolean;
     }
 }
 declare module "src/connection" {
     import isoWS from 'isomorphic-ws';
-    import { ConnectionChangeEvent, Logger, User } from '../types/types';
-    import { TokenManager } from "src/token_manager";
     import WebSocket from 'isomorphic-ws';
-    type ConnectionOpen = {
-        connection_id?: string;
-        [key: string]: unknown;
-    };
-    type Constructor = {
+    import { TokenManager } from "src/token_manager";
+    import { ConnectionChangeEvent, ConnectionOpen, Logger, UnknownType, User } from '../types/types';
+    type Constructor<UserType = UnknownType> = {
         wsBaseURL: string;
         clientID: string;
         userID: string;
-        user: User;
+        user: User<UserType>;
         userAgent: string;
         apiKey: string;
-        tokenManager: TokenManager;
+        tokenManager: TokenManager<UserType>;
         authType: 'anonymous' | 'jwt';
-        messageCallback: (messageEvent: WebSocket.OpenEvent) => void;
-        recoverCallback: (open?: ConnectionOpen) => Promise<void>;
+        messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
+        recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
         eventCallback: (event: ConnectionChangeEvent) => void;
         logger: Logger | (() => void);
     };
@@ -432,19 +287,19 @@ declare module "src/connection" {
      * - state can be recovered by querying the channel again
      * - if the servers fails to publish a message to the client, the WS connection is destroyed
      */
-    export class StableWSConnection {
-        wsBaseURL: Constructor['wsBaseURL'];
-        clientID: Constructor['clientID'];
-        userID: Constructor['userID'];
-        user: Constructor['user'];
-        userAgent: Constructor['userAgent'];
-        authType: Constructor['authType'];
-        apiKey: Constructor['apiKey'];
-        tokenManager: Constructor['tokenManager'];
-        messageCallback: Constructor['messageCallback'];
-        recoverCallback: Constructor['recoverCallback'];
-        eventCallback: Constructor['eventCallback'];
-        logger: Constructor['logger'];
+    export class StableWSConnection<UserType> {
+        wsBaseURL: Constructor<UserType>['wsBaseURL'];
+        clientID: Constructor<UserType>['clientID'];
+        userID: Constructor<UserType>['userID'];
+        user: Constructor<UserType>['user'];
+        userAgent: Constructor<UserType>['userAgent'];
+        authType: Constructor<UserType>['authType'];
+        apiKey: Constructor<UserType>['apiKey'];
+        tokenManager: Constructor<UserType>['tokenManager'];
+        messageCallback: Constructor<UserType>['messageCallback'];
+        recoverCallback: Constructor<UserType>['recoverCallback'];
+        eventCallback: Constructor<UserType>['eventCallback'];
+        logger: Constructor<UserType>['logger'];
         consecutiveFailures: number;
         healthCheckInterval: number;
         isConnecting: boolean;
@@ -453,37 +308,41 @@ declare module "src/connection" {
         monitorInterval: number;
         totalFailures: number;
         connectionID?: string;
-        connectionOpen?: Promise<ConnectionOpen | undefined>;
+        connectionOpen?: Promise<ConnectionOpen<UserType> | undefined>;
         healthCheckIntervalRef?: NodeJS.Timeout;
         isResolved?: boolean;
         monitorIntervalRef?: NodeJS.Timeout;
-        rejectPromise?: (reason?: unknown) => void;
+        rejectPromise?: (reason?: Error & {
+            code?: string | number;
+            StatusCode?: string | number;
+            isWSFailure?: boolean;
+        }) => void;
         resolvePromise?: (value?: WebSocket.MessageEvent) => void;
         ws?: isoWS;
         wsID: number;
-        constructor({ wsBaseURL, clientID, userID, user, userAgent, apiKey, tokenManager, authType, messageCallback, recoverCallback, eventCallback, logger, }: Constructor);
+        constructor({ wsBaseURL, clientID, userID, user, userAgent, apiKey, tokenManager, authType, messageCallback, recoverCallback, eventCallback, logger, }: Constructor<UserType>);
         /**
          * connect - Connect to the WS URL
          *
-         * @return {promise} Promise that completes once the first health check message is received
+         * @return {Promise<ConnectionOpen<UserType> | void>} Promise that completes once the first health check message is received
          */
-        connect(): Promise<ConnectionOpen | void>;
+        connect(): Promise<void | ConnectionOpen<UserType>>;
         _buildUrl: () => string;
         /**
          * disconnect - Disconnect the connection and doesn't recover...
          *
          */
-        disconnect(timeout?: number): Promise<unknown>;
+        disconnect(timeout?: number): Promise<void>;
         /**
          * _connect - Connect to the WS endpoint
          *
-         * @return {promise} Promise that completes once the first health check message is received
+         * @return {Promise<ConnectionOpen<UserType> | undefined>} Promise that completes once the first health check message is received
          */
-        _connect(): Promise<ConnectionOpen | undefined>;
+        _connect(): Promise<ConnectionOpen<UserType> | undefined>;
         /**
          * _reconnect - Retry the connection to WS endpoint
          *
-         * @param {object} options Following options are available
+         * @param {{ interval?: number; refreshToken?: boolean }} options Following options are available
          *
          * - `interval`	{int}			number of ms that function should wait before reconnecting
          * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
@@ -495,7 +354,7 @@ declare module "src/connection" {
         /**
          * onlineStatusChanged - this function is called when the browser connects or disconnects from the internet.
          *
-         * @param {object} event Event with type online or offline
+         * @param {Event} event Event with type online or offline
          *
          */
         onlineStatusChanged: (event: Event) => void;
@@ -507,7 +366,7 @@ declare module "src/connection" {
          * _setHealth - Sets the connection to healthy or unhealthy.
          * Broadcasts an event in case the connection status changed.
          *
-         * @param {bool} healthy boolean indicating if the connection is healthy or not
+         * @param {boolean} healthy boolean indicating if the connection is healthy or not
          *
          */
         _setHealth: (healthy: boolean) => void;
@@ -517,7 +376,7 @@ declare module "src/connection" {
          */
         _errorFromWSEvent: (event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent, isWSFailure?: boolean) => Error & {
             code?: string | number | undefined;
-            StatusCode?: unknown;
+            StatusCode?: string | number | undefined;
             isWSFailure?: boolean | undefined;
         };
         /**
@@ -534,7 +393,7 @@ declare module "src/connection" {
         /**
          * _retryInterval - A retry interval which increases after consecutive failures
          *
-         * @return {int} Duration to wait in milliseconds
+         * @return {number} Duration to wait in milliseconds
          */
         _retryInterval: () => number;
         /**
@@ -554,90 +413,53 @@ declare module "src/connection" {
     }
 }
 declare module "src/client" {
-    export class StreamChat {
-        constructor(key: any, secretOrOptions: any, options: any);
-        key: any;
-        secret: any;
-        listeners: {};
-        state: ClientState;
-        mutedChannels: any[];
-        browser: any;
+    import { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
+    import WebSocket from 'ws';
+    import { Channel } from "src/channel";
+    import { ClientState } from "src/client_state";
+    import { StableWSConnection } from "src/connection";
+    import { TokenManager } from "src/token_manager";
+    import { Configs, Logger, User, ConnectionOpen, TokenOrProvider, UserResponse, Event, EventHandler, ChannelMute, QueryFilters, ChannelSort, ChannelOptions, ChannelAPIResponse, ChannelData, AppSettings, CheckPushResponse, TestPushDataInput, UserFilters, UserSort, UserOptions, SearchOptions, MessageResponse, ReactionResponse, BanUserOptions, UnBanUserOptions, MuteUserResponse, FlagMessageOptions, FlagMessageResponse, MarkAllReadOptions, StreamChatOptions, CreateChannelOptions, GetChannelTypeResponse, UpdateChannelOptions, UpdateChannelResponse, ListChannelResponse, APIResponse, CustomPermissionOptions } from '../types/types';
+    export class StreamChat<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType> {
+        key: string;
+        secret?: string;
+        listeners: {
+            [key: string]: Array<(event: Event) => void>;
+        };
+        state: ClientState<UserType>;
+        mutedChannels: ChannelMute<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>[];
+        browser: boolean;
         node: boolean;
-        options: any;
-        axiosInstance: import("axios").AxiosInstance;
-        wsConnection: StableWSConnection | null;
-        wsPromise: Promise<void | {
-            [key: string]: unknown;
-            connection_id?: string | undefined;
-        }> | null;
-        setUserPromise: Promise<void | {
-            [key: string]: unknown;
-            connection_id?: string | undefined;
-        }> | null;
-        activeChannels: {};
-        configs: {};
+        options: StreamChatOptions;
+        axiosInstance: AxiosInstance;
+        wsConnection: StableWSConnection<UserType> | null;
+        wsPromise: Promise<void | ConnectionOpen<UserType>> | null;
+        setUserPromise: Promise<void | ConnectionOpen<UserType>> | null;
+        activeChannels: {
+            [key: string]: Channel<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>;
+        };
+        configs: Configs;
         anonymous: boolean;
-        tokenManager: TokenManager;
-        /**
-         * logger function should accept 3 parameters:
-         * @param logLevel string
-         * @param message   string
-         * @param extraData object
-         *
-         * e.g.,
-         * const client = new StreamChat('api_key', {}, {
-         * 		logger = (logLevel, message, extraData) => {
-         * 			console.log(message);
-         * 		}
-         * })
-         *
-         * extraData contains tags array attached to log message. Tags can have one/many of following values:
-         * 1. api
-         * 2. api_request
-         * 3. api_response
-         * 4. client
-         * 5. channel
-         * 6. connection
-         * 7. event
-         *
-         * It may also contains some extra data, some examples have been mentioned below:
-         * 1. {
-         * 		tags: ['api', 'api_request', 'client'],
-         * 		url: string,
-         * 		payload: object,
-         * 		config: object
-         * }
-         * 2. {
-         * 		tags: ['api', 'api_response', 'client'],
-         * 		url: string,
-         * 		response: object
-         * }
-         * 3. {
-         * 		tags: ['api', 'api_response', 'client'],
-         * 		url: string,
-         * 		error: object
-         * }
-         * 4. {
-         * 		tags: ['event', 'client'],
-         * 		event: object
-         * }
-         * 5. {
-         * 		tags: ['channel'],
-         * 		channel: object
-         * }
-         */
-        logger: any;
-        devToken(userID: any): string;
+        tokenManager: TokenManager<UserType>;
+        logger: Logger;
+        baseURL?: string;
+        wsBaseURL?: string;
+        UUID?: string;
+        userID?: string;
+        clientID?: string;
+        connectionID?: string;
+        user?: User<UserType>;
+        _user?: User<UserType>;
+        cleaningIntervalRef?: NodeJS.Timeout;
+        connectionEstablishedCount?: number;
+        connecting?: boolean;
+        failures?: number;
+        constructor(key: string, options?: StreamChatOptions);
+        constructor(key: string, secret?: string, options?: StreamChatOptions);
+        devToken(userID: string): string;
         getAuthType(): "anonymous" | "jwt";
-        setBaseURL(baseURL: any): void;
-        baseURL: any;
-        wsBaseURL: any;
-        _setupConnection: () => Promise<void | {
-            [key: string]: unknown;
-            connection_id?: string | undefined;
-        }>;
-        UUID: string | undefined;
-        clientID: string | undefined;
+        setBaseURL(baseURL: string): void;
+        _setupConnection: () => Promise<void | ConnectionOpen<UserType>>;
         _hasConnectionID: () => boolean;
         /**
          * setUser - Set the current user, this triggers a connection to the API
@@ -647,65 +469,57 @@ declare module "src/client" {
          *
          * @return {promise} Returns a promise that resolves when the connection is setup
          */
-        setUser: (user: object, userTokenOrProvider: any) => any;
-        userID: any;
-        _setToken: (user: any, userTokenOrProvider: any) => Promise<void>;
-        _setUser(user: any): void;
-        user: any;
-        _user: any;
+        setUser: (user: User<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void | ConnectionOpen<UserType>>;
+        _setToken: (user: User<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void>;
+        _setUser(user: User<UserType>): void;
         /**
-         * updateAppSettings - updates application settings
-         *
-         * @param {object} options App settings.
-         * 		IE: {
-                    "apn_config": {
-                        "auth_type": "token",
-                        "auth_key": fs.readFileSync(
-                            './apn-push-auth-key.p8',
-                            'utf-8',
-                        ),
-                        "key_id": "keyid",
-                        "team_id": "teamid", //either ALL these 3
-                        "notification_template": "notification handlebars template",
-                        "bundle_id": "com.apple.your.app",
-                        "development": true
-                    },
-                    "firebase_config": {
-                        "server_key": "server key from fcm",
-                        "notification_template": "notification handlebars template"
-                        "data_template": "data handlebars template"
-                    },
-                    "webhook_url": "https://acme.com/my/awesome/webhook/"
-                }
-         */
-        updateAppSettings(options: object): Promise<any>;
+           * updateAppSettings - updates application settings
+           *
+           * @param {object} options App settings.
+           * 		IE: {
+                      "apn_config": {
+                          "auth_type": "token",
+                          "auth_key": fs.readFileSync(
+                              './apn-push-auth-key.p8',
+                              'utf-8',
+                          ),
+                          "key_id": "keyid",
+                          "team_id": "teamid", //either ALL these 3
+                          "notification_template": "notification handlebars template",
+                          "bundle_id": "com.apple.your.app",
+                          "development": true
+                      },
+                      "firebase_config": {
+                          "server_key": "server key from fcm",
+                          "notification_template": "notification handlebars template"
+                          "data_template": "data handlebars template"
+                      },
+                      "webhook_url": "https://acme.com/my/awesome/webhook/"
+                  }
+           */
+        updateAppSettings(options: AppSettings): Promise<APIResponse>;
         /**
          * getAppSettings - retrieves application settings
          */
-        getAppSettings(): Promise<any>;
+        getAppSettings(): Promise<unknown>;
         /**
-         * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
-         *
-         * @param {string} userID User ID. If user has no devices, it will error
-         * @param {object} [data] Overrides for push templates/message used
-         * 		IE: {
-                      messageID: 'id-of-message',//will error if message does not exist
-                      apnTemplate: '{}', //if app doesn't have apn configured it will error
-                      firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-                      firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
-                }
-         */
-        testPushSettings(userID: string, data?: object | undefined): Promise<any>;
+           * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+           *
+           * @param {string} userID User ID. If user has no devices, it will error
+           * @param {object} [data] Overrides for push templates/message used
+           * 		IE: {
+                        messageID: 'id-of-message',//will error if message does not exist
+                        apnTemplate: '{}', //if app doesn't have apn configured it will error
+                        firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+                        firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+                  }
+           */
+        testPushSettings(userID: string, data?: TestPushDataInput): Promise<CheckPushResponse>;
         /**
          * disconnect - closes the WS connection
          */
-        disconnect(timeout: any): Promise<unknown>;
-        cleaningIntervalRef: NodeJS.Timeout | null | undefined;
-        connectionEstablishedCount: number | undefined;
-        setAnonymousUser: () => Promise<void | {
-            [key: string]: unknown;
-            connection_id?: string | undefined;
-        }>;
+        disconnect(timeout?: number): Promise<void>;
+        setAnonymousUser: () => Promise<void | ConnectionOpen<UserType>>;
         /**
          * setGuestUser - Setup a temporary guest user
          *
@@ -713,17 +527,17 @@ declare module "src/client" {
          *
          * @return {promise} Returns a promise that resolves when the connection is setup
          */
-        setGuestUser(user: object): any;
+        setGuestUser(user: User<UserType>): Promise<void | ConnectionOpen<UserType>>;
         /**
          * createToken - Creates a token to authenticate this user. This function is used server side.
          * The resulting token should be passed to the client side when the users registers or logs in
          *
          * @param {string}   userID         The User ID
-         * @param {string}   exp            The expiration time for the token expressed in the number of seconds since the epoch
+         * @param {number}   exp            The expiration time for the token expressed in the number of seconds since the epoch
          *
          * @return {string} Returns a token
          */
-        createToken(userID: string, exp: string): string;
+        createToken(userID: string, exp?: number): string;
         /**
          * on - Listen to events on all channels and users your watching
          *
@@ -736,42 +550,57 @@ declare module "src/client" {
          *
          * @return {type} Description
          */
-        on(callbackOrString: string, callbackOrNothing: Function): any;
+        on(callback: EventHandler): {
+            unsubscribe: () => void;
+        };
+        on(eventType: string, callback: EventHandler): {
+            unsubscribe: () => void;
+        };
         /**
          * off - Remove the event handler
          *
          */
-        off(callbackOrString: any, callbackOrNothing: any): void;
-        _logApiRequest(type: any, url: any, data: any, config: any): void;
-        _logApiResponse(type: any, url: any, response: any): void;
-        _logApiError(type: any, url: any, error: any): void;
-        doAxiosRequest: (type: any, url: any, data: any, options?: {}) => any;
-        get(url: any, params: any): any;
-        put(url: any, data: any): any;
-        post(url: any, data: any): any;
-        patch(url: any, data: any): any;
-        delete(url: any, params: any): any;
-        sendFile(url: any, uri: any, name: any, contentType: any, user: any): any;
-        errorFromResponse(response: any): Error;
-        handleResponse(response: any): any;
-        dispatchEvent: (event: any) => void;
-        handleEvent: (messageEvent: any) => void;
-        _handleClientEvent(event: any): void;
-        _muteStatus(cid: any): {
+        off(callback: EventHandler): void;
+        off(eventType: string, callback: EventHandler): void;
+        _logApiRequest(type: string, url: string, data: unknown, config: AxiosRequestConfig & {
+            config?: AxiosRequestConfig & {
+                maxBodyLength?: number;
+            };
+        }): void;
+        _logApiResponse(type: string, url: string, response: AxiosResponse): void;
+        _logApiError(type: string, url: string, error: unknown): void;
+        doAxiosRequest: <T>(type: string, url: string, data?: unknown, options?: AxiosRequestConfig & {
+            config?: AxiosRequestConfig & {
+                maxBodyLength?: number;
+            };
+        }) => Promise<T>;
+        get<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
+        put<T>(url: string, data?: unknown): Promise<T>;
+        post<T>(url: string, data?: unknown): Promise<T>;
+        patch<T>(url: string, data?: unknown): Promise<T>;
+        delete<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
+        sendFile<T>(url: string, uri: string | Buffer | File, name?: string, contentType?: string, user?: User<UserType>): Promise<T>;
+        errorFromResponse<T>(response: AxiosResponse<T & {
+            code?: number;
+            message?: string;
+        }>): Error & {
+            response?: AxiosResponse<T> | undefined;
+            status?: number | undefined;
+            code?: number | undefined;
+        };
+        handleResponse<T>(response: AxiosResponse<T>): T;
+        dispatchEvent: (event: Event) => void;
+        handleEvent: (messageEvent: WebSocket.MessageEvent) => void;
+        _handleClientEvent(event: Event<EventTypeName, EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
+        _muteStatus(cid: string): {
             muted: boolean;
             createdAt: null;
             expiresAt: null;
         };
-        _callClientListeners: (event: any) => void;
+        _callClientListeners: (event: Event) => void;
         recoverState: () => Promise<void>;
-        connectionID: string | undefined;
-        _updateUserReferences(user: any): void;
-        connect(): Promise<void | {
-            [key: string]: unknown;
-            connection_id?: string | undefined;
-        }>;
-        connecting: boolean | undefined;
-        failures: number | undefined;
+        _updateUserReferences(user: User<UserType>): void;
+        connect(): Promise<void | ConnectionOpen<UserType>>;
         /**
          * queryUsers - Query users and watch user presence
          *
@@ -781,8 +610,10 @@ declare module "src/client" {
          *
          * @return {object} User Query Response
          */
-        queryUsers(filterConditions: object, sort: object, options: object): object;
-        queryChannels(filterConditions: any, sort?: {}, options?: {}): Promise<Channel<any, any, any>[]>;
+        queryUsers(filterConditions: UserFilters, sort?: UserSort<User<UserType>>, options?: UserOptions): Promise<APIResponse & {
+            users: Array<UserResponse<UserType>>;
+        }>;
+        queryChannels(filterConditions: QueryFilters, sort?: ChannelSort, options?: ChannelOptions): Promise<Channel<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>[]>;
         /**
          * search - Query messages
          *
@@ -792,7 +623,9 @@ declare module "src/client" {
          *
          * @return {object} search messages response
          */
-        search(filterConditions: any, query: any, options?: object): object;
+        search(filterConditions: QueryFilters, query: string | QueryFilters, options?: SearchOptions): Promise<APIResponse & {
+            results: Array<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
+        }>;
         /**
          * addDevice - Adds a push device for a user.
          *
@@ -801,7 +634,7 @@ declare module "src/client" {
          * @param {string} [userID] the user id (defaults to current user)
          *
          */
-        addDevice(id: string, push_provider: string, userID?: string | undefined): Promise<any>;
+        addDevice(id: string, push_provider: string, userID?: string): Promise<unknown>;
         /**
          * getDevices - Returns the devices associated with a current user
          *
@@ -809,7 +642,7 @@ declare module "src/client" {
          *
          * @return {devices} Array of devices
          */
-        getDevices(userID?: string | undefined): any;
+        getDevices(userID?: string): Promise<unknown>;
         /**
          * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
          *
@@ -817,8 +650,8 @@ declare module "src/client" {
          * @param {string} [userID] The user id. Only specify this for serverside requests
          *
          */
-        removeDevice(id: string, userID?: string | undefined): Promise<any>;
-        _addChannelConfig(channelState: any): void;
+        removeDevice(id: string, userID?: string): Promise<unknown>;
+        _addChannelConfig(channelState: ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>): void;
         /**
          * channel - Returns a new channel with the given type, id and custom data
          *
@@ -833,7 +666,7 @@ declare module "src/client" {
          *
          * @return {channel} The channel object, initialize it using channel.watch()
          */
-        channel(channelType: string, channelID: string, custom?: object | undefined, ...args: any[]): Channel<any, any, any>;
+        channel(channelType: string, channelID: string, custom?: ChannelData): Channel<AttachmentType, ChannelType, EventTypeName, EventType, MessageType, ReactionType, UserType>;
         /**
          * @deprecated Please use upsertUser() function instead.
          *
@@ -843,7 +676,11 @@ declare module "src/client" {
          *
          * @return {object}
          */
-        updateUser(userObject: any): object;
+        updateUser(userObject: User<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: User<UserType>;
+            };
+        }>;
         /**
          * partialUpdateUser - Update the given user object
          *
@@ -852,7 +689,11 @@ declare module "src/client" {
          *
          * @return {object} list of updated users
          */
-        partialUpdateUser(userObject: any): object;
+        partialUpdateUser(userObject: User<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
         /**
          * upsertUsers - Batch upsert the list of users
          *
@@ -860,7 +701,11 @@ declare module "src/client" {
          *
          * @return {object}
          */
-        upsertUsers(users: any): object;
+        upsertUsers(users: User<UserType>[]): Promise<APIResponse & {
+            users: {
+                [key: string]: User<UserType>;
+            };
+        }>;
         /**
          * upsertUser - Update or Create the given user object
          *
@@ -868,7 +713,11 @@ declare module "src/client" {
          *
          * @return {object}
          */
-        upsertUser(userObject: any): object;
+        upsertUser(userObject: User<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: User<UserType>;
+            };
+        }>;
         /**
          * @deprecated Please use upsertUsers() function instead.
          *
@@ -878,7 +727,11 @@ declare module "src/client" {
          *
          * @return {object}
          */
-        updateUsers(users: any): object;
+        updateUsers(users: Array<User<UserType>>): Promise<APIResponse & {
+            users: {
+                [key: string]: User<UserType>;
+            };
+        }>;
         /**
          * updateUsers - Batch partial update of users
          *
@@ -886,53 +739,74 @@ declare module "src/client" {
          *
          * @return {object}
          */
-        partialUpdateUsers(users: any): object;
-        deleteUser(userID: any, params: any): Promise<any>;
-        reactivateUser(userID: any, options: any): Promise<any>;
-        deactivateUser(userID: any, options: any): Promise<any>;
-        exportUser(userID: any, options: any): Promise<any>;
+        partialUpdateUsers(users: Array<User<UserType>>): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        deleteUser(userID: string, params?: {
+            hard_delete?: boolean;
+            mark_messages_deleted?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        reactivateUser(userID: string, options?: {
+            restore_messages?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        deactivateUser(userID: string, options?: {
+            mark_messages_deleted?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        exportUser(userID: string, options?: Record<string, unknown>): Promise<APIResponse & {
+            messages: Array<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
+            reactions: Array<ReactionResponse<ReactionType, UserType>>;
+            user: UserResponse<UserType>;
+        }>;
         /** banUser - bans a user from all channels
          *
          * @param targetUserID
          * @param options
          * @returns {Promise<*>}
          */
-        banUser(targetUserID: any, options: any): Promise<any>;
+        banUser(targetUserID: string, options?: BanUserOptions<UserType>): Promise<APIResponse>;
         /** unbanUser - revoke global ban for a user
          *
          * @param targetUserID
          * @returns {Promise<*>}
          */
-        unbanUser(targetUserID: any, options: any): Promise<any>;
+        unbanUser(targetUserID: string, options: UnBanUserOptions): Promise<APIResponse>;
         /** muteUser - mutes a user
          *
          * @param targetID
          * @param [userID] Only used with serverside auth
          * @returns {Promise<*>}
          */
-        muteUser(targetID: any, userID?: any): Promise<any>;
+        muteUser(targetID: string, userID?: string): Promise<MuteUserResponse<UserType>>;
         /** unmuteUser - unmutes a user
          *
          * @param targetID
          * @param [currentUserID] Only used with serverside auth
          * @returns {Promise<*>}
          */
-        unmuteUser(targetID: any, currentUserID?: any): Promise<any>;
-        flagMessage(messageID: any, options?: {}): Promise<any>;
-        flagUser(userID: any, options?: {}): Promise<any>;
-        unflagMessage(messageID: any, options?: {}): Promise<any>;
-        unflagUser(userID: any, options?: {}): Promise<any>;
+        unmuteUser(targetID: string, currentUserID?: string): Promise<APIResponse>;
+        flagMessage(targetMessageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        flagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        unflagMessage(messageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        unflagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
         /**
          * markAllRead - marks all channels for this user as read
          *
          * @return {Promise} Description
          */
-        markAllRead(data?: {}): Promise<any>;
-        createChannelType(data: any): any;
-        getChannelType(channelType: any): any;
-        updateChannelType(channelType: any, data: any): any;
-        deleteChannelType(channelType: any): any;
-        listChannelTypes(): any;
+        markAllRead(data?: MarkAllReadOptions<UserType>): Promise<void>;
+        createChannelType(data: CreateChannelOptions): Promise<Pick<GetChannelTypeResponse, "search" | "created_at" | "updated_at" | "name" | "automod" | "automod_behavior" | "max_message_length" | "message_retention" | "mutes" | "permissions" | "reactions" | "read_events" | "replies" | "typing_events" | "uploads" | "url_enrichment" | "duration">>;
+        getChannelType(channelType: string): Promise<GetChannelTypeResponse>;
+        updateChannelType(channelType: string, data: UpdateChannelOptions): Promise<UpdateChannelResponse>;
+        deleteChannelType(channelType: string): Promise<APIResponse>;
+        listChannelTypes(): Promise<ListChannelResponse>;
         /**
          * translateMessage - adds the translation to the message
          *
@@ -940,7 +814,34 @@ declare module "src/client" {
          *
          * @return {object} Response that includes the message
          */
-        translateMessage(messageId: string, language: any): object;
+        translateMessage(messageId: string, language: string): Promise<APIResponse & MessageType & {
+            attachments?: import("types/types").Attachment<AttachmentType>[] | undefined;
+            html?: string | undefined;
+            id?: string | undefined;
+            parent_id?: string | undefined;
+            show_in_channel?: boolean | undefined;
+            text?: string | undefined;
+            user_id?: string | undefined;
+        } & {
+            command?: string | undefined;
+            created_at?: string | undefined;
+            deleted_at?: string | undefined;
+            latest_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
+            mentioned_users?: UserResponse<UserType>[] | undefined;
+            own_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
+            reaction_counts?: {
+                [key: string]: number;
+            } | undefined;
+            reaction_scores?: {
+                [key: string]: number;
+            } | undefined;
+            reply_count?: number | undefined;
+            silent?: boolean | undefined;
+            status?: string | undefined;
+            type?: string | undefined;
+            user?: UserResponse<UserType> | undefined;
+            updated_at?: string | undefined;
+        }>;
         /**
          * updateMessage - Update the given message
          *
@@ -948,111 +849,136 @@ declare module "src/client" {
          *
          * @return {object} Response that includes the message
          */
-        updateMessage(message: object, userId: any): object;
-        deleteMessage(messageID: any, hardDelete: any): Promise<any>;
-        getMessage(messageID: any): Promise<any>;
+        updateMessage(message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>, userId?: string | {
+            id: string;
+        }): Promise<APIResponse & {
+            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        }>;
+        deleteMessage(messageID: string, hardDelete?: boolean): Promise<APIResponse & {
+            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        }>;
+        getMessage(messageID: string): Promise<APIResponse & {
+            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        }>;
         _userAgent(): string;
         /**
          * _isUsingServerAuth - Returns true if we're using server side auth
          */
         _isUsingServerAuth: () => boolean;
-        _enrichAxiosOptions(options?: {
-            params: {};
-            headers: {};
-            config: {};
+        _enrichAxiosOptions(options?: AxiosRequestConfig & {
+            config?: AxiosRequestConfig;
         }): {
-            params: {
-                api_key: any;
-                connection_id: string | undefined;
-                user_id: any;
-            };
-            headers: {
-                Authorization: string | null | undefined;
-                'stream-auth-type': string;
-                'x-stream-client': string;
-            };
+            params: any;
+            headers: any;
+        } | {
+            url?: string | undefined;
+            method?: string | undefined;
+            baseURL?: string | undefined;
+            transformRequest?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
+            transformResponse?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
+            headers: any;
+            params: any;
+            paramsSerializer?: ((params: any) => string) | undefined;
+            data?: any;
+            timeout?: number | undefined;
+            withCredentials?: boolean | undefined;
+            adapter?: import("axios").AxiosAdapter | undefined;
+            auth?: import("axios").AxiosBasicCredentials | undefined;
+            responseType?: string | undefined;
+            xsrfCookieName?: string | undefined;
+            xsrfHeaderName?: string | undefined;
+            onUploadProgress?: ((progressEvent: any) => void) | undefined;
+            onDownloadProgress?: ((progressEvent: any) => void) | undefined;
+            maxContentLength?: number | undefined;
+            validateStatus?: ((status: number) => boolean) | undefined;
+            maxRedirects?: number | undefined;
+            httpAgent?: any;
+            httpsAgent?: any;
+            proxy?: false | import("axios").AxiosProxyConfig | undefined;
+            cancelToken?: import("axios").CancelToken | undefined;
         };
         _getToken(): string | null | undefined;
         _startCleaning(): void;
-        verifyWebhook(requestBody: any, xSignature: any): boolean;
+        verifyWebhook(requestBody: string, xSignature: string): boolean;
         /** getPermission - gets the definition for a permission
          *
          * @param {string} name
          * @returns {Promise<*>}
          */
-        getPermission(name: string): Promise<any>;
+        getPermission(name: string): Promise<APIResponse>;
         /** createPermission - creates a custom permission
          *
          * @param {object} permissionData the permission data
          * @returns {Promise<*>}
          */
-        createPermission(permissionData: object): Promise<any>;
+        createPermission(permissionData: CustomPermissionOptions): Promise<APIResponse>;
         /** updatePermission - updates an existing custom permission
          *
          * @param {string} name
          * @param {object} permissionData the permission data
          * @returns {Promise<*>}
          */
-        updatePermission(name: string, permissionData: object): Promise<any>;
+        updatePermission(name: string, permissionData: CustomPermissionOptions): Promise<APIResponse>;
         /** deletePermission - deletes a custom permission
          *
          * @param {name}
          * @returns {Promise<*>}
          */
-        deletePermission(name: any): Promise<any>;
+        deletePermission(name: string): Promise<APIResponse>;
         /** listPermissions - returns the list of custom permissions for this application
          *
          * @returns {Promise<*>}
          */
-        listPermissions(): Promise<any>;
+        listPermissions(): Promise<APIResponse>;
         /** createRole - creates a custom role
          *
          * @param {string} name the new role name
          * @returns {Promise<*>}
          */
-        createRole(name: string): Promise<any>;
+        createRole(name: string): Promise<APIResponse>;
         /** listRoles - returns the list of custom roles for this application
          *
          * @returns {Promise<*>}
          */
-        listRoles(): Promise<any>;
+        listRoles(): Promise<APIResponse>;
         /** deleteRole - deletes a custom role
          *
          * @param {string} name the role name
          * @returns {Promise<*>}
          */
-        deleteRole(name: string): Promise<any>;
+        deleteRole(name: string): Promise<APIResponse>;
         /** sync - returns all events that happened for a list of channels since last sync
          * @param {array} channel_cids list of channel CIDs
          * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
          */
-        sync(channel_cids: any, last_sync_at: string): any;
+        sync(channel_cids: string[], last_sync_at: string): Promise<APIResponse & {
+            events: Event[];
+        }>;
     }
-    import { ClientState } from "src/client_state";
-    import { StableWSConnection } from "src/connection";
-    import { TokenManager } from "src/token_manager";
-    import { Channel } from "src/channel";
 }
 declare module "src/channel" {
-    import Immutable from 'seamless-immutable';
+    import Immutable, { ImmutableObject } from 'seamless-immutable';
     import { ChannelState } from "src/channel_state";
     import { StreamChat } from "src/client";
-    import { ChannelData, ChannelResponse, EventHandler, Message } from '../types/types';
+    import { APIResponse, ChannelAPIResponse, ChannelData, ChannelResponse, DeleteChannelAPIResponse, Event, EventHandler, EventTypes, GetMultipleMessagesAPIResponse, GetReactionsAPIResponse, GetRepliesAPIResponse, MarkReadAPIResponse, Message, MuteChannelAPIResponse, Reaction, ReactionAPIResponse, SearchAPIResponse, SendEventAPIResponse, SendMessageAPIResponse, TruncateChannelAPIResponse, UpdateChannelAPIResponse, User, ChannelMemberAPIResponse, UserResponse, SendImageAPIResponse } from '../types/types';
     /**
      * Channel - The Channel class manages it's own state.
      */
-    export class Channel<UserType, MessageType, ReactionType> {
-        _client: StreamChat;
+    export class Channel<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType> {
+        _client: StreamChat<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>;
         type: string;
-        id: string;
-        data: ChannelData | ChannelResponse;
-        _data: ChannelData | ChannelResponse;
+        id: string | undefined;
+        data: ChannelData | ChannelResponse<ChannelType, UserType> | ImmutableObject<ChannelResponse<{
+            [key: string]: unknown;
+        }>> | undefined;
+        _data: ChannelData | ChannelResponse<ChannelType, UserType>;
         cid: string;
         listeners: {
-            [key: string]: EventHandler[];
+            [key: string]: (string | EventHandler)[];
         };
-        state: ChannelState<UserType, MessageType, ReactionType>;
+        state: ChannelState<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>;
         initialized: boolean;
+        lastKeyStroke?: Date;
         lastTypingEvent: Date | null;
         isTyping: boolean;
         disconnected: boolean;
@@ -1066,19 +992,19 @@ declare module "src/channel" {
          *
          * @return {Channel} Returns a new uninitialized channel
          */
-        constructor(client: StreamChat, type: string, id: string, data: ChannelData);
+        constructor(client: StreamChat<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>, type: string, id: string | undefined, data: ChannelData);
         /**
          * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
          *
          * @return {object}
          */
-        getClient(): StreamChat;
+        getClient(): StreamChat<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>;
         /**
          * getConfig - Get the configs for this channel type
          *
          * @return {object}
          */
-        getConfig(): any;
+        getConfig(): Record<string, unknown>;
         /**
          * sendMessage - Send a message to this channel
          *
@@ -1086,11 +1012,11 @@ declare module "src/channel" {
          *
          * @return {object} The Server Response
          */
-        sendMessage(message: Message<MessageType>): Promise<any>;
-        sendFile(uri: any, name: any, contentType: any, user: any): any;
-        sendImage(uri: any, name: any, contentType: any, user: any): any;
-        deleteFile(url: any): any;
-        deleteImage(url: any): any;
+        sendMessage(message: Message<MessageType, AttachmentType, UserType>): Promise<SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
+        sendFile(uri: string | Buffer | File, name?: string, contentType?: string, user?: User<UserType>): Promise<SendImageAPIResponse>;
+        sendImage(uri: string | Buffer | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<SendImageAPIResponse>;
+        deleteFile(url: string): Promise<APIResponse>;
+        deleteImage(url: string): Promise<APIResponse>;
         /**
          * sendEvent - Send an event on this channel
          *
@@ -1098,7 +1024,7 @@ declare module "src/channel" {
          *
          * @return {object} The Server Response
          */
-        sendEvent(event: any): Promise<any>;
+        sendEvent(event: Event): Promise<SendEventAPIResponse<string>>;
         /**
          * search - Query messages
          *
@@ -1107,7 +1033,12 @@ declare module "src/channel" {
          *
          * @return {object} search messages response
          */
-        search(query: any, options?: {}): Promise<any>;
+        search<T = {
+            [key: string]: unknown;
+        }>(query: string | Record<string, unknown>, options: T & {
+            query?: string;
+            message_filter_conditions?: Record<string, unknown>;
+        }): Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * search - Query Members
          *
@@ -1117,7 +1048,7 @@ declare module "src/channel" {
          *
          * @return {object} search members response
          */
-        queryMembers(filterConditions: any, sort?: {}, options?: {}): Promise<any>;
+        queryMembers(filterConditions: Record<string, unknown>, sort?: Record<string, unknown>, options?: Record<string, unknown>): Promise<ChannelMemberAPIResponse<UserType>>;
         /**
          * sendReaction - Send a reaction about a message
          *
@@ -1127,7 +1058,7 @@ declare module "src/channel" {
          *
          * @return {object} The Server Response
          */
-        sendReaction(messageID: any, reaction: any, user_id: any): Promise<any>;
+        sendReaction(messageID: string, reaction: Reaction<ReactionType, UserType>, user_id: string): Promise<ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>>;
         /**
          * deleteReaction - Delete a reaction by user and type
          *
@@ -1137,7 +1068,7 @@ declare module "src/channel" {
          *
          * @return {object} The Server Response
          */
-        deleteReaction(messageID: any, reactionType: any, user_id: any): any;
+        deleteReaction(messageID: string, reactionType: string, user_id: string): Promise<ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>>;
         /**
          * update - Edit the channel's custom properties
          *
@@ -1145,19 +1076,19 @@ declare module "src/channel" {
          * @param {object} updateMessage Optional message object for channel members notification
          * @return {type} The server response
          */
-        update(channelData: any, updateMessage: any): Promise<any>;
+        update(channelData: ChannelData, updateMessage?: Message<MessageType, AttachmentType, UserType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * delete - Delete the channel. Messages are permanently removed.
          *
          * @return {object} The server response
          */
-        delete(): Promise<any>;
+        delete(): Promise<DeleteChannelAPIResponse<ChannelType, UserType>>;
         /**
          * truncate - Removes all messages from the channel
          *
          * @return {object} The server response
          */
-        truncate(): Promise<any>;
+        truncate(): Promise<TruncateChannelAPIResponse<ChannelType, UserType>>;
         /**
          * acceptInvite - accept invitation to the channel
          *
@@ -1165,7 +1096,7 @@ declare module "src/channel" {
          *
          * @return {type} The server response
          */
-        acceptInvite(options?: {}): Promise<any>;
+        acceptInvite(options?: Record<string, unknown>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * acceptInvite - reject invitation to the channel
          *
@@ -1173,7 +1104,7 @@ declare module "src/channel" {
          *
          * @return {type} The server response
          */
-        rejectInvite(options?: {}): Promise<any>;
+        rejectInvite(options?: Record<string, unknown>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * addMembers - add members to the channel
          *
@@ -1181,7 +1112,7 @@ declare module "src/channel" {
          * @param {object} message Optional message object for channel members notification
          * @return {type} The server response
          */
-        addMembers(members: any, message: any): Promise<any>;
+        addMembers(members: string[], message?: Message<MessageType, AttachmentType, UserType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * addModerators - add moderators to the channel
          *
@@ -1189,7 +1120,7 @@ declare module "src/channel" {
          * @param {object} message Optional message object for channel members notification
          * @return {type} The server response
          */
-        addModerators(members: any, message: any): Promise<any>;
+        addModerators(members: string[], message?: Message<MessageType, AttachmentType, UserType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * inviteMembers - invite members to the channel
          *
@@ -1197,7 +1128,7 @@ declare module "src/channel" {
          * @param {object} message Optional message object for channel members notification
          * @return {type} The server response
          */
-        inviteMembers(members: any, message: any): Promise<any>;
+        inviteMembers(members: string[], message?: Message<MessageType, AttachmentType, UserType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * removeMembers - remove members from channel
          *
@@ -1205,7 +1136,7 @@ declare module "src/channel" {
          * @param {object} message Optional message object for channel members notification
          * @return {type} The server response
          */
-        removeMembers(members: any, message: any): Promise<any>;
+        removeMembers(members: string[], message?: Message<MessageType, AttachmentType, UserType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * demoteModerators - remove moderator role from channel members
          *
@@ -1213,7 +1144,7 @@ declare module "src/channel" {
          * @param {object} message Optional message object for channel members notification
          * @return {type} The server response
          */
-        demoteModerators(members: any, message: any): Promise<any>;
+        demoteModerators(members: string[], message?: Message<MessageType>): Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * mute - mutes the current channel
          * @param {object} 				opts expiration or user_id
@@ -1226,7 +1157,7 @@ declare module "src/channel" {
          * await channel.mute({user_id: userId});
          *
          */
-        mute(opts?: {}): Promise<any>;
+        mute(opts?: Record<string, unknown>): Promise<MuteChannelAPIResponse<AttachmentType, ChannelType, EventType, EventTypeName, MessageType, ReactionType, UserType>>;
         /**
          * unmute - mutes the current channel
          * @param {object} opts user_id
@@ -1235,17 +1166,17 @@ declare module "src/channel" {
          * example server side:
          * await channel.unmute({user_id: userId});
          */
-        unmute(opts?: {}): Promise<any>;
+        unmute(opts?: Record<string, unknown>): Promise<APIResponse>;
         /**
          * muteStatus - returns the mute status for the current channel
          * @return {object} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
          */
         muteStatus(): {
             muted: boolean;
-            createdAt: null;
-            expiresAt: null;
+            createdAt?: string | null;
+            expiredAt?: string | null;
         };
-        sendAction(messageID: any, formData: any): any;
+        sendAction(messageID: string, formData: Record<string, unknown>): Promise<unknown>;
         /**
          * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
          *  Call this on every keystroke
@@ -1260,44 +1191,13 @@ declare module "src/channel" {
          *
          * @return {type} Description
          */
-        lastMessage(): Immutable.Immutable<Immutable.Immutable<MessageType & {
-            __html: string; /**
-             * getConfig - Get the configs for this channel type
-             *
-             * @return {object}
-             */
-            id: string;
-            text: string;
-            attachments?: any[] | undefined;
-            parent_id?: string | undefined;
-            mentioned_users?: any[] | undefined;
-            command?: string | undefined;
-            user?: import("types/types").User<{
-                [key: string]: unknown;
-            }> | undefined;
-            html: string;
-            type: string;
-            latest_reactions?: import("types/types").ReactionResponse<ReactionType>[] | undefined;
-            own_reactions?: import("types/types").ReactionResponse<ReactionType>[] | undefined;
-            reaction_counts?: {
-                [key: string]: number;
-            } | undefined;
-            reaction_scores?: {
-                [key: string]: number;
-            } | undefined;
-            show_in_channel?: boolean | undefined;
-            reply_count?: number | undefined;
-            created_at: Date;
-            updated_at: Date;
-            deleted_at?: string | undefined;
-            status: string;
-        }, {}>, {}> | undefined;
+        lastMessage(): Immutable.Immutable<import("types/types").ParsedMessageResponse<MessageType, AttachmentType, ReactionType, UserType>, {}> | undefined;
         /**
          * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled
          *
          * @return {Promise} Description
          */
-        markRead(data?: {}): Promise<any>;
+        markRead(data?: {}): Promise<MarkReadAPIResponse | null>;
         /**
          * clean - Cleans the channel state and fires stop typing if needed
          */
@@ -1309,13 +1209,13 @@ declare module "src/channel" {
          *
          * @return {object} The server response
          */
-        watch(options: any): Promise<any>;
+        watch(options: Record<string, unknown>): Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
-         * stopwatching - Stops watching the channel
+         * stopWatching - Stops watching the channel
          *
          * @return {object} The server response
          */
-        stopWatching(): Promise<any>;
+        stopWatching(): Promise<APIResponse>;
         /**
          * getReplies - List the message replies for a parent message
          *
@@ -1324,7 +1224,7 @@ declare module "src/channel" {
          *
          * @return {type} A response with a list of messages
          */
-        getReplies(parent_id: any, options: any): Promise<any>;
+        getReplies(parent_id: string, options: Record<string, unknown>): Promise<GetRepliesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * getReactions - List the reactions, supports pagination
          *
@@ -1333,20 +1233,20 @@ declare module "src/channel" {
          *
          * @return {object} Server response
          */
-        getReactions(message_id: any, options: any): any;
+        getReactions(message_id: string, options: Record<string, unknown>): Promise<GetReactionsAPIResponse<ReactionType, UserType>>;
         /**
          * getMessagesById - Retrieves a list of messages by ID
          *
-         * @param {string} messageIds The ids of the messages to retrieve from this channel
+         * @param {array} messageIds The ids of the messages to retrieve from this channel
          *
          * @return {object} Server response
          */
-        getMessagesById(messageIds: any): any;
+        getMessagesById(messageIds: string[]): Promise<GetMultipleMessagesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
-         * @return {date}
+         * @return {Date}
          */
-        lastRead(): Immutable.ImmutableDate | null;
+        lastRead(): Immutable.ImmutableDate | null | undefined;
         /**
          * countUnread - Count the number of messages with a date thats newer than the last read timestamp
          *
@@ -1354,7 +1254,7 @@ declare module "src/channel" {
          *
          * @return {int} Unread count
          */
-        countUnread(lastRead: any): number;
+        countUnread(lastRead: Date | Immutable.ImmutableDate | null | undefined): number;
         /**
          * countUnread - Count the number of unread messages mentioning the current user
          *
@@ -1366,7 +1266,7 @@ declare module "src/channel" {
          *
          * @return {type} The Server Response
          */
-        create: () => Promise<any>;
+        create: () => Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * query - Query the API, get messages, members or other channel fields
          *
@@ -1374,7 +1274,7 @@ declare module "src/channel" {
          *
          * @return {object} Returns a query response
          */
-        query(options: any): Promise<any>;
+        query(options: Record<string, unknown>): Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>;
         /**
          * banUser - Bans a user from a channel
          *
@@ -1382,7 +1282,7 @@ declare module "src/channel" {
          * @param options
          * @returns {Promise<*>}
          */
-        banUser(targetUserID: any, options: any): Promise<any>;
+        banUser(targetUserID: string, options: Record<string, unknown>): Promise<APIResponse>;
         /**
          * hides the channel from queryChannels for the user until a message is added
          * If clearHistory is set to true - all messages will be removed for the user
@@ -1391,21 +1291,21 @@ declare module "src/channel" {
          * @param clearHistory
          * @returns {Promise<*>}
          */
-        hide(userId?: null, clearHistory?: boolean): Promise<any>;
+        hide(userId?: string | null, clearHistory?: boolean): Promise<unknown>;
         /**
          * removes the hidden status for a channel
          *
          * @param userId
          * @returns {Promise<*>}
          */
-        show(userId?: null): Promise<any>;
+        show(userId?: string | null): Promise<unknown>;
         /**
          * banUser - Removes the bans for a user on a channel
          *
          * @param targetUserID
          * @returns {Promise<*>}
          */
-        unbanUser(targetUserID: any): Promise<any>;
+        unbanUser(targetUserID: string): Promise<APIResponse>;
         /**
          * on - Listen to events on this channel.
          *
@@ -1418,14 +1318,16 @@ declare module "src/channel" {
          *
          * @return {type} Description
          */
-        on(callbackOrString: any, callbackOrNothing: any): void;
+        on(eventType: EventTypes, callback: EventHandler): void;
+        on(callback: EventHandler): void;
         /**
          * off - Remove the event handler
          *
          */
-        off(callbackOrString: any, callbackOrNothing: any): void;
-        _handleChannelEvent(event: any): void;
-        _callChannelListeners: (event: any) => void;
+        off(eventType: EventTypes, callback: EventHandler): void;
+        off(callback: EventHandler): void;
+        _handleChannelEvent(event: Event): void;
+        _callChannelListeners: (event: Event) => void;
         /**
          * _channelURL - Returns the channel url
          *
@@ -1433,11 +1335,13 @@ declare module "src/channel" {
          */
         _channelURL: () => string;
         _checkInitialized(): void;
-        _initializeState(state: any): void;
+        _initializeState(state: ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>): void;
         _disconnect(): void;
     }
 }
 declare module "src/permissions" {
+    import { PermissionObject } from '../types/types';
+    type RequiredPermissionObject = Required<PermissionObject>;
     export const Allow = "Allow";
     export const Deny = "Deny";
     export const AnyResource: string[];
@@ -1445,13 +1349,13 @@ declare module "src/permissions" {
     export const MaxPriority = 999;
     export const MinPriority = 1;
     export class Permission {
-        name: string;
-        action: string;
-        owner: boolean;
-        priority: number;
-        resources: string[];
-        roles: string[];
-        constructor(name: string, priority: number, resources?: string[], roles?: string[], owner?: boolean, action?: string);
+        name: RequiredPermissionObject['name'];
+        action: RequiredPermissionObject['action'];
+        owner: RequiredPermissionObject['owner'];
+        priority: RequiredPermissionObject['priority'];
+        resources: RequiredPermissionObject['resources'];
+        roles: RequiredPermissionObject['roles'];
+        constructor(name: string, priority: number, resources?: string[], roles?: string[], owner?: boolean, action?: RequiredPermissionObject['action']);
     }
     export const AllowAll: Permission;
     export const DenyAll: Permission;
@@ -1490,16 +1394,16 @@ declare module "src/permissions" {
     };
 }
 declare module "src/index" {
+    export * from "src/base64";
     export { StreamChat } from "src/client";
     export * from "src/client_state";
-    export { logChatPromiseExecution } from "src/utils";
     export * from "src/channel";
     export * from "src/channel_state";
     export * from "src/connection";
-    export * from "src/permissions";
     export * from "src/events";
+    export * from "src/permissions";
     export * from "src/signing";
-    export * from "src/base64";
     export * from "src/token_manager";
+    export { logChatPromiseExecution } from "src/utils";
 }
 //# sourceMappingURL=index.d.ts.map
