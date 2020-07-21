@@ -12,6 +12,7 @@ export type User<T = UnknownType> = Partial<T> & {
   id: string;
   anon?: boolean;
   role?: string;
+  teams?: string[];
 };
 
 export type UserResponse<T> = User<T> & {
@@ -541,8 +542,13 @@ export type PrimitiveFilter = string | number | boolean;
 
 export type AscDesc = 1 | -1;
 
-export type QueryFilter<T> = T & {
-  $and?: ArrayTwoOrMore<RequireAtLeastOne<QueryFilter<T>>>;
+export type QueryLogicalOperators<QueryField, SpecialOperators> = {
+  $and?: ArrayTwoOrMore<QueryFilters<QueryField, SpecialOperators>>;
+  $nor?: Array<QueryFilters<QueryField, SpecialOperators>>;
+  $or?: ArrayTwoOrMore<QueryFilters<QueryField, SpecialOperators>>;
+};
+
+export type QueryFilter<SpecialOperators = {}> = Partial<SpecialOperators> & {
   $eq?: PrimitiveFilter;
   $gt?: PrimitiveFilter;
   $gte?: PrimitiveFilter;
@@ -551,17 +557,51 @@ export type QueryFilter<T> = T & {
   $lte?: PrimitiveFilter;
   $ne?: PrimitiveFilter;
   $nin?: PrimitiveFilter[];
-  $nor?: ArrayTwoOrMore<RequireAtLeastOne<QueryFilter<T>>>;
-  $or?: ArrayTwoOrMore<RequireAtLeastOne<QueryFilter<T>>>;
 };
 
-export type QueryFilters<QueryField = Record<string, unknown>, Operators = {}> = {
-  [K in keyof QueryField]?: PrimitiveFilter | RequireAtLeastOne<QueryFilter<Operators>>;
-};
+export type QueryFilters<QueryField = Record<string, unknown>, SpecialOperators = {}> = {
+  [Key in keyof Omit<QueryField, keyof SpecialOperators>]?:
+    | PrimitiveFilter
+    | RequireAtLeastOne<QueryFilter>;
+} &
+  {
+    [Key in keyof SpecialOperators]?:
+      | PrimitiveFilter
+      | SpecialOperators[Key]
+      | RequireAtLeastOne<QueryFilter<SpecialOperators[Key]>>;
+  } &
+  QueryLogicalOperators<QueryField, SpecialOperators>;
 
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
+
+export type ContainsOperator<CustomType> = {
+  [Key in keyof CustomType]?: CustomType[Key] extends (infer ContainType)[]
+    ? RequireAtLeastOne<{
+        $contains?: ContainType extends object
+          ? RequireAtLeastOne<ContainType>
+          : ContainType;
+      }>
+    : RequireAtLeastOne<QueryFilter>;
+};
+
+export type MessageFilters<
+  MessageType,
+  AttachmentType,
+  ReactionType,
+  UserType
+> = QueryFilters<
+  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+  ContainsOperator<MessageType> & {
+    text?: RequireAtLeastOne<{ $autocomplete?: string; $q?: string }>;
+  }
+>;
+
+export type ChannelFilters<ChannelType, UserType> = QueryFilters<
+  ChannelResponse<ChannelType, UserType>,
+  ContainsOperator<ChannelType> & { name?: RequireAtLeastOne<{ $autocomplete?: string }> }
+>;
 
 export type ChannelSort<ChannelType = Record<string, unknown>> = Sort<ChannelType> & {
   last_updated?: AscDesc;
@@ -586,7 +626,12 @@ export type ChannelOptions = {
 
 export type UserFilters<UserType = UnknownType> = QueryFilters<
   UserResponse<UserType>,
-  { $autoComplete?: string }
+  ContainsOperator<UserType> & {
+    id?: RequireAtLeastOne<{ $autocomplete?: string }>;
+    name?: RequireAtLeastOne<{ $autocomplete?: string }>;
+    username?: RequireAtLeastOne<{ $autocomplete?: string }>;
+    teams?: RequireAtLeastOne<{ $contains?: string }>;
+  }
 >;
 
 export type UserSort<UserType> = Sort<UserResponse<UserType>>;
@@ -611,7 +656,7 @@ export type SearchPayload<
 > = SearchOptions & {
   client_id?: string;
   connection_id?: string;
-  filter_conditions?: QueryFilters<ChannelResponse<ChannelType, UserType>>;
+  filter_conditions?: ChannelFilters<ChannelType, UserType>;
   query?: string;
   message_filter_conditions?: QueryFilters<
     MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
