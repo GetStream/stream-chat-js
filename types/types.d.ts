@@ -105,6 +105,7 @@ export type Event<
   created_at?: string;
   connection_id?: string;
   received_at?: string | Date;
+  clear_history?: boolean;
 };
 
 export type EventHandler<
@@ -264,10 +265,22 @@ export type SearchAPIResponse<
   }[];
 };
 
-type MessageReadEvent = 'message.read';
-
-export type MarkReadAPIResponse = APIResponse & {
-  event: Event<MessageReadEvent>;
+export type EventAPIResponse<
+  EventType = UnknownType,
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  event: Event<
+    EventType,
+    AttachmentType,
+    ChannelType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
 };
 
 export type GetRepliesAPIResponse<
@@ -563,10 +576,10 @@ export type QueryLogicalOperators<QueryField, SpecialOperators> = {
   $or?: ArrayTwoOrMore<QueryFilters<QueryField, SpecialOperators>>;
 };
 
-export type QueryFilter<SpecialOperators = {}, ObjectType = string> = Partial<
-  SpecialOperators
-> &
-  ObjectType extends string | number | boolean
+export type QueryFilter<ObjectType = string> = ObjectType extends
+  | string
+  | number
+  | boolean
   ? {
       $eq?: PrimitiveFilter<ObjectType>;
       $gt?: PrimitiveFilter<ObjectType>;
@@ -589,7 +602,7 @@ export type QueryFilter<SpecialOperators = {}, ObjectType = string> = Partial<
 export type QueryFilters<QueryField = Record<string, unknown>, SpecialOperators = {}> = {
   [Key in keyof Omit<QueryField, keyof SpecialOperators>]?:
     | PrimitiveFilter<QueryField[Key]>
-    | RequireOnlyOne<QueryFilter<{}, QueryField[Key]>>;
+    | RequireOnlyOne<QueryFilter<QueryField[Key]>>;
 } &
   {
     [Key in keyof SpecialOperators]?: SpecialOperators[Key];
@@ -608,10 +621,10 @@ export type ContainsOperator<CustomType> = {
               $contains?: ContainType extends object
                 ? PrimitiveFilter<RequireAtLeastOne<ContainType>>
                 : PrimitiveFilter<ContainType>;
-            } & QueryFilter<{}, PrimitiveFilter<ContainType>[]>
+            } & QueryFilter<PrimitiveFilter<ContainType>[]>
           >
         | PrimitiveFilter<PrimitiveFilter<ContainType>[]>
-    : RequireOnlyOne<QueryFilter<{}, CustomType[Key]>> | PrimitiveFilter<CustomType[Key]>;
+    : RequireOnlyOne<QueryFilter<CustomType[Key]>> | PrimitiveFilter<CustomType[Key]>;
 };
 
 export type MessageFilters<
@@ -638,7 +651,6 @@ export type MessageFilters<
               UserType
             >['text'];
           } & QueryFilter<
-            {},
             MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text']
           >
         >
@@ -655,7 +667,7 @@ export type ChannelFilters<ChannelType, UserType> = QueryFilters<
       | RequireOnlyOne<
           {
             $autocomplete?: ChannelResponse<ChannelType, UserType>['name'];
-          } & QueryFilter<{}, ChannelResponse<ChannelType, UserType>['name']>
+          } & QueryFilter<ChannelResponse<ChannelType, UserType>['name']>
         >
       | PrimitiveFilter<ChannelResponse<ChannelType, UserType>['name']>;
   }
@@ -688,7 +700,6 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
     id?:
       | RequireOnlyOne<
           { $autocomplete?: UserResponse<UserType>['id'] } & QueryFilter<
-            {},
             UserResponse<UserType>['id']
           >
         >
@@ -696,7 +707,6 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
     name?:
       | RequireOnlyOne<
           { $autocomplete?: UserResponse<UserType>['name'] } & QueryFilter<
-            {},
             UserResponse<UserType>['name']
           >
         >
@@ -704,7 +714,6 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
     username?:
       | RequireOnlyOne<
           { $autocomplete?: UserResponse<UserType>['username'] } & QueryFilter<
-            {},
             UserResponse<UserType>['username']
           >
         >
@@ -1018,4 +1027,33 @@ export type InviteOptions<
   remove_members?: string[];
   user?: UserResponse<UserType>;
   user_id?: string;
+};
+
+export type MarkReadOptions<UserType> = {
+  client_id?: string;
+  connection_id?: string;
+  message_id?: string;
+  user?: UserResponse<UserType>;
+  user_id?: string;
+};
+
+export type PaginationOptions = {
+  id_gt?: number;
+  id_gte?: number;
+  id_lt?: number;
+  id_lte?: number;
+  limit?: number;
+  offset?: number;
+};
+
+export type ChannelQueryOptions<ChannelType, UserType> = {
+  client_id?: string;
+  connection_id?: string;
+  data?: ChannelResponse<ChannelType, UserType>;
+  members?: PaginationOptions;
+  messages?: PaginationOptions;
+  presence?: boolean;
+  state?: boolean;
+  watch?: boolean;
+  watchers?: PaginationOptions;
 };
