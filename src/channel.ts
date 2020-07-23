@@ -37,6 +37,7 @@ import {
   ChannelQueryOptions,
   PaginationOptions,
   BanUserOptions,
+  KnownKeys,
 } from '../types/types';
 
 /**
@@ -51,12 +52,12 @@ export class Channel<
   UserType
 > {
   _client: StreamChat<
-    AttachmentType,
-    ChannelType,
-    EventType,
+    UserType,
     MessageType,
+    ChannelType,
+    AttachmentType,
     ReactionType,
-    UserType
+    EventType
   >;
   type: string;
   id: string | undefined;
@@ -97,7 +98,7 @@ export class Channel<
   /**
    * constructor - Create a channel
    *
-   * @param {StreamChat<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>} client the chat client
+   * @param {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>} client the chat client
    * @param {string} type  the type of channel
    * @param {string} [id]  the id of the chat
    * @param {ChannelData<ChannelType>} data any additional custom params
@@ -106,12 +107,12 @@ export class Channel<
    */
   constructor(
     client: StreamChat<
-      AttachmentType,
-      ChannelType,
-      EventType,
+      UserType,
       MessageType,
+      ChannelType,
+      AttachmentType,
       ReactionType,
-      UserType
+      EventType
     >,
     type: string,
     id: string | undefined,
@@ -154,15 +155,15 @@ export class Channel<
   /**
    * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
    *
-   * @return {StreamChat<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>}
+   * @return {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>}
    */
   getClient(): StreamChat<
-    AttachmentType,
-    ChannelType,
-    EventType,
+    UserType,
     MessageType,
+    ChannelType,
+    AttachmentType,
     ReactionType,
-    UserType
+    EventType
   > {
     if (this.disconnected === true) {
       throw Error(`You can't use a channel after client.disconnect() was called`);
@@ -268,13 +269,20 @@ export class Channel<
   /**
    * search - Query messages
    *
-   * @param {MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string}  query search query or object MongoDB style filters
+   * @param { MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
    * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;}} options Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
    */
   async search(
-    query: MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string,
+    query:
+      | MessageFilters<
+          Pick<MessageType, KnownKeys<MessageType>>,
+          AttachmentType,
+          ReactionType,
+          UserType
+        >
+      | string,
     options: {
       client_id?: string;
       connection_id?: string;
@@ -282,7 +290,7 @@ export class Channel<
       offset?: number;
       query?: string;
       message_filter_conditions?: MessageFilters<
-        MessageType,
+        Pick<MessageType, KnownKeys<MessageType>>,
         AttachmentType,
         ReactionType,
         UserType
@@ -315,14 +323,14 @@ export class Channel<
   /**
    * search - Query Members
    *
-   * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
+   * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>}  filterConditions object MongoDB style filters
    * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *
    * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
    */
   async queryMembers(
-    filterConditions: UserFilters<UserType>,
+    filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>,
     sort: UserSort<UserType> = {},
     options: { limit?: number; offset?: number } = {},
   ) {
@@ -741,7 +749,7 @@ export class Channel<
    *  Call this on every keystroke
    */
   async keystroke() {
-    if (!this.getConfig().typing_events) {
+    if (!this.getConfig()?.typing_events) {
       return;
     }
     const now = new Date();
@@ -761,7 +769,7 @@ export class Channel<
    * stopTyping - Sets last typing to null and sends the typing.stop event
    */
   async stopTyping() {
-    if (!this.getConfig().typing_events) {
+    if (!this.getConfig()?.typing_events) {
       return;
     }
     this.lastTypingEvent = null;
@@ -805,7 +813,7 @@ export class Channel<
   async markRead(data: MarkReadOptions<UserType> = {}) {
     this._checkInitialized();
 
-    if (!this.getConfig().read_events) {
+    if (!this.getConfig()?.read_events) {
       return Promise.resolve(null);
     }
 

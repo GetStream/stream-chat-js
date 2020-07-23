@@ -19,14 +19,12 @@ import { isFunction, chatCodes } from './utils';
 import {
   Configs,
   Logger,
-  User,
   ConnectionOpen,
   TokenOrProvider,
   UserResponse,
   Event,
   EventHandler,
   ChannelMute,
-  QueryFilters,
   ChannelSort,
   ChannelOptions,
   AscDesc,
@@ -58,7 +56,13 @@ import {
   APIResponse,
   CustomPermissionOptions,
   SearchAPIResponse,
-  ChannelResponse,
+  ChannelFilters,
+  AppSettingsAPIResponse,
+  UnknownType,
+  ConnectionChangeEvent,
+  KnownKeys,
+  MessageFilters,
+  Device,
 } from '../types/types';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
@@ -77,17 +81,29 @@ function isString(x: unknown): x is string {
 }
 
 export class StreamChat<
-  AttachmentType,
-  ChannelType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
+  UserType = UnknownType,
+  MessageType = UnknownType,
+  ChannelType = UnknownType,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  EventType = UnknownType
 > {
   key: string;
   secret?: string;
-  // TODO: FIX event unknown
-  listeners: { [key: string]: Array<(event: Event) => void> };
+  listeners: {
+    [key: string]: Array<
+      (
+        event: Event<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >,
+      ) => void
+    >;
+  };
   state: ClientState<UserType>;
   mutedChannels: ChannelMute<
     AttachmentType,
@@ -124,8 +140,8 @@ export class StreamChat<
   userID?: string;
   clientID?: string;
   connectionID?: string;
-  user?: User<UserType>;
-  _user?: User<UserType>;
+  user?: UserResponse<UserType>;
+  _user?: UserResponse<UserType>;
   cleaningIntervalRef?: NodeJS.Timeout;
   connectionEstablishedCount?: number;
   connecting?: boolean;
@@ -279,12 +295,12 @@ export class StreamChat<
   /**
    * setUser - Set the current user, this triggers a connection to the API
    *
-   * @param {object} user Data about this user. IE {name: "john"}
-   * @param {string} userToken   Token
+   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {promise} Returns a promise that resolves when the connection is setup
+   * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (user: User<UserType>, userTokenOrProvider: TokenOrProvider) => {
+  setUser = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => {
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -317,10 +333,10 @@ export class StreamChat<
     return this.setUserPromise;
   };
 
-  _setToken = (user: User<UserType>, userTokenOrProvider: TokenOrProvider) =>
+  _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: User<UserType>) {
+  _setUser(user: UserResponse<UserType>) {
     // this one is used by the frontend
     this.user = user;
     // this one is actually used for requests...
@@ -330,7 +346,7 @@ export class StreamChat<
   /**
 	 * updateAppSettings - updates application settings
 	 *
-	 * @param {object} options App settings.
+	 * @param {AppSettings} options App settings.
 	 * 		IE: {
 	  			"apn_config": {
 					"auth_type": "token",
@@ -365,14 +381,14 @@ export class StreamChat<
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    return await this.get(this.baseURL + '/app');
+    return await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
   }
 
   /**
 	 * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
 	 *
 	 * @param {string} userID User ID. If user has no devices, it will error
-	 * @param {object} [data] Overrides for push templates/message used
+	 * @param {TestPushDataInput} [data] Overrides for push templates/message used
 	 * 		IE: {
 				  messageID: 'id-of-message',//will error if message does not exist
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
@@ -437,7 +453,7 @@ export class StreamChat<
     const anonymousUser = {
       id: this.userID,
       anon: true,
-    } as User<UserType>;
+    } as UserResponse<UserType>;
 
     this._setToken(anonymousUser, '');
     this._setUser(anonymousUser);
@@ -448,18 +464,17 @@ export class StreamChat<
   /**
    * setGuestUser - Setup a temporary guest user
    *
-   * @param {object} user Data about this user. IE {name: "john"}
+   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    *
-   * @return {promise} Returns a promise that resolves when the connection is setup
+   * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
    */
-  async setGuestUser(user: User<UserType>) {
+  async setGuestUser(user: UserResponse<UserType>) {
     let response: { user: UserResponse<UserType>; access_token: string } | undefined;
     this.anonymous = true;
     try {
-      response = await this.post<{ user: UserResponse<UserType>; access_token: string }>(
-        this.baseURL + '/guest',
-        { user },
-      );
+      response = await this.post<
+        APIResponse & { user: UserResponse<UserType>; access_token: string }
+      >(this.baseURL + '/guest', { user });
     } catch (e) {
       this.anonymous = false;
       throw e;
@@ -474,8 +489,8 @@ export class StreamChat<
    * createToken - Creates a token to authenticate this user. This function is used server side.
    * The resulting token should be passed to the client side when the users registers or logs in
    *
-   * @param {string}   userID         The User ID
-   * @param {number}   exp            The expiration time for the token expressed in the number of seconds since the epoch
+   * @param {string} userID The User ID
+   * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
    *
    * @return {string} Returns a token
    */
@@ -499,16 +514,51 @@ export class StreamChat<
    * or
    * client.on(event => {console.log(event.type)})
    *
-   * @param {string} callbackOrString  The event type to listen for (optional)
-   * @param {function} callbackOrNothing The callback to call
+   * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType> | string} callbackOrString  The event type to listen for (optional)
+   * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
    *
-   * @return {type} Description
+   * @return {{ unsubscribe: () => void }} Description
    */
-  on(callback: EventHandler): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | string,
-    callbackOrNothing?: EventHandler,
+    callback: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ): { unsubscribe: () => void };
+  on(
+    eventType: string,
+    callback: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ): { unsubscribe: () => void };
+  on(
+    callbackOrString:
+      | EventHandler<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >
+      | string,
+    callbackOrNothing?: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
@@ -517,7 +567,14 @@ export class StreamChat<
     }
     const callback = callbackOrNothing
       ? callbackOrNothing
-      : (callbackOrString as EventHandler);
+      : (callbackOrString as EventHandler<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -536,9 +593,47 @@ export class StreamChat<
    * off - Remove the event handler
    *
    */
-  off(callback: EventHandler): void;
-  off(eventType: string, callback: EventHandler): void;
-  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
+  off(
+    callback: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ): void;
+  off(
+    eventType: string,
+    callback: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ): void;
+  off(
+    callbackOrString:
+      | EventHandler<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >
+      | string,
+    callbackOrNothing?: EventHandler<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
@@ -546,7 +641,14 @@ export class StreamChat<
     }
     const callback = callbackOrNothing
       ? callbackOrNothing
-      : (callbackOrString as EventHandler);
+      : (callbackOrString as EventHandler<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -573,7 +675,7 @@ export class StreamChat<
     });
   }
 
-  _logApiResponse(type: string, url: string, response: AxiosResponse) {
+  _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>) {
     this.logger(
       'info',
       `client:${type} - Response - url: ${url} > status ${response.status}`,
@@ -625,7 +727,7 @@ export class StreamChat<
         default:
           throw new Error('Invalid request type');
       }
-      this._logApiResponse(type, url, response);
+      this._logApiResponse<T>(type, url, response);
 
       return this.handleResponse(response);
     } catch (e) {
@@ -637,7 +739,7 @@ export class StreamChat<
           !this.tokenManager.isStatic()
         ) {
           this.tokenManager.loadToken();
-          return await this.doAxiosRequest(type, url, data, options);
+          return await this.doAxiosRequest<T>(type, url, data, options);
         }
         return this.handleResponse(e.response);
       } else {
@@ -671,7 +773,7 @@ export class StreamChat<
     uri: string | Buffer | File,
     name?: string,
     contentType?: string,
-    user?: User<UserType>,
+    user?: UserResponse<UserType>,
   ) {
     const data = new FormData();
     let fileField: File | Buffer | { uri: string; name: string; type?: string };
@@ -754,12 +856,28 @@ export class StreamChat<
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
     // dispatch the event to the channel listeners
     const jsonString = messageEvent.data as string;
-    const event = JSON.parse(jsonString) as Event;
+    const event = JSON.parse(jsonString) as Event<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
     event.received_at = new Date();
     this.dispatchEvent(event);
   };
 
-  _handleClientEvent(event: Event) {
+  _handleClientEvent(
+    event: Event<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
     const client = this;
     this.logger(
       'info',
@@ -771,7 +889,10 @@ export class StreamChat<
     );
 
     // update the client.state with any changes to users
-    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+    if (
+      event.user &&
+      (event.type === 'user.presence.changed' || event.type === 'user.updated')
+    ) {
       if (event.user?.id === this.userID) {
         this.user = this.user && { ...this.user, ...event.user };
         // Updating only available properties in _user object.
@@ -795,7 +916,7 @@ export class StreamChat<
       this.configs[event.channel.type] = event.channel.config;
     }
 
-    if (event.type === 'notification.channel_mutes_updated') {
+    if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
     }
   }
@@ -827,10 +948,28 @@ export class StreamChat<
     };
   }
 
-  _callClientListeners = (event: Event) => {
+  _callClientListeners = (
+    event: Event<
+      EventType,
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) => {
     const client = this;
     // gather and call the listeners
-    const listeners: Array<(event: Event) => void> = [];
+    const listeners: Array<(
+      event: Event<
+        EventType,
+        AttachmentType,
+        ChannelType,
+        MessageType,
+        ReactionType,
+        UserType
+      >,
+    ) => void> = [];
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
@@ -858,7 +997,7 @@ export class StreamChat<
     for (const c of Object.values(this.activeChannels)) {
       const lastMessage = c.lastMessage();
       let lastMessageId: string;
-      if (lastMessage) {
+      if (lastMessage?.id) {
         lastMessageId = lastMessage.id;
         lastMessageIDs[c.cid] = lastMessageId;
       }
@@ -871,7 +1010,7 @@ export class StreamChat<
       );
 
       await this.queryChannels(
-        { cid: { $in: cids } },
+        { cid: { $in: cids } } as ChannelFilters<UnknownType, UserType>,
         { last_message_at: -1 },
         { limit: 30, recovery: true, last_message_ids: lastMessageIDs },
       );
@@ -882,7 +1021,7 @@ export class StreamChat<
 
       this.dispatchEvent({
         type: 'connection.recovered',
-      });
+      } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>);
     }
 
     this.wsPromise = Promise.resolve();
@@ -893,7 +1032,7 @@ export class StreamChat<
 	_updateUserReferences updates the members and watchers of the currently active channels
 	that contain this user
 	*/
-  _updateUserReferences(user: User<UserType>) {
+  _updateUserReferences(user: UserResponse<UserType>) {
     const refMap = this.state.userChannelReferences[user.id] || {};
     const refs = Object.keys(refMap);
     for (const channelID of refs) {
@@ -928,7 +1067,7 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection({
+    this.wsConnection = new StableWSConnection<UserType>({
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
       userID: client.userID,
@@ -939,7 +1078,7 @@ export class StreamChat<
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent,
+      eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
     });
 
@@ -951,14 +1090,14 @@ export class StreamChat<
   /**
    * queryUsers - Query users and watch user presence
    *
-   * @param {object} filterConditions MongoDB style filter conditions
-   * @param {object} sort             Sort options, for instance {last_active: -1}
-   * @param {object} options          Option object, {presence: true}
+   * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>} filterConditions MongoDB style filter conditions
+   * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}
+   * @param {UserOptions} options Option object, {presence: true}
    *
-   * @return {object} User Query Response
+   * @return {Promise<APIResponse & { users: Array<UserResponse<UserType>> }>} User Query Response
    */
   async queryUsers(
-    filterConditions: UserFilters<UserType>,
+    filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>,
     sort?: UserSort<UserType>,
     options?: UserOptions,
   ) {
@@ -1004,7 +1143,7 @@ export class StreamChat<
   }
 
   async queryChannels(
-    filterConditions: QueryFilters<ChannelResponse<ChannelType, UserType>>,
+    filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>,
     sort: ChannelSort = {},
     options: ChannelOptions = {},
   ) {
@@ -1075,23 +1214,32 @@ export class StreamChat<
   /**
    * search - Query messages
    *
-   * @param {object} channels MongoDB style filter conditions
-   * @param {object|string}  message search query or object MongoDB style filters
-   * @param {object} options       Option object, {user_id: 'tommaso'}
+   * @param {ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>} filterConditions MongoDB style filter conditions
+   * @param {MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
+   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
    *
-   * @return {object} search messages response
+   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
    */
   async search(
-    filterConditions: QueryFilters<ChannelResponse<ChannelType, UserType>>,
+    filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>,
     query:
       | string
-      | QueryFilters<
-          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      | MessageFilters<
+          Pick<MessageType, KnownKeys<MessageType>>,
+          AttachmentType,
+          ReactionType,
+          UserType
         >,
     options: SearchOptions = {},
   ) {
     // Return a list of channels
-    const payload: SearchPayload = {
+    const payload: SearchPayload<
+      AttachmentType,
+      ChannelType,
+      MessageType,
+      ReactionType,
+      UserType
+    > = {
       filter_conditions: filterConditions,
       ...options,
     };
@@ -1117,12 +1265,12 @@ export class StreamChat<
    * addDevice - Adds a push device for a user.
    *
    * @param {string} id the device id
-   * @param {string} push_provider the push provider (apn or firebase)
+   * @param {'apn' | 'firebase'} push_provider the push provider (apn or firebase)
    * @param {string} [userID] the user id (defaults to current user)
    *
    */
-  async addDevice(id: string, push_provider: string, userID?: string) {
-    return await this.post(this.baseURL + '/devices', {
+  async addDevice(id: string, push_provider: 'apn' | 'firebase', userID?: string) {
+    return await this.post<APIResponse>(this.baseURL + '/devices', {
       id,
       push_provider,
       ...(userID != null ? { user_id: userID } : {}),
@@ -1134,10 +1282,13 @@ export class StreamChat<
    *
    * @param {string} [userID] User ID. Only works on serversidex
    *
-   * @return {devices} Array of devices
+   * @return {APIResponse & Device<UserType>[]} Array of devices
    */
   async getDevices(userID?: string) {
-    return await this.get(this.baseURL + '/devices', userID ? { user_id: userID } : {});
+    return await this.get<APIResponse & Device<UserType>[]>(
+      this.baseURL + '/devices',
+      userID ? { user_id: userID } : {},
+    );
   }
 
   /**
@@ -1148,7 +1299,7 @@ export class StreamChat<
    *
    */
   async removeDevice(id: string, userID?: string) {
-    return await this.delete(this.baseURL + '/devices', {
+    return await this.delete<APIResponse>(this.baseURL + '/devices', {
       id,
       ...(userID ? { user_id: userID } : {}),
     });
@@ -1180,7 +1331,11 @@ export class StreamChat<
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
-  channel(channelType: string, channelID: string, custom: ChannelData = {}) {
+  channel(
+    channelType: string,
+    channelID: string,
+    custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
+  ) {
     if (!this.userID && !this._isUsingServerAuth()) {
       throw Error('Call setUser or setAnonymousUser before creating a channel');
     }
@@ -1200,7 +1355,7 @@ export class StreamChat<
         MessageType,
         ReactionType,
         UserType
-      >(this, channelType, undefined, custom || {});
+      >(this, channelType, undefined, custom);
     }
     // support channel("messaging", {options})
     if (typeof channelID === 'object' && arguments.length === 2) {
@@ -1246,35 +1401,35 @@ export class StreamChat<
    *
    * updateUser - Update or Create the given user object
    *
-   * @param {object} A user object, the only required field is the user id. IE {id: "myuser"} is valid
+   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
    *
-   * @return {object}
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  async updateUser(userObject: User<UserType>) {
+  async updateUser(userObject: UserResponse<UserType>) {
     return await this.upsertUsers([userObject]);
   }
 
   /**
    * partialUpdateUser - Update the given user object
    *
-   * @param {object} Object which should contain id and any of "set" or "unset" params;
+   * @param {UserResponse<UserType>} userObject which should contain id and any of "set" or "unset" params;
    * example: {id: "user1", set:{field: value}, unset:["field2"]}
    *
-   * @return {object} list of updated users
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>} list of updated users
    */
-  async partialUpdateUser(userObject: User<UserType>) {
+  async partialUpdateUser(userObject: UserResponse<UserType>) {
     return await this.partialUpdateUsers([userObject]);
   }
 
   /**
    * upsertUsers - Batch upsert the list of users
    *
-   * @param {array} A list of users
+   * @param {UserResponse<UserType>[]} users list of users
    *
-   * @return {object}
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  async upsertUsers(users: User<UserType>[]) {
-    const userMap: { [key: string]: User<UserType> } = {};
+  async upsertUsers(users: UserResponse<UserType>[]) {
+    const userMap: { [key: string]: UserResponse<UserType> } = {};
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');
@@ -1284,7 +1439,7 @@ export class StreamChat<
 
     return await this.post<
       APIResponse & {
-        users: { [key: string]: User<UserType> };
+        users: { [key: string]: UserResponse<UserType> };
       }
     >(this.baseURL + '/users', {
       users: userMap,
@@ -1294,11 +1449,11 @@ export class StreamChat<
   /**
    * upsertUser - Update or Create the given user object
    *
-   * @param {object} A user object, the only required field is the user id. IE {id: "myuser"} is valid
+   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
    *
-   * @return {object}
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  upsertUser(userObject: User<UserType>) {
+  upsertUser(userObject: UserResponse<UserType>) {
     return this.upsertUsers([userObject]);
   }
 
@@ -1307,22 +1462,22 @@ export class StreamChat<
    *
    * updateUsers - Batch update the list of users
    *
-   * @param {array} A list of users
+   * @param {UserResponse<UserType>[]} users list of users
    *
-   * @return {object}
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  updateUsers(users: Array<User<UserType>>) {
+  updateUsers(users: UserResponse<UserType>[]) {
     return this.upsertUsers(users);
   }
 
   /**
    * updateUsers - Batch partial update of users
    *
-   * @param {array} A list of partial update requests
+   * @param {UserResponse<UserType>[]} users list of partial update requests
    *
-   * @return {object}
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  async partialUpdateUsers(users: Array<User<UserType>>) {
+  async partialUpdateUsers(users: UserResponse<UserType>[]) {
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');
@@ -1368,13 +1523,11 @@ export class StreamChat<
     );
   }
 
-  async exportUser(userID: string, options?: Record<string, unknown>) {
+  async exportUser(userID: string, options?: Record<string, string>) {
     return await this.get<
       APIResponse & {
-        messages: Array<
-          MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
-        >;
-        reactions: Array<ReactionResponse<ReactionType, UserType>>;
+        messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
+        reactions: ReactionResponse<ReactionType, UserType>[];
         user: UserResponse<UserType>;
       }
     >(this.baseURL + `/users/${userID}/export`, {
@@ -1384,9 +1537,9 @@ export class StreamChat<
 
   /** banUser - bans a user from all channels
    *
-   * @param targetUserID
-   * @param options
-   * @returns {Promise<*>}
+   * @param {string} targetUserID
+   * @param {BanUserOptions<UserType>} [options]
+   * @returns {Promise<APIResponse>}
    */
   async banUser(targetUserID: string, options?: BanUserOptions<UserType>) {
     return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
@@ -1397,10 +1550,11 @@ export class StreamChat<
 
   /** unbanUser - revoke global ban for a user
    *
-   * @param targetUserID
-   * @returns {Promise<*>}
+   * @param {string} targetUserID
+   * @param {UnBanUserOptions} [options]
+   * @returns {Promise<APIResponse>}
    */
-  async unbanUser(targetUserID: string, options: UnBanUserOptions) {
+  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
     return await this.delete<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
@@ -1409,9 +1563,9 @@ export class StreamChat<
 
   /** muteUser - mutes a user
    *
-   * @param targetID
-   * @param [userID] Only used with serverside auth
-   * @returns {Promise<*>}
+   * @param {string} targetID
+   * @param {string} [userID] Only used with serverside auth
+   * @returns {Promise<MuteUserResponse<UserType>>}
    */
   async muteUser(targetID: string, userID?: string) {
     return await this.post<MuteUserResponse<UserType>>(
@@ -1425,9 +1579,9 @@ export class StreamChat<
 
   /** unmuteUser - unmutes a user
    *
-   * @param targetID
-   * @param [currentUserID] Only used with serverside auth
-   * @returns {Promise<*>}
+   * @param {string} targetID
+   * @param {string} [currentUserID] Only used with serverside auth
+   * @returns {Promise<APIResponse>}
    */
   async unmuteUser(targetID: string, currentUserID?: string) {
     return await this.post<APIResponse>(this.baseURL + '/moderation/unmute', {
@@ -1478,8 +1632,9 @@ export class StreamChat<
 
   /**
    * markAllRead - marks all channels for this user as read
+   * @param {MarkAllReadOptions<UserType>} [data]
    *
-   * @return {Promise} Description
+   * @return {Promise<APIResponse>}
    */
   async markAllRead(data: MarkAllReadOptions<UserType> = {}) {
     await this.post<APIResponse>(this.baseURL + '/channels/read', {
@@ -1517,8 +1672,9 @@ export class StreamChat<
    * translateMessage - adds the translation to the message
    *
    * @param {string} messageId
+   * @param {string} language
    *
-   * @return {object} Response that includes the message
+   * @return {APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} Response that includes the message
    */
   async translateMessage(messageId: string, language: string) {
     return await this.post<
@@ -1531,9 +1687,10 @@ export class StreamChat<
   /**
    * updateMessage - Update the given message
    *
-   * @param {object} message object, id needs to be specified
+   * @param {MessageResponse<MessageType, ReactionType, AttachmentType, UserType>} message object, id needs to be specified
+   * @param {string | { id: string }} [userId]
    *
-   * @return {object} Response that includes the message
+   * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
     message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>,
@@ -1580,12 +1737,12 @@ export class StreamChat<
       if (isString(userId)) {
         clonedMessage.user_id = userId;
       } else {
-        clonedMessage.user = { id: userId.id } as User<UserType>;
+        clonedMessage.user = { id: userId.id } as UserResponse<UserType>;
       }
     }
     return await this.post<
       APIResponse & {
-        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
       }
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
@@ -1675,7 +1832,7 @@ export class StreamChat<
   /** getPermission - gets the definition for a permission
    *
    * @param {string} name
-   * @returns {Promise<*>}
+   * @returns {Promise<APIResponse>}
    */
   getPermission(name: string) {
     return this.get<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
@@ -1683,8 +1840,8 @@ export class StreamChat<
 
   /** createPermission - creates a custom permission
    *
-   * @param {object} permissionData the permission data
-   * @returns {Promise<*>}
+   * @param {CustomPermissionOptions} permissionData the permission data
+   * @returns {Promise<APIResponse>}
    */
   createPermission(permissionData: CustomPermissionOptions) {
     return this.post<APIResponse>(`${this.baseURL}/custom_permission`, {
@@ -1695,8 +1852,8 @@ export class StreamChat<
   /** updatePermission - updates an existing custom permission
    *
    * @param {string} name
-   * @param {object} permissionData the permission data
-   * @returns {Promise<*>}
+   * @param {CustomPermissionOptions} permissionData the permission data
+   * @returns {Promise<APIResponse>}
    */
   updatePermission(name: string, permissionData: CustomPermissionOptions) {
     return this.post<APIResponse>(`${this.baseURL}/custom_permission/${name}`, {
@@ -1706,8 +1863,8 @@ export class StreamChat<
 
   /** deletePermission - deletes a custom permission
    *
-   * @param {name}
-   * @returns {Promise<*>}
+   * @param {string} name
+   * @returns {Promise<APIResponse>}
    */
   deletePermission(name: string) {
     return this.delete<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
@@ -1715,7 +1872,7 @@ export class StreamChat<
 
   /** listPermissions - returns the list of custom permissions for this application
    *
-   * @returns {Promise<*>}
+   * @returns {Promise<APIResponse>}
    */
   listPermissions() {
     return this.get<APIResponse>(`${this.baseURL}/custom_permission`);
@@ -1724,7 +1881,7 @@ export class StreamChat<
   /** createRole - creates a custom role
    *
    * @param {string} name the new role name
-   * @returns {Promise<*>}
+   * @returns {Promise<APIResponse>}
    */
   createRole(name: string) {
     return this.post<APIResponse>(`${this.baseURL}/custom_role`, { name });
@@ -1732,7 +1889,7 @@ export class StreamChat<
 
   /** listRoles - returns the list of custom roles for this application
    *
-   * @returns {Promise<*>}
+   * @returns {Promise<APIResponse>}
    */
   listRoles() {
     return this.get<APIResponse>(`${this.baseURL}/custom_role`);
@@ -1741,18 +1898,29 @@ export class StreamChat<
   /** deleteRole - deletes a custom role
    *
    * @param {string} name the role name
-   * @returns {Promise<*>}
+   * @returns {Promise<APIResponse>}
    */
   deleteRole(name: string) {
     return this.delete<APIResponse>(`${this.baseURL}/custom_role/${name}`);
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
-   * @param {array} channel_cids list of channel CIDs
+   * @param {string[]} channel_cids list of channel CIDs
    * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
    */
   sync(channel_cids: string[], last_sync_at: string) {
-    return this.post<APIResponse & { events: Event[] }>(`${this.baseURL}/sync`, {
+    return this.post<
+      APIResponse & {
+        events: Event<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType
+        >[];
+      }
+    >(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
     });

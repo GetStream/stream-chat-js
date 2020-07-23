@@ -2,7 +2,7 @@ import SeamlessImmutable from 'seamless-immutable';
 import { Channel } from '../src/channel';
 import { AxiosRequestConfig } from 'axios';
 
-type UnknownType = { [key: string]: unknown };
+export type UnknownType<T = Record<string, unknown>> = T;
 
 export type APIResponse = {
   duration: string;
@@ -297,7 +297,7 @@ export type GetReactionsAPIResponse<ReactionType, UserType> = APIResponse & {
 };
 
 export type Configs = {
-  [channel_type: string]: ExtraData;
+  [channel_type: string]: ChannelConfigWithInfo | undefined;
 };
 
 export type ChannelData<ChannelType = UnknownType> = ChannelType & {
@@ -306,10 +306,10 @@ export type ChannelData<ChannelType = UnknownType> = ChannelType & {
   members?: string[];
 };
 
-export interface ReadResponse<UserType> {
+export type ReadResponse<UserType> = {
   user: UserResponse<UserType>;
   last_read: string;
-}
+};
 
 export type ChannelAPIResponse<
   ChannelType = UnknownType,
@@ -429,15 +429,15 @@ export type ChannelMute<
   updated_at?: string;
 };
 
-type DeviceFields = {
-  push_providers?: string;
+export type DeviceFields = {
+  push_providers?: 'apn' | 'firebase';
   id?: string;
 };
 
-type Device<UserType> = DeviceFields & {
+export type Device<UserType> = DeviceFields & {
   provider?: string;
   user?: UserResponse<UserType>;
-  [key: string]: unknown;
+  user_id?: string;
 };
 
 export type OwnUserResponse<
@@ -532,7 +532,7 @@ export type TokenOrProvider = string | TokenProvider | null | undefined;
 export type TokenProvider = () => Promise<string>;
 
 export type ConnectionChangeEvent = {
-  type: 'connection.changed' | 'connection.recovered';
+  type: EventTypes;
   online?: boolean;
 };
 
@@ -544,6 +544,12 @@ export type PermissionObject = {
   resources?: string[];
   roles?: string[];
 };
+
+export type KnownKeys<T> = {
+  [K in keyof T]: string extends K ? never : number extends K ? never : K;
+} extends { [_ in keyof T]: infer U }
+  ? U
+  : never;
 
 export type ArrayOneOrMore<T> = {
   0: T;
@@ -599,7 +605,7 @@ export type QueryFilter<ObjectType = string> = ObjectType extends
       $exists?: boolean;
     };
 
-export type QueryFilters<QueryField = Record<string, unknown>, SpecialOperators = {}> = {
+export type QueryFilters<QueryField = UnknownType, SpecialOperators = {}> = {
   [Key in keyof Omit<QueryField, keyof SpecialOperators>]?:
     | PrimitiveFilter<QueryField[Key]>
     | RequireOnlyOne<QueryFilter<QueryField[Key]>>;
@@ -613,7 +619,7 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type ContainsOperator<CustomType> = {
+export type ContainsOperator<CustomType = {}> = {
   [Key in keyof CustomType]?: CustomType[Key] extends (infer ContainType)[]
     ?
         | RequireOnlyOne<
@@ -628,10 +634,10 @@ export type ContainsOperator<CustomType> = {
 };
 
 export type MessageFilters<
-  MessageType,
-  AttachmentType,
-  ReactionType,
-  UserType
+  MessageType = UnknownType<{}>,
+  AttachmentType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
 > = QueryFilters<
   MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ContainsOperator<MessageType> & {
@@ -660,7 +666,10 @@ export type MessageFilters<
   }
 >;
 
-export type ChannelFilters<ChannelType, UserType> = QueryFilters<
+export type ChannelFilters<
+  ChannelType = UnknownType<{}>,
+  UserType = UnknownType
+> = QueryFilters<
   ChannelResponse<ChannelType, UserType>,
   ContainsOperator<ChannelType> & {
     name?:
@@ -694,7 +703,7 @@ export type ChannelOptions = {
   last_message_ids?: { [key: string]: string };
 };
 
-export type UserFilters<UserType = UnknownType> = QueryFilters<
+export type UserFilters<UserType = UnknownType<{}>> = QueryFilters<
   UserResponse<UserType>,
   ContainsOperator<UserType> & {
     id?:
@@ -749,7 +758,7 @@ export type SearchPayload<
 > = SearchOptions & {
   client_id?: string;
   connection_id?: string;
-  filter_conditions?: ChannelFilters<ChannelType, UserType>;
+  filter_conditions?: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>;
   query?: string;
   message_filter_conditions?: QueryFilters<
     MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
@@ -812,10 +821,10 @@ export type MarkAllReadOptions<UserType> = {
 };
 
 export type CreateChannelOptions = {
-  automod?: 'disabled' | 'simple' | 'AI';
-  automod_behavior?: 'flag' | 'block';
+  automod?: ChannelConfigAutomodTypes;
+  automod_behavior?: ChannelConfigAutomodBehaviorTypes;
   client_id?: string;
-  commands?: string[];
+  commands?: CommandVariants[];
   connect_events?: boolean;
   connection_id?: string;
   max_message_length?: number;
@@ -895,6 +904,70 @@ export type AppSettings = {
   webhook_url?: string;
 };
 
+export type Policy = {
+  name?: string;
+  resources?: string[];
+  roles?: string[];
+  action?: 0 | 1;
+  owner?: boolean;
+  priority?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type APNConfig = {
+  auth_type?: string;
+  bundle_id?: string;
+  development?: boolean;
+  enabled?: boolean;
+  host?: string;
+  key_id?: string;
+  notification_template?: string;
+  team_id?: string;
+};
+
+export type FirebaseConfig = {
+  data_template?: string;
+  enabled?: boolean;
+  notification_template?: string;
+};
+
+export type AppSettingsAPIResponse = APIResponse & {
+  app?: {
+    channel_configs: {
+      automod?: ChannelConfigAutomodTypes;
+      automod_behavior?: ChannelConfigAutomodBehaviorTypes;
+      commands?: CommandVariants[];
+      connect_events?: boolean;
+      created_at?: string;
+      max_message_length?: number;
+      message_retention?: string;
+      mutes?: boolean;
+      name?: string;
+      reactions?: boolean;
+      read_events?: boolean;
+      replies?: boolean;
+      search?: boolean;
+      typing_events?: boolean;
+      updated_at?: string;
+      uploads?: boolean;
+      url_enrichment?: boolean;
+    };
+    disable_auth_checks?: boolean;
+    disable_permissions_checks?: boolean;
+    name?: string;
+    organization?: string;
+    policies?: Record<string, Policy[]>;
+    push_notifications?: {
+      apn?: APNConfig;
+      firebase?: FirebaseConfig;
+    };
+    suspended?: boolean;
+    suspended_explanation?: string;
+    webhook_url?: string;
+  };
+};
+
 export type CheckPushInput<UserType> = {
   apn_template?: string;
   client_id?: string;
@@ -913,12 +986,11 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
 };
 
-export type CheckPushResponse = {
+export type CheckPushResponse = APIResponse & {
   device_errors?: {
     error_message?: string;
     provider?: string;
   };
-  duration?: string;
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
@@ -929,12 +1001,12 @@ export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
 };
 
-export interface CommandResponse {
+export type CommandResponse = {
   name?: string;
   description?: string;
   args?: string;
   set?: string;
-}
+};
 
 export type ConnectionOpen<UserType> = {
   connection_id: string;
@@ -994,7 +1066,7 @@ export type ChannelConfigFields = {
   uploads?: boolean;
   url_enrichment?: boolean;
   automod?: ChannelConfigAutomodTypes;
-  automod_behavior?: 'flag' | 'block';
+  automod_behavior?: ChannelConfigAutomodBehaviorTypes;
 };
 
 export type ChannelConfig = ChannelConfigFields &
