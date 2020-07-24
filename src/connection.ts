@@ -596,8 +596,9 @@ export class StableWSConnection<UserType> {
     event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
     isWSFailure = true,
   ) => {
+    // Keeping this `warn` level log, to avoid cluttering of error logs from ws failures.
     this.logger(
-      'error',
+      'warn',
       `connection:_errorFromWSEvent() - WS failed with code ${
         isCloseEvent(event) ? event.code : 'unknown'
       }`,

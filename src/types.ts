@@ -542,6 +542,18 @@ export type MarkReadOptions<UserType> = {
   user_id?: string;
 };
 
+export type MuteUserOptions<UserType> = {
+  client_id?: string;
+  connection_id?: string;
+  id?: string;
+  reason?: string;
+  target_user_id?: string;
+  timeout?: number;
+  type?: string;
+  user?: UserResponse<UserType>;
+  user_id?: string;
+};
+
 export type PaginationOptions = {
   id_gt?: number;
   id_gte?: number;
@@ -1055,7 +1067,7 @@ export type FirebaseConfig = {
 };
 
 export type Logger = (
-  logLevel: 'info' | 'error',
+  logLevel: 'info' | 'error' | 'warn',
   message: string,
   extraData?: Record<string, unknown>,
 ) => void;

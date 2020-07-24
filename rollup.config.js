@@ -21,7 +21,6 @@ const nodeModulesDirectory = 'node_modules/**';
 
 const externalPackages = [
 	'axios',
-	'cross-fetch',
 	'form-data',
 	'isomorphic-ws',
 	'lodash',

@@ -99,7 +99,7 @@ channelState.members.someUser12433222; // $ExpectType ImmutableObject<ChannelMem
 channelState.members.someUser124332221; // $ExpectType ImmutableObject<ChannelMemberResponse>
 
 channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
-channelState.typing.someUserId; // $ExpectType "typing.start"
+channelState.typing.someUserId; // $ExpectType ImmutableObject<Event<"typing.start">>
 const acceptInvite = channel.acceptInvite({}); // $ExpectType Promise<AcceptInviteAPIResponse>
 acceptInvite.then(value => value);
 

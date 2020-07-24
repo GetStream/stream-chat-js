@@ -295,7 +295,11 @@ export class StreamChat {
   banUser(targetUserID: string, options: object): Promise<BanUserAPIResponse>;
   unbanUser(targetUserID: string, options: object): Promise<UnbanUserAPIResponse>;
 
-  muteUser(targetUserID: string): Promise<MuteAPIResponse>;
+  muteUser(
+    targetUserID: string,
+    UserID?: string,
+    options?: object,
+  ): Promise<MuteAPIResponse>;
   unmuteUser(targetUserID: string): Promise<UnmuteAPIResponse>;
 
   flagUser(userID: string, options?: object): Promise<FlagAPIResponse>;
@@ -313,7 +317,10 @@ export class StreamChat {
   listChannelTypes(): Promise<ListChannelTypesAPIResponse>;
 
   translateMessage(messageId: string, language: string): Promise<GetMessageAPIResponse>;
-  updateMessage(message: Message, user: string | User): Promise<UpdateMessageAPIResponse>;
+  updateMessage(
+    message: Message,
+    user?: string | User,
+  ): Promise<UpdateMessageAPIResponse>;
   deleteMessage(
     messageID: string,
     hardDelete?: boolean,
@@ -488,7 +495,7 @@ export class ChannelState {
   constructor(channel: Channel);
   watcher_count: number;
   typing: SeamlessImmutable.Immutable<{
-    [user_id: string]: SeamlessImmutable.Immutable<TypingStartEvent>;
+    [user_id: string]: SeamlessImmutable.Immutable<Event<TypingStartEvent>>;
   }>;
   read: SeamlessImmutable.Immutable<{
     [user_id: string]: SeamlessImmutable.Immutable<{
@@ -514,7 +521,9 @@ export class ChannelState {
   clearMessages(): void;
   addMessageSorted(newMessage: Message): void;
   addMessagesSorted(newMessages: Message[]): void;
-  messageToImmutable(message: Message): SeamlessImmutable.Immutable<Message>;
+  messageToImmutable(
+    message: MessageResponse,
+  ): SeamlessImmutable.Immutable<MessageResponse>;
   removeMessage(messageToRemove: Message): boolean;
   filterErrorMessages(): SeamlessImmutable.Immutable<Message>;
   clean(): void;

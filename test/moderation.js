@@ -56,6 +56,36 @@ describe('Moderation', function() {
 		await eventPromise;
 	});
 
+	it('Mute with expiration', async function() {
+		const user1 = uuidv4();
+		const user2 = uuidv4();
+		await createUsers([user1, user2]);
+		const client1 = await getTestClientForUser(user1);
+
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('notification.mutes_updated', e => {
+				expect(e.me.mutes.length).to.equal(1);
+				resolve();
+			});
+		});
+		const response = await client1.muteUser(user2, null, { timeout: 10 });
+		expect(response.mute.created_at).to.not.be.undefined;
+		expect(response.mute.updated_at).to.not.be.undefined;
+		expect(response.mute.expires).to.not.be.undefined;
+		expect(response.mute.user.id).to.equal(user1);
+		expect(response.mute.target.id).to.equal(user2);
+		// verify we return the right user mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(1);
+		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
+		await eventPromise;
+	});
+
 	it('Mute after sendMessage', async function() {
 		const user1 = uuidv4();
 		const user2 = uuidv4();

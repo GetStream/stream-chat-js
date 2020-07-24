@@ -63,6 +63,7 @@ import {
   KnownKeys,
   MessageFilters,
   Device,
+  MuteUserOptions,
 } from './types';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
@@ -1565,14 +1566,20 @@ export class StreamChat<
    *
    * @param {string} targetID
    * @param {string} [userID] Only used with serverside auth
+   * @param {MuteUserOptions<UserType>} [options]
    * @returns {Promise<MuteUserResponse<UserType>>}
    */
-  async muteUser(targetID: string, userID?: string) {
+  async muteUser(
+    targetID: string,
+    userID?: string,
+    options: MuteUserOptions<UserType> = {},
+  ) {
     return await this.post<MuteUserResponse<UserType>>(
       this.baseURL + '/moderation/mute',
       {
         target_id: targetID,
         ...(userID ? { user_id: userID } : {}),
+        ...options,
       },
     );
   }
