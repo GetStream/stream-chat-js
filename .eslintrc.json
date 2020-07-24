@@ -1,5 +1,12 @@
 {
-  "plugins": ["babel", "markdown", "sonarjs", "prettier", "@typescript-eslint"],
+  "plugins": [
+    "babel",
+    "markdown",
+    "sonarjs",
+    "prettier",
+    "@typescript-eslint",
+    "typescript-sort-keys"
+  ],
   "extends": [
     "eslint:recommended",
     "plugin:sonarjs/recommended",
@@ -32,7 +39,17 @@
     "linebreak-style": [2, "unix"],
     "semi": [1, "always"],
     "no-buffer-constructor": "error",
-    "sonarjs/cognitive-complexity": ["error", 30]
+    "sonarjs/cognitive-complexity": ["error", 30],
+    "typescript-sort-keys/interface": [
+      "error",
+      "asc",
+      { "caseSensitive": false, "natural": true, "requiredFirst": true }
+    ],
+    "typescript-sort-keys/string-enum": [
+      "error",
+      "asc",
+      { "caseSensitive": false, "natural": true }
+    ]
   },
   "env": {
     "es6": true,

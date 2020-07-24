@@ -41,7 +41,7 @@ export class ChannelState<
     >;
   }>;
   read: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<{ user: UserResponse<UserType>; last_read: Date }>;
+    [key: string]: Immutable.Immutable<{ last_read: Date; user: UserResponse<UserType> }>;
   }>;
   messages: Immutable.ImmutableArray<
     ReturnType<
@@ -98,8 +98,8 @@ export class ChannelState<
     }>({});
     this.read = Immutable<{
       [key: string]: Immutable.Immutable<{
-        user: UserResponse<UserType>;
         last_read: Date;
+        user: UserResponse<UserType>;
       }>;
     }>({});
     this.messages = Immutable([]);

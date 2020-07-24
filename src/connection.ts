@@ -20,18 +20,18 @@ const isErrorEvent = (
 ): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).message !== undefined;
 
 type Constructor<UserType = UnknownType> = {
-  wsBaseURL: string;
-  clientID: string;
-  userID: string;
-  user: UserResponse<UserType>;
-  userAgent: string;
   apiKey: string;
-  tokenManager: TokenManager<UserType>;
   authType: 'anonymous' | 'jwt';
-  messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-  recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
+  clientID: string;
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
+  messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
+  recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
+  tokenManager: TokenManager<UserType>;
+  user: UserResponse<UserType>;
+  userAgent: string;
+  userID: string;
+  wsBaseURL: string;
 };
 
 /**
@@ -80,8 +80,8 @@ export class StableWSConnection<UserType> {
   rejectPromise?: (
     reason?: Error & {
       code?: string | number;
-      StatusCode?: string | number;
       isWSFailure?: boolean;
+      StatusCode?: string | number;
     },
   ) => void;
   resolvePromise?: (value?: WebSocket.MessageEvent) => void;
@@ -613,8 +613,8 @@ export class StableWSConnection<UserType> {
       }`,
     ) as Error & {
       code?: string | number;
-      StatusCode?: string | number;
       isWSFailure?: boolean;
+      StatusCode?: string | number;
     };
     error.code = isCloseEvent(event) ? event.code : undefined;
     /**

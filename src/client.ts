@@ -469,11 +469,11 @@ export class StreamChat<
    * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
    */
   async setGuestUser(user: UserResponse<UserType>) {
-    let response: { user: UserResponse<UserType>; access_token: string } | undefined;
+    let response: { access_token: string; user: UserResponse<UserType> } | undefined;
     this.anonymous = true;
     try {
       response = await this.post<
-        APIResponse & { user: UserResponse<UserType>; access_token: string }
+        APIResponse & { access_token: string; user: UserResponse<UserType> }
       >(this.baseURL + '/guest', { user });
     } catch (e) {
       this.anonymous = false;
@@ -776,7 +776,7 @@ export class StreamChat<
     user?: UserResponse<UserType>,
   ) {
     const data = new FormData();
-    let fileField: File | Buffer | { uri: string; name: string; type?: string };
+    let fileField: File | Buffer | { name: string; uri: string; type?: string };
 
     if (isReadableStream(uri) || uri instanceof File) {
       fileField = uri;
@@ -805,7 +805,7 @@ export class StreamChat<
   }
 
   errorFromResponse<T>(response: AxiosResponse<T & { code?: number; message?: string }>) {
-    let err: Error & { response?: AxiosResponse<T>; status?: number; code?: number };
+    let err: Error & { code?: number; response?: AxiosResponse<T>; status?: number };
     err = new Error(`StreamChat error HTTP code: ${response.status}`);
     if (response.data && response.data.code) {
       err = new Error(

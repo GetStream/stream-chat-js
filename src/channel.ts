@@ -287,14 +287,14 @@ export class Channel<
       client_id?: string;
       connection_id?: string;
       limit?: number;
-      offset?: number;
-      query?: string;
       message_filter_conditions?: MessageFilters<
         Pick<MessageType, KnownKeys<MessageType>>,
         AttachmentType,
         ReactionType,
         UserType
       >;
+      offset?: number;
+      query?: string;
     },
   ) {
     // Return a list of channels
@@ -686,7 +686,7 @@ export class Channel<
    * await channel.mute({user_id: userId});
    *
    */
-  async mute(opts: { user_id?: string; expiration?: number } = {}) {
+  async mute(opts: { expiration?: number; user_id?: string } = {}) {
     return await this.getClient().post<
       MuteChannelAPIResponse<
         AttachmentType,
