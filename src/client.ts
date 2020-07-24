@@ -63,7 +63,7 @@ import {
   KnownKeys,
   MessageFilters,
   Device,
-} from '../types/types';
+} from './types';
 
 function isReadableStream(obj: string | Buffer | File): obj is Buffer {
   return (

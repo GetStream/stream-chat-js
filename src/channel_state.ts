@@ -8,7 +8,7 @@ import {
   ReactionResponse,
   UnknownType,
   UserResponse,
-} from '../types/types';
+} from './types';
 
 const byDate = (
   a: { created_at: Date | Immutable.ImmutableDate },

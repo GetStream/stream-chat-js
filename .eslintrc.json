@@ -18,6 +18,7 @@
     "@typescript-eslint/explicit-module-boundary-types": 0,
     "@typescript-eslint/ban-types": 0,
     "@typescript-eslint/no-this-alias": 0,
+    "@typescript-eslint/triple-slash-reference": 0,
     "no-console": 0,
     "no-class-assign": 0,
     "no-mixed-spaces-and-tabs": 0,
@@ -40,6 +41,7 @@
     "semi": [1, "always"],
     "no-buffer-constructor": "error",
     "sonarjs/cognitive-complexity": ["error", 30],
+    "sonarjs/no-duplicate-string": 0,
     "typescript-sort-keys/interface": [
       "error",
       "asc",

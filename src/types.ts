@@ -1,5 +1,5 @@
 import SeamlessImmutable from 'seamless-immutable';
-import { Channel } from '../src/channel';
+import { Channel } from './channel';
 import { AxiosRequestConfig } from 'axios';
 
 /**

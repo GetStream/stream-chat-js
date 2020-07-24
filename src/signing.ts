@@ -1,7 +1,7 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { encodeBase64, decodeBase64 } from './base64';
-import { UnknownType } from '../types/types';
+import { UnknownType } from './types';
 
 /**
  * Creates the JWT token that can be used for a UserSession

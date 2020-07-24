@@ -38,7 +38,7 @@ import {
   PaginationOptions,
   BanUserOptions,
   KnownKeys,
-} from '../types/types';
+} from './types';
 
 /**
  * Channel - The Channel class manages it's own state.

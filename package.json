@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "module": "./dist/index.es.js",
   "jsnext:main": "./dist/index.es.js",
-  "types": "./types/stream-chat/index.d.ts",
+  "types": "./types/index.d.ts",
   "browser": {
     "./dist/index.es.js": "./dist/browser.es.js",
     "./dist/index.js": "./dist/browser.js"

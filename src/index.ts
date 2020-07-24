@@ -7,5 +7,6 @@ export * from './connection';
 export * from './events';
 export * from './permissions';
 export * from './signing';
-export * from './token_manager.js';
+export * from './token_manager';
+export * from './types';
 export { logChatPromiseExecution } from './utils';

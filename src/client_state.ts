@@ -1,5 +1,5 @@
 import Immutable from 'seamless-immutable';
-import { UnknownType, UserResponse } from '../types/types';
+import { UnknownType, UserResponse } from './types';
 
 /**
  * ClientState - A container class for the client state.

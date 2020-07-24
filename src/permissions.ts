@@ -1,4 +1,4 @@
-import { PermissionObject } from '../types/types';
+import { PermissionObject } from './types';
 
 type RequiredPermissionObject = Required<PermissionObject>;
 

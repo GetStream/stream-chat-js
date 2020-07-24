@@ -8,7 +8,7 @@ import {
   Logger,
   UnknownType,
   UserResponse,
-} from '../types/types';
+} from './types';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
