@@ -256,10 +256,17 @@ export class Channel {
 	 * @return {type} The server response
 	 */
 	async update(channelData, updateMessage) {
-		const data = await this.getClient().post(this._channelURL(), {
-			message: updateMessage,
-			data: channelData,
-		});
+		let data;
+		if (channelData) {
+			data = await this.getClient().post(this._channelURL(), {
+				message: updateMessage,
+				data: channelData,
+			});
+		} else {
+			data = await this.getClient().post(this._channelURL(), {
+				message: updateMessage,
+			});
+		}
 		this.data = data.channel;
 		return data;
 	}
