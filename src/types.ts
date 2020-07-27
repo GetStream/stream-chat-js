@@ -290,7 +290,7 @@ export type MessageResponse<
   AttachmentType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = MessageBase<MessageType, AttachmentType, UserType> & {
+> = MessageBase<MessageType, AttachmentType> & {
   command?: string;
   created_at?: string;
   deleted_at?: string;
@@ -870,6 +870,8 @@ export type Action = {
   value?: string;
 };
 
+export type AnonUserType = {};
+
 export type APNConfig = {
   auth_type?: string;
   bundle_id?: string;
@@ -1076,15 +1078,14 @@ export type Message<
   MessageType = UnknownType,
   AttachmentType = UnknownType,
   UserType = UnknownType
-> = MessageBase<MessageType, AttachmentType, UserType> & {
+> = MessageBase<MessageType, AttachmentType> & {
   mentioned_users?: string[];
   user?: UserResponse<UserType>;
 };
 
 export type MessageBase<
   MessageType = UnknownType,
-  AttachmentType = UnknownType,
-  UserType = UnknownType
+  AttachmentType = UnknownType
 > = MessageType & {
   attachments?: Attachment<AttachmentType>[];
   html?: string;
@@ -1160,7 +1161,7 @@ export type TokenOrProvider = string | TokenProvider | null | undefined;
 
 export type TokenProvider = () => Promise<string>;
 
-export type User<T = UnknownType> = Partial<T> & {
+export type User<T = UnknownType> = T & {
   id: string;
   anon?: boolean;
   name?: string;
