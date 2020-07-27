@@ -1457,6 +1457,25 @@ describe('App configs', function() {
 			);
 		});
 	});
+
+	it('Set Custom Command endpoint URL', async function() {
+		// Set custom command endpoint url
+		const custom_command_url = 'http://example.com';
+		await client.updateAppSettings({
+			custom_command_url: custom_command_url,
+		});
+
+		let response = await client.getAppSettings();
+		expect(response.app.custom_command_url).to.be.eq(custom_command_url);
+
+		// reset custom endpoint url
+		await client.updateAppSettings({
+			custom_command_url: '',
+		});
+
+		response = await client.getAppSettings();
+		expect(response.app.custom_command_url).to.be.eq('');
+	});
 });
 
 describe('Devices', function() {
