@@ -1468,6 +1468,17 @@ describe('App configs', function() {
 		let response = await client.getAppSettings();
 		expect(response.app.custom_command_url).to.be.eq(custom_command_url);
 
+		// reject invalid url
+		await expectHTTPErrorCode(
+			400,
+			client.updateAppSettings({
+				custom_command_url: 'gibbrish',
+			}),
+		);
+
+		response = await client.getAppSettings();
+		expect(response.app.custom_command_url).to.be.eq(custom_command_url);
+
 		// reset custom endpoint url
 		await client.updateAppSettings({
 			custom_command_url: '',
