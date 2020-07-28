@@ -1,9 +1,50 @@
 /// <reference types="seamless-immutable" />
 /// <reference types="node" />
 /// <reference types="ws" />
-declare module "src/base64" {
-    export const encodeBase64: (data: string) => string;
-    export const decodeBase64: (s: string) => string;
+declare module "src/events" {
+    export const EVENT_MAP: {
+        'user.presence.changed': boolean;
+        'user.watching.start': boolean;
+        'user.watching.stop': boolean;
+        'user.updated': boolean;
+        'user.deleted': boolean;
+        'user.banned': boolean;
+        'user.unbanned': boolean;
+        'typing.start': boolean;
+        'typing.stop': boolean;
+        'message.new': boolean;
+        'message.updated': boolean;
+        'message.deleted': boolean;
+        'message.read': boolean;
+        'reaction.new': boolean;
+        'reaction.deleted': boolean;
+        'reaction.updated': boolean;
+        'member.added': boolean;
+        'member.updated': boolean;
+        'member.removed': boolean;
+        'channel.updated': boolean;
+        'channel.muted': boolean;
+        'channel.unmuted': boolean;
+        'channel.deleted': boolean;
+        'channel.truncated': boolean;
+        'channel.created': boolean;
+        'channel.hidden': boolean;
+        'channel.visible': boolean;
+        'health.check': boolean;
+        'notification.message_new': boolean;
+        'notification.mark_read': boolean;
+        'notification.invited': boolean;
+        'notification.invite_accepted': boolean;
+        'notification.added_to_channel': boolean;
+        'notification.removed_from_channel': boolean;
+        'notification.mutes_updated': boolean;
+        'notification.channel_deleted': boolean;
+        'notification.channel_truncated': boolean;
+        'notification.channel_mutes_updated': boolean;
+        'connection.changed': boolean;
+        'connection.recovered': boolean;
+    };
+    export const isValidEventType: (eventType: string) => boolean;
 }
 declare module "src/types" {
     import SeamlessImmutable from 'seamless-immutable';
@@ -30,7 +71,7 @@ declare module "src/types" {
     export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<keyof T, Keys>> & {
         [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
     }[Keys];
-    export type UnknownType<T = Record<string, unknown>> = T;
+    export type UnknownType = Record<string, unknown>;
     /**
      * Response Types
      */
@@ -129,6 +170,7 @@ declare module "src/types" {
         name?: string;
         set?: string;
     };
+    export type ConnectAPIResponse<UserType = UnknownType> = Promise<void | ConnectionOpen<UserType>>;
     export type CreateChannelResponse = Omit<GetChannelTypeResponse, 'commands'>;
     export type DeleteChannelAPIResponse<ChannelType = UnknownType, UserType = UnknownType> = APIResponse & {
         channel: ChannelResponse<ChannelType, UserType>;
@@ -184,7 +226,7 @@ declare module "src/types" {
         mute: MuteResponse<UserType>;
         own_user: OwnUserResponse<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>;
     };
-    export type MessageResponse<MessageType = UnknownType, AttachmentType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> = MessageBase<MessageType, AttachmentType, UserType> & {
+    export type MessageResponse<MessageType = UnknownType, AttachmentType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> = MessageBase<MessageType, AttachmentType> & {
         command?: string;
         created_at?: string;
         deleted_at?: string;
@@ -368,6 +410,17 @@ declare module "src/types" {
         user?: UserResponse<UserType>;
         user_id?: string;
     };
+    export type MuteUserOptions<UserType> = {
+        client_id?: string;
+        connection_id?: string;
+        id?: string;
+        reason?: string;
+        target_user_id?: string;
+        timeout?: number;
+        type?: string;
+        user?: UserResponse<UserType>;
+        user_id?: string;
+    };
     export type PaginationOptions = {
         id_gt?: number;
         id_gte?: number;
@@ -431,24 +484,28 @@ declare module "src/types" {
      * Filter Types
      */
     export type AscDesc = 1 | -1;
-    export type ChannelFilters<ChannelType = UnknownType<{}>, UserType = UnknownType> = QueryFilters<ChannelResponse<ChannelType, UserType>, ContainsOperator<ChannelType> & {
+    export type ChannelFilters<ChannelType = UnknownType, UserType = UnknownType> = QueryFilters<ContainsOperator<ChannelType> & {
         name?: RequireOnlyOne<{
             $autocomplete?: ChannelResponse<ChannelType, UserType>['name'];
         } & QueryFilter<ChannelResponse<ChannelType, UserType>['name']>> | PrimitiveFilter<ChannelResponse<ChannelType, UserType>['name']>;
+    } & {
+        [Key in keyof Omit<ChannelResponse<{}, UserType>, 'name'>]: RequireOnlyOne<QueryFilter<ChannelResponse<{}, UserType>[Key]>> | PrimitiveFilter<ChannelResponse<{}, UserType>[Key]>;
     }>;
     export type ContainsOperator<CustomType = {}> = {
         [Key in keyof CustomType]?: CustomType[Key] extends (infer ContainType)[] ? RequireOnlyOne<{
             $contains?: ContainType extends object ? PrimitiveFilter<RequireAtLeastOne<ContainType>> : PrimitiveFilter<ContainType>;
         } & QueryFilter<PrimitiveFilter<ContainType>[]>> | PrimitiveFilter<PrimitiveFilter<ContainType>[]> : RequireOnlyOne<QueryFilter<CustomType[Key]>> | PrimitiveFilter<CustomType[Key]>;
     };
-    export type MessageFilters<MessageType = UnknownType<{}>, AttachmentType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> = QueryFilters<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>, ContainsOperator<MessageType> & {
+    export type MessageFilters<MessageType = UnknownType, AttachmentType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> = QueryFilters<ContainsOperator<MessageType> & {
         text?: RequireOnlyOne<{
             $autocomplete?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text'];
             $q?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text'];
         } & QueryFilter<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text']>> | PrimitiveFilter<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text']>;
+    } & {
+        [Key in keyof Omit<MessageResponse<{}, AttachmentType, ReactionType, UserType>, 'text'>]?: RequireOnlyOne<QueryFilter<MessageResponse<{}, AttachmentType, ReactionType, UserType>[Key]>> | PrimitiveFilter<MessageResponse<{}, AttachmentType, ReactionType, UserType>[Key]>;
     }>;
     export type PrimitiveFilter<ObjectType> = ObjectType | null;
-    export type QueryFilter<ObjectType = string> = ObjectType extends string | number | boolean ? {
+    export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends string | number | boolean ? {
         $eq?: PrimitiveFilter<ObjectType>;
         $exists?: boolean;
         $gt?: PrimitiveFilter<ObjectType>;
@@ -465,17 +522,15 @@ declare module "src/types" {
         $ne?: PrimitiveFilter<ObjectType>;
         $nin?: PrimitiveFilter<ObjectType>[];
     };
-    export type QueryFilters<QueryField = UnknownType, SpecialOperators = {}> = {
-        [Key in keyof Omit<QueryField, keyof SpecialOperators>]?: PrimitiveFilter<QueryField[Key]> | RequireOnlyOne<QueryFilter<QueryField[Key]>>;
-    } & {
-        [Key in keyof SpecialOperators]?: SpecialOperators[Key];
-    } & QueryLogicalOperators<QueryField, SpecialOperators>;
-    export type QueryLogicalOperators<QueryField, SpecialOperators> = {
-        $and?: ArrayOneOrMore<QueryFilters<QueryField, SpecialOperators>>;
-        $nor?: ArrayOneOrMore<QueryFilters<QueryField, SpecialOperators>>;
-        $or?: ArrayTwoOrMore<QueryFilters<QueryField, SpecialOperators>>;
+    export type QueryFilters<Operators = {}> = {
+        [Key in keyof Operators]?: Operators[Key];
+    } & QueryLogicalOperators<Operators>;
+    export type QueryLogicalOperators<Operators> = {
+        $and?: ArrayOneOrMore<QueryFilters<Operators>>;
+        $nor?: ArrayOneOrMore<QueryFilters<Operators>>;
+        $or?: ArrayTwoOrMore<QueryFilters<Operators>>;
     };
-    export type UserFilters<UserType = UnknownType<{}>> = QueryFilters<UserResponse<UserType>, ContainsOperator<UserType> & {
+    export type UserFilters<UserType = UnknownType> = QueryFilters<ContainsOperator<UserType> & {
         id?: RequireOnlyOne<{
             $autocomplete?: UserResponse<UserType>['id'];
         } & QueryFilter<UserResponse<UserType>['id']>> | PrimitiveFilter<UserResponse<UserType>['id']>;
@@ -489,6 +544,8 @@ declare module "src/types" {
         username?: RequireOnlyOne<{
             $autocomplete?: UserResponse<UserType>['username'];
         } & QueryFilter<UserResponse<UserType>['username']>> | PrimitiveFilter<UserResponse<UserType>['username']>;
+    } & {
+        [Key in keyof Omit<UserResponse<{}>, 'id' | 'name' | 'teams' | 'username'>]?: RequireOnlyOne<QueryFilter<UserResponse<{}>[Key]>> | PrimitiveFilter<UserResponse<{}>[Key]>;
     }>;
     /**
      * Sort Types
@@ -516,6 +573,7 @@ declare module "src/types" {
         type?: string;
         value?: string;
     };
+    export type AnonUserType = {};
     export type APNConfig = {
         auth_type?: string;
         bundle_id?: string;
@@ -666,12 +724,12 @@ declare module "src/types" {
         enabled?: boolean;
         notification_template?: string;
     };
-    export type Logger = (logLevel: 'info' | 'error', message: string, extraData?: Record<string, unknown>) => void;
-    export type Message<MessageType = UnknownType, AttachmentType = UnknownType, UserType = UnknownType> = MessageBase<MessageType, AttachmentType, UserType> & {
+    export type Logger = (logLevel: 'info' | 'error' | 'warn', message: string, extraData?: Record<string, unknown>) => void;
+    export type Message<MessageType = UnknownType, AttachmentType = UnknownType, UserType = UnknownType> = MessageBase<MessageType, AttachmentType> & {
         mentioned_users?: string[];
         user?: UserResponse<UserType>;
     };
-    export type MessageBase<MessageType = UnknownType, AttachmentType = UnknownType, UserType = UnknownType> = MessageType & {
+    export type MessageBase<MessageType = UnknownType, AttachmentType = UnknownType> = MessageType & {
         attachments?: Attachment<AttachmentType>[];
         html?: string;
         id?: string;
@@ -714,8 +772,8 @@ declare module "src/types" {
     export type SearchPayload<AttachmentType = UnknownType, ChannelType = UnknownType, MessageType = UnknownType, ReactionType = UnknownType, UserType = UnknownType> = SearchOptions & {
         client_id?: string;
         connection_id?: string;
-        filter_conditions?: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>;
-        message_filter_conditions?: QueryFilters<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>>;
+        filter_conditions?: ChannelFilters<ChannelType, UserType>;
+        message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;
         query?: string;
     };
     export type TestPushDataInput = {
@@ -726,7 +784,7 @@ declare module "src/types" {
     };
     export type TokenOrProvider = string | TokenProvider | null | undefined;
     export type TokenProvider = () => Promise<string>;
-    export type User<T = UnknownType> = Partial<T> & {
+    export type User<T = UnknownType> = T & {
         id: string;
         anon?: boolean;
         name?: string;
@@ -973,51 +1031,6 @@ declare module "src/channel_state" {
         clearMessages(): void;
     }
 }
-declare module "src/events" {
-    export const EVENT_MAP: {
-        'user.presence.changed': boolean;
-        'user.watching.start': boolean;
-        'user.watching.stop': boolean;
-        'user.updated': boolean;
-        'user.deleted': boolean;
-        'user.banned': boolean;
-        'user.unbanned': boolean;
-        'typing.start': boolean;
-        'typing.stop': boolean;
-        'message.new': boolean;
-        'message.updated': boolean;
-        'message.deleted': boolean;
-        'message.read': boolean;
-        'reaction.new': boolean;
-        'reaction.deleted': boolean;
-        'reaction.updated': boolean;
-        'member.added': boolean;
-        'member.updated': boolean;
-        'member.removed': boolean;
-        'channel.updated': boolean;
-        'channel.muted': boolean;
-        'channel.unmuted': boolean;
-        'channel.deleted': boolean;
-        'channel.truncated': boolean;
-        'channel.created': boolean;
-        'channel.hidden': boolean;
-        'channel.visible': boolean;
-        'health.check': boolean;
-        'notification.message_new': boolean;
-        'notification.mark_read': boolean;
-        'notification.invited': boolean;
-        'notification.invite_accepted': boolean;
-        'notification.added_to_channel': boolean;
-        'notification.removed_from_channel': boolean;
-        'notification.mutes_updated': boolean;
-        'notification.channel_deleted': boolean;
-        'notification.channel_truncated': boolean;
-        'notification.channel_mutes_updated': boolean;
-        'connection.changed': boolean;
-        'connection.recovered': boolean;
-    };
-    export const isValidEventType: (eventType: string) => boolean;
-}
 declare module "src/utils" {
     /**
      * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -1035,817 +1048,16 @@ declare module "src/utils" {
         WS_CLOSED_SUCCESS: number;
     };
 }
-declare module "src/client_state" {
-    import Immutable from 'seamless-immutable';
-    import { UnknownType, UserResponse } from "src/types";
-    /**
-     * ClientState - A container class for the client state.
-     */
-    export class ClientState<UserType = UnknownType> {
-        users: Immutable.ImmutableObject<{
-            [key: string]: Immutable.Immutable<UserResponse<UserType>>;
-        }>;
-        userChannelReferences: {
-            [key: string]: {
-                [key: string]: boolean;
-            };
-        };
-        constructor();
-        updateUsers(users: UserResponse<UserType>[]): void;
-        updateUser(user?: UserResponse<UserType>): void;
-        updateUserReference(user: UserResponse<UserType>, channelID: string): void;
-    }
-}
-declare module "src/signing" {
-    import { Secret, SignOptions } from 'jsonwebtoken';
-    import { UnknownType } from "src/types";
-    /**
-     * Creates the JWT token that can be used for a UserSession
-     * @method JWTUserToken
-     * @memberof signing
-     * @private
-     * @param {Secret} apiSecret - API Secret key
-     * @param {string} userId - The user_id key in the JWT payload
-     * @param {UnknownType} [extraData] - Extra that should be part of the JWT token
-     * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
-     * @return {string} JWT Token
-     */
-    export function JWTUserToken(apiSecret: Secret, userId: string, extraData?: UnknownType, jwtOptions?: SignOptions): string;
-    export function JWTServerToken(apiSecret: Secret, jwtOptions?: SignOptions): string;
-    export function UserFromToken(token: string): string;
-    /**
-     *
-     * @param {string} userId the id of the user
-     * @return {string}
-     */
-    export function DevToken(userId: string): string;
-    /**
-     *
-     * @param {string} body the signed message
-     * @param {string} secret the shared secret used to generate the signature (Stream API secret)
-     * @param {string} signature the signature to validate
-     * @return {boolean}
-     */
-    export function CheckSignature(body: string, secret: string, signature: string): boolean;
-}
-declare module "src/token_manager" {
-    import { Secret } from 'jsonwebtoken';
-    import { TokenOrProvider, UnknownType, UserResponse } from "src/types";
-    /**
-     * TokenManager
-     *
-     * Handles all the operations around user token.
-     */
-    export class TokenManager<UserType = UnknownType> {
-        loadTokenPromise: Promise<string> | null;
-        type: 'static' | 'provider';
-        secret?: Secret;
-        token?: string;
-        tokenProvider?: TokenOrProvider;
-        user?: UserResponse<UserType>;
-        /**
-         * Constructor
-         *
-         * @param {Secret} secret
-         */
-        constructor(secret?: Secret);
-        /**
-         * Set the static string token or token provider.
-         * Token provider should return a token string or a promise which resolves to string token.
-         *
-         * @param {TokenOrProvider} tokenOrProvider
-         * @param {UserResponse<UserType>} user
-         */
-        setTokenOrProvider: (tokenOrProvider: TokenOrProvider, user: UserResponse<UserType>) => Promise<void>;
-        /**
-         * Resets the token manager.
-         * Useful for client disconnection or switching user.
-         */
-        reset: () => void;
-        validateToken: (tokenOrProvider: TokenOrProvider, user: UserResponse<UserType>) => void;
-        tokenReady: () => Promise<string> | null;
-        loadToken: () => Promise<string>;
-        getToken: () => string | undefined;
-        isStatic: () => boolean;
-    }
-}
-declare module "src/connection" {
-    import isoWS from 'isomorphic-ws';
-    import WebSocket from 'isomorphic-ws';
-    import { TokenManager } from "src/token_manager";
-    import { ConnectionChangeEvent, ConnectionOpen, Logger, UnknownType, UserResponse } from "src/types";
-    type Constructor<UserType = UnknownType> = {
-        apiKey: string;
-        authType: 'anonymous' | 'jwt';
-        clientID: string;
-        eventCallback: (event: ConnectionChangeEvent) => void;
-        logger: Logger | (() => void);
-        messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-        recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
-        tokenManager: TokenManager<UserType>;
-        user: UserResponse<UserType>;
-        userAgent: string;
-        userID: string;
-        wsBaseURL: string;
-    };
-    /**
-     * StableWSConnection - A WS connection that reconnects upon failure.
-     * - the browser will sometimes report that you're online or offline
-     * - the WS connection can break and fail (there is a 30s health check)
-     * - sometimes your WS connection will seem to work while the user is in fact offline
-     * - to speed up online/offline detection you can use the window.addEventListener('offline');
-     *
-     * There are 4 ways in which a connection can become unhealthy:
-     * - websocket.onerror is called
-     * - websocket.onclose is called
-     * - the health check fails and no event is received for ~40 seconds
-     * - the browser indicates the connection is now offline
-     *
-     * There are 2 assumptions we make about the server:
-     * - state can be recovered by querying the channel again
-     * - if the servers fails to publish a message to the client, the WS connection is destroyed
-     */
-    export class StableWSConnection<UserType> {
-        wsBaseURL: Constructor<UserType>['wsBaseURL'];
-        clientID: Constructor<UserType>['clientID'];
-        userID: Constructor<UserType>['userID'];
-        user: Constructor<UserType>['user'];
-        userAgent: Constructor<UserType>['userAgent'];
-        authType: Constructor<UserType>['authType'];
-        apiKey: Constructor<UserType>['apiKey'];
-        tokenManager: Constructor<UserType>['tokenManager'];
-        messageCallback: Constructor<UserType>['messageCallback'];
-        recoverCallback: Constructor<UserType>['recoverCallback'];
-        eventCallback: Constructor<UserType>['eventCallback'];
-        logger: Constructor<UserType>['logger'];
-        consecutiveFailures: number;
-        healthCheckInterval: number;
-        isConnecting: boolean;
-        isHealthy: boolean;
-        lastEvent: Date | null;
-        monitorInterval: number;
-        totalFailures: number;
-        connectionID?: string;
-        connectionOpen?: Promise<ConnectionOpen<UserType> | undefined>;
-        healthCheckIntervalRef?: NodeJS.Timeout;
-        isResolved?: boolean;
-        monitorIntervalRef?: NodeJS.Timeout;
-        rejectPromise?: (reason?: Error & {
-            code?: string | number;
-            isWSFailure?: boolean;
-            StatusCode?: string | number;
-        }) => void;
-        resolvePromise?: (value?: WebSocket.MessageEvent) => void;
-        ws?: isoWS;
-        wsID: number;
-        constructor({ wsBaseURL, clientID, userID, user, userAgent, apiKey, tokenManager, authType, messageCallback, recoverCallback, eventCallback, logger, }: Constructor<UserType>);
-        /**
-         * connect - Connect to the WS URL
-         *
-         * @return {Promise<ConnectionOpen<UserType> | void>} Promise that completes once the first health check message is received
-         */
-        connect(): Promise<void | ConnectionOpen<UserType>>;
-        _buildUrl: () => string;
-        /**
-         * disconnect - Disconnect the connection and doesn't recover...
-         *
-         */
-        disconnect(timeout?: number): Promise<void>;
-        /**
-         * _connect - Connect to the WS endpoint
-         *
-         * @return {Promise<ConnectionOpen<UserType> | undefined>} Promise that completes once the first health check message is received
-         */
-        _connect(): Promise<ConnectionOpen<UserType> | undefined>;
-        /**
-         * _reconnect - Retry the connection to WS endpoint
-         *
-         * @param {{ interval?: number; refreshToken?: boolean }} options Following options are available
-         *
-         * - `interval`	{int}			number of ms that function should wait before reconnecting
-         * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
-         */
-        _reconnect(options?: {
-            interval?: number;
-            refreshToken?: boolean;
-        }): Promise<void>;
-        /**
-         * onlineStatusChanged - this function is called when the browser connects or disconnects from the internet.
-         *
-         * @param {Event} event Event with type online or offline
-         *
-         */
-        onlineStatusChanged: (event: Event) => void;
-        onopen: (wsID: number) => void;
-        onmessage: (wsID: number, event: WebSocket.MessageEvent) => void;
-        onclose: (wsID: number, event: WebSocket.CloseEvent) => void;
-        onerror: (wsID: number, event: WebSocket.ErrorEvent) => void;
-        /**
-         * _setHealth - Sets the connection to healthy or unhealthy.
-         * Broadcasts an event in case the connection status changed.
-         *
-         * @param {boolean} healthy boolean indicating if the connection is healthy or not
-         *
-         */
-        _setHealth: (healthy: boolean) => void;
-        /**
-         * _errorFromWSEvent - Creates an error object for the WS event
-         *
-         */
-        _errorFromWSEvent: (event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent, isWSFailure?: boolean) => Error & {
-            code?: string | number | undefined;
-            isWSFailure?: boolean | undefined;
-            StatusCode?: string | number | undefined;
-        };
-        /**
-         * _listenForConnectionChanges - Adds an event listener for the browser going online or offline
-         *
-         */
-        _listenForConnectionChanges: () => void;
-        _removeConnectionListeners: () => void;
-        /**
-         * _destroyCurrentWSConnection - Removes the current WS connection
-         *
-         */
-        _destroyCurrentWSConnection(): void;
-        /**
-         * _retryInterval - A retry interval which increases after consecutive failures
-         *
-         * @return {number} Duration to wait in milliseconds
-         */
-        _retryInterval: () => number;
-        /**
-         * _setupPromise - sets up the this.connectOpen promise
-         */
-        _setupConnectionPromise: () => void;
-        /**
-         * _startHealthCheck - Sends a message every 30s or so to see if the ws connection still works
-         *
-         */
-        _startHealthCheck(): void;
-        /**
-         * _startMonitor - Verifies we didn't miss any events. Marks the connection as failed in case we did.
-         *
-         */
-        _startMonitor(): void;
-    }
-}
-declare module "src/client" {
-    import { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
-    import WebSocket from 'ws';
-    import { Channel } from "src/channel";
-    import { ClientState } from "src/client_state";
-    import { StableWSConnection } from "src/connection";
-    import { TokenManager } from "src/token_manager";
-    import { Configs, Logger, ConnectionOpen, TokenOrProvider, UserResponse, Event, EventHandler, ChannelMute, ChannelSort, ChannelOptions, ChannelAPIResponse, ChannelData, AppSettings, CheckPushResponse, TestPushDataInput, UserFilters, UserSort, UserOptions, SearchOptions, MessageResponse, ReactionResponse, BanUserOptions, UnBanUserOptions, MuteUserResponse, FlagMessageOptions, FlagMessageResponse, MarkAllReadOptions, StreamChatOptions, CreateChannelOptions, GetChannelTypeResponse, UpdateChannelOptions, UpdateChannelResponse, ListChannelResponse, APIResponse, CustomPermissionOptions, SearchAPIResponse, ChannelFilters, AppSettingsAPIResponse, UnknownType, KnownKeys, MessageFilters, Device } from "src/types";
-    export class StreamChat<UserType = UnknownType, MessageType = UnknownType, ChannelType = UnknownType, AttachmentType = UnknownType, ReactionType = UnknownType, EventType = UnknownType> {
-        key: string;
-        secret?: string;
-        listeners: {
-            [key: string]: Array<(event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void>;
-        };
-        state: ClientState<UserType>;
-        mutedChannels: ChannelMute<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>[];
-        browser: boolean;
-        node: boolean;
-        options: StreamChatOptions;
-        axiosInstance: AxiosInstance;
-        wsConnection: StableWSConnection<UserType> | null;
-        wsPromise: Promise<void | ConnectionOpen<UserType>> | null;
-        setUserPromise: Promise<void | ConnectionOpen<UserType>> | null;
-        activeChannels: {
-            [key: string]: Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>;
-        };
-        configs: Configs;
-        anonymous: boolean;
-        tokenManager: TokenManager<UserType>;
-        logger: Logger;
-        baseURL?: string;
-        wsBaseURL?: string;
-        UUID?: string;
-        userID?: string;
-        clientID?: string;
-        connectionID?: string;
-        user?: UserResponse<UserType>;
-        _user?: UserResponse<UserType>;
-        cleaningIntervalRef?: NodeJS.Timeout;
-        connectionEstablishedCount?: number;
-        connecting?: boolean;
-        failures?: number;
-        constructor(key: string, options?: StreamChatOptions);
-        constructor(key: string, secret?: string, options?: StreamChatOptions);
-        devToken(userID: string): string;
-        getAuthType(): "anonymous" | "jwt";
-        setBaseURL(baseURL: string): void;
-        _setupConnection: () => Promise<void | ConnectionOpen<UserType>>;
-        _hasConnectionID: () => boolean;
-        /**
-         * setUser - Set the current user, this triggers a connection to the API
-         *
-         * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
-         * @param {TokenOrProvider} userTokenOrProvider Token or provider
-         *
-         * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
-         */
-        setUser: (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void | ConnectionOpen<UserType>>;
-        _setToken: (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void>;
-        _setUser(user: UserResponse<UserType>): void;
-        /**
-           * updateAppSettings - updates application settings
-           *
-           * @param {AppSettings} options App settings.
-           * 		IE: {
-                      "apn_config": {
-                          "auth_type": "token",
-                          "auth_key": fs.readFileSync(
-                              './apn-push-auth-key.p8',
-                              'utf-8',
-                          ),
-                          "key_id": "keyid",
-                          "team_id": "teamid", //either ALL these 3
-                          "notification_template": "notification handlebars template",
-                          "bundle_id": "com.apple.your.app",
-                          "development": true
-                      },
-                      "firebase_config": {
-                          "server_key": "server key from fcm",
-                          "notification_template": "notification handlebars template"
-                          "data_template": "data handlebars template"
-                      },
-                      "webhook_url": "https://acme.com/my/awesome/webhook/"
-                  }
-           */
-        updateAppSettings(options: AppSettings): Promise<APIResponse>;
-        /**
-         * getAppSettings - retrieves application settings
-         */
-        getAppSettings(): Promise<AppSettingsAPIResponse>;
-        /**
-           * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
-           *
-           * @param {string} userID User ID. If user has no devices, it will error
-           * @param {TestPushDataInput} [data] Overrides for push templates/message used
-           * 		IE: {
-                        messageID: 'id-of-message',//will error if message does not exist
-                        apnTemplate: '{}', //if app doesn't have apn configured it will error
-                        firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-                        firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
-                  }
-           */
-        testPushSettings(userID: string, data?: TestPushDataInput): Promise<CheckPushResponse>;
-        /**
-         * disconnect - closes the WS connection
-         */
-        disconnect(timeout?: number): Promise<void>;
-        setAnonymousUser: () => Promise<void | ConnectionOpen<UserType>>;
-        /**
-         * setGuestUser - Setup a temporary guest user
-         *
-         * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
-         *
-         * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
-         */
-        setGuestUser(user: UserResponse<UserType>): Promise<void | ConnectionOpen<UserType>>;
-        /**
-         * createToken - Creates a token to authenticate this user. This function is used server side.
-         * The resulting token should be passed to the client side when the users registers or logs in
-         *
-         * @param {string} userID The User ID
-         * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
-         *
-         * @return {string} Returns a token
-         */
-        createToken(userID: string, exp?: number): string;
-        /**
-         * on - Listen to events on all channels and users your watching
-         *
-         * client.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
-         * or
-         * client.on(event => {console.log(event.type)})
-         *
-         * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType> | string} callbackOrString  The event type to listen for (optional)
-         * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
-         *
-         * @return {{ unsubscribe: () => void }} Description
-         */
-        on(callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): {
-            unsubscribe: () => void;
-        };
-        on(eventType: string, callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): {
-            unsubscribe: () => void;
-        };
-        /**
-         * off - Remove the event handler
-         *
-         */
-        off(callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
-        off(eventType: string, callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
-        _logApiRequest(type: string, url: string, data: unknown, config: AxiosRequestConfig & {
-            config?: AxiosRequestConfig & {
-                maxBodyLength?: number;
-            };
-        }): void;
-        _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>): void;
-        _logApiError(type: string, url: string, error: unknown): void;
-        doAxiosRequest: <T>(type: string, url: string, data?: unknown, options?: AxiosRequestConfig & {
-            config?: AxiosRequestConfig & {
-                maxBodyLength?: number;
-            };
-        }) => Promise<T>;
-        get<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
-        put<T>(url: string, data?: unknown): Promise<T>;
-        post<T>(url: string, data?: unknown): Promise<T>;
-        patch<T>(url: string, data?: unknown): Promise<T>;
-        delete<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
-        sendFile<T>(url: string, uri: string | Buffer | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<T>;
-        errorFromResponse<T>(response: AxiosResponse<T & {
-            code?: number;
-            message?: string;
-        }>): Error & {
-            code?: number | undefined;
-            response?: AxiosResponse<T> | undefined;
-            status?: number | undefined;
-        };
-        handleResponse<T>(response: AxiosResponse<T>): T;
-        dispatchEvent: (event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void;
-        handleEvent: (messageEvent: WebSocket.MessageEvent) => void;
-        _handleClientEvent(event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
-        _muteStatus(cid: string): {
-            muted: boolean;
-            createdAt: null;
-            expiresAt: null;
-        };
-        _callClientListeners: (event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void;
-        recoverState: () => Promise<void>;
-        _updateUserReferences(user: UserResponse<UserType>): void;
-        connect(): Promise<void | ConnectionOpen<UserType>>;
-        /**
-         * queryUsers - Query users and watch user presence
-         *
-         * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>} filterConditions MongoDB style filter conditions
-         * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}
-         * @param {UserOptions} options Option object, {presence: true}
-         *
-         * @return {Promise<APIResponse & { users: Array<UserResponse<UserType>> }>} User Query Response
-         */
-        queryUsers(filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>, sort?: UserSort<UserType>, options?: UserOptions): Promise<APIResponse & {
-            users: Array<UserResponse<UserType>>;
-        }>;
-        queryChannels(filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>, sort?: ChannelSort, options?: ChannelOptions): Promise<Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>[]>;
-        /**
-         * search - Query messages
-         *
-         * @param {ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>} filterConditions MongoDB style filter conditions
-         * @param {MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
-         * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
-         *
-         * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
-         */
-        search(filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>, query: string | MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType>, options?: SearchOptions): Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
-        /**
-         * addDevice - Adds a push device for a user.
-         *
-         * @param {string} id the device id
-         * @param {'apn' | 'firebase'} push_provider the push provider (apn or firebase)
-         * @param {string} [userID] the user id (defaults to current user)
-         *
-         */
-        addDevice(id: string, push_provider: 'apn' | 'firebase', userID?: string): Promise<APIResponse>;
-        /**
-         * getDevices - Returns the devices associated with a current user
-         *
-         * @param {string} [userID] User ID. Only works on serversidex
-         *
-         * @return {APIResponse & Device<UserType>[]} Array of devices
-         */
-        getDevices(userID?: string): Promise<APIResponse & Device<UserType>[]>;
-        /**
-         * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
-         *
-         * @param {string} id The device id
-         * @param {string} [userID] The user id. Only specify this for serverside requests
-         *
-         */
-        removeDevice(id: string, userID?: string): Promise<APIResponse>;
-        _addChannelConfig(channelState: ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>): void;
-        /**
-         * channel - Returns a new channel with the given type, id and custom data
-         *
-         * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter
-         * and only provide ID and the list of members
-         *
-         * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
-         *
-         * @param {string} channelType The channel type
-         * @param {string} channelID   The channel ID, you can leave this out if you want to create a conversation channel
-         * @param {object} [custom]    Custom data to attach to the channel
-         *
-         * @return {channel} The channel object, initialize it using channel.watch()
-         */
-        channel(channelType: string, channelID: string, custom?: ChannelData<ChannelType>): Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>;
-        /**
-         * @deprecated Please use upsertUser() function instead.
-         *
-         * updateUser - Update or Create the given user object
-         *
-         * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-         */
-        updateUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        /**
-         * partialUpdateUser - Update the given user object
-         *
-         * @param {UserResponse<UserType>} userObject which should contain id and any of "set" or "unset" params;
-         * example: {id: "user1", set:{field: value}, unset:["field2"]}
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>} list of updated users
-         */
-        partialUpdateUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        /**
-         * upsertUsers - Batch upsert the list of users
-         *
-         * @param {UserResponse<UserType>[]} users list of users
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-         */
-        upsertUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        /**
-         * upsertUser - Update or Create the given user object
-         *
-         * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-         */
-        upsertUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        /**
-         * @deprecated Please use upsertUsers() function instead.
-         *
-         * updateUsers - Batch update the list of users
-         *
-         * @param {UserResponse<UserType>[]} users list of users
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-         */
-        updateUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        /**
-         * updateUsers - Batch partial update of users
-         *
-         * @param {UserResponse<UserType>[]} users list of partial update requests
-         *
-         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-         */
-        partialUpdateUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
-            users: {
-                [key: string]: UserResponse<UserType>;
-            };
-        }>;
-        deleteUser(userID: string, params?: {
-            hard_delete?: boolean;
-            mark_messages_deleted?: boolean;
-        }): Promise<APIResponse & {
-            user: UserResponse<UserType>;
-        }>;
-        reactivateUser(userID: string, options?: {
-            restore_messages?: boolean;
-        }): Promise<APIResponse & {
-            user: UserResponse<UserType>;
-        }>;
-        deactivateUser(userID: string, options?: {
-            mark_messages_deleted?: boolean;
-        }): Promise<APIResponse & {
-            user: UserResponse<UserType>;
-        }>;
-        exportUser(userID: string, options?: Record<string, string>): Promise<APIResponse & {
-            messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
-            reactions: ReactionResponse<ReactionType, UserType>[];
-            user: UserResponse<UserType>;
-        }>;
-        /** banUser - bans a user from all channels
-         *
-         * @param {string} targetUserID
-         * @param {BanUserOptions<UserType>} [options]
-         * @returns {Promise<APIResponse>}
-         */
-        banUser(targetUserID: string, options?: BanUserOptions<UserType>): Promise<APIResponse>;
-        /** unbanUser - revoke global ban for a user
-         *
-         * @param {string} targetUserID
-         * @param {UnBanUserOptions} [options]
-         * @returns {Promise<APIResponse>}
-         */
-        unbanUser(targetUserID: string, options?: UnBanUserOptions): Promise<APIResponse>;
-        /** muteUser - mutes a user
-         *
-         * @param {string} targetID
-         * @param {string} [userID] Only used with serverside auth
-         * @returns {Promise<MuteUserResponse<UserType>>}
-         */
-        muteUser(targetID: string, userID?: string): Promise<MuteUserResponse<UserType>>;
-        /** unmuteUser - unmutes a user
-         *
-         * @param {string} targetID
-         * @param {string} [currentUserID] Only used with serverside auth
-         * @returns {Promise<APIResponse>}
-         */
-        unmuteUser(targetID: string, currentUserID?: string): Promise<APIResponse>;
-        flagMessage(targetMessageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
-        flagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
-        unflagMessage(messageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
-        unflagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
-        /**
-         * markAllRead - marks all channels for this user as read
-         * @param {MarkAllReadOptions<UserType>} [data]
-         *
-         * @return {Promise<APIResponse>}
-         */
-        markAllRead(data?: MarkAllReadOptions<UserType>): Promise<void>;
-        createChannelType(data: CreateChannelOptions): Promise<Pick<GetChannelTypeResponse, "search" | "automod" | "automod_behavior" | "max_message_length" | "message_retention" | "mutes" | "name" | "permissions" | "reactions" | "read_events" | "replies" | "typing_events" | "uploads" | "url_enrichment" | "created_at" | "duration" | "updated_at">>;
-        getChannelType(channelType: string): Promise<GetChannelTypeResponse>;
-        updateChannelType(channelType: string, data: UpdateChannelOptions): Promise<UpdateChannelResponse>;
-        deleteChannelType(channelType: string): Promise<APIResponse>;
-        listChannelTypes(): Promise<ListChannelResponse>;
-        /**
-         * translateMessage - adds the translation to the message
-         *
-         * @param {string} messageId
-         * @param {string} language
-         *
-         * @return {APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} Response that includes the message
-         */
-        translateMessage(messageId: string, language: string): Promise<APIResponse & MessageType & {
-            attachments?: import("src/types").Attachment<AttachmentType>[] | undefined;
-            html?: string | undefined;
-            id?: string | undefined;
-            parent_id?: string | undefined;
-            show_in_channel?: boolean | undefined;
-            text?: string | undefined;
-            user_id?: string | undefined;
-        } & {
-            command?: string | undefined;
-            created_at?: string | undefined;
-            deleted_at?: string | undefined;
-            latest_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
-            mentioned_users?: UserResponse<UserType>[] | undefined;
-            own_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
-            reaction_counts?: {
-                [key: string]: number;
-            } | undefined;
-            reaction_scores?: {
-                [key: string]: number;
-            } | undefined;
-            reply_count?: number | undefined;
-            silent?: boolean | undefined;
-            status?: string | undefined;
-            type?: string | undefined;
-            updated_at?: string | undefined;
-            user?: UserResponse<UserType> | undefined;
-        }>;
-        /**
-         * updateMessage - Update the given message
-         *
-         * @param {MessageResponse<MessageType, ReactionType, AttachmentType, UserType>} message object, id needs to be specified
-         * @param {string | { id: string }} [userId]
-         *
-         * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType> }} Response that includes the message
-         */
-        updateMessage(message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>, userId?: string | {
-            id: string;
-        }): Promise<APIResponse & {
-            message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
-        }>;
-        deleteMessage(messageID: string, hardDelete?: boolean): Promise<APIResponse & {
-            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
-        }>;
-        getMessage(messageID: string): Promise<APIResponse & {
-            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
-        }>;
-        _userAgent(): string;
-        /**
-         * _isUsingServerAuth - Returns true if we're using server side auth
-         */
-        _isUsingServerAuth: () => boolean;
-        _enrichAxiosOptions(options?: AxiosRequestConfig & {
-            config?: AxiosRequestConfig;
-        }): {
-            params: any;
-            headers: any;
-        } | {
-            url?: string | undefined;
-            method?: string | undefined;
-            baseURL?: string | undefined;
-            transformRequest?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
-            transformResponse?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
-            headers: any;
-            params: any;
-            paramsSerializer?: ((params: any) => string) | undefined;
-            data?: any;
-            timeout?: number | undefined;
-            withCredentials?: boolean | undefined;
-            adapter?: import("axios").AxiosAdapter | undefined;
-            auth?: import("axios").AxiosBasicCredentials | undefined;
-            responseType?: string | undefined;
-            xsrfCookieName?: string | undefined;
-            xsrfHeaderName?: string | undefined;
-            onUploadProgress?: ((progressEvent: any) => void) | undefined;
-            onDownloadProgress?: ((progressEvent: any) => void) | undefined;
-            maxContentLength?: number | undefined;
-            validateStatus?: ((status: number) => boolean) | undefined;
-            maxRedirects?: number | undefined;
-            httpAgent?: any;
-            httpsAgent?: any;
-            proxy?: false | import("axios").AxiosProxyConfig | undefined;
-            cancelToken?: import("axios").CancelToken | undefined;
-        };
-        _getToken(): string | null | undefined;
-        _startCleaning(): void;
-        verifyWebhook(requestBody: string, xSignature: string): boolean;
-        /** getPermission - gets the definition for a permission
-         *
-         * @param {string} name
-         * @returns {Promise<APIResponse>}
-         */
-        getPermission(name: string): Promise<APIResponse>;
-        /** createPermission - creates a custom permission
-         *
-         * @param {CustomPermissionOptions} permissionData the permission data
-         * @returns {Promise<APIResponse>}
-         */
-        createPermission(permissionData: CustomPermissionOptions): Promise<APIResponse>;
-        /** updatePermission - updates an existing custom permission
-         *
-         * @param {string} name
-         * @param {CustomPermissionOptions} permissionData the permission data
-         * @returns {Promise<APIResponse>}
-         */
-        updatePermission(name: string, permissionData: CustomPermissionOptions): Promise<APIResponse>;
-        /** deletePermission - deletes a custom permission
-         *
-         * @param {string} name
-         * @returns {Promise<APIResponse>}
-         */
-        deletePermission(name: string): Promise<APIResponse>;
-        /** listPermissions - returns the list of custom permissions for this application
-         *
-         * @returns {Promise<APIResponse>}
-         */
-        listPermissions(): Promise<APIResponse>;
-        /** createRole - creates a custom role
-         *
-         * @param {string} name the new role name
-         * @returns {Promise<APIResponse>}
-         */
-        createRole(name: string): Promise<APIResponse>;
-        /** listRoles - returns the list of custom roles for this application
-         *
-         * @returns {Promise<APIResponse>}
-         */
-        listRoles(): Promise<APIResponse>;
-        /** deleteRole - deletes a custom role
-         *
-         * @param {string} name the role name
-         * @returns {Promise<APIResponse>}
-         */
-        deleteRole(name: string): Promise<APIResponse>;
-        /** sync - returns all events that happened for a list of channels since last sync
-         * @param {string[]} channel_cids list of channel CIDs
-         * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
-         */
-        sync(channel_cids: string[], last_sync_at: string): Promise<APIResponse & {
-            events: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>[];
-        }>;
-    }
-}
 declare module "src/channel" {
     import Immutable from 'seamless-immutable';
     import { ChannelState } from "src/channel_state";
     import { StreamChat } from "src/client";
-    import { APIResponse, ChannelAPIResponse, ChannelData, ChannelResponse, DeleteChannelAPIResponse, Event, EventHandler, EventTypes, GetMultipleMessagesAPIResponse, GetReactionsAPIResponse, GetRepliesAPIResponse, Message, MuteChannelAPIResponse, Reaction, ReactionAPIResponse, SearchAPIResponse, SendMessageAPIResponse, TruncateChannelAPIResponse, UpdateChannelAPIResponse, ChannelMemberAPIResponse, UserResponse, SendImageAPIResponse, UserSort, UserFilters, InviteOptions, MessageFilters, EventAPIResponse, MarkReadOptions, ChannelQueryOptions, PaginationOptions, BanUserOptions, KnownKeys } from "src/types";
+    import { APIResponse, ChannelAPIResponse, ChannelData, ChannelResponse, DeleteChannelAPIResponse, Event, EventHandler, EventTypes, GetMultipleMessagesAPIResponse, GetReactionsAPIResponse, GetRepliesAPIResponse, Message, MuteChannelAPIResponse, Reaction, ReactionAPIResponse, SearchAPIResponse, SendMessageAPIResponse, TruncateChannelAPIResponse, UpdateChannelAPIResponse, ChannelMemberAPIResponse, UserResponse, SendImageAPIResponse, UserSort, UserFilters, InviteOptions, MessageFilters, EventAPIResponse, MarkReadOptions, ChannelQueryOptions, PaginationOptions, BanUserOptions } from "src/types";
     /**
      * Channel - The Channel class manages it's own state.
      */
     export class Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType> {
-        _client: StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>;
+        _client: StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>;
         type: string;
         id: string | undefined;
         data: ChannelData<ChannelType> | ChannelResponse<ChannelType, UserType> | Immutable.Immutable<ChannelResponse<ChannelType, UserType>> | undefined;
@@ -1863,20 +1075,20 @@ declare module "src/channel" {
         /**
          * constructor - Create a channel
          *
-         * @param {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>} client the chat client
+         * @param {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>} client the chat client
          * @param {string} type  the type of channel
          * @param {string} [id]  the id of the chat
          * @param {ChannelData<ChannelType>} data any additional custom params
          *
          * @return {Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>} Returns a new uninitialized channel
          */
-        constructor(client: StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>, type: string, id: string | undefined, data: ChannelData<ChannelType>);
+        constructor(client: StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>, type: string, id: string | undefined, data: ChannelData<ChannelType>);
         /**
          * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
          *
-         * @return {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>}
+         * @return {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>}
          */
-        getClient(): StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>;
+        getClient(): StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>;
         /**
          * getConfig - Get the configs for this channel type
          *
@@ -1891,8 +1103,8 @@ declare module "src/channel" {
          * @return {Promise<SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} The Server Response
          */
         sendMessage(message: Message<MessageType, AttachmentType, UserType>): Promise<SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
-        sendFile(uri: string | Buffer | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<SendImageAPIResponse>;
-        sendImage(uri: string | Buffer | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<SendImageAPIResponse>;
+        sendFile(uri: string | NodeJS.ReadableStream | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<SendImageAPIResponse>;
+        sendImage(uri: string | NodeJS.ReadableStream | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<SendImageAPIResponse>;
         deleteFile(url: string): Promise<APIResponse>;
         deleteImage(url: string): Promise<APIResponse>;
         /**
@@ -1906,29 +1118,29 @@ declare module "src/channel" {
         /**
          * search - Query messages
          *
-         * @param { MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
+         * @param { MessageFilters<MessageType, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
          * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;}} options Option object, {user_id: 'tommaso'}
          *
          * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
          */
-        search(query: MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType> | string, options: {
+        search(query: MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string, options: {
             client_id?: string;
             connection_id?: string;
             limit?: number;
-            message_filter_conditions?: MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType>;
+            message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;
             offset?: number;
             query?: string;
         }): Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
         /**
          * search - Query Members
          *
-         * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>}  filterConditions object MongoDB style filters
+         * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
          * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
          * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
          *
          * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
          */
-        queryMembers(filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>, sort?: UserSort<UserType>, options?: {
+        queryMembers(filterConditions: UserFilters<UserType>, sort?: UserSort<UserType>, options?: {
             limit?: number;
             offset?: number;
         }): Promise<ChannelMemberAPIResponse<UserType>>;
@@ -2260,6 +1472,813 @@ declare module "src/channel" {
         _disconnect(): void;
     }
 }
+declare module "src/client_state" {
+    import Immutable from 'seamless-immutable';
+    import { UnknownType, UserResponse } from "src/types";
+    /**
+     * ClientState - A container class for the client state.
+     */
+    export class ClientState<UserType = UnknownType> {
+        users: Immutable.ImmutableObject<{
+            [key: string]: Immutable.Immutable<UserResponse<UserType>>;
+        }>;
+        userChannelReferences: {
+            [key: string]: {
+                [key: string]: boolean;
+            };
+        };
+        constructor();
+        updateUsers(users: UserResponse<UserType>[]): void;
+        updateUser(user?: UserResponse<UserType>): void;
+        updateUserReference(user: UserResponse<UserType>, channelID: string): void;
+    }
+}
+declare module "src/base64" {
+    export const encodeBase64: (data: string) => string;
+    export const decodeBase64: (s: string) => string;
+}
+declare module "src/signing" {
+    import { Secret, SignOptions } from 'jsonwebtoken';
+    import { UnknownType } from "src/types";
+    /**
+     * Creates the JWT token that can be used for a UserSession
+     * @method JWTUserToken
+     * @memberof signing
+     * @private
+     * @param {Secret} apiSecret - API Secret key
+     * @param {string} userId - The user_id key in the JWT payload
+     * @param {UnknownType} [extraData] - Extra that should be part of the JWT token
+     * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
+     * @return {string} JWT Token
+     */
+    export function JWTUserToken(apiSecret: Secret, userId: string, extraData?: UnknownType, jwtOptions?: SignOptions): string;
+    export function JWTServerToken(apiSecret: Secret, jwtOptions?: SignOptions): string;
+    export function UserFromToken(token: string): string;
+    /**
+     *
+     * @param {string} userId the id of the user
+     * @return {string}
+     */
+    export function DevToken(userId: string): string;
+    /**
+     *
+     * @param {string} body the signed message
+     * @param {string} secret the shared secret used to generate the signature (Stream API secret)
+     * @param {string} signature the signature to validate
+     * @return {boolean}
+     */
+    export function CheckSignature(body: string, secret: string, signature: string): boolean;
+}
+declare module "src/token_manager" {
+    import { Secret } from 'jsonwebtoken';
+    import { TokenOrProvider, UnknownType, UserResponse } from "src/types";
+    /**
+     * TokenManager
+     *
+     * Handles all the operations around user token.
+     */
+    export class TokenManager<UserType = UnknownType> {
+        loadTokenPromise: Promise<string> | null;
+        type: 'static' | 'provider';
+        secret?: Secret;
+        token?: string;
+        tokenProvider?: TokenOrProvider;
+        user?: UserResponse<UserType>;
+        /**
+         * Constructor
+         *
+         * @param {Secret} secret
+         */
+        constructor(secret?: Secret);
+        /**
+         * Set the static string token or token provider.
+         * Token provider should return a token string or a promise which resolves to string token.
+         *
+         * @param {TokenOrProvider} tokenOrProvider
+         * @param {UserResponse<UserType>} user
+         */
+        setTokenOrProvider: (tokenOrProvider: TokenOrProvider, user: UserResponse<UserType>) => Promise<void>;
+        /**
+         * Resets the token manager.
+         * Useful for client disconnection or switching user.
+         */
+        reset: () => void;
+        validateToken: (tokenOrProvider: TokenOrProvider, user: UserResponse<UserType>) => void;
+        tokenReady: () => Promise<string> | null;
+        loadToken: () => Promise<string>;
+        getToken: () => string | undefined;
+        isStatic: () => boolean;
+    }
+}
+declare module "src/connection" {
+    import isoWS from 'isomorphic-ws';
+    import WebSocket from 'isomorphic-ws';
+    import { TokenManager } from "src/token_manager";
+    import { ConnectionChangeEvent, ConnectionOpen, Logger, UnknownType, UserResponse } from "src/types";
+    type Constructor<UserType = UnknownType> = {
+        apiKey: string;
+        authType: 'anonymous' | 'jwt';
+        clientID: string;
+        eventCallback: (event: ConnectionChangeEvent) => void;
+        logger: Logger | (() => void);
+        messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
+        recoverCallback: (open?: ConnectionOpen<UserType>) => Promise<void>;
+        tokenManager: TokenManager<UserType>;
+        user: UserResponse<UserType>;
+        userAgent: string;
+        userID: string;
+        wsBaseURL: string;
+    };
+    /**
+     * StableWSConnection - A WS connection that reconnects upon failure.
+     * - the browser will sometimes report that you're online or offline
+     * - the WS connection can break and fail (there is a 30s health check)
+     * - sometimes your WS connection will seem to work while the user is in fact offline
+     * - to speed up online/offline detection you can use the window.addEventListener('offline');
+     *
+     * There are 4 ways in which a connection can become unhealthy:
+     * - websocket.onerror is called
+     * - websocket.onclose is called
+     * - the health check fails and no event is received for ~40 seconds
+     * - the browser indicates the connection is now offline
+     *
+     * There are 2 assumptions we make about the server:
+     * - state can be recovered by querying the channel again
+     * - if the servers fails to publish a message to the client, the WS connection is destroyed
+     */
+    export class StableWSConnection<UserType> {
+        wsBaseURL: Constructor<UserType>['wsBaseURL'];
+        clientID: Constructor<UserType>['clientID'];
+        userID: Constructor<UserType>['userID'];
+        user: Constructor<UserType>['user'];
+        userAgent: Constructor<UserType>['userAgent'];
+        authType: Constructor<UserType>['authType'];
+        apiKey: Constructor<UserType>['apiKey'];
+        tokenManager: Constructor<UserType>['tokenManager'];
+        messageCallback: Constructor<UserType>['messageCallback'];
+        recoverCallback: Constructor<UserType>['recoverCallback'];
+        eventCallback: Constructor<UserType>['eventCallback'];
+        logger: Constructor<UserType>['logger'];
+        consecutiveFailures: number;
+        healthCheckInterval: number;
+        isConnecting: boolean;
+        isHealthy: boolean;
+        lastEvent: Date | null;
+        monitorInterval: number;
+        totalFailures: number;
+        connectionID?: string;
+        connectionOpen?: Promise<ConnectionOpen<UserType> | undefined>;
+        healthCheckIntervalRef?: NodeJS.Timeout;
+        isResolved?: boolean;
+        monitorIntervalRef?: NodeJS.Timeout;
+        rejectPromise?: (reason?: Error & {
+            code?: string | number;
+            isWSFailure?: boolean;
+            StatusCode?: string | number;
+        }) => void;
+        resolvePromise?: (value?: WebSocket.MessageEvent) => void;
+        ws?: isoWS;
+        wsID: number;
+        constructor({ wsBaseURL, clientID, userID, user, userAgent, apiKey, tokenManager, authType, messageCallback, recoverCallback, eventCallback, logger, }: Constructor<UserType>);
+        /**
+         * connect - Connect to the WS URL
+         *
+         * @return {Promise<ConnectionOpen<UserType> | void>} Promise that completes once the first health check message is received
+         */
+        connect(): Promise<void | ConnectionOpen<UserType>>;
+        _buildUrl: () => string;
+        /**
+         * disconnect - Disconnect the connection and doesn't recover...
+         *
+         */
+        disconnect(timeout?: number): Promise<void>;
+        /**
+         * _connect - Connect to the WS endpoint
+         *
+         * @return {Promise<ConnectionOpen<UserType> | undefined>} Promise that completes once the first health check message is received
+         */
+        _connect(): Promise<ConnectionOpen<UserType> | undefined>;
+        /**
+         * _reconnect - Retry the connection to WS endpoint
+         *
+         * @param {{ interval?: number; refreshToken?: boolean }} options Following options are available
+         *
+         * - `interval`	{int}			number of ms that function should wait before reconnecting
+         * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
+         */
+        _reconnect(options?: {
+            interval?: number;
+            refreshToken?: boolean;
+        }): Promise<void>;
+        /**
+         * onlineStatusChanged - this function is called when the browser connects or disconnects from the internet.
+         *
+         * @param {Event} event Event with type online or offline
+         *
+         */
+        onlineStatusChanged: (event: Event) => void;
+        onopen: (wsID: number) => void;
+        onmessage: (wsID: number, event: WebSocket.MessageEvent) => void;
+        onclose: (wsID: number, event: WebSocket.CloseEvent) => void;
+        onerror: (wsID: number, event: WebSocket.ErrorEvent) => void;
+        /**
+         * _setHealth - Sets the connection to healthy or unhealthy.
+         * Broadcasts an event in case the connection status changed.
+         *
+         * @param {boolean} healthy boolean indicating if the connection is healthy or not
+         *
+         */
+        _setHealth: (healthy: boolean) => void;
+        /**
+         * _errorFromWSEvent - Creates an error object for the WS event
+         *
+         */
+        _errorFromWSEvent: (event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent, isWSFailure?: boolean) => Error & {
+            code?: string | number | undefined;
+            isWSFailure?: boolean | undefined;
+            StatusCode?: string | number | undefined;
+        };
+        /**
+         * _listenForConnectionChanges - Adds an event listener for the browser going online or offline
+         *
+         */
+        _listenForConnectionChanges: () => void;
+        _removeConnectionListeners: () => void;
+        /**
+         * _destroyCurrentWSConnection - Removes the current WS connection
+         *
+         */
+        _destroyCurrentWSConnection(): void;
+        /**
+         * _retryInterval - A retry interval which increases after consecutive failures
+         *
+         * @return {number} Duration to wait in milliseconds
+         */
+        _retryInterval: () => number;
+        /**
+         * _setupPromise - sets up the this.connectOpen promise
+         */
+        _setupConnectionPromise: () => void;
+        /**
+         * _startHealthCheck - Sends a message every 30s or so to see if the ws connection still works
+         *
+         */
+        _startHealthCheck(): void;
+        /**
+         * _startMonitor - Verifies we didn't miss any events. Marks the connection as failed in case we did.
+         *
+         */
+        _startMonitor(): void;
+    }
+}
+declare module "src/client" {
+    import { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
+    import WebSocket from 'ws';
+    import { Channel } from "src/channel";
+    import { ClientState } from "src/client_state";
+    import { StableWSConnection } from "src/connection";
+    import { TokenManager } from "src/token_manager";
+    import { Configs, Logger, ConnectionOpen, TokenOrProvider, UserResponse, Event, EventHandler, ChannelMute, ChannelSort, ChannelOptions, ChannelAPIResponse, ChannelData, AppSettings, CheckPushResponse, TestPushDataInput, UserFilters, UserSort, UserOptions, SearchOptions, MessageResponse, ReactionResponse, BanUserOptions, UnBanUserOptions, MuteUserResponse, FlagMessageOptions, FlagMessageResponse, MarkAllReadOptions, StreamChatOptions, CreateChannelOptions, GetChannelTypeResponse, UpdateChannelOptions, UpdateChannelResponse, ListChannelResponse, APIResponse, CustomPermissionOptions, SearchAPIResponse, ChannelFilters, AppSettingsAPIResponse, UnknownType, MessageFilters, Device, MuteUserOptions } from "src/types";
+    export class StreamChat<ChannelType = UnknownType, UserType = UnknownType, MessageType = UnknownType, AttachmentType = UnknownType, ReactionType = UnknownType, EventType = UnknownType> {
+        key: string;
+        secret?: string;
+        listeners: {
+            [key: string]: Array<(event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void>;
+        };
+        state: ClientState<UserType>;
+        mutedChannels: ChannelMute<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>[];
+        browser: boolean;
+        node: boolean;
+        options: StreamChatOptions;
+        axiosInstance: AxiosInstance;
+        wsConnection: StableWSConnection<UserType> | null;
+        wsPromise: Promise<void | ConnectionOpen<UserType>> | null;
+        setUserPromise: Promise<void | ConnectionOpen<UserType>> | null;
+        activeChannels: {
+            [key: string]: Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>;
+        };
+        configs: Configs;
+        anonymous: boolean;
+        tokenManager: TokenManager<UserType>;
+        logger: Logger;
+        baseURL?: string;
+        wsBaseURL?: string;
+        UUID?: string;
+        userID?: string;
+        clientID?: string;
+        connectionID?: string;
+        user?: UserResponse<UserType>;
+        _user?: UserResponse<UserType>;
+        cleaningIntervalRef?: NodeJS.Timeout;
+        connectionEstablishedCount?: number;
+        connecting?: boolean;
+        failures?: number;
+        constructor(key: string, options?: StreamChatOptions);
+        constructor(key: string, secret?: string, options?: StreamChatOptions);
+        devToken(userID: string): string;
+        getAuthType(): "anonymous" | "jwt";
+        setBaseURL(baseURL: string): void;
+        _setupConnection: () => Promise<void | ConnectionOpen<UserType>>;
+        _hasConnectionID: () => boolean;
+        /**
+         * setUser - Set the current user, this triggers a connection to the API
+         *
+         * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+         * @param {TokenOrProvider} userTokenOrProvider Token or provider
+         *
+         * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
+         */
+        setUser: (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void | ConnectionOpen<UserType>>;
+        _setToken: (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => Promise<void>;
+        _setUser(user: UserResponse<UserType>): void;
+        /**
+           * updateAppSettings - updates application settings
+           *
+           * @param {AppSettings} options App settings.
+           * 		IE: {
+                      "apn_config": {
+                          "auth_type": "token",
+                          "auth_key": fs.readFileSync(
+                              './apn-push-auth-key.p8',
+                              'utf-8',
+                          ),
+                          "key_id": "keyid",
+                          "team_id": "teamid", //either ALL these 3
+                          "notification_template": "notification handlebars template",
+                          "bundle_id": "com.apple.your.app",
+                          "development": true
+                      },
+                      "firebase_config": {
+                          "server_key": "server key from fcm",
+                          "notification_template": "notification handlebars template"
+                          "data_template": "data handlebars template"
+                      },
+                      "webhook_url": "https://acme.com/my/awesome/webhook/"
+                  }
+           */
+        updateAppSettings(options: AppSettings): Promise<APIResponse>;
+        /**
+         * getAppSettings - retrieves application settings
+         */
+        getAppSettings(): Promise<AppSettingsAPIResponse>;
+        /**
+           * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+           *
+           * @param {string} userID User ID. If user has no devices, it will error
+           * @param {TestPushDataInput} [data] Overrides for push templates/message used
+           * 		IE: {
+                        messageID: 'id-of-message',//will error if message does not exist
+                        apnTemplate: '{}', //if app doesn't have apn configured it will error
+                        firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+                        firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+                  }
+           */
+        testPushSettings(userID: string, data?: TestPushDataInput): Promise<CheckPushResponse>;
+        /**
+         * disconnect - closes the WS connection
+         */
+        disconnect(timeout?: number): Promise<void>;
+        setAnonymousUser: () => Promise<void | ConnectionOpen<UserType>>;
+        /**
+         * setGuestUser - Setup a temporary guest user
+         *
+         * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+         *
+         * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
+         */
+        setGuestUser(user: UserResponse<UserType>): Promise<void | ConnectionOpen<UserType>>;
+        /**
+         * createToken - Creates a token to authenticate this user. This function is used server side.
+         * The resulting token should be passed to the client side when the users registers or logs in
+         *
+         * @param {string} userID The User ID
+         * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
+         *
+         * @return {string} Returns a token
+         */
+        createToken(userID: string, exp?: number): string;
+        /**
+         * on - Listen to events on all channels and users your watching
+         *
+         * client.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
+         * or
+         * client.on(event => {console.log(event.type)})
+         *
+         * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType> | string} callbackOrString  The event type to listen for (optional)
+         * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
+         *
+         * @return {{ unsubscribe: () => void }} Description
+         */
+        on(callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): {
+            unsubscribe: () => void;
+        };
+        on(eventType: string, callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): {
+            unsubscribe: () => void;
+        };
+        /**
+         * off - Remove the event handler
+         *
+         */
+        off(callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
+        off(eventType: string, callback: EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
+        _logApiRequest(type: string, url: string, data: unknown, config: AxiosRequestConfig & {
+            config?: AxiosRequestConfig & {
+                maxBodyLength?: number;
+            };
+        }): void;
+        _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>): void;
+        _logApiError(type: string, url: string, error: unknown): void;
+        doAxiosRequest: <T>(type: string, url: string, data?: unknown, options?: AxiosRequestConfig & {
+            config?: AxiosRequestConfig & {
+                maxBodyLength?: number;
+            };
+        }) => Promise<T>;
+        get<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
+        put<T>(url: string, data?: unknown): Promise<T>;
+        post<T>(url: string, data?: unknown): Promise<T>;
+        patch<T>(url: string, data?: unknown): Promise<T>;
+        delete<T>(url: string, params?: AxiosRequestConfig['params']): Promise<T>;
+        sendFile<T>(url: string, uri: string | NodeJS.ReadableStream | File, name?: string, contentType?: string, user?: UserResponse<UserType>): Promise<T>;
+        errorFromResponse<T>(response: AxiosResponse<T & {
+            code?: number;
+            message?: string;
+        }>): Error & {
+            code?: number | undefined;
+            response?: AxiosResponse<T> | undefined;
+            status?: number | undefined;
+        };
+        handleResponse<T>(response: AxiosResponse<T>): T;
+        dispatchEvent: (event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void;
+        handleEvent: (messageEvent: WebSocket.MessageEvent) => void;
+        _handleClientEvent(event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>): void;
+        _muteStatus(cid: string): {
+            muted: boolean;
+            createdAt: null;
+            expiresAt: null;
+        };
+        _callClientListeners: (event: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>) => void;
+        recoverState: () => Promise<void>;
+        _updateUserReferences(user: UserResponse<UserType>): void;
+        connect(): Promise<void | ConnectionOpen<UserType>>;
+        /**
+         * queryUsers - Query users and watch user presence
+         *
+         * @param {UserFilters<UserType>} filterConditions MongoDB style filter conditions
+         * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}
+         * @param {UserOptions} options Option object, {presence: true}
+         *
+         * @return {Promise<APIResponse & { users: Array<UserResponse<UserType>> }>} User Query Response
+         */
+        queryUsers(filterConditions: UserFilters<UserType>, sort?: UserSort<UserType>, options?: UserOptions): Promise<APIResponse & {
+            users: Array<UserResponse<UserType>>;
+        }>;
+        queryChannels(filterConditions: ChannelFilters<ChannelType, UserType>, sort?: ChannelSort, options?: ChannelOptions): Promise<Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>[]>;
+        /**
+         * search - Query messages
+         *
+         * @param {ChannelFilters<ChannelType, UserType>} filterConditions MongoDB style filter conditions
+         * @param {MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
+         * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
+         *
+         * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
+         */
+        search(filterConditions: ChannelFilters<ChannelType, UserType>, query: string | MessageFilters<MessageType, AttachmentType, ReactionType, UserType>, options?: SearchOptions): Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>;
+        /**
+         * addDevice - Adds a push device for a user.
+         *
+         * @param {string} id the device id
+         * @param {'apn' | 'firebase'} push_provider the push provider (apn or firebase)
+         * @param {string} [userID] the user id (defaults to current user)
+         *
+         */
+        addDevice(id: string, push_provider: 'apn' | 'firebase', userID?: string): Promise<APIResponse>;
+        /**
+         * getDevices - Returns the devices associated with a current user
+         *
+         * @param {string} [userID] User ID. Only works on serversidex
+         *
+         * @return {APIResponse & Device<UserType>[]} Array of devices
+         */
+        getDevices(userID?: string): Promise<APIResponse & Device<UserType>[]>;
+        /**
+         * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
+         *
+         * @param {string} id The device id
+         * @param {string} [userID] The user id. Only specify this for serverside requests
+         *
+         */
+        removeDevice(id: string, userID?: string): Promise<APIResponse>;
+        _addChannelConfig(channelState: ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>): void;
+        /**
+         * channel - Returns a new channel with the given type, id and custom data
+         *
+         * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter
+         * and only provide ID and the list of members
+         *
+         * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
+         *
+         * @param {string} channelType The channel type
+         * @param {string} channelID   The channel ID, you can leave this out if you want to create a conversation channel
+         * @param {object} [custom]    Custom data to attach to the channel
+         *
+         * @return {channel} The channel object, initialize it using channel.watch()
+         */
+        channel(channelType: string, channelID: string, custom?: ChannelData<ChannelType>): Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>;
+        /**
+         * @deprecated Please use upsertUser() function instead.
+         *
+         * updateUser - Update or Create the given user object
+         *
+         * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+         */
+        updateUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        /**
+         * partialUpdateUser - Update the given user object
+         *
+         * @param {UserResponse<UserType>} userObject which should contain id and any of "set" or "unset" params;
+         * example: {id: "user1", set:{field: value}, unset:["field2"]}
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>} list of updated users
+         */
+        partialUpdateUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        /**
+         * upsertUsers - Batch upsert the list of users
+         *
+         * @param {UserResponse<UserType>[]} users list of users
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+         */
+        upsertUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        /**
+         * upsertUser - Update or Create the given user object
+         *
+         * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+         */
+        upsertUser(userObject: UserResponse<UserType>): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        /**
+         * @deprecated Please use upsertUsers() function instead.
+         *
+         * updateUsers - Batch update the list of users
+         *
+         * @param {UserResponse<UserType>[]} users list of users
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+         */
+        updateUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        /**
+         * updateUsers - Batch partial update of users
+         *
+         * @param {UserResponse<UserType>[]} users list of partial update requests
+         *
+         * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+         */
+        partialUpdateUsers(users: UserResponse<UserType>[]): Promise<APIResponse & {
+            users: {
+                [key: string]: UserResponse<UserType>;
+            };
+        }>;
+        deleteUser(userID: string, params?: {
+            hard_delete?: boolean;
+            mark_messages_deleted?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        reactivateUser(userID: string, options?: {
+            restore_messages?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        deactivateUser(userID: string, options?: {
+            mark_messages_deleted?: boolean;
+        }): Promise<APIResponse & {
+            user: UserResponse<UserType>;
+        }>;
+        exportUser(userID: string, options?: Record<string, string>): Promise<APIResponse & {
+            messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
+            reactions: ReactionResponse<ReactionType, UserType>[];
+            user: UserResponse<UserType>;
+        }>;
+        /** banUser - bans a user from all channels
+         *
+         * @param {string} targetUserID
+         * @param {BanUserOptions<UserType>} [options]
+         * @returns {Promise<APIResponse>}
+         */
+        banUser(targetUserID: string, options?: BanUserOptions<UserType>): Promise<APIResponse>;
+        /** unbanUser - revoke global ban for a user
+         *
+         * @param {string} targetUserID
+         * @param {UnBanUserOptions} [options]
+         * @returns {Promise<APIResponse>}
+         */
+        unbanUser(targetUserID: string, options?: UnBanUserOptions): Promise<APIResponse>;
+        /** muteUser - mutes a user
+         *
+         * @param {string} targetID
+         * @param {string} [userID] Only used with serverside auth
+         * @param {MuteUserOptions<UserType>} [options]
+         * @returns {Promise<MuteUserResponse<UserType>>}
+         */
+        muteUser(targetID: string, userID?: string, options?: MuteUserOptions<UserType>): Promise<MuteUserResponse<UserType>>;
+        /** unmuteUser - unmutes a user
+         *
+         * @param {string} targetID
+         * @param {string} [currentUserID] Only used with serverside auth
+         * @returns {Promise<APIResponse>}
+         */
+        unmuteUser(targetID: string, currentUserID?: string): Promise<APIResponse>;
+        flagMessage(targetMessageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        flagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        unflagMessage(messageID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        unflagUser(userID: string, options?: FlagMessageOptions<UserType>): Promise<FlagMessageResponse<UserType>>;
+        /**
+         * markAllRead - marks all channels for this user as read
+         * @param {MarkAllReadOptions<UserType>} [data]
+         *
+         * @return {Promise<APIResponse>}
+         */
+        markAllRead(data?: MarkAllReadOptions<UserType>): Promise<void>;
+        createChannelType(data: CreateChannelOptions): Promise<Pick<GetChannelTypeResponse, "search" | "automod" | "automod_behavior" | "max_message_length" | "message_retention" | "mutes" | "name" | "permissions" | "reactions" | "read_events" | "replies" | "typing_events" | "uploads" | "url_enrichment" | "created_at" | "duration" | "updated_at">>;
+        getChannelType(channelType: string): Promise<GetChannelTypeResponse>;
+        updateChannelType(channelType: string, data: UpdateChannelOptions): Promise<UpdateChannelResponse>;
+        deleteChannelType(channelType: string): Promise<APIResponse>;
+        listChannelTypes(): Promise<ListChannelResponse>;
+        /**
+         * translateMessage - adds the translation to the message
+         *
+         * @param {string} messageId
+         * @param {string} language
+         *
+         * @return {APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} Response that includes the message
+         */
+        translateMessage(messageId: string, language: string): Promise<APIResponse & MessageType & {
+            attachments?: import("src/types").Attachment<AttachmentType>[] | undefined;
+            html?: string | undefined;
+            id?: string | undefined;
+            parent_id?: string | undefined;
+            show_in_channel?: boolean | undefined;
+            text?: string | undefined;
+            user_id?: string | undefined;
+        } & {
+            command?: string | undefined;
+            created_at?: string | undefined;
+            deleted_at?: string | undefined;
+            latest_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
+            mentioned_users?: UserResponse<UserType>[] | undefined;
+            own_reactions?: ReactionResponse<ReactionType, UserType>[] | undefined;
+            reaction_counts?: {
+                [key: string]: number;
+            } | undefined;
+            reaction_scores?: {
+                [key: string]: number;
+            } | undefined;
+            reply_count?: number | undefined;
+            silent?: boolean | undefined;
+            status?: string | undefined;
+            type?: string | undefined;
+            updated_at?: string | undefined;
+            user?: UserResponse<UserType> | undefined;
+        }>;
+        /**
+         * updateMessage - Update the given message
+         *
+         * @param {MessageResponse<MessageType, ReactionType, AttachmentType, UserType>} message object, id needs to be specified
+         * @param {string | { id: string }} [userId]
+         *
+         * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType> }} Response that includes the message
+         */
+        updateMessage(message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>, userId?: string | {
+            id: string;
+        }): Promise<APIResponse & {
+            message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+        }>;
+        deleteMessage(messageID: string, hardDelete?: boolean): Promise<APIResponse & {
+            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        }>;
+        getMessage(messageID: string): Promise<APIResponse & {
+            message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        }>;
+        _userAgent(): string;
+        /**
+         * _isUsingServerAuth - Returns true if we're using server side auth
+         */
+        _isUsingServerAuth: () => boolean;
+        _enrichAxiosOptions(options?: AxiosRequestConfig & {
+            config?: AxiosRequestConfig;
+        }): {
+            params: any;
+            headers: any;
+        } | {
+            url?: string | undefined;
+            method?: string | undefined;
+            baseURL?: string | undefined;
+            transformRequest?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
+            transformResponse?: import("axios").AxiosTransformer | import("axios").AxiosTransformer[] | undefined;
+            headers: any;
+            params: any;
+            paramsSerializer?: ((params: any) => string) | undefined;
+            data?: any;
+            timeout?: number | undefined;
+            withCredentials?: boolean | undefined;
+            adapter?: import("axios").AxiosAdapter | undefined;
+            auth?: import("axios").AxiosBasicCredentials | undefined;
+            responseType?: string | undefined;
+            xsrfCookieName?: string | undefined;
+            xsrfHeaderName?: string | undefined;
+            onUploadProgress?: ((progressEvent: any) => void) | undefined;
+            onDownloadProgress?: ((progressEvent: any) => void) | undefined;
+            maxContentLength?: number | undefined;
+            validateStatus?: ((status: number) => boolean) | undefined;
+            maxRedirects?: number | undefined;
+            httpAgent?: any;
+            httpsAgent?: any;
+            proxy?: false | import("axios").AxiosProxyConfig | undefined;
+            cancelToken?: import("axios").CancelToken | undefined;
+        };
+        _getToken(): string | null | undefined;
+        _startCleaning(): void;
+        verifyWebhook(requestBody: string, xSignature: string): boolean;
+        /** getPermission - gets the definition for a permission
+         *
+         * @param {string} name
+         * @returns {Promise<APIResponse>}
+         */
+        getPermission(name: string): Promise<APIResponse>;
+        /** createPermission - creates a custom permission
+         *
+         * @param {CustomPermissionOptions} permissionData the permission data
+         * @returns {Promise<APIResponse>}
+         */
+        createPermission(permissionData: CustomPermissionOptions): Promise<APIResponse>;
+        /** updatePermission - updates an existing custom permission
+         *
+         * @param {string} name
+         * @param {CustomPermissionOptions} permissionData the permission data
+         * @returns {Promise<APIResponse>}
+         */
+        updatePermission(name: string, permissionData: CustomPermissionOptions): Promise<APIResponse>;
+        /** deletePermission - deletes a custom permission
+         *
+         * @param {string} name
+         * @returns {Promise<APIResponse>}
+         */
+        deletePermission(name: string): Promise<APIResponse>;
+        /** listPermissions - returns the list of custom permissions for this application
+         *
+         * @returns {Promise<APIResponse>}
+         */
+        listPermissions(): Promise<APIResponse>;
+        /** createRole - creates a custom role
+         *
+         * @param {string} name the new role name
+         * @returns {Promise<APIResponse>}
+         */
+        createRole(name: string): Promise<APIResponse>;
+        /** listRoles - returns the list of custom roles for this application
+         *
+         * @returns {Promise<APIResponse>}
+         */
+        listRoles(): Promise<APIResponse>;
+        /** deleteRole - deletes a custom role
+         *
+         * @param {string} name the role name
+         * @returns {Promise<APIResponse>}
+         */
+        deleteRole(name: string): Promise<APIResponse>;
+        /** sync - returns all events that happened for a list of channels since last sync
+         * @param {string[]} channel_cids list of channel CIDs
+         * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
+         */
+        sync(channel_cids: string[], last_sync_at: string): Promise<APIResponse & {
+            events: Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>[];
+        }>;
+    }
+}
+declare module "src/Tester" { }
 declare module "src/permissions" {
     import { PermissionObject } from "src/types";
     type RequiredPermissionObject = Required<PermissionObject>;
