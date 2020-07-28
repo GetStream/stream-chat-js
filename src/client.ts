@@ -60,7 +60,6 @@ import {
   AppSettingsAPIResponse,
   UnknownType,
   ConnectionChangeEvent,
-  KnownKeys,
   MessageFilters,
   Device,
   MuteUserOptions,
@@ -1096,14 +1095,14 @@ export class StreamChat<
   /**
    * queryUsers - Query users and watch user presence
    *
-   * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>} filterConditions MongoDB style filter conditions
+   * @param {UserFilters<UserType>} filterConditions MongoDB style filter conditions
    * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}
    * @param {UserOptions} options Option object, {presence: true}
    *
    * @return {Promise<APIResponse & { users: Array<UserResponse<UserType>> }>} User Query Response
    */
   async queryUsers(
-    filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>,
+    filterConditions: UserFilters<UserType>,
     sort?: UserSort<UserType>,
     options?: UserOptions,
   ) {
@@ -1149,7 +1148,7 @@ export class StreamChat<
   }
 
   async queryChannels(
-    filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>,
+    filterConditions: ChannelFilters<ChannelType, UserType>,
     sort: ChannelSort = {},
     options: ChannelOptions = {},
   ) {
@@ -1220,22 +1219,15 @@ export class StreamChat<
   /**
    * search - Query messages
    *
-   * @param {ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>} filterConditions MongoDB style filter conditions
-   * @param {MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
+   * @param {ChannelFilters<ChannelType, UserType>} filterConditions MongoDB style filter conditions
+   * @param {MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
    * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
    */
   async search(
-    filterConditions: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>,
-    query:
-      | string
-      | MessageFilters<
-          Pick<MessageType, KnownKeys<MessageType>>,
-          AttachmentType,
-          ReactionType,
-          UserType
-        >,
+    filterConditions: ChannelFilters<ChannelType, UserType>,
+    query: string | MessageFilters<MessageType, AttachmentType, ReactionType, UserType>,
     options: SearchOptions = {},
   ) {
     // Return a list of channels

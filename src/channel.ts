@@ -37,7 +37,6 @@ import {
   ChannelQueryOptions,
   PaginationOptions,
   BanUserOptions,
-  KnownKeys,
 } from './types';
 
 /**
@@ -269,26 +268,19 @@ export class Channel<
   /**
    * search - Query messages
    *
-   * @param { MessageFilters<Pick<MessageType, KnownKeys<MessageType>>, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
+   * @param { MessageFilters<MessageType, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
    * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;}} options Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
    */
   async search(
-    query:
-      | MessageFilters<
-          Pick<MessageType, KnownKeys<MessageType>>,
-          AttachmentType,
-          ReactionType,
-          UserType
-        >
-      | string,
+    query: MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string,
     options: {
       client_id?: string;
       connection_id?: string;
       limit?: number;
       message_filter_conditions?: MessageFilters<
-        Pick<MessageType, KnownKeys<MessageType>>,
+        MessageType,
         AttachmentType,
         ReactionType,
         UserType
@@ -323,14 +315,14 @@ export class Channel<
   /**
    * search - Query Members
    *
-   * @param {UserFilters<Pick<UserType, KnownKeys<UserType>>>}  filterConditions object MongoDB style filters
+   * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
    * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *
    * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
    */
   async queryMembers(
-    filterConditions: UserFilters<Pick<UserType, KnownKeys<UserType>>>,
+    filterConditions: UserFilters<UserType>,
     sort: UserSort<UserType> = {},
     options: { limit?: number; offset?: number } = {},
   ) {

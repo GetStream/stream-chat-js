@@ -33,7 +33,7 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
-export type UnknownType<T = Record<string, unknown>> = T;
+export type UnknownType = Record<string, unknown>;
 
 /**
  * Response Types
@@ -706,10 +706,9 @@ export type EventTypes =
 export type AscDesc = 1 | -1;
 
 export type ChannelFilters<
-  ChannelType = UnknownType<{}>,
+  ChannelType = UnknownType,
   UserType = UnknownType
 > = QueryFilters<
-  ChannelResponse<ChannelType, UserType>,
   ContainsOperator<ChannelType> & {
     name?:
       | RequireOnlyOne<
@@ -718,7 +717,11 @@ export type ChannelFilters<
           } & QueryFilter<ChannelResponse<ChannelType, UserType>['name']>
         >
       | PrimitiveFilter<ChannelResponse<ChannelType, UserType>['name']>;
-  }
+  } & {
+      [Key in keyof Omit<ChannelResponse<{}, UserType>, 'name'>]:
+        | RequireOnlyOne<QueryFilter<ChannelResponse<{}, UserType>[Key]>>
+        | PrimitiveFilter<ChannelResponse<{}, UserType>[Key]>;
+    }
 >;
 
 export type ContainsOperator<CustomType = {}> = {
@@ -736,12 +739,11 @@ export type ContainsOperator<CustomType = {}> = {
 };
 
 export type MessageFilters<
-  MessageType = UnknownType<{}>,
+  MessageType = UnknownType,
   AttachmentType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
 > = QueryFilters<
-  MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
   ContainsOperator<MessageType> & {
     text?:
       | RequireOnlyOne<
@@ -765,12 +767,23 @@ export type MessageFilters<
       | PrimitiveFilter<
           MessageResponse<MessageType, AttachmentType, ReactionType, UserType>['text']
         >;
-  }
+  } & {
+      [Key in keyof Omit<
+        MessageResponse<{}, AttachmentType, ReactionType, UserType>,
+        'text'
+      >]?:
+        | RequireOnlyOne<
+            QueryFilter<MessageResponse<{}, AttachmentType, ReactionType, UserType>[Key]>
+          >
+        | PrimitiveFilter<
+            MessageResponse<{}, AttachmentType, ReactionType, UserType>[Key]
+          >;
+    }
 >;
 
 export type PrimitiveFilter<ObjectType> = ObjectType | null;
 
-export type QueryFilter<ObjectType = string> = ObjectType extends
+export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends
   | string
   | number
   | boolean
@@ -793,24 +806,18 @@ export type QueryFilter<ObjectType = string> = ObjectType extends
       $nin?: PrimitiveFilter<ObjectType>[];
     };
 
-export type QueryFilters<QueryField = UnknownType, SpecialOperators = {}> = {
-  [Key in keyof Omit<QueryField, keyof SpecialOperators>]?:
-    | PrimitiveFilter<QueryField[Key]>
-    | RequireOnlyOne<QueryFilter<QueryField[Key]>>;
+export type QueryFilters<Operators = {}> = {
+  [Key in keyof Operators]?: Operators[Key];
 } &
-  {
-    [Key in keyof SpecialOperators]?: SpecialOperators[Key];
-  } &
-  QueryLogicalOperators<QueryField, SpecialOperators>;
+  QueryLogicalOperators<Operators>;
 
-export type QueryLogicalOperators<QueryField, SpecialOperators> = {
-  $and?: ArrayOneOrMore<QueryFilters<QueryField, SpecialOperators>>;
-  $nor?: ArrayOneOrMore<QueryFilters<QueryField, SpecialOperators>>;
-  $or?: ArrayTwoOrMore<QueryFilters<QueryField, SpecialOperators>>;
+export type QueryLogicalOperators<Operators> = {
+  $and?: ArrayOneOrMore<QueryFilters<Operators>>;
+  $nor?: ArrayOneOrMore<QueryFilters<Operators>>;
+  $or?: ArrayTwoOrMore<QueryFilters<Operators>>;
 };
 
-export type UserFilters<UserType = UnknownType<{}>> = QueryFilters<
-  UserResponse<UserType>,
+export type UserFilters<UserType = UnknownType> = QueryFilters<
   ContainsOperator<UserType> & {
     id?:
       | RequireOnlyOne<
@@ -839,7 +846,11 @@ export type UserFilters<UserType = UnknownType<{}>> = QueryFilters<
           >
         >
       | PrimitiveFilter<UserResponse<UserType>['username']>;
-  }
+  } & {
+      [Key in keyof Omit<UserResponse<{}>, 'id' | 'name' | 'teams' | 'username'>]?:
+        | RequireOnlyOne<QueryFilter<UserResponse<{}>[Key]>>
+        | PrimitiveFilter<UserResponse<{}>[Key]>;
+    }
 >;
 
 /**
@@ -1147,9 +1158,12 @@ export type SearchPayload<
 > = SearchOptions & {
   client_id?: string;
   connection_id?: string;
-  filter_conditions?: ChannelFilters<Pick<ChannelType, KnownKeys<ChannelType>>, UserType>;
-  message_filter_conditions?: QueryFilters<
-    MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+  filter_conditions?: ChannelFilters<ChannelType, UserType>;
+  message_filter_conditions?: MessageFilters<
+    MessageType,
+    AttachmentType,
+    ReactionType,
+    UserType
   >;
   query?: string;
 };
