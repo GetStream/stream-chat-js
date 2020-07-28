@@ -52,9 +52,9 @@ export class Channel<
   UserType
 > {
   _client: StreamChat<
+    ChannelType,
     UserType,
     MessageType,
-    ChannelType,
     AttachmentType,
     ReactionType,
     EventType
@@ -98,7 +98,7 @@ export class Channel<
   /**
    * constructor - Create a channel
    *
-   * @param {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>} client the chat client
+   * @param {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>} client the chat client
    * @param {string} type  the type of channel
    * @param {string} [id]  the id of the chat
    * @param {ChannelData<ChannelType>} data any additional custom params
@@ -107,9 +107,9 @@ export class Channel<
    */
   constructor(
     client: StreamChat<
+      ChannelType,
       UserType,
       MessageType,
-      ChannelType,
       AttachmentType,
       ReactionType,
       EventType
@@ -155,12 +155,12 @@ export class Channel<
   /**
    * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
    *
-   * @return {StreamChat<UserType, MessageType, ChannelType, AttachmentType, ReactionType, EventType>}
+   * @return {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>}
    */
   getClient(): StreamChat<
+    ChannelType,
     UserType,
     MessageType,
-    ChannelType,
     AttachmentType,
     ReactionType,
     EventType
@@ -197,7 +197,7 @@ export class Channel<
   }
 
   sendFile(
-    uri: string | Buffer | File,
+    uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
@@ -212,7 +212,7 @@ export class Channel<
   }
 
   sendImage(
-    uri: string | Buffer | File,
+    uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,

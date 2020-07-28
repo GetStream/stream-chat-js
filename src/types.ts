@@ -151,6 +151,10 @@ export type CommandResponse = {
   set?: string;
 };
 
+export type ConnectAPIResponse<UserType = UnknownType> = Promise<void | ConnectionOpen<
+  UserType
+>>;
+
 export type CreateChannelResponse = Omit<GetChannelTypeResponse, 'commands'>;
 
 export type DeleteChannelAPIResponse<

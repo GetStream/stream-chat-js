@@ -66,14 +66,16 @@ import {
   MuteUserOptions,
 } from './types';
 
-function isReadableStream(obj: string | Buffer | File): obj is Buffer {
+function isReadableStream(
+  obj: string | NodeJS.ReadableStream | File,
+): obj is NodeJS.ReadableStream {
   return (
     obj !== null &&
     typeof obj === 'object' &&
     // @ts-expect-error
-    typeof (obj as Buffer)._read === 'function' &&
+    typeof (obj as NodeJS.ReadableStream)._read === 'function' &&
     // @ts-expect-error
-    typeof (obj as Buffer)._readableState === 'object'
+    typeof (obj as NodeJS.ReadableStream)._readableState === 'object'
   );
 }
 
@@ -82,9 +84,9 @@ function isString(x: unknown): x is string {
 }
 
 export class StreamChat<
+  ChannelType = UnknownType,
   UserType = UnknownType,
   MessageType = UnknownType,
-  ChannelType = UnknownType,
   AttachmentType = UnknownType,
   ReactionType = UnknownType,
   EventType = UnknownType
@@ -771,13 +773,16 @@ export class StreamChat<
 
   sendFile<T>(
     url: string,
-    uri: string | Buffer | File,
+    uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
     const data = new FormData();
-    let fileField: File | Buffer | { name: string; uri: string; type?: string };
+    let fileField:
+      | File
+      | NodeJS.ReadableStream
+      | { name: string; uri: string; type?: string };
 
     if (isReadableStream(uri) || uri instanceof File) {
       fileField = uri;
