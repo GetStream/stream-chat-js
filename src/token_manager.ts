@@ -8,7 +8,7 @@ import { TokenOrProvider, UnknownType, UserResponse } from './types';
  *
  * Handles all the operations around user token.
  */
-export class TokenManager<UserType = UnknownType> {
+export class TokenManager<UserType extends UnknownType = UnknownType> {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
   secret?: Secret;

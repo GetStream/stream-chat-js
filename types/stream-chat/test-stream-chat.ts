@@ -52,13 +52,13 @@ client.setAnonymousUser(); // $ExpectType Promise<void>
 client.setGuestUser({ id: 'steven' }); // $ExpectType Promise<void>
 
 client.get('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
-client.put('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIRespone>
+client.put('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 client.post('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 client.delete('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
 
 client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', { id: 'james' }); // $ExpectType Promise<FileUploadAPIResponse>
 
-const event = {
+const event: Event = {
   cid: 'channelid',
   type: 'user.updated',
   message: {

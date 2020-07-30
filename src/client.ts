@@ -12,7 +12,8 @@ import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
-import pkg from '../package.json';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pkg = require('../package.json');
 import { TokenManager } from './token_manager';
 import { isFunction, chatCodes } from './utils';
 
@@ -63,6 +64,7 @@ import {
   MessageFilters,
   Device,
   MuteUserOptions,
+  FlagUserResponse,
 } from './types';
 
 function isReadableStream(
@@ -83,12 +85,12 @@ function isString(x: unknown): x is string {
 }
 
 export class StreamChat<
-  ChannelType = UnknownType,
-  UserType = UnknownType,
-  MessageType = UnknownType,
-  AttachmentType = UnknownType,
-  ReactionType = UnknownType,
-  EventType = UnknownType
+  ChannelType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  AttachmentType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  EventType extends UnknownType = UnknownType
 > {
   key: string;
   secret?: string;
@@ -119,9 +121,30 @@ export class StreamChat<
   node: boolean;
   options: StreamChatOptions;
   axiosInstance: AxiosInstance;
-  wsConnection: StableWSConnection<UserType> | null;
-  wsPromise: Promise<void | ConnectionOpen<UserType>> | null;
-  setUserPromise: Promise<void | ConnectionOpen<UserType>> | null;
+  wsConnection: StableWSConnection<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > | null;
+  wsPromise: Promise<void | ConnectionOpen<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >> | null;
+  setUserPromise: Promise<void | ConnectionOpen<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >> | null;
   activeChannels: {
     [key: string]: Channel<
       AttachmentType,
@@ -300,9 +323,19 @@ export class StreamChat<
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
+   * @return {Promise<void | ConnectionOpen<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) => {
+  setUser = (
+    user: UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ): Promise<void | ConnectionOpen<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >> => {
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -468,7 +501,7 @@ export class StreamChat<
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    *
-   * @return {Promise<void | ConnectionOpen<UserType>>} Returns a promise that resolves when the connection is setup
+   * @return {Promise<void | ConnectionOpen<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>} Returns a promise that resolves when the connection is setup
    */
   async setGuestUser(user: UserResponse<UserType>) {
     let response: { access_token: string; user: UserResponse<UserType> } | undefined;
@@ -1015,7 +1048,7 @@ export class StreamChat<
       );
 
       await this.queryChannels(
-        { cid: { $in: cids } } as ChannelFilters<UnknownType, UserType>,
+        { cid: { $in: cids } } as ChannelFilters<ChannelType, UserType>,
         { last_message_at: -1 },
         { limit: 30, recovery: true, last_message_ids: lastMessageIDs },
       );
@@ -1072,7 +1105,14 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection<UserType>({
+    this.wsConnection = new StableWSConnection<
+      AttachmentType,
+      ChannelType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >({
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
       userID: client.userID,
@@ -1220,14 +1260,16 @@ export class StreamChat<
    * search - Query messages
    *
    * @param {ChannelFilters<ChannelType, UserType>} filterConditions MongoDB style filter conditions
-   * @param {MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string} query search query or object MongoDB style filters
+   * @param {MessageFilters<MessageType, AttachmentType, ChannelType, ReactionType, UserType> | string} query search query or object MongoDB style filters
    * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
    *
-   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
+   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} search messages response
    */
   async search(
     filterConditions: ChannelFilters<ChannelType, UserType>,
-    query: string | MessageFilters<MessageType, AttachmentType, ReactionType, UserType>,
+    query:
+      | string
+      | MessageFilters<MessageType, AttachmentType, ChannelType, ReactionType, UserType>,
     options: SearchOptions = {},
   ) {
     // Return a list of channels
@@ -1253,7 +1295,7 @@ export class StreamChat<
     await this.setUserPromise;
 
     return await this.get<
-      SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      SearchAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>
     >(this.baseURL + '/search', {
       payload,
     });
@@ -1524,7 +1566,13 @@ export class StreamChat<
   async exportUser(userID: string, options?: Record<string, string>) {
     return await this.get<
       APIResponse & {
-        messages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[];
+        messages: MessageResponse<
+          MessageType,
+          AttachmentType,
+          ChannelType,
+          ReactionType,
+          UserType
+        >[];
         reactions: ReactionResponse<ReactionType, UserType>[];
         user: UserResponse<UserType>;
       }
@@ -1605,7 +1653,7 @@ export class StreamChat<
   }
 
   async flagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
-    return await this.post<FlagMessageResponse<UserType>>(
+    return await this.post<FlagUserResponse<UserType>>(
       this.baseURL + '/moderation/flag',
       {
         target_user_id: userID,
@@ -1625,7 +1673,7 @@ export class StreamChat<
   }
 
   async unflagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
-    return await this.post<FlagMessageResponse<UserType>>(
+    return await this.post<FlagUserResponse<UserType>>(
       this.baseURL + '/moderation/unflag',
       {
         target_user_id: userID,
@@ -1678,11 +1726,12 @@ export class StreamChat<
    * @param {string} messageId
    * @param {string} language
    *
-   * @return {APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} Response that includes the message
+   * @return {APIResponse & MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} Response that includes the message
    */
   async translateMessage(messageId: string, language: string) {
     return await this.post<
-      APIResponse & MessageResponse<MessageType, AttachmentType, ReactionType, UserType>
+      APIResponse &
+        MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>
     >(this.baseURL + `/messages/${messageId}/translate`, {
       language,
     });
@@ -1691,13 +1740,19 @@ export class StreamChat<
   /**
    * updateMessage - Update the given message
    *
-   * @param {MessageResponse<MessageType, ReactionType, AttachmentType, UserType>} message object, id needs to be specified
+   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} message object, id needs to be specified
    * @param {string | { id: string }} [userId]
    *
-   * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType> }} Response that includes the message
+   * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
-    message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>,
+    message: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >,
     userId?: string | { id: string },
   ) {
     if (!message.id) {
@@ -1746,7 +1801,13 @@ export class StreamChat<
     }
     return await this.post<
       APIResponse & {
-        message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>;
+        message: MessageResponse<
+          MessageType,
+          AttachmentType,
+          ChannelType,
+          ReactionType,
+          UserType
+        >;
       }
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
@@ -1760,7 +1821,13 @@ export class StreamChat<
     }
     return await this.delete<
       APIResponse & {
-        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        message: MessageResponse<
+          MessageType,
+          AttachmentType,
+          ChannelType,
+          ReactionType,
+          UserType
+        >;
       }
     >(this.baseURL + `/messages/${messageID}`, params);
   }
@@ -1768,7 +1835,13 @@ export class StreamChat<
   async getMessage(messageID: string) {
     return await this.get<
       APIResponse & {
-        message: MessageResponse<MessageType, ReactionType, AttachmentType, UserType>;
+        message: MessageResponse<
+          MessageType,
+          AttachmentType,
+          ChannelType,
+          ReactionType,
+          UserType
+        >;
       }
     >(this.baseURL + `/messages/${messageID}`);
   }

@@ -4,7 +4,7 @@ export * from './client_state';
 export * from './channel';
 export * from './channel_state';
 export * from './connection';
-export * from './events';
+export { isValidEventType, EVENT_MAP } from './events';
 export * from './permissions';
 export * from './signing';
 export * from './token_manager';

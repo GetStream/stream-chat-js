@@ -1,5 +1,5 @@
 import Immutable from 'seamless-immutable';
-import { Channel } from 'channel';
+import { Channel } from './channel';
 import {
   ChannelMembership,
   ChannelMemberResponse,
@@ -19,12 +19,12 @@ const byDate = (
  * ChannelState - A container class for the channel state.
  */
 export class ChannelState<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  EventType = UnknownType,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
 > {
   _channel: Channel<
     AttachmentType,
@@ -127,7 +127,7 @@ export class ChannelState<
     }>({});
     this.membership = Immutable<ChannelMembership<UserType>>({});
     this.last_message_at =
-      channel.state.last_message_at != null
+      channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)
         : null;
   }
@@ -135,11 +135,17 @@ export class ChannelState<
   /**
    * addMessageSorted - Add a message to the state
    *
-   * @param {MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} newMessage A new message
+   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} newMessage A new message
    *
    */
   addMessageSorted(
-    newMessage: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+    newMessage: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >,
   ) {
     return this.addMessagesSorted([newMessage]);
   }
@@ -148,11 +154,17 @@ export class ChannelState<
    * messageToImmutable - Takes the message object. Parses the dates, sets __html
    * and sets the status to received if missing. Returns an immutable message object
    *
-   * @param {MessageResponse<MessageType, AttachmentType, ReactionType, UserType>} message an Immutable message object
+   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} message an Immutable message object
    *
    */
   messageToImmutable(
-    message: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+    message: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >,
   ) {
     return Immutable({
       ...message,
@@ -167,12 +179,18 @@ export class ChannelState<
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
-   * @param {Array<MessageResponse<MessageType, AttachmentType, ReactionType, UserType>>} newMessages A list of messages
+   * @param {Array<MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} newMessages A list of messages
    * @param {boolean} initializing Weather channel is being initialized.
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>[],
+    newMessages: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >[],
     initializing = false,
   ) {
     // parse all the new message dates and add __html for react
@@ -238,7 +256,13 @@ export class ChannelState<
 
   addReaction(
     reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+    message?: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >,
   ) {
     const { messages } = this;
     if (!message) return;
@@ -341,7 +365,13 @@ export class ChannelState<
 
   removeReaction(
     reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<MessageType, AttachmentType, ReactionType, UserType>,
+    message?: MessageResponse<
+      MessageType,
+      AttachmentType,
+      ChannelType,
+      ReactionType,
+      UserType
+    >,
   ) {
     const { messages } = this;
     if (!message) return;

@@ -2,7 +2,7 @@ import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution } from './utils';
-import { StreamChat } from 'client';
+import { StreamChat } from './client';
 import {
   APIResponse,
   ChannelAPIResponse,
@@ -37,18 +37,19 @@ import {
   ChannelQueryOptions,
   PaginationOptions,
   BanUserOptions,
+  UnknownType,
 } from './types';
 
 /**
  * Channel - The Channel class manages it's own state.
  */
 export class Channel<
-  AttachmentType,
-  ChannelType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
 > {
   _client: StreamChat<
     ChannelType,
@@ -185,11 +186,17 @@ export class Channel<
    *
    * @param {Message<MessageType, AttachmentType, UserType>} message The Message object
    *
-   * @return {Promise<SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} The Server Response
+   * @return {Promise<SendMessageAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} The Server Response
    */
   async sendMessage(message: Message<MessageType, AttachmentType, UserType>) {
     return await this.getClient().post<
-      SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      SendMessageAPIResponse<
+        MessageType,
+        AttachmentType,
+        ChannelType,
+        ReactionType,
+        UserType
+      >
     >(this._channelURL() + '/message', {
       message,
     });
@@ -268,13 +275,15 @@ export class Channel<
   /**
    * search - Query messages
    *
-   * @param { MessageFilters<MessageType, AttachmentType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
+   * @param { MessageFilters<MessageType, AttachmentType, ChannelType, ReactionType, UserType > | string}  query search query or object MongoDB style filters
    * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType>;}} options Option object, {user_id: 'tommaso'}
    *
-   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} search messages response
+   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} search messages response
    */
   async search(
-    query: MessageFilters<MessageType, AttachmentType, ReactionType, UserType> | string,
+    query:
+      | MessageFilters<MessageType, AttachmentType, ChannelType, ReactionType, UserType>
+      | string,
     options: {
       client_id?: string;
       connection_id?: string;
@@ -282,6 +291,7 @@ export class Channel<
       message_filter_conditions?: MessageFilters<
         MessageType,
         AttachmentType,
+        ChannelType,
         ReactionType,
         UserType
       >;
@@ -306,7 +316,7 @@ export class Channel<
     await this.getClient().wsPromise;
 
     return await this.getClient().get<
-      SearchAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      SearchAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>
     >(this.getClient().baseURL + '/search', {
       payload,
     });
@@ -361,7 +371,7 @@ export class Channel<
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
    * @param {string} user_id the id of the user (used only for server side request) default null
    *
-   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>>} The Server Response
+   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
@@ -381,7 +391,13 @@ export class Channel<
       body.reaction = { ...reaction, user: { id: user_id } as UserResponse<UserType> };
     }
     return await this.getClient().post<
-      ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>
+      ReactionAPIResponse<
+        ReactionType,
+        AttachmentType,
+        ChannelType,
+        MessageType,
+        UserType
+      >
     >(this.getClient().baseURL + `/messages/${messageID}/reaction`, body);
   }
 
@@ -392,7 +408,7 @@ export class Channel<
    * @param {string} reactionType the type of reaction that should be removed
    * @param {string} user_id the id of the user (used only for server side request) default null
    *
-   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>>} The Server Response
+   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType>>} The Server Response
    */
   deleteReaction(messageID: string, reactionType: string, user_id: string) {
     this._checkInitialized();
@@ -407,12 +423,24 @@ export class Channel<
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<
-        ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>
+        ReactionAPIResponse<
+          ReactionType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          UserType
+        >
       >(url, { user_id });
     }
 
     return this.getClient().delete<
-      ReactionAPIResponse<ReactionType, AttachmentType, MessageType, UserType>
+      ReactionAPIResponse<
+        ReactionType,
+        AttachmentType,
+        ChannelType,
+        MessageType,
+        UserType
+      >
     >(url, {});
   }
 
@@ -727,7 +755,13 @@ export class Channel<
       throw Error(`Message id is missing`);
     }
     return this.getClient().post<
-      SendMessageAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      SendMessageAPIResponse<
+        MessageType,
+        AttachmentType,
+        ChannelType,
+        ReactionType,
+        UserType
+      >
     >(this.getClient().baseURL + `/messages/${messageID}/action`, {
       message_id: messageID,
       form_data: formData,
@@ -905,14 +939,20 @@ export class Channel<
    * @param {string} parent_id The message parent id, ie the top of the thread
    * @param {PaginationOptions & { user?: UserResponse<UserType>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
    *
-   * @return {Promise<GetRepliesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} A response with a list of messages
+   * @return {Promise<GetRepliesAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} A response with a list of messages
    */
   async getReplies(
     parent_id: string,
     options: PaginationOptions & { user?: UserResponse<UserType>; user_id?: string },
   ) {
     const data = await this.getClient().get<
-      GetRepliesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      GetRepliesAPIResponse<
+        MessageType,
+        AttachmentType,
+        ChannelType,
+        ReactionType,
+        UserType
+      >
     >(this.getClient().baseURL + `/messages/${parent_id}/replies`, {
       ...options,
     });
@@ -947,11 +987,17 @@ export class Channel<
    *
    * @param {string[]} messageIds The ids of the messages to retrieve from this channel
    *
-   * @return {Promise<GetMultipleMessagesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>>} Server response
+   * @return {Promise<GetMultipleMessagesAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} Server response
    */
   getMessagesById(messageIds: string[]) {
     return this.getClient().get<
-      GetMultipleMessagesAPIResponse<MessageType, AttachmentType, ReactionType, UserType>
+      GetMultipleMessagesAPIResponse<
+        MessageType,
+        AttachmentType,
+        ChannelType,
+        ReactionType,
+        UserType
+      >
     >(this._channelURL() + '/messages', {
       ids: messageIds.join(','),
     });

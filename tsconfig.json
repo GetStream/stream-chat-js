@@ -4,11 +4,11 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": "./src",
     "esModuleInterop": true,
-    "resolveJsonModule": true,
     "lib": ["DOM", "ES6"],
     "noEmitOnError": false,
     "noImplicitAny": true,
-    "outDir": "types",
+    "preserveConstEnums": true,
+    "outDir": "types/src",
     "strict": true,
     "target": "ES5"
   },
