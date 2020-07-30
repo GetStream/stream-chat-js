@@ -1612,21 +1612,27 @@ export class StreamChat<
    * @param {string} targetID
    * @param {string} [userID] Only used with serverside auth
    * @param {MuteUserOptions<UserType>} [options]
-   * @returns {Promise<MuteUserResponse<UserType>>}
+   * @returns {Promise<MuteUserResponse< AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>}
    */
   async muteUser(
     targetID: string,
     userID?: string,
     options: MuteUserOptions<UserType> = {},
   ) {
-    return await this.post<MuteUserResponse<UserType>>(
-      this.baseURL + '/moderation/mute',
-      {
-        target_id: targetID,
-        ...(userID ? { user_id: userID } : {}),
-        ...options,
-      },
-    );
+    return await this.post<
+      MuteUserResponse<
+        AttachmentType,
+        ChannelType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + '/moderation/mute', {
+      target_id: targetID,
+      ...(userID ? { user_id: userID } : {}),
+      ...options,
+    });
   }
 
   /** unmuteUser - unmutes a user

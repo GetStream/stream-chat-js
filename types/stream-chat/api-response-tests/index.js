@@ -183,21 +183,77 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['delete']>>",
 	},
-	// /** Keeping truncate quite for now. Needs some fixes on backend regarding commands array in response */
-	// // { f: rg.truncateChannel, type: 'TruncateChannelAPIResponse' },
-	// { f: rg.acceptInvite, type: 'AcceptInviteAPIResponse' },
-	// { f: rg.rejectInvite, type: 'RejectInviteAPIResponse' },
-	// { f: rg.addMembers, type: 'AddMembersAPIResponse' },
-	// { f: rg.removeMembers, type: 'RemoveMembersAPIResponse' },
-	// { f: rg.sendAction, type: 'SendMessageAPIResponse' },
-	// { f: rg.keystroke, type: 'undefined', imports: [] },
-	// { f: rg.stopTyping, type: 'undefined', imports: [] },
-	// { f: rg.markRead, type: 'MarkReadAPIResponse' },
-	// { f: rg.query, type: 'ChannelAPIResponse' },
-	// { f: rg.watch, type: 'ChannelAPIResponse' },
-	// { f: rg.create, type: 'ChannelAPIResponse' },
-	// { f: rg.stopWatching, type: 'StopWatchingAPIResponse' },
-	// { f: rg.getReplies, type: 'GetRepliesAPIResponse' },
+	{
+		f: rg.truncateChannel,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['truncate']>>",
+	},
+	{
+		f: rg.acceptInvite,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['acceptInvite']>>",
+	},
+	{
+		f: rg.rejectInvite,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['rejectInvite']>>",
+	},
+	{
+		f: rg.addMembers,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['addMembers']>>",
+	},
+	{
+		f: rg.removeMembers,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['removeMembers']>>",
+	},
+	{
+		f: rg.sendAction,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendAction']>>",
+	},
+	{
+		f: rg.keystroke,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['keystroke']>>",
+	},
+	{
+		f: rg.stopTyping,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['stopTyping']>>",
+	},
+	{
+		f: rg.markRead,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['markRead']>>",
+	},
+	{
+		f: rg.query,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['query']>>",
+	},
+	{
+		f: rg.watch,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['watch']>>",
+	},
+	{
+		f: rg.create,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['create']>>",
+	},
+	{
+		f: rg.stopWatching,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['stopWatching']>>",
+	},
+	{
+		f: rg.getReplies,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
+	},
 ];
 
 let imports = '';

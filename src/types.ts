@@ -357,8 +357,10 @@ export type MessageResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = MessageBase<MessageType, AttachmentType> & {
+  args?: string;
   channel?: ChannelResponse<ChannelType, UserType>;
   command?: string;
+  command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
@@ -381,10 +383,29 @@ export type MuteResponse<UserType> = {
   updated_at?: string;
 };
 
-export type MuteUserResponse<UserType> = APIResponse & {
+export type MuteUserResponse<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = APIResponse & {
   mute?: MuteResponse<UserType>;
   mutes?: Array<Mute<UserType>>;
-  own_user?: UserResponse<UserType>;
+  own_user?: OwnUserResponse<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
+    image?: string;
+    invisible?: boolean;
+    language?: string;
+    roles?: string[];
+  };
 };
 
 export type OwnUserResponse<
@@ -1178,32 +1199,18 @@ export type ConnectionOpen<
   connection_id: string;
   cid?: string;
   created_at?: string;
-  me?: {
-    banned?: boolean;
-    channel_mutes?: ChannelMute<
-      AttachmentType,
-      ChannelType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >[];
-    created_at?: string;
-    devices?: Device<UserType>[];
-    id?: string;
+  me?: OwnUserResponse<
+    AttachmentType,
+    ChannelType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
     image?: string;
     invisible?: boolean;
     language?: string;
-    last_active?: string;
-    mutes?: Mute<UserType>[];
-    name?: string;
-    online?: boolean;
-    role?: string;
     roles?: string[];
-    total_unread_count?: number;
-    unread_channels?: number;
-    unread_count?: number;
-    updated_at?: string;
   };
   type?: string;
 };
