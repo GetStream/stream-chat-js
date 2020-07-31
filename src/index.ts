@@ -1,4 +1,4 @@
-export * from './base64.js';
+export * from './base64';
 export { StreamChat } from './client';
 export * from './client_state';
 export * from './channel';
