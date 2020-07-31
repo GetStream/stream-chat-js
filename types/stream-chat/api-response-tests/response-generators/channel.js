@@ -1,5 +1,7 @@
 const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
+const fs = require('fs');
+const url = require('url');
 
 const johnID = `john-${uuidv4()}`;
 
@@ -63,6 +65,11 @@ async function updateChannel() {
 	return await channel.update({
 		description: 'Taking over this channel now',
 	});
+}
+
+async function updateChannelType() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.updateChannelType('messaging', { uploads: true });
 }
 
 async function deleteChannel() {
@@ -144,12 +151,41 @@ async function markRead() {
 	return await channel.markRead();
 }
 
+async function sendFile() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const id = uuidv4();
+	const channel = authClient.channel('messaging', id);
+
+	await channel.create();
+	const rs = fs.createReadStream(
+		url.pathToFileURL(
+			'./types/stream-chat/api-response-tests/response-generators/index.js',
+		),
+	);
+	return await channel.sendFile(rs, 'testFile');
+}
+
+async function sendImage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const id = uuidv4();
+	const channel = authClient.channel('messaging', id);
+
+	await channel.create();
+	const rs = fs.createReadStream(
+		url.pathToFileURL(
+			'./types/stream-chat/api-response-tests/response-generators/stream.png',
+		),
+	);
+	return await channel.sendImage(rs, 'testFile');
+}
+
 module.exports = {
 	create,
 	query,
 	watch,
 	stopWatching,
 	updateChannel,
+	updateChannelType,
 	deleteChannel,
 	truncateChannel,
 	acceptInvite,
@@ -157,4 +193,6 @@ module.exports = {
 	addMembers,
 	removeMembers,
 	markRead,
+	sendFile,
+	sendImage,
 };

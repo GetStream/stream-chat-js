@@ -65,6 +65,8 @@ import {
   Device,
   MuteUserOptions,
   FlagUserResponse,
+  PermissionAPIResponse,
+  PermissionsAPIResponse,
 } from './types';
 
 function isReadableStream(
@@ -1143,15 +1145,9 @@ export class StreamChat<
    */
   async queryUsers(
     filterConditions: UserFilters<UserType>,
-    sort?: UserSort<UserType>,
-    options?: UserOptions,
+    sort: UserSort<UserType> = {},
+    options: UserOptions = {},
   ) {
-    if (!sort) {
-      sort = {};
-    }
-    if (!options) {
-      options = {};
-    }
     const sortFields: Array<{ field: string; direction?: AscDesc }> = [];
     for (const [k, v] of Object.entries(sort)) {
       sortFields.push({ field: k, direction: v });
@@ -1325,7 +1321,7 @@ export class StreamChat<
    * @return {APIResponse & Device<UserType>[]} Array of devices
    */
   async getDevices(userID?: string) {
-    return await this.get<APIResponse & Device<UserType>[]>(
+    return await this.get<APIResponse & { devices?: Device<UserType>[] }>(
       this.baseURL + '/devices',
       userID ? { user_id: userID } : {},
     );
@@ -1915,10 +1911,10 @@ export class StreamChat<
   /** getPermission - gets the definition for a permission
    *
    * @param {string} name
-   * @returns {Promise<APIResponse>}
+   * @returns {Promise<PermissionAPIResponse>}
    */
   getPermission(name: string) {
-    return this.get<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
+    return this.get<PermissionAPIResponse>(`${this.baseURL}/custom_permission/${name}`);
   }
 
   /** createPermission - creates a custom permission
@@ -1958,7 +1954,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   listPermissions() {
-    return this.get<APIResponse>(`${this.baseURL}/custom_permission`);
+    return this.get<PermissionsAPIResponse>(`${this.baseURL}/custom_permission`);
   }
 
   /** createRole - creates a custom role

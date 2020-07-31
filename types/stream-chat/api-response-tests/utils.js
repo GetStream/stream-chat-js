@@ -38,11 +38,11 @@ module.exports = {
 				console.warn('runAndLogPromise failed with error', err);
 			});
 	},
-	createUsers: async function createUsers(userIDs) {
+	createUsers: async function createUsers(userIDs, additionalInfo) {
 		const serverClient = this.getServerTestClient();
 		const users = [];
 		for (const userID of userIDs) {
-			users.push({ id: userID });
+			users.push({ id: userID, ...additionalInfo });
 		}
 		return await serverClient.updateUsers(users);
 	},

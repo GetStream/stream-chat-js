@@ -119,6 +119,16 @@ async function deactivateUser() {
 	return await client.deactivateUser(userID);
 }
 
+async function upsertUser() {
+	const client = utils.getServerTestClient();
+	const userID = uuid4();
+	return await client.upsertUser({
+		id: userID,
+		name: 'Neil',
+		nickname: 'neil',
+	});
+}
+
 async function reactivateUser() {
 	const client = utils.getServerTestClient();
 	const userID = uuid4();
@@ -169,6 +179,7 @@ module.exports = {
 	deleteUser,
 	exportUser,
 	updateUsers,
+	upsertUser,
 	partialUpdateUser,
 	partialUpdateUsers,
 };

@@ -53,29 +53,35 @@ export type APIResponse = {
 
 export type AppSettingsAPIResponse = APIResponse & {
   app?: {
-    channel_configs: {
-      automod?: ChannelConfigAutomod;
-      automod_behavior?: ChannelConfigAutomodBehavior;
-      commands?: CommandVariants[];
-      connect_events?: boolean;
-      created_at?: string;
-      max_message_length?: number;
-      message_retention?: string;
-      mutes?: boolean;
-      name?: string;
-      reactions?: boolean;
-      read_events?: boolean;
-      replies?: boolean;
-      search?: boolean;
-      typing_events?: boolean;
-      updated_at?: string;
-      uploads?: boolean;
-      url_enrichment?: boolean;
-    };
+    channel_configs: Record<
+      string,
+      {
+        automod?: ChannelConfigAutomod;
+        automod_behavior?: ChannelConfigAutomodBehavior;
+        commands?: CommandVariants[];
+        connect_events?: boolean;
+        created_at?: string;
+        max_message_length?: number;
+        message_retention?: string;
+        mutes?: boolean;
+        name?: string;
+        reactions?: boolean;
+        read_events?: boolean;
+        replies?: boolean;
+        search?: boolean;
+        typing_events?: boolean;
+        updated_at?: string;
+        uploads?: boolean;
+        url_enrichment?: boolean;
+      }
+    >;
+    custom_command_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
+    multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
+    permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
       apn?: APNConfig;
@@ -83,6 +89,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     };
     suspended?: boolean;
     suspended_explanation?: string;
+    user_search_disallowed_roles?: string[];
     webhook_url?: string;
   };
 };
@@ -431,6 +438,14 @@ export type OwnUserResponse<
   unread_count: number;
 };
 
+export type PermissionAPIResponse = APIResponse & {
+  permission?: PermissionAPIObject;
+};
+
+export type PermissionsAPIResponse = APIResponse & {
+  permissions?: PermissionAPIObject[];
+};
+
 export type ReactionAPIResponse<
   ReactionType = UnknownType,
   AttachmentType = UnknownType,
@@ -585,7 +600,7 @@ export type CreateChannelOptions = {
 
 export type CustomPermissionOptions = {
   name: string;
-  resource: string;
+  resource: Resource;
   condition?: string;
   owner?: boolean;
   same_team?: boolean;
@@ -1223,7 +1238,7 @@ export type Device<UserType> = DeviceFields & {
 
 export type DeviceFields = {
   id?: string;
-  push_providers?: 'apn' | 'firebase';
+  push_provider?: 'apn' | 'firebase';
 };
 
 export type Field = {
@@ -1273,6 +1288,14 @@ export type Mute<UserType> = {
   user: UserResponse<UserType>;
 };
 
+export type PermissionAPIObject = {
+  custom?: boolean;
+  name?: string;
+  owner?: boolean;
+  resource?: Resource;
+  same_team?: boolean;
+};
+
 export type PermissionObject = {
   action?: 'Deny' | 'Allow';
   name?: string;
@@ -1303,6 +1326,26 @@ export type Reaction<
   user?: UserResponse<UserType>;
   user_id?: string;
 };
+
+export type Resource =
+  | 'CreateChannel'
+  | 'ReadChannel'
+  | 'UpdateChannelMembers'
+  | 'UpdateChannel'
+  | 'UpdateUser'
+  | 'DeleteChannel'
+  | 'CreateMessage'
+  | 'UpdateMessage'
+  | 'DeleteMessage'
+  | 'RunMessageAction'
+  | 'MuteUser'
+  | 'BanUser'
+  | 'EditUser'
+  | 'UploadAttachment'
+  | 'DeleteAttachment'
+  | 'AddLinks'
+  | 'CreateReaction'
+  | 'DeleteReaction';
 
 export type SearchPayload<
   AttachmentType = UnknownType,

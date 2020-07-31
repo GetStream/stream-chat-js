@@ -254,6 +254,133 @@ const executables = [
 		type:
 			"Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
 	},
+	{
+		f: rg.getAppSettings,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getAppSettings']>>",
+	},
+	{
+		f: rg.setAnonymousUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setAnonymousUser']>>",
+	},
+	{
+		f: rg.setGuestUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setGuestUser']>>",
+	},
+	{
+		f: rg.sendFile,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendFile']>>",
+	},
+	{
+		f: rg.sendImage,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendImage']>>",
+	},
+	{
+		f: rg.connect,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['connect']>>",
+	},
+	{
+		f: rg.disconnect,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['disconnect']>>",
+	},
+	{
+		f: rg.queryUsers,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { nickname?: string }, {}, {}, {}, {}>['queryUsers']>>",
+	},
+	{
+		f: rg.addDevice,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['addDevice']>>",
+	},
+	{
+		f: rg.getDevices,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getDevices']>>",
+	},
+	{
+		f: rg.upsertUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { nickname: string }, {}, {}, {}, {}>['upsertUser']>>",
+	},
+	{
+		f: rg.markAllRead,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['markAllRead']>>",
+	},
+	{
+		f: rg.updateChannelType,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateChannelType']>>",
+	},
+	// Need translation on the account to run this test
+	// {
+	// 	f: rg.translateMessage,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type:
+	// 		"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['translateMessage']>>",
+	// },
+	{
+		f: rg.createPermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createPermission']>>",
+	},
+	{
+		f: rg.getPermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getPermission']>>",
+	},
+	{
+		f: rg.updatePermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updatePermission']>>",
+	},
+	{
+		f: rg.deletePermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deletePermission']>>",
+	},
+	{
+		f: rg.listPermissions,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listPermissions']>>",
+	},
+	// Currently roles do not return
+	// {
+	// 	f: rg.createRole,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createRole']>>",
+	// },
+	// {
+	// 	f: rg.listRoles,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listRoles']>>",
+	// },
+	// {
+	// 	f: rg.deleteRole,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteRole']>>",
+	// },
+	{
+		f: rg.sync,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['sync']>>",
+	},
 ];
 
 let imports = '';

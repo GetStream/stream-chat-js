@@ -197,13 +197,85 @@ async function unflagMessage() {
 	return await authClient.unflagMessage(messageResponse.message.id);
 }
 
+async function createPermission() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.createPermission({
+		name: 'TestCreatePermission',
+		resource: 'ReadChannel',
+	});
+}
+
+async function getPermission() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.createPermission({
+		name: 'TestGetPermission',
+		resource: 'ReadChannel',
+	});
+	return await authClient.getPermission('TestGetPermission');
+}
+
+async function updatePermission() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.createPermission({
+		name: 'TestUpdatePermission',
+		resource: 'ReadChannel',
+	});
+	return await authClient.updatePermission('TestUpdatePermission', {
+		resource: 'DeleteChannel',
+	});
+}
+
+async function deletePermission() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.createPermission({
+		name: 'TestDeletePermission',
+		resource: 'DeleteChannel',
+	});
+	return await authClient.deletePermission('TestDeletePermission');
+}
+
+async function listPermissions() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.createPermission({
+		name: 'TestListPermissions',
+		resource: 'ReadChannel',
+	});
+	return await authClient.listPermissions();
+}
+
+async function createRole() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.createRole(uuidv4());
+}
+
+async function listRoles() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.createRole('TestListRole');
+	authClient.listRoles();
+}
+
+async function deleteRole() {
+	const name = uuidv4();
+	const authClient = await utils.getTestClient(true);
+	await authClient.createRole(name);
+	return await authClient.deleteRole(name);
+}
+
 module.exports = {
 	banUsers,
+	createPermission,
+	createRole,
+	deletePermission,
+	deleteRole,
+	getPermission,
 	unbanUsers,
+	listPermissions,
+	listRoles,
 	muteUser,
 	unmuteUser,
 	flagUser,
 	unflagUser,
 	flagMessage,
 	unflagMessage,
+	updatePermission,
 };

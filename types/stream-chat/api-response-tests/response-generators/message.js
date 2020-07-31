@@ -39,6 +39,15 @@ async function getMessage() {
 	return await authClient.getMessage(message.id);
 }
 
+async function translateMessage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+
+	return await authClient.translateMessage(message.id, 'da');
+}
+
 async function getMessagesById() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
@@ -101,5 +110,6 @@ module.exports = {
 	getMessagesById,
 	getMessage,
 	sendAction,
+	translateMessage,
 	getReplies,
 };

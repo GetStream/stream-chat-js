@@ -13,6 +13,91 @@ async function setUser() {
 	return authClient.setUser({ id: user1 }, utils.createUserToken(user1));
 }
 
+async function setAnonymousUser() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.setAnonymousUser();
+}
+
+async function setGuestUser() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.setGuestUser({ id: 'steven' });
+}
+
+async function getAppSettings() {
+	const authClient = await utils.getServerTestClient();
+	return await authClient.getAppSettings();
+}
+
+async function connect() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.setAnonymousUser();
+	return await authClient.connect();
+}
+
+async function disconnect() {
+	const authClient = await utils.getTestClient(true);
+	await authClient.setAnonymousUser();
+	await authClient.connect();
+	return await authClient.disconnect();
+}
+
+async function queryUsers() {
+	const user1 = uuidv4();
+	const user2 = uuidv4();
+	await utils.createUsers([user1, user2], { nickname: user2 });
+	const client = await utils.getTestClientForUser(user1);
+	return await client.queryUsers({ nickname: { $eq: user2 } });
+}
+
+async function addDevice() {
+	const user1 = uuidv4();
+	await utils.createUsers([user1]);
+	const client = await utils.getTestClientForUser(user1);
+	return await client.addDevice(uuidv4(), 'firebase', user1);
+}
+
+async function getDevices() {
+	const user1 = uuidv4();
+	await utils.createUsers([user1]);
+	const client = await utils.getTestClientForUser(user1);
+	await client.addDevice(uuidv4(), 'firebase', user1);
+	return await client.getDevices(user1);
+}
+
+async function markAllRead() {
+	const user1 = uuidv4();
+	await utils.createUsers([user1]);
+	const client = await utils.getTestClientForUser(user1);
+	return await client.markAllRead({ user_id: user1 });
+}
+
+async function sync() {
+	const user1 = uuidv4();
+	await utils.createUsers([user1]);
+	const client = await utils.getTestClientForUser(user1);
+	const id = uuidv4();
+	const channel = client.channel('messaging', id);
+	await channel.create();
+	await channel.sendMessage({
+		text: 'New Event?',
+		user: { id: user1 },
+	});
+	return await client.sync(
+		[channel.cid],
+		new Date(Date.now() - 1000 * 60).toISOString(),
+	);
+}
+
 module.exports = {
+	addDevice,
+	connect,
+	disconnect,
+	getAppSettings,
+	getDevices,
+	markAllRead,
+	setAnonymousUser,
+	setGuestUser,
 	setUser,
+	sync,
+	queryUsers,
 };
