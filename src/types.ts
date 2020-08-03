@@ -74,6 +74,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         url_enrichment?: boolean;
       }
     >;
+    before_message_send_hook_url?: string;
     custom_command_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;

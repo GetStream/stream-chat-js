@@ -11,7 +11,7 @@ const executables = [
 		f: rg.acceptInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['acceptInvite']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, { song?: string }>['acceptInvite']>>",
 	},
 	{
 		f: rg.addDevice,
@@ -300,7 +300,7 @@ const executables = [
 		f: rg.rejectInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['rejectInvite']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, { song?: string }>['rejectInvite']>>",
 	},
 	{
 		f: rg.removeMembers,
