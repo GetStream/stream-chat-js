@@ -8,20 +8,257 @@ let countExecutables = 0;
 
 const executables = [
 	{
-		f: rg.setUser,
+		f: rg.acceptInvite,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['acceptInvite']>>",
+	},
+	{
+		f: rg.addDevice,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setUser']>>",
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['addDevice']>>",
+	},
+	{
+		f: rg.getDevices,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getDevices']>>",
+	},
+	{
+		f: rg.addMembers,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addMembers']>>",
+	},
+	{
+		f: rg.addModerators,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addModerators']>>",
+	},
+	{
+		f: rg.banUsers,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['banUser']>>",
 	},
 	{
 		f: rg.channelSearch,
 		imports: ['StreamChat', 'Unpacked'],
 		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['search']>>",
-	}, // TODO: REPLY EMPTY????
+	},
 	{
-		f: rg.updateUsers,
+		f: rg.connect,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['connect']>>",
+	},
+	{
+		f: rg.create,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['create']>>",
+	},
+	// createChannelType has a limit. So only run this when needed.
+	// {
+	// 	f: rg.createChannelType,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat['createChannelType']>>",
+	// },
+	{
+		f: rg.createPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { unique: string }, {}, {}, {}, {}>['updateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createPermission']>>",
+	},
+	{
+		f: rg.deactivateUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deactivateUser']>>",
+	},
+	{
+		f: rg.deleteChannel,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['delete']>>",
+	},
+	// TODO: Fix the error which results from deleteChannelType api call:
+	// `deleteChannelType failed with error:  { Error: StreamChat error code 16: DeleteChannelType failed with error: "bc0b09df-2cfd-4e80-93e7-1f0091e6a435 is not a defined channel type"`
+	// because of which build failure occurs.
+	// {
+	// 	f: rg.deleteChannelType,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat['deleteChannelType']>>",
+	// },
+	{
+		f: rg.deleteFile,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteFile']>>",
+	},
+	{
+		f: rg.deleteImage,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteImage']>>",
+	},
+	{
+		f: rg.deleteMessage,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteMessage']>>",
+	},
+	{
+		f: rg.deletePermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deletePermission']>>",
+	},
+	{
+		f: rg.deleteReaction,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteReaction']>>",
+	},
+	{
+		f: rg.deleteUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteUser']>>",
+	},
+	{
+		f: rg.demoteModerators,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['demoteModerators']>>",
+	},
+	{
+		f: rg.disconnect,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['disconnect']>>",
+	},
+	{
+		f: rg.exportUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['exportUser']>>",
+	},
+	{
+		f: rg.flagMessage,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagMessage']>>",
+	},
+	{
+		f: rg.flagUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagUser']>>",
+	},
+	{
+		f: rg.getAppSettings,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getAppSettings']>>",
+	},
+	{
+		f: rg.getChannelType,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getChannelType']>>",
+	},
+	{
+		f: rg.getConfig,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getConfig']>>",
+	},
+	{
+		f: rg.getMessage,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getMessage']>>",
+	},
+	{
+		f: rg.getMessagesById,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getMessagesById']>>",
+	},
+	{
+		f: rg.getPermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getPermission']>>",
+	},
+	{
+		f: rg.getReactions,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getReactions']>>",
+	},
+	{
+		f: rg.getReplies,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{ description?: string }, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
+	},
+	{
+		f: rg.hide,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['hide']>>",
+	},
+	{
+		f: rg.inviteMembers,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['inviteMembers']>>",
+	},
+	{
+		f: rg.keystroke,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['keystroke']>>",
+	},
+	{
+		f: rg.lastMessage,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Omit<ReturnType<Immutable<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>['asMutable']>>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+	},
+	{
+		f: rg.listChannelTypes,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listChannelTypes']>>",
+	},
+	{
+		f: rg.listPermissions,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listPermissions']>>",
+	},
+	{
+		f: rg.markAllRead,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['markAllRead']>>",
+	},
+	{
+		f: rg.markRead,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['markRead']>>",
+	},
+	{
+		f: rg.mute,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['mute']>>",
+	},
+	{
+		f: rg.muteStatus,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['muteStatus']>>",
+	},
+	{
+		f: rg.muteUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['muteUser']>>",
 	},
 	{
 		f: rg.partialUpdateUser,
@@ -36,14 +273,22 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, { gender: string; unique: string; work?: string }, {}, {}, {}, {}>['partialUpdateUsers']>>",
 	},
 	{
-		f: rg.banUsers,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['banUser']>>",
+		f: rg.query,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['query']>>",
 	},
 	{
-		f: rg.deleteUser,
+		f: rg.queryMembers,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['queryMembers']>>",
+	},
+	{
+		f: rg.queryUsers,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { nickname?: string }, {}, {}, {}, {}>['queryUsers']>>",
 	},
 	{
 		f: rg.reactivateUser,
@@ -52,167 +297,10 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['reactivateUser']>>",
 	},
 	{
-		f: rg.deactivateUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deactivateUser']>>",
-	},
-	{
-		f: rg.exportUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['exportUser']>>",
-	},
-	{
-		f: rg.unbanUsers,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unbanUser']>>",
-	},
-	{
-		f: rg.muteUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['muteUser']>>",
-	},
-	{
-		f: rg.unmuteUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unmuteUser']>>",
-	},
-	{
-		f: rg.flagUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagUser']>>",
-	},
-	{
-		f: rg.unflagUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagUser']>>",
-	},
-	{
-		f: rg.flagMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagMessage']>>",
-	},
-	{
-		f: rg.unflagMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagMessage']>>",
-	},
-	// createChannelType has a limit. So only run this when needed.
-	// {
-	// 	f: rg.createChannelType,
-	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat['createChannelType']>>",
-	// },
-	{
-		f: rg.getChannelType,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getChannelType']>>",
-	},
-	{
-		f: rg.listChannelTypes,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listChannelTypes']>>",
-	},
-	// TODO: Fix the error which results from deleteChannelType api call:
-	// `deleteChannelType failed with error:  { Error: StreamChat error code 16: DeleteChannelType failed with error: "bc0b09df-2cfd-4e80-93e7-1f0091e6a435 is not a defined channel type"`
-	// because of which build failure occurs.
-	// {
-	// 	f: rg.deleteChannelType,
-	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat['deleteChannelType']>>",
-	// },
-	{
-		f: rg.sendMessage,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendMessage']>>",
-	},
-	{
-		f: rg.updateMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateMessage']>>",
-	},
-	{
-		f: rg.deleteMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteMessage']>>",
-	},
-	{
-		f: rg.getMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getMessage']>>",
-	},
-	{
-		f: rg.getMessagesById,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getMessagesById']>>",
-	},
-	{
-		f: rg.sendMessageReadEvent,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendEvent']>>",
-	},
-	{
-		f: rg.sendReaction,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendReaction']>>",
-	},
-	{
-		f: rg.deleteReaction,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteReaction']>>",
-	},
-	{
-		f: rg.getReactions,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getReactions']>>",
-	},
-	{
-		f: rg.updateChannel,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, {}, {}, {}, {}>['update']>>",
-	},
-	{
-		f: rg.deleteChannel,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['delete']>>",
-	},
-	{
-		f: rg.truncateChannel,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['truncate']>>",
-	},
-	{
-		f: rg.acceptInvite,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['acceptInvite']>>",
-	},
-	{
 		f: rg.rejectInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['rejectInvite']>>",
-	},
-	{
-		f: rg.addMembers,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addMembers']>>",
 	},
 	{
 		f: rg.removeMembers,
@@ -227,58 +315,34 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendAction']>>",
 	},
 	{
-		f: rg.keystroke,
+		f: rg.sendFile,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['keystroke']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendFile']>>",
 	},
 	{
-		f: rg.stopTyping,
+		f: rg.sendImage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopTyping']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendImage']>>",
 	},
 	{
-		f: rg.markRead,
+		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['markRead']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendMessage']>>",
 	},
 	{
-		f: rg.query,
+		f: rg.sendMessageReadEvent,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['query']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendEvent']>>",
 	},
 	{
-		f: rg.watch,
+		f: rg.sendReaction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['watch']>>",
-	},
-	{
-		f: rg.create,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['create']>>",
-	},
-	{
-		f: rg.stopWatching,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopWatching']>>",
-	},
-	{
-		f: rg.getReplies,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
-	},
-	{
-		f: rg.getAppSettings,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getAppSettings']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
 		f: rg.setAnonymousUser,
@@ -292,59 +356,33 @@ const executables = [
 		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setGuestUser']>>",
 	},
 	{
-		f: rg.sendFile,
+		f: rg.setUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setUser']>>",
+	},
+	{
+		f: rg.show,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendFile']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['show']>>",
 	},
 	{
-		f: rg.sendImage,
+		f: rg.stopTyping,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendImage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopTyping']>>",
 	},
 	{
-		f: rg.connect,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['connect']>>",
+		f: rg.stopWatching,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopWatching']>>",
 	},
 	{
-		f: rg.disconnect,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['disconnect']>>",
-	},
-	{
-		f: rg.queryUsers,
+		f: rg.sync,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { nickname?: string }, {}, {}, {}, {}>['queryUsers']>>",
-	},
-	{
-		f: rg.addDevice,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['addDevice']>>",
-	},
-	{
-		f: rg.getDevices,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getDevices']>>",
-	},
-	{
-		f: rg.upsertUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, { nickname: string }, {}, {}, {}, {}>['upsertUser']>>",
-	},
-	{
-		f: rg.markAllRead,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['markAllRead']>>",
-	},
-	{
-		f: rg.updateChannelType,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateChannelType']>>",
+			"Unpacked<ReturnType<StreamChat<{ description?: string }, {}, {}, {}, {}, {}>['sync']>>",
 	},
 	// Need translation on the account to run this test
 	// {
@@ -354,102 +392,27 @@ const executables = [
 	// 		"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['translateMessage']>>",
 	// },
 	{
-		f: rg.createPermission,
+		f: rg.truncateChannel,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['truncate']>>",
+	},
+	{
+		f: rg.unbanUsers,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unbanUser']>>",
+	},
+	{
+		f: rg.unflagMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createPermission']>>",
+			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagMessage']>>",
 	},
 	{
-		f: rg.getPermission,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getPermission']>>",
-	},
-	{
-		f: rg.updatePermission,
+		f: rg.unflagUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updatePermission']>>",
-	},
-	{
-		f: rg.deletePermission,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deletePermission']>>",
-	},
-	{
-		f: rg.listPermissions,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listPermissions']>>",
-	},
-	// Currently roles do not return
-	// {
-	// 	f: rg.createRole,
-	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createRole']>>",
-	// },
-	// {
-	// 	f: rg.listRoles,
-	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listRoles']>>",
-	// },
-	// {
-	// 	f: rg.deleteRole,
-	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteRole']>>",
-	// },
-	{
-		f: rg.sync,
-		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['sync']>>",
-	},
-	{
-		f: rg.getConfig,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getConfig']>>",
-	},
-	{
-		f: rg.inviteMembers,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['inviteMembers']>>",
-	},
-	{
-		f: rg.deleteFile,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteFile']>>",
-	},
-	{
-		f: rg.deleteImage,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteImage']>>",
-	},
-	{
-		f: rg.queryMembers,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['queryMembers']>>",
-	},
-	{
-		f: rg.addModerators,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addModerators']>>",
-	},
-	{
-		f: rg.demoteModerators,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['demoteModerators']>>",
-	},
-	{
-		f: rg.mute,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['mute']>>",
+			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagUser']>>",
 	},
 	{
 		f: rg.unmute,
@@ -458,29 +421,68 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['unmute']>>",
 	},
 	{
-		f: rg.lastMessage,
-		imports: ['Channel', 'Unpacked'],
-		type:
-			"Omit<ReturnType<Immutable<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>['asMutable']>>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+		f: rg.unmuteUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unmuteUser']>>",
 	},
 	{
-		f: rg.muteStatus,
+		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['muteStatus']>>",
+			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, {}, {}, {}, {}>['update']>>",
 	},
 	{
-		f: rg.hide,
-		imports: ['Channel', 'Unpacked'],
+		f: rg.updateChannelType,
+		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['hide']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateChannelType']>>",
 	},
 	{
-		f: rg.show,
+		f: rg.updateMessage,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateMessage']>>",
+	},
+	{
+		f: rg.updatePermission,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updatePermission']>>",
+	},
+	{
+		f: rg.updateUsers,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { unique: string }, {}, {}, {}, {}>['updateUsers']>>",
+	},
+	{
+		f: rg.upsertUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { nickname: string }, {}, {}, {}, {}>['upsertUser']>>",
+	},
+	{
+		f: rg.watch,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['show']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['watch']>>",
 	},
+
+	// Currently roles do not return
+	// {
+	// 	f: rg.createRole,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createRole']>>",
+	// },
+	// {
+	// 	f: rg.deleteRole,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteRole']>>",
+	// },
+	// {
+	// 	f: rg.listRoles,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listRoles']>>",
+	// },
 ];
 
 let imports = '';

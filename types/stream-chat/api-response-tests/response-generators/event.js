@@ -3,6 +3,14 @@ const utils = require('../utils');
 
 const johnID = `john-${uuid4()}`;
 
+async function keystroke() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	await channel.watch();
+
+	return await channel.keystroke();
+}
+
 async function sendMessageReadEvent() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
@@ -14,14 +22,6 @@ async function sendMessageReadEvent() {
 	return await channel.sendEvent(event);
 }
 
-async function keystroke() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
-	await channel.watch();
-
-	return await channel.keystroke();
-}
-
 async function stopTyping() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
@@ -31,7 +31,7 @@ async function stopTyping() {
 }
 
 module.exports = {
-	sendMessageReadEvent,
 	keystroke,
+	sendMessageReadEvent,
 	stopTyping,
 };
