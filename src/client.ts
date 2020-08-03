@@ -148,6 +148,7 @@ export class StreamChat<
   connectionID?: string;
   user?: UserResponse<UserType>;
   _user?: UserResponse<UserType>;
+  userAgent?: string;
   cleaningIntervalRef?: NodeJS.Timeout;
   connectionEstablishedCount?: number;
   connecting?: boolean;
@@ -1814,10 +1815,22 @@ export class StreamChat<
     >(this.baseURL + `/messages/${messageID}`);
   }
 
+  /**
+   * @deprecated Please use getUserAgent instead
+   */
   _userAgent() {
-    return `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${
-      pkg.version
-    }`;
+    return this.getUserAgent();
+  }
+
+  getUserAgent() {
+    return (
+      this.userAgent ||
+      `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${pkg.version}`
+    );
+  }
+
+  setUserAgent(userAgent: string) {
+    this.userAgent = userAgent;
   }
 
   /**
