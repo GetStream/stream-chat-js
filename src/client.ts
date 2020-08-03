@@ -111,14 +111,7 @@ export class StreamChat<
     >;
   };
   state: ClientState<UserType>;
-  mutedChannels: ChannelMute<
-    AttachmentType,
-    ChannelType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  mutedChannels: ChannelMute<ChannelType, UserType>[];
   browser: boolean;
   node: boolean;
   options: StreamChatOptions;
@@ -131,22 +124,8 @@ export class StreamChat<
     ReactionType,
     UserType
   > | null;
-  wsPromise: Promise<void | ConnectionOpen<
-    AttachmentType,
-    ChannelType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >> | null;
-  setUserPromise: Promise<void | ConnectionOpen<
-    AttachmentType,
-    ChannelType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >> | null;
+  wsPromise: Promise<void | ConnectionOpen<ChannelType, UserType>> | null;
+  setUserPromise: Promise<void | ConnectionOpen<ChannelType, UserType>> | null;
   activeChannels: {
     [key: string]: Channel<
       AttachmentType,
@@ -325,19 +304,12 @@ export class StreamChat<
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {Promise<void | ConnectionOpen<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>} Returns a promise that resolves when the connection is setup
+   * @return {Promise<void | ConnectionOpen<ChannelType, UserType>>} Returns a promise that resolves when the connection is setup
    */
   setUser = (
     user: UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
-  ): Promise<void | ConnectionOpen<
-    AttachmentType,
-    ChannelType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >> => {
+  ): Promise<void | ConnectionOpen<ChannelType, UserType>> => {
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
@@ -1608,27 +1580,21 @@ export class StreamChat<
    * @param {string} targetID
    * @param {string} [userID] Only used with serverside auth
    * @param {MuteUserOptions<UserType>} [options]
-   * @returns {Promise<MuteUserResponse< AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>}
+   * @returns {Promise<MuteUserResponse<ChannelType, UserType>>}
    */
   async muteUser(
     targetID: string,
     userID?: string,
     options: MuteUserOptions<UserType> = {},
   ) {
-    return await this.post<
-      MuteUserResponse<
-        AttachmentType,
-        ChannelType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this.baseURL + '/moderation/mute', {
-      target_id: targetID,
-      ...(userID ? { user_id: userID } : {}),
-      ...options,
-    });
+    return await this.post<MuteUserResponse<ChannelType, UserType>>(
+      this.baseURL + '/moderation/mute',
+      {
+        target_id: targetID,
+        ...(userID ? { user_id: userID } : {}),
+        ...options,
+      },
+    );
   }
 
   /** unmuteUser - unmutes a user

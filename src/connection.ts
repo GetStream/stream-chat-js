@@ -33,16 +33,7 @@ type Constructor<
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-  recoverCallback: (
-    open?: ConnectionOpen<
-      AttachmentType,
-      ChannelType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-  ) => Promise<void>;
+  recoverCallback: (open?: ConnectionOpen<ChannelType, UserType>) => Promise<void>;
   tokenManager: TokenManager<UserType>;
   user: UserResponse<UserType>;
   userAgent: string;
@@ -180,17 +171,7 @@ export class StableWSConnection<
   monitorInterval: number;
   totalFailures: number;
   connectionID?: string;
-  connectionOpen?: Promise<
-    | ConnectionOpen<
-        AttachmentType,
-        ChannelType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    | undefined
-  >;
+  connectionOpen?: Promise<ConnectionOpen<ChannelType, UserType> | undefined>;
   healthCheckIntervalRef?: NodeJS.Timeout;
   isResolved?: boolean;
   monitorIntervalRef?: NodeJS.Timeout;
@@ -261,19 +242,10 @@ export class StableWSConnection<
   /**
    * connect - Connect to the WS URL
    *
-   * @return {Promise<ConnectionOpen<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType> | void>} Promise that completes once the first health check message is received
+   * @return {Promise<ConnectionOpen<ChannelType, UserType> | void>} Promise that completes once the first health check message is received
    */
   async connect() {
-    let healthCheck:
-      | ConnectionOpen<
-          AttachmentType,
-          ChannelType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
-      | undefined;
+    let healthCheck: ConnectionOpen<ChannelType, UserType> | undefined;
     if (this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
@@ -834,14 +806,7 @@ export class StableWSConnection<
     }).then(
       e => {
         if (e.data && typeof e.data === 'string') {
-          const data = JSON.parse(e.data) as ConnectionOpen<
-            AttachmentType,
-            ChannelType,
-            EventType,
-            MessageType,
-            ReactionType,
-            UserType
-          > & {
+          const data = JSON.parse(e.data) as ConnectionOpen<ChannelType, UserType> & {
             error?: unknown;
           };
           if (data && data.error != null) {

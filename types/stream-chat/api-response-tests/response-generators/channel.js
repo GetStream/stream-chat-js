@@ -4,41 +4,42 @@ const fs = require('fs');
 const url = require('url');
 
 const johnID = `john-${uuidv4()}`;
+const testChannelId = 'Test_ID_For_Types';
 
 async function create() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const id = uuidv4();
 	const channel = authClient.channel('messaging', id);
+	// Use this to create channel with testChannelId for testing
+	// const channel = authClient.channel('messaging', testChannelId);
 
 	return await channel.create();
 }
 
 async function watch() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
-
+	const channel = await utils.getTestChannel(testChannelId);
 	return await channel.watch();
 }
 
 async function query() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	const testText = uuidv4();
+	await channel.sendMessage({ text: testText });
 
 	return await channel.query({});
 }
 
 async function stopWatching() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
-
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	await channel.watch();
 
 	return await channel.stopWatching();
+}
+
+async function inviteMembers() {
+	const randomID = 'xyz' + uuidv4();
+	const channel = await utils.getTestChannelForUser(testChannelId, randomID, {});
+	return await channel.inviteMembers([randomID]);
 }
 
 async function createTestInviteChannel() {
@@ -56,10 +57,7 @@ async function createTestInviteChannel() {
 }
 
 async function updateChannel() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	await channel.watch();
 
 	return await channel.update({
@@ -78,15 +76,13 @@ async function deleteChannel() {
 	const channel = authClient.channel('messaging', id);
 	await channel.create();
 	await channel.watch();
+	await channel.watch();
 
 	return await channel.delete();
 }
 
 async function truncateChannel() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
+	const channel = await utils.getTestChannel(testChannelId);
 	await channel.watch();
 
 	return await channel.truncate();
@@ -115,10 +111,7 @@ async function rejectInvite() {
 }
 
 async function addMembers() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	await channel.watch();
 
 	const newMembers = [uuidv4(), uuidv4()];
@@ -127,11 +120,19 @@ async function addMembers() {
 	return await channel.addMembers(newMembers);
 }
 
+async function addModerators() {
+	const channel = await utils.getTestChannel(testChannelId);
+	return await channel.addModerators([johnID]);
+}
+
+async function demoteModerators() {
+	const channel = await utils.getTestChannel(testChannelId);
+	await channel.addModerators([johnID]);
+	return await channel.demoteModerators([johnID]);
+}
+
 async function removeMembers() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	await channel.watch();
 
 	const newMembers = [uuidv4(), uuidv4()];
@@ -142,21 +143,14 @@ async function removeMembers() {
 }
 
 async function markRead() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-	await channel.create();
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	await channel.watch();
 
 	return await channel.markRead();
 }
 
 async function sendFile() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
-
-	await channel.create();
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 	const rs = fs.createReadStream(
 		url.pathToFileURL(
 			'./types/stream-chat/api-response-tests/response-generators/index.js',
@@ -166,21 +160,91 @@ async function sendFile() {
 }
 
 async function sendImage() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const id = uuidv4();
-	const channel = authClient.channel('messaging', id);
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
 
-	await channel.create();
 	const rs = fs.createReadStream(
 		url.pathToFileURL(
 			'./types/stream-chat/api-response-tests/response-generators/stream.png',
 		),
 	);
-	return await channel.sendImage(rs, 'testFile');
+	return await channel.sendImage(rs, 'testImage');
+}
+
+async function deleteFile() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	const rs = fs.createReadStream(
+		url.pathToFileURL(
+			'./types/stream-chat/api-response-tests/response-generators/index.js',
+		),
+	);
+	const file = await channel.sendFile(rs, 'testFile');
+	return channel.deleteFile(file.file);
+}
+
+async function deleteImage() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+
+	const rs = fs.createReadStream(
+		url.pathToFileURL(
+			'./types/stream-chat/api-response-tests/response-generators/stream.png',
+		),
+	);
+	const image = await channel.sendImage(rs, 'testImage');
+	return channel.deleteImage(image.file);
+}
+
+async function getConfig() {
+	const channel = await utils.getTestChannel(testChannelId);
+
+	return await channel.getConfig();
+}
+
+async function queryMembers() {
+	const channel = await utils.getTestChannel(testChannelId);
+	return await channel.queryMembers({}, {}, { limit: 2 });
+}
+
+async function mute() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	return await channel.mute();
+}
+
+async function unmute() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	return await channel.unmute();
+}
+
+async function lastMessage() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	await channel.sendMessage({ text: 'Hello World' });
+	return await channel.lastMessage();
+}
+
+async function muteStatus() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	return await channel.muteStatus();
+}
+
+async function hide() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	return await channel.hide();
+}
+
+async function show() {
+	const channel = await utils.getTestChannelForUser(testChannelId, johnID, {});
+	return await channel.show();
 }
 
 module.exports = {
 	create,
+	hide,
+	show,
+	addModerators,
+	getConfig,
+	deleteFile,
+	demoteModerators,
+	deleteImage,
+	inviteMembers,
 	query,
 	watch,
 	stopWatching,
@@ -195,4 +259,9 @@ module.exports = {
 	markRead,
 	sendFile,
 	sendImage,
+	queryMembers,
+	mute,
+	unmute,
+	lastMessage,
+	muteStatus,
 };

@@ -46,4 +46,23 @@ module.exports = {
 		}
 		return await serverClient.updateUsers(users);
 	},
+	getTestChannel: async function getTestChannel(id) {
+		const client = this.getTestClient(true);
+		const channels = await client.queryChannels({ id });
+		return channels[0];
+	},
+	getTestChannelForUser: async function getTestChannelForUser(
+		channelId,
+		userID,
+		options,
+	) {
+		const client = this.getTestClient(false);
+		const health = await client.setUser(
+			{ id: userID, ...options },
+			this.createUserToken(userID),
+		);
+		client.health = health;
+		const channels = await client.queryChannels({ id: channelId });
+		return channels[0];
+	},
 };

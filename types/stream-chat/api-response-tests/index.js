@@ -130,7 +130,8 @@ const executables = [
 	{
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendMessage']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendMessage']>>",
 	},
 	{
 		f: rg.updateMessage,
@@ -150,109 +151,128 @@ const executables = [
 	{
 		f: rg.getMessagesById,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['getMessagesById']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getMessagesById']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendEvent']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendEvent']>>",
 	},
 	{
 		f: rg.sendReaction,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendReaction']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
 		f: rg.deleteReaction,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['deleteReaction']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteReaction']>>",
 	},
 	{
 		f: rg.getReactions,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['getReactions']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getReactions']>>",
 	},
 	{
 		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['update']>>",
+			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, {}, {}, {}, {}>['update']>>",
 	},
 	{
 		f: rg.deleteChannel,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['delete']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['delete']>>",
 	},
 	{
 		f: rg.truncateChannel,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['truncate']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['truncate']>>",
 	},
 	{
 		f: rg.acceptInvite,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['acceptInvite']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['acceptInvite']>>",
 	},
 	{
 		f: rg.rejectInvite,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['rejectInvite']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, {}>['rejectInvite']>>",
 	},
 	{
 		f: rg.addMembers,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['addMembers']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addMembers']>>",
 	},
 	{
 		f: rg.removeMembers,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['removeMembers']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['removeMembers']>>",
 	},
 	{
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendAction']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendAction']>>",
 	},
 	{
 		f: rg.keystroke,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['keystroke']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['keystroke']>>",
 	},
 	{
 		f: rg.stopTyping,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['stopTyping']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopTyping']>>",
 	},
 	{
 		f: rg.markRead,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['markRead']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['markRead']>>",
 	},
 	{
 		f: rg.query,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['query']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['query']>>",
 	},
 	{
 		f: rg.watch,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['watch']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['watch']>>",
 	},
 	{
 		f: rg.create,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['create']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['create']>>",
 	},
 	{
 		f: rg.stopWatching,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['stopWatching']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopWatching']>>",
 	},
 	{
 		f: rg.getReplies,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
+			"Unpacked<ReturnType<Channel<{ description?: string }, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
 	},
 	{
 		f: rg.getAppSettings,
@@ -274,12 +294,14 @@ const executables = [
 	{
 		f: rg.sendFile,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendFile']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendFile']>>",
 	},
 	{
 		f: rg.sendImage,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel<{}, {}, {}, {}, {}, {}>['sendImage']>>",
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendImage']>>",
 	},
 	{
 		f: rg.connect,
@@ -381,6 +403,84 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['sync']>>",
 	},
+	{
+		f: rg.getConfig,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getConfig']>>",
+	},
+	{
+		f: rg.inviteMembers,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['inviteMembers']>>",
+	},
+	{
+		f: rg.deleteFile,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteFile']>>",
+	},
+	{
+		f: rg.deleteImage,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteImage']>>",
+	},
+	{
+		f: rg.queryMembers,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['queryMembers']>>",
+	},
+	{
+		f: rg.addModerators,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addModerators']>>",
+	},
+	{
+		f: rg.demoteModerators,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['demoteModerators']>>",
+	},
+	{
+		f: rg.mute,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['mute']>>",
+	},
+	{
+		f: rg.unmute,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['unmute']>>",
+	},
+	{
+		f: rg.lastMessage,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Omit<ReturnType<Immutable<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>['asMutable']>>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+	},
+	{
+		f: rg.muteStatus,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['muteStatus']>>",
+	},
+	{
+		f: rg.hide,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['hide']>>",
+	},
+	{
+		f: rg.show,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['show']>>",
+	},
 ];
 
 let imports = '';
@@ -396,7 +496,7 @@ executables.forEach(i => {
 const uniqueTypes = types.filter((value, index, self) => self.indexOf(value) === index);
 imports = uniqueTypes.join(', ');
 
-imports = `import { ${imports} } from '../../src/index';`;
+imports = `import { Immutable } from 'seamless-immutable';\n\nimport { ${imports} } from '../../src/index';`;
 const tsFileName = `${__dirname}/data.ts`;
 fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
 	if (err) {

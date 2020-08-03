@@ -697,7 +697,7 @@ export class Channel<
   /**
    * mute - mutes the current channel
    * @param {{ user_id?: string, expiration?: string }} opts expiration in minutes or user_id
-   * @return {Promise<MuteChannelAPIResponse<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>>} The server response
+   * @return {Promise<MuteChannelAPIResponse<ChannelType, UserType>>} The server response
    *
    * example with expiration:
    * await channel.mute({expiration: moment.duration(2, 'weeks')});
@@ -707,19 +707,13 @@ export class Channel<
    *
    */
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<
-      MuteChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this.getClient().baseURL + '/moderation/mute/channel', {
-      channel_cid: this.cid,
-      ...opts,
-    });
+    return await this.getClient().post<MuteChannelAPIResponse<ChannelType, UserType>>(
+      this.getClient().baseURL + '/moderation/mute/channel',
+      {
+        channel_cid: this.cid,
+        ...opts,
+      },
+    );
   }
 
   /**
@@ -742,9 +736,13 @@ export class Channel<
 
   /**
    * muteStatus - returns the mute status for the current channel
-   * @return {{ muted: boolean; createdAt?: string | null; expiredAt?: string | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+   * @return {{ muted: boolean; createdAt?: string | null; expiresAt?: string | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
    */
-  muteStatus(): { muted: boolean; createdAt?: string | null; expiredAt?: string | null } {
+  muteStatus(): {
+    muted: boolean;
+    createdAt?: string | null;
+    expiresAt?: string | null;
+  } {
     this._checkInitialized();
     return this.getClient()._muteStatus(this.cid);
   }
