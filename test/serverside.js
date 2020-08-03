@@ -1975,6 +1975,83 @@ describe('User management', function() {
 	});
 });
 
+describe('Custom Commands', function() {
+	const client = getTestClient(true);
+	const newName = uuidv4(),
+		newDesc = 'My amazing custom command',
+		newArgs = '[@username] [greeting]';
+
+	let updatedCommand;
+
+	it('Should create a new command', async function() {
+		let response = await client.createCommand({
+			name: newName,
+			description: newDesc,
+			args: newArgs,
+		});
+		expect(response.command.name).to.equal(newName);
+		expect(response.command.description).to.equal(newDesc);
+		expect(response.command.args).to.equal(newArgs);
+		expect(response.command.set).to.equal('custom_set');
+		expect(response.command.created_at).to.not.equal('0001-01-01T00:00:00Z');
+		expect(response.command.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+		await sleep(1000);
+	});
+
+	it('Should retrieve command', async function() {
+		let response = await client.getCommand(newName);
+		expect(response.name).to.equal(newName);
+		expect(response.description).to.equal(newDesc);
+		expect(response.args).to.equal(newArgs);
+		expect(response.set).to.equal('custom_set');
+		expect(response.created_at).to.not.equal('0001-01-01T00:00:00Z');
+		expect(response.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing get command', async function() {
+		await expectHTTPErrorCode(404, client.getCommand('non-existent'));
+	});
+
+	it('Should update command', async function() {
+		let response = await client.updateCommand(newName, {
+			description: 'updated description',
+			args: 'updated args',
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing update command', async function() {
+		await expectHTTPErrorCode(
+			404,
+			client.updateCommand('non-existent', {
+				description: 'updated description',
+				args: 'updated args',
+			}),
+		);
+	});
+
+	it('Should list commands', async function() {
+		let response = await client.listCommands();
+		expect(response.commands).to.deep.contain(updatedCommand);
+		await sleep(1000);
+	});
+
+	it('Should delete command', async function() {
+		let response = await client.deleteCommand(newName);
+		expect(response.name).to.equal(newName);
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing delete command', async function() {
+		await expectHTTPErrorCode(404, client.getCommand('non-existent'));
+	});
+});
+
 describe('Channel types', function() {
 	const client = getTestClient(true);
 	const newType = uuidv4();

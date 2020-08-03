@@ -1228,6 +1228,26 @@ export class StreamChat {
 		});
 	}
 
+	createCommand(data) {
+		return this.post(this.baseURL + '/commands', data);
+	}
+
+	getCommand(name) {
+		return this.get(this.baseURL + `/commands/${name}`);
+	}
+
+	updateCommand(name, data) {
+		return this.put(this.baseURL + `/commands/${name}`, data);
+	}
+
+	deleteCommand(name) {
+		return this.delete(this.baseURL + `/commands/${name}`);
+	}
+
+	listCommands() {
+		return this.get(this.baseURL + `/commands`);
+	}
+
 	createChannelType(data) {
 		const channelData = Object.assign({}, { commands: ['all'] }, data);
 		return this.post(this.baseURL + '/channeltypes', channelData);
