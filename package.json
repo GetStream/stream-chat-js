@@ -30,7 +30,8 @@
   ],
   "files": [
     "/dist",
-    "/types/src/index.d.ts",
+    "/src",
+    "/types/src",
     "readme.md",
     "license"
   ],
