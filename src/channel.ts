@@ -297,7 +297,7 @@ export class Channel<
       >;
       offset?: number;
       query?: string;
-    },
+    } = {},
   ) {
     // Return a list of channels
     const payload = {
