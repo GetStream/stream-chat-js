@@ -118,7 +118,7 @@
     "start": "yarn run compile -w",
     "compile": "rollup -c",
     "build": "rm -rf dist && yarn run types && yarn run compile",
-    "types": "tsc --declaration true --declarationMap true --emitDeclarationOnly true",
+    "types": "tsc --emitDeclarationOnly true",
     "prettier": "prettier --check '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "test-api": "node ts-test/api-response-tests/index.js && npx prettier --write 'ts-test/api-response-tests/data.ts' .eslintrc.json .prettierrc .babelrc && tsc --esModuleInterop true ts-test/api-response-tests/data.ts && rm ts-test/api-response-tests/data.js",
