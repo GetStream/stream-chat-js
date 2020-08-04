@@ -8,7 +8,7 @@
     "noEmitOnError": false,
     "noImplicitAny": true,
     "preserveConstEnums": true,
-    "outDir": "types/src",
+    "outDir": "dist/types",
     "strict": true,
     "target": "ES5"
   },

@@ -56,7 +56,6 @@ async function createTestInviteChannel() {
 async function deleteChannel() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	await channel.watch();
-	await channel.watch();
 
 	return await channel.delete();
 }
@@ -64,9 +63,7 @@ async function deleteChannel() {
 async function deleteFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	const rs = fs.createReadStream(
-		url.pathToFileURL(
-			'./types/stream-chat/api-response-tests/response-generators/index.js',
-		),
+		url.pathToFileURL('./ts-test/api-response-tests/response-generators/index.js'),
 	);
 	const file = await channel.sendFile(rs, 'testFile');
 	return channel.deleteFile(file.file);
@@ -76,9 +73,7 @@ async function deleteImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 
 	const rs = fs.createReadStream(
-		url.pathToFileURL(
-			'./types/stream-chat/api-response-tests/response-generators/stream.png',
-		),
+		url.pathToFileURL('./ts-test/api-response-tests/response-generators/stream.png'),
 	);
 	const image = await channel.sendImage(rs, 'testImage');
 	return channel.deleteImage(image.file);
@@ -169,9 +164,7 @@ async function removeMembers() {
 async function sendFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	const rs = fs.createReadStream(
-		url.pathToFileURL(
-			'./types/stream-chat/api-response-tests/response-generators/index.js',
-		),
+		url.pathToFileURL('./ts-test/api-response-tests/response-generators/index.js'),
 	);
 	return await channel.sendFile(rs, 'testFile');
 }
@@ -180,9 +173,7 @@ async function sendImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 
 	const rs = fs.createReadStream(
-		url.pathToFileURL(
-			'./types/stream-chat/api-response-tests/response-generators/stream.png',
-		),
+		url.pathToFileURL('./ts-test/api-response-tests/response-generators/stream.png'),
 	);
 	return await channel.sendImage(rs, 'testImage');
 }
