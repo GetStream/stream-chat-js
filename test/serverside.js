@@ -1462,7 +1462,7 @@ describe('App configs', function() {
 		// Set custom command endpoint url
 		const custom_command_url = 'http://example.com';
 		await client.updateAppSettings({
-			custom_command_url: custom_command_url,
+			custom_command_url,
 		});
 
 		let response = await client.getAppSettings();
