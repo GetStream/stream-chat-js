@@ -76,7 +76,7 @@ const normalBundle = {
 	],
 	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
 	plugins: [
-		resolve({ extensions: ['.ts'] }),
+		resolve({ extensions: ['.js', '.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
@@ -84,7 +84,7 @@ const normalBundle = {
 		babel({
 			babelHelpers: 'runtime',
 			exclude: nodeModulesDirectory,
-			extensions: ['.ts'],
+			extensions: [...DEFAULT_EXTENSIONS, '.ts'],
 		}),
 		scss({
 			output: pkg.style,
@@ -111,7 +111,7 @@ const browserBundle = {
 	],
 	external: externalPackages,
 	plugins: [
-		resolve({ extensions: ['.ts'] }),
+		resolve({ extensions: ['.js', '.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
@@ -144,7 +144,7 @@ const fullBrowserBundle = {
 		},
 	],
 	plugins: [
-		resolve({ extensions: ['.ts'] }),
+		resolve({ extensions: ['.js', '.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
