@@ -14,6 +14,7 @@
   "plugins": [
     "@babel/plugin-transform-object-assign",
     "@babel/plugin-transform-runtime",
+    "@babel/proposal-object-rest-spread",
     "@babel/plugin-proposal-class-properties"
   ],
   "ignore": ["node_modules", "dist"]

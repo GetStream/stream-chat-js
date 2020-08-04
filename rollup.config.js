@@ -1,5 +1,4 @@
-// @flow
-import babel from 'rollup-plugin-babel';
+import babel from '@rollup/plugin-babel';
 import { DEFAULT_EXTENSIONS } from '@babel/core';
 import external from 'rollup-plugin-peer-deps-external';
 import commonjs from 'rollup-plugin-commonjs';
@@ -8,7 +7,6 @@ import json from 'rollup-plugin-json';
 import url from 'rollup-plugin-url';
 import resolve from 'rollup-plugin-node-resolve';
 import { terser } from 'rollup-plugin-terser';
-import typescript from 'rollup-plugin-typescript2';
 
 import replace from 'rollup-plugin-replace';
 
@@ -78,15 +76,15 @@ const normalBundle = {
 	],
 	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
 	plugins: [
+		resolve({ extensions: ['.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
 		external(),
-		typescript(),
 		babel({
-			runtimeHelpers: true,
+			babelHelpers: 'runtime',
 			exclude: nodeModulesDirectory,
-			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
+			extensions: ['.ts'],
 		}),
 		scss({
 			output: pkg.style,
@@ -113,16 +111,16 @@ const browserBundle = {
 	],
 	external: externalPackages,
 	plugins: [
+		resolve({ extensions: ['.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
 		browserIgnore,
 		external(),
-		typescript(),
 		babel({
-			runtimeHelpers: true,
+			babelHelpers: 'runtime',
 			exclude: nodeModulesDirectory,
-			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
+			extensions: [...DEFAULT_EXTENSIONS, '.ts'],
 		}),
 		scss({
 			output: pkg.style,
@@ -146,15 +144,15 @@ const fullBrowserBundle = {
 		},
 	],
 	plugins: [
+		resolve({ extensions: ['.ts'] }),
 		replace({
 			'process.env.NODE_ENV': JSON.stringify('production'),
 		}),
 		external(),
-		typescript(),
 		babel({
-			runtimeHelpers: true,
+			babelHelpers: 'runtime',
 			exclude: nodeModulesDirectory,
-			extensions: [...DEFAULT_EXTENSIONS, '.ts', '.tsx'],
+			extensions: [...DEFAULT_EXTENSIONS, '.ts'],
 		}),
 		scss({
 			output: pkg.style,
