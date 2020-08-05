@@ -89,9 +89,9 @@ const users = await client.queryUsers({ nickname: 'streamUser' });
 const users = await client.queryUsers({ nickname: { $eq: 'streamUser' } });
 
 // Invalid queries
-const users = await client.queryUsers({ nickname: { $contains: ['stream'] } });
-const users = await client.queryUsers({ nickname: 1080 });
-const users = await client.queryUsers({ name: { $eq: 1080 } });
+const users = await client.queryUsers({ nickname: { $contains: ['stream'] } }); // $contains is only an operator on arrays
+const users = await client.queryUsers({ nickname: 1080 }); // nickname must be a string
+const users = await client.queryUsers({ name: { $eq: 1080 } }); // name must be a string
 ```
 
 **Note:** If you have differing union types like `ChatUser1 | ChatUser2` or `UserMessage | AdminMessage` you can use [type guards](https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types) to maintain type safety when dealing with the results of queries.
@@ -116,11 +116,15 @@ await channel.create();
 // messages: SearchAPIResponse<UserMessage | AdminMessage, ChatAttachment, ChatChannel, CustomReaction, ChatUser1 | ChatUser2>
 const messages = await channel.search({ country: 'NL' });
 const messages = await channel.search({ priorityLevel: { $gt: 5 } });
-const messages = await channel.search({ $and: [{ priorityLevel: { $gt: 5 } }, { deleted_at: { $exists: false }}] });
+const messages = await channel.search({
+  $and: [{ priorityLevel: { $gt: 5 } }, { deleted_at: { $exists: false } }],
+});
 
 // Invalid queries
-const messages = await channel.search({ country: { $eq 5 } });
-const messages = await channel.search({ $or: [{ id: '2' }, { reaction_counts: { $eq: 'hello' }}] });
+const messages = await channel.search({ country: { $eq: 5 } }); // country must be a string
+const messages = await channel.search({
+  $or: [{ id: '2' }, { reaction_counts: { $eq: 'hello' } }],
+}); // reaction_counts must be a number
 ```
 
 Custom types are carried into all creation functions as well.
@@ -131,9 +135,9 @@ client.setUser({ id: 'testId', nickname: 'testUser', age: 3 }, 'TestToken');
 client.setUser({ id: 'testId', nickname: 'testUser', avatar: 'testAvatar' }, 'TestToken');
 
 // Invalid
-client.setUser({ id: 'testId' }, 'TestToken');
-client.setUser({ id: 'testId', nickname: true }, 'TestToken');
-client.setUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestToken');
+client.setUser({ id: 'testId' }, 'TestToken'); // Type ChatUser1 | ChatUser2 requires nickname for both types
+client.setUser({ id: 'testId', nickname: true }, 'TestToken'); // nickname must be a string
+client.setUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestToken'); // country does not exist on type ChatUser1 | ChatUser2
 ```
 
 ## More
