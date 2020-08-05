@@ -6,7 +6,7 @@ import FormData from 'form-data';
 import http from 'http';
 import https from 'https';
 import uuidv4 from 'uuid/v4';
-import WebSocket from 'ws';
+import WebSocket from 'isomorphic-ws';
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';

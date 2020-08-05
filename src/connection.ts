@@ -1,4 +1,3 @@
-import isoWS from 'isomorphic-ws';
 import WebSocket from 'isomorphic-ws';
 import { chatCodes, sleep } from './utils';
 import { TokenManager } from './token_manager';
@@ -183,7 +182,7 @@ export class StableWSConnection<
     },
   ) => void;
   resolvePromise?: (value?: WebSocket.MessageEvent) => void;
-  ws?: isoWS;
+  ws?: WebSocket;
   wsID: number;
 
   constructor({
@@ -404,7 +403,7 @@ export class StableWSConnection<
     await this.tokenManager.tokenReady();
     this._setupConnectionPromise();
     const wsURL = this._buildUrl();
-    this.ws = new isoWS(wsURL);
+    this.ws = new WebSocket(wsURL);
     this.ws.onopen = this.onopen.bind(this, this.wsID);
     this.ws.onclose = this.onclose.bind(this, this.wsID);
     this.ws.onerror = this.onerror.bind(this, this.wsID);
