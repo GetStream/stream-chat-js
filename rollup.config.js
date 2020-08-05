@@ -14,7 +14,6 @@ const externalPackages = [
 	'axios',
 	'form-data',
 	'isomorphic-ws',
-	'lodash',
 	'seamless-immutable',
 	'uuid/v4',
 	'base64-js',
@@ -36,7 +35,6 @@ const extensions = ['.mjs', '.json', '.node', '.js', '.ts'];
 const babelConfig = {
 	babelHelpers: 'runtime',
 	exclude: 'node_modules/**',
-	include: ['src/**/*'],
 	extensions,
 };
 
