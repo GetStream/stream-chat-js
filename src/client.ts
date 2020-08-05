@@ -12,8 +12,6 @@ import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pkg = require('../package.json');
 import { TokenManager } from './token_manager';
 import { isFunction, chatCodes } from './utils';
 
@@ -1825,7 +1823,9 @@ export class StreamChat<
   getUserAgent() {
     return (
       this.userAgent ||
-      `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${pkg.version}`
+      `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${
+        process.env.PKG_VERSION
+      }`
     );
   }
 
