@@ -1,3 +1,6 @@
+// basic sanity check
+import Immutable from 'seamless-immutable';
+
 import {
   StreamChat,
   Event,
@@ -7,28 +10,76 @@ import {
   AnyResource,
   Permission,
   MaxPriority,
-} from 'stream-chat';
+  APIResponse,
+  AppSettingsAPIResponse,
+  UserResponse,
+  ConnectionOpen,
+  SendFileAPIResponse,
+  UnknownType,
+  Channel,
+  EventTypes,
+  ChannelState,
+  ChannelMemberResponse,
+  UpdateChannelAPIResponse,
+  PermissionObject,
+} from '..';
 const apiKey = 'apiKey';
 
-// $ExpectType StreamChat
-const client = new StreamChat(apiKey, null, {
+type UserType = {
+  id: string;
+  name?: string;
+  example?: number;
+  phone?: number;
+};
+
+type ChannelType = {
+  color: string;
+};
+
+type AttachmentType = UnknownType;
+type EventType = UnknownType;
+type MessageType = UnknownType;
+type ReactionType = UnknownType;
+
+let voidReturn: void;
+let voidPromise: Promise<void>;
+
+const client: StreamChat<
+  ChannelType,
+  UserType,
+  MessageType,
+  AttachmentType,
+  ReactionType,
+  EventType
+> = new StreamChat<
+  ChannelType,
+  UserType,
+  MessageType,
+  AttachmentType,
+  ReactionType,
+  EventType
+>(apiKey, null, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData: {}) => {},
 });
 
-const clientWithoutSecret = new StreamChat(apiKey, {
+const clientWithoutSecret: StreamChat<ChannelType, UserType> = new StreamChat<
+  ChannelType,
+  UserType
+>(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData: {}) => {},
 });
 
-const devToken = client.devToken('joshua'); // $ExpectType string
-client.createToken('james', 3600); // $ExpectType string
-client.getAuthType(); // $ExpectType string
+const devToken: string = client.devToken('joshua');
+const token: string = client.createToken('james', 3600);
+const authType: string = client.getAuthType();
 
-client.setBaseURL('https://chat-us-east-1.stream-io-api.com/'); // $ExpectType void
-client.updateAppSettings({}); // $ExpectType Promise<object>
-client.getAppSettings(); // $ExpectType Promise<object>
-client.disconnect(); // $ExpectType Promise<void>
+voidReturn = client.setBaseURL('https://chat-us-east-1.stream-io-api.com/');
+const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
+const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
+voidPromise = client.disconnect();
+
 const updateRequest = {
   id: 'vishal',
   set: {
@@ -37,30 +88,49 @@ const updateRequest = {
   unset: ['example'],
 };
 
-client.partialUpdateUser(updateRequest); // $ExpectType Promise<UpdateUsersAPIResponse>
-client.partialUpdateUsers([updateRequest]); // $ExpectType Promise<UpdateUsersAPIResponse>
+// TODO: update request type seems to be wrong! @nhannah
+const updateUser: Promise<{
+  users: { [key: string]: UserResponse<UserType> };
+}> = client.partialUpdateUser(updateRequest);
+const updateUsers: Promise<{
+  users: { [key: string]: UserResponse<UserType> };
+}> = client.partialUpdateUsers([updateRequest]);
 
 const eventHandler = (event: Event) => {};
-client.on(eventHandler);
-client.off(eventHandler);
-client.on('message.new', eventHandler);
-client.off('message.new', eventHandler);
+// @ts-expect-error
+voidReturn = client.on(eventHandler);
+voidReturn = client.off(eventHandler);
+// @ts-expect-error
+voidReturn = client.on('message.new', eventHandler);
+voidReturn = client.off('message.new', eventHandler);
 
-client.setUser({ id: 'john', phone: 2 }, devToken); // $ExpectType Promise<ConnectAPIResponse>
-client.setUser({ id: 'john', phone: 2 }, async () => 'token'); // $ExpectType Promise<ConnectAPIResponse>
-client.setAnonymousUser(); // $ExpectType Promise<void>
-client.setGuestUser({ id: 'steven' }); // $ExpectType Promise<void>
+let userReturn: Promise<void | ConnectionOpen<ChannelType, UserType>>;
+userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
+userReturn = client.setUser({ id: 'john', phone: 2 }, async () => 'token');
 
-client.get('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
-client.put('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
-client.post('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
-client.delete('https://chat-us-east-1.stream-io-api.com/', { id: 2 }); // $ExpectType Promise<APIResponse>
+userReturn = client.setAnonymousUser();
+userReturn = client.setGuestUser({ id: 'steven' });
 
-client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', { id: 'james' }); // $ExpectType Promise<FileUploadAPIResponse>
+type X = { x: string };
+let clientRes: Promise<X>;
+clientRes = client.get<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
+clientRes = client.put<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
+clientRes = client.post<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
+clientRes = client.patch<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
+clientRes = client.delete<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
 
-const event: Event = {
+const file: Promise<SendFileAPIResponse> = client.sendFile(
+  'aa',
+  'bb',
+  'text.jpg',
+  'image/jpg',
+  { id: 'james' },
+);
+
+const type: EventTypes = 'user.updated';
+const event = {
+  type,
   cid: 'channelid',
-  type: 'user.updated',
   message: {
     text: 'Heloo',
     type: 'system',
@@ -83,30 +153,68 @@ const event: Event = {
   unread_count: 3,
   online: true,
 };
-client.dispatchEvent(event); // $ExpectType void
-client.handleEvent(event); // $ExpectType void
-client.recoverState(); // $ExpectType Promise<void>
+voidReturn = client.dispatchEvent(event);
+// @ts-expect-error
+voidReturn = client.handleEvent(event);
+voidPromise = client.recoverState();
 
-const channels = client.queryChannels({}, {}, {});
+const channels: Promise<Channel<
+  AttachmentType,
+  ChannelType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+>[]> = client.queryChannels({}, {}, {});
 channels.then(response => {
-  response[0].type; // $ExpectType string
-  response[0].cid; // $ExpectType string
+  const type: string = response[0].type;
+  const cid: string = response[0].cid;
 });
 
-const channel = client.channel('messaging', 'channelName', { color: 'green' }); // $ExpectType Channel
-const channelState = channel.state; // $ExpectType ChannelState
-channelState.members.someUser12433222; // $ExpectType ImmutableObject<ChannelMemberResponse>
-channelState.members.someUser124332221; // $ExpectType ImmutableObject<ChannelMemberResponse>
+const channel: Channel<
+  AttachmentType,
+  ChannelType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+> = client.channel('messaging', 'channelName', { color: 'green' });
+const channelState: ChannelState<
+  AttachmentType,
+  ChannelType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+> = channel.state;
+const chUser1: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
+  channelState.members.someUser12433222;
+const chUser2: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
+  channelState.members.someUser124332221;
 
-channelState.read.someUserId.user; // $ExpectType ImmutableObject<UserResponse>
-channelState.typing.someUserId; // $ExpectType ImmutableObject<Event<"typing.start">>
-const acceptInvite = channel.acceptInvite({}); // $ExpectType Promise<AcceptInviteAPIResponse>
-acceptInvite.then(value => value);
+const chUser3: Immutable.ImmutableObject<UserResponse<UserType>> =
+  channelState.read.someUserId.user;
+const typing: Immutable.ImmutableObject<Event<
+  EventType,
+  AttachmentType,
+  ChannelType,
+  MessageType,
+  ReactionType,
+  UserType
+>> = channelState.typing['someUserId'];
 
-channel.on(eventHandler);
-channel.off(eventHandler);
-channel.on('message.new', eventHandler);
-channel.off('message.new', eventHandler);
+const acceptInvite: Promise<UpdateChannelAPIResponse<
+  ChannelType,
+  AttachmentType,
+  MessageType,
+  ReactionType,
+  UserType
+>> = channel.acceptInvite({});
+
+voidReturn = channel.on(eventHandler);
+voidReturn = channel.off(eventHandler);
+voidReturn = channel.on('message.new', eventHandler);
+voidReturn = channel.off('message.new', eventHandler);
 
 const permissions = [
   new Permission(
@@ -146,7 +254,7 @@ const permissions = [
 ];
 
 client.updateChannelType('messaging', { permissions }).then(response => {
-  const permissions = response.permissions;
+  const permissions: PermissionObject[] = response.permissions;
   const permissionName: string = permissions[0].name;
   const permissionRoles: string[] = permissions[0].roles;
 });
