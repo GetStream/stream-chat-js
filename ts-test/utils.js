@@ -1,4 +1,4 @@
-const { StreamChat } = require('../..');
+const { StreamChat } = require('../dist');
 require('dotenv').config();
 const apiKey = '892s22ypvt6m';
 const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
