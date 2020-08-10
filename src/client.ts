@@ -65,6 +65,8 @@ import {
   FlagUserResponse,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  SendFileAPIResponse,
+  PartialUserUpdate,
 } from './types';
 
 function isReadableStream(
@@ -776,7 +778,7 @@ export class StreamChat<
     return this.doAxiosRequest<T>('delete', url, null, { params });
   }
 
-  sendFile<T>(
+  sendFile(
     url: string,
     uri: string | NodeJS.ReadableStream | File,
     name?: string,
@@ -805,7 +807,7 @@ export class StreamChat<
       data.append('user', JSON.stringify(user));
     }
     data.append('file', fileField);
-    return this.doAxiosRequest<T>('post', url, data, {
+    return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
         timeout: 0,
@@ -1419,13 +1421,13 @@ export class StreamChat<
   /**
    * partialUpdateUser - Update the given user object
    *
-   * @param {UserResponse<UserType>} userObject which should contain id and any of "set" or "unset" params;
+   * @param {PartialUserUpdate<UserType>} partialUserObject which should contain id and any of "set" or "unset" params;
    * example: {id: "user1", set:{field: value}, unset:["field2"]}
    *
    * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>} list of updated users
    */
-  async partialUpdateUser(userObject: UserResponse<UserType>) {
-    return await this.partialUpdateUsers([userObject]);
+  async partialUpdateUser(partialUserObject: PartialUserUpdate<UserType>) {
+    return await this.partialUpdateUsers([partialUserObject]);
   }
 
   /**
@@ -1480,11 +1482,11 @@ export class StreamChat<
   /**
    * updateUsers - Batch partial update of users
    *
-   * @param {UserResponse<UserType>[]} users list of partial update requests
+   * @param {PartialUserUpdate<UserType>[]} users list of partial update requests
    *
    * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  async partialUpdateUsers(users: UserResponse<UserType>[]) {
+  async partialUpdateUsers(users: PartialUserUpdate<UserType>[]) {
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');

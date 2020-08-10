@@ -436,9 +436,7 @@ export type SearchAPIResponse<
   }[];
 };
 
-export type SendFileAPIResponse = SendImageAPIResponse;
-
-export type SendImageAPIResponse = APIResponse & { file: string };
+export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
   MessageType = UnknownType,
@@ -1194,6 +1192,12 @@ export type Mute<UserType> = {
   target: UserResponse<UserType>;
   updated_at: string;
   user: UserResponse<UserType>;
+};
+
+export type PartialUserUpdate<UserType = UnknownType> = {
+  id: string;
+  set?: Partial<UserResponse<UserType>>;
+  unset?: Array<keyof UserResponse<UserType>>;
 };
 
 export type PermissionAPIObject = {

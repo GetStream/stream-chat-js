@@ -26,8 +26,6 @@ import {
   UpdateChannelAPIResponse,
   ChannelMemberAPIResponse,
   UserResponse,
-  SendImageAPIResponse,
-  SendFileAPIResponse,
   UserSort,
   UserFilters,
   InviteOptions,
@@ -208,7 +206,7 @@ export class Channel<
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    return this.getClient().sendFile<SendFileAPIResponse>(
+    return this.getClient().sendFile(
       `${this._channelURL()}/file`,
       uri,
       name,
@@ -223,7 +221,7 @@ export class Channel<
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    return this.getClient().sendFile<SendImageAPIResponse>(
+    return this.getClient().sendFile(
       `${this._channelURL()}/image`,
       uri,
       name,

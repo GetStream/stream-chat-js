@@ -66,6 +66,6 @@ typings/
 
 /.vscode
 
-ts-test/api-response-tests/data.js
-ts-test/api-response-tests/data.ts
+ts-test/data.js
+ts-test/data.ts
 

@@ -498,7 +498,7 @@ executables.forEach(i => {
 const uniqueTypes = types.filter((value, index, self) => self.indexOf(value) === index);
 imports = uniqueTypes.join(', ');
 
-imports = `import { Immutable } from 'seamless-immutable';\n\nimport { ${imports} } from '../..';`;
+imports = `import { Immutable } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
 const tsFileName = `${__dirname}/data.ts`;
 fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
 	if (err) {

@@ -1,4 +1,4 @@
-const { StreamChat } = require('../..');
+const { StreamChat } = require('../dist');
 require('dotenv').config();
 const apiKey = '892s22ypvt6m';
 const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
@@ -38,7 +38,7 @@ module.exports = {
 		return this.getTestClient(true);
 	},
 	getTestClient: function getTestClient(serverSide) {
-		return new StreamChat(apiKey, serverSide ? apiSecret : null);
+		return new StreamChat(apiKey, serverSide ? apiSecret : null, { timeout: 8000 });
 	},
 	getTestClientForUser: async function getTestClientForUser(userID, options = {}) {
 		const client = this.getTestClient(false);
