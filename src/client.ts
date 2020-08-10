@@ -65,6 +65,7 @@ import {
   FlagUserResponse,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  SendFileAPIResponse,
 } from './types';
 
 function isReadableStream(
@@ -776,7 +777,7 @@ export class StreamChat<
     return this.doAxiosRequest<T>('delete', url, null, { params });
   }
 
-  sendFile<T>(
+  sendFile(
     url: string,
     uri: string | NodeJS.ReadableStream | File,
     name?: string,
@@ -805,7 +806,7 @@ export class StreamChat<
       data.append('user', JSON.stringify(user));
     }
     data.append('file', fileField);
-    return this.doAxiosRequest<T>('post', url, data, {
+    return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
         timeout: 0,

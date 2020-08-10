@@ -436,9 +436,7 @@ export type SearchAPIResponse<
   }[];
 };
 
-export type SendFileAPIResponse = SendImageAPIResponse;
-
-export type SendImageAPIResponse = APIResponse & { file: string };
+export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
   MessageType = UnknownType,
