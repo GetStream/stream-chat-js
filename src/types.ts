@@ -1194,6 +1194,12 @@ export type Mute<UserType> = {
   user: UserResponse<UserType>;
 };
 
+export type PartialUserUpdate<UserType = UnknownType> = {
+  id: string;
+  set?: Partial<UserResponse<UserType>>;
+  unset?: Array<keyof UserResponse<UserType>>;
+};
+
 export type PermissionAPIObject = {
   custom?: boolean;
   name?: string;

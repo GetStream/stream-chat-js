@@ -21,6 +21,7 @@ import {
   ChannelState,
   ChannelMemberResponse,
   UpdateChannelAPIResponse,
+  PartialUserUpdate,
   PermissionObject,
 } from '..';
 const apiKey = 'apiKey';
@@ -41,7 +42,7 @@ type EventType = UnknownType;
 type MessageType = UnknownType;
 type ReactionType = UnknownType;
 
-let voidReturn: void;
+let voidReturn: void | { unsubscribe: () => void };
 let voidPromise: Promise<void>;
 
 const client: StreamChat<
@@ -80,7 +81,7 @@ const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
 const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
 voidPromise = client.disconnect();
 
-const updateRequest = {
+const updateRequest: PartialUserUpdate<UserType> = {
   id: 'vishal',
   set: {
     name: 'Awesome',
@@ -88,7 +89,6 @@ const updateRequest = {
   unset: ['example'],
 };
 
-// TODO: update request type seems to be wrong! @nhannah
 const updateUser: Promise<{
   users: { [key: string]: UserResponse<UserType> };
 }> = client.partialUpdateUser(updateRequest);
@@ -97,10 +97,8 @@ const updateUsers: Promise<{
 }> = client.partialUpdateUsers([updateRequest]);
 
 const eventHandler = (event: Event) => {};
-// @ts-expect-error
 voidReturn = client.on(eventHandler);
 voidReturn = client.off(eventHandler);
-// @ts-expect-error
 voidReturn = client.on('message.new', eventHandler);
 voidReturn = client.off('message.new', eventHandler);
 
@@ -154,8 +152,6 @@ const event = {
   online: true,
 };
 voidReturn = client.dispatchEvent(event);
-// @ts-expect-error
-voidReturn = client.handleEvent(event);
 voidPromise = client.recoverState();
 
 const channels: Promise<Channel<
