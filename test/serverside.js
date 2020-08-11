@@ -1458,34 +1458,37 @@ describe('App configs', function() {
 		});
 	});
 
-	it('Set Custom Command endpoint URL', async function() {
-		// Set custom command endpoint url
-		const custom_command_url = 'http://example.com';
-		await client.updateAppSettings({
-			custom_command_url: custom_command_url,
+	describe('Set custom_command_url', function() {
+		it('Sets valid URL', async function() {
+			// Set custom command endpoint url
+			const custom_command_url = 'http://example.com';
+			await client.updateAppSettings({
+				custom_command_url: custom_command_url,
+			});
+
+			const response = await client.getAppSettings();
+			expect(response.app.custom_command_url).to.be.eq(custom_command_url);
 		});
 
-		let response = await client.getAppSettings();
-		expect(response.app.custom_command_url).to.be.eq(custom_command_url);
-
-		// reject invalid url
-		await expectHTTPErrorCode(
-			400,
-			client.updateAppSettings({
-				custom_command_url: 'gibbrish',
-			}),
-		);
-
-		response = await client.getAppSettings();
-		expect(response.app.custom_command_url).to.be.eq(custom_command_url);
-
-		// reset custom endpoint url
-		await client.updateAppSettings({
-			custom_command_url: '',
+		it('Rejects invalid URL', async function() {
+			// reject invalid url
+			await expectHTTPErrorCode(
+				400,
+				client.updateAppSettings({
+					custom_command_url: 'gibbrish',
+				}),
+			);
 		});
 
-		response = await client.getAppSettings();
-		expect(response.app.custom_command_url).to.be.eq('');
+		it('Accepts empty URL', async function() {
+			// reset custom endpoint url
+			await client.updateAppSettings({
+				custom_command_url: '',
+			});
+
+			const response = await client.getAppSettings();
+			expect(response.app.custom_command_url).to.be.eq('');
+		});
 	});
 });
 
