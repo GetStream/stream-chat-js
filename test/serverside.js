@@ -1982,7 +1982,8 @@ describe('Custom Commands', function() {
 	const client = getTestClient(true);
 	const newName = uuidv4(),
 		newDesc = 'My amazing custom command',
-		newArgs = '[@username] [greeting]';
+		newArgs = '[@username] [greeting]',
+		newSet = 'new_set';
 
 	let updatedCommand;
 
@@ -1991,11 +1992,12 @@ describe('Custom Commands', function() {
 			name: newName,
 			description: newDesc,
 			args: newArgs,
+			set: newSet,
 		});
 		expect(response.command.name).to.equal(newName);
 		expect(response.command.description).to.equal(newDesc);
 		expect(response.command.args).to.equal(newArgs);
-		expect(response.command.set).to.equal('custom_set');
+		expect(response.command.set).to.equal('new_set');
 		expect(response.command.created_at).to.not.equal('0001-01-01T00:00:00Z');
 		expect(response.command.updated_at).to.not.equal('0001-01-01T00:00:00Z');
 		await sleep(1000);
@@ -2006,7 +2008,7 @@ describe('Custom Commands', function() {
 		expect(response.name).to.equal(newName);
 		expect(response.description).to.equal(newDesc);
 		expect(response.args).to.equal(newArgs);
-		expect(response.set).to.equal('custom_set');
+		expect(response.set).to.equal('new_set');
 		expect(response.created_at).to.not.equal('0001-01-01T00:00:00Z');
 		expect(response.updated_at).to.not.equal('0001-01-01T00:00:00Z');
 		await sleep(1000);
@@ -2020,11 +2022,29 @@ describe('Custom Commands', function() {
 		let response = await client.updateCommand(newName, {
 			description: 'updated description',
 			args: 'updated args',
+			set: 'updated_set',
 		});
 		updatedCommand = response.command;
 		expect(updatedCommand.name).to.equal(newName);
 		expect(updatedCommand.description).to.equal('updated description');
 		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
+		await sleep(1000);
+	});
+
+	it('Should ignore AppPK on update command', async function() {
+		let response = await client.updateCommand(newName, {
+			description: 'updated description',
+			args: 'updated args',
+			set: 'updated_set',
+			app_pk: 0,
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.app_pk).to.not.equal(0);
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
 		await sleep(1000);
 	});
 
