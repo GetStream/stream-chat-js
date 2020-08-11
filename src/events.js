@@ -22,6 +22,7 @@ export const EVENT_MAP = {
 	'channel.truncated': true,
 	'channel.created': true,
 	'channel.hidden': true,
+	'channel.visible': true,
 	'health.check': true,
 	'notification.message_new': true,
 	'notification.mark_read': true,
