@@ -5,11 +5,7 @@ import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../src';
-import {
-	expectHTTPErrorCode,
-	getTestClientForUserWithoutWarmUp,
-	getTestClientWithoutWarmUp,
-} from './utils';
+import { expectHTTPErrorCode, getTestClientWithWarmUp } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
 const mockServer = require('mockttp').getLocal();
@@ -3023,18 +3019,27 @@ describe('warm up', () => {
 		// populate cache
 		await channel.query();
 
-		// first request with warmUp
-		const warmUpClient = await getTestClientForUser(user);
+		// first client uses warmUp
+		const warmUpClient = getTestClientWithWarmUp();
 		warmUpClient.setBaseURL(baseUrl);
+		warmUpClient.health = await warmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
+
 		let t0 = new Date().getTime();
 		await warmUpClient.channel(channel.type, channel.id).query();
 		let t1 = new Date().getTime();
 		const withWarmUpDur = t1 - t0;
 		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
 
-		// second request without warmUp
-		const noWarmUpClient = await getTestClientForUserWithoutWarmUp(user);
+		// second client without warmUp
+		const noWarmUpClient = await getTestClient(false);
 		noWarmUpClient.setBaseURL(baseUrl);
+		noWarmUpClient.health = await noWarmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
 		t0 = new Date().getTime();
 		await noWarmUpClient.channel(channel.type, channel.id).query();
 		t1 = new Date().getTime();

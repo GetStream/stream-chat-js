@@ -56,7 +56,7 @@ export class StreamChat {
 		const defaultOptions = {
 			timeout: 3000,
 			withCredentials: false, // making sure cookies are not sent
-			warmUp: true,
+			warmUp: false,
 		};
 
 		if (this.node) {
@@ -792,9 +792,8 @@ export class StreamChat {
 			logger: this.logger,
 		});
 
-		let warmUp;
 		if (this.options.warmUp) {
-			warmUp = this.doAxiosRequest('options', this.baseURL + '/connect');
+			this.doAxiosRequest('options', this.baseURL + '/connect');
 		}
 
 		const handshake = await this.wsConnection.connect();
