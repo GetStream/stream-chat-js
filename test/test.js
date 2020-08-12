@@ -3008,13 +3008,14 @@ describe('paginate order with id_gt{,e}', () => {
 	});
 });
 
-describe.only('warm up', () => {
+describe('warm up', () => {
 	let channel;
 	let client;
-	let user = uuidv4();
+	const user = uuidv4();
 	it('shouldReuseConnection', async () => {
+		const baseUrl = 'https://chat-us-east-1.stream-io-api.com';
 		const client = getTestClient(true);
-		client.setBaseURL('https://chat-us-east-1.stream-io-api.com');
+		client.setBaseURL(baseUrl);
 		const health = await client.setUser({ id: user }, createUserToken(user));
 		client.health = health;
 		channel = await client.channel('messaging', uuidv4());
@@ -3024,6 +3025,7 @@ describe.only('warm up', () => {
 
 		// first request with warmUp
 		const warmUpClient = await getTestClientForUser(user);
+		warmUpClient.setBaseURL(baseUrl);
 		let t0 = new Date().getTime();
 		await warmUpClient.channel(channel.type, channel.id).query();
 		let t1 = new Date().getTime();
@@ -3032,6 +3034,7 @@ describe.only('warm up', () => {
 
 		// second request without warmUp
 		const noWarmUpClient = await getTestClientForUserWithoutWarmUp(user);
+		noWarmUpClient.setBaseURL(baseUrl);
 		t0 = new Date().getTime();
 		await noWarmUpClient.channel(channel.type, channel.id).query();
 		t1 = new Date().getTime();
