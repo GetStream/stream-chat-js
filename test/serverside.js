@@ -2011,6 +2011,42 @@ describe('Custom Commands', function() {
 		);
 	});
 
+	it('Should fail on empty args', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: '',
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on empty description', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: '',
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on empty set', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: newArgs,
+				set: '',
+			}),
+		);
+	});
+
 	it('Should create a new command', async function() {
 		let response = await client.createCommand({
 			name: newName,
@@ -2044,6 +2080,7 @@ describe('Custom Commands', function() {
 
 	it('Should update command', async function() {
 		let response = await client.updateCommand(newName, {
+			name: newName,
 			description: 'updated description',
 			args: 'updated args',
 			set: 'updated_set',
@@ -2058,6 +2095,7 @@ describe('Custom Commands', function() {
 
 	it('Should ignore AppPK on update command', async function() {
 		let response = await client.updateCommand(newName, {
+			name: newName,
 			description: 'updated description',
 			args: 'updated args',
 			set: 'updated_set',
@@ -2076,8 +2114,22 @@ describe('Custom Commands', function() {
 		await expectHTTPErrorCode(
 			404,
 			client.updateCommand('non-existent', {
+				name: newName,
 				description: 'updated description',
 				args: 'updated args',
+				set: 'updated_set',
+			}),
+		);
+	});
+
+	it('Should fail on invalid name update command', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.updateCommand(newName, {
+				name: 'invalid name',
+				description: 'updated description',
+				args: 'updated args',
+				set: 'updated_set',
 			}),
 		);
 	});
