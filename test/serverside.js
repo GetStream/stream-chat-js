@@ -2094,7 +2094,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2140,7 +2140,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2183,7 +2183,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2356,7 +2356,7 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
-			expect(response.commands).to.have.length(6);
+			expect(response.commands).to.have.length(7);
 		});
 
 		it('changing commands to fun_set', async function() {
