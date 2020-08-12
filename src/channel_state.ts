@@ -13,7 +13,13 @@ import {
 const byDate = (
   a: { created_at: Date | Immutable.ImmutableDate },
   b: { created_at: Date | Immutable.ImmutableDate },
-) => a.created_at.getTime() - b.created_at.getTime();
+) => {
+  if (!a.created_at) return -1;
+
+  if (!b.created_at) return 1;
+
+  return a.created_at.getTime() - b.created_at.getTime();
+};
 
 /**
  * ChannelState - A container class for the channel state.
@@ -215,11 +221,16 @@ export class ChannelState<
       const parsedMsg = this.messageToImmutable(message);
 
       parsedMessages.push(parsedMsg);
+
+      if (!this.last_message_at) {
+        this.last_message_at = new Date(parsedMsg.created_at.getTime());
+      }
+
       if (
         this.last_message_at &&
         parsedMsg.created_at.getTime() > this.last_message_at.getTime()
       ) {
-        this.last_message_at = new Date(parsedMsg.created_at.getDate());
+        this.last_message_at = new Date(parsedMsg.created_at.getTime());
       }
     }
 

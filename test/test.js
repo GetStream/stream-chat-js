@@ -1809,7 +1809,9 @@ describe('Chat', () => {
 			expect(result.messages.length).to.equal(2);
 			// verify that the id lte filter works
 			for (const m of result.messages) {
-				expect(m.created_at).to.be.below(oldestMessage.created_at);
+				const createdAt = new Date(m.created_at);
+				const oldestMessageCreatedAt = new Date(oldestMessage.created_at);
+				expect(createdAt).to.be.below(oldestMessageCreatedAt);
 			}
 			// the state should have 4 messages
 			expect(paginationChannel.state.messages.length).to.equal(4);

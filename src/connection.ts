@@ -16,7 +16,7 @@ const isCloseEvent = (
 
 const isErrorEvent = (
   res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
-): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).message !== undefined;
+): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).error !== undefined;
 
 type Constructor<
   AttachmentType extends UnknownType = UnknownType,
@@ -700,34 +700,40 @@ export class StableWSConnection<
     event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
     isWSFailure = true,
   ) => {
+    let code;
+    let statusCode;
+    let message;
+    if (isCloseEvent(event)) {
+      code = event.code;
+      statusCode = 'unknown';
+      message = event.reason;
+    }
+
+    if (isErrorEvent(event)) {
+      code = event.error.code;
+      statusCode = event.error.StatusCode;
+      message = event.error.message;
+    }
+
     // Keeping this `warn` level log, to avoid cluttering of error logs from ws failures.
-    this.logger(
-      'warn',
-      `connection:_errorFromWSEvent() - WS failed with code ${
-        isCloseEvent(event) ? event.code : 'unknown'
-      }`,
-      {
-        tags: ['connection'],
-        event,
-      },
-    );
+    this.logger('warn', `connection:_errorFromWSEvent() - WS failed with code ${code}`, {
+      tags: ['connection'],
+      event,
+    });
 
     const error = new Error(
-      `WS failed with code ${isCloseEvent(event) ? event.code : 'unknown'} and reason - ${
-        isErrorEvent(event) ? event.message : 'unknown'
-      }`,
+      `WS failed with code ${code} and reason - ${message}`,
     ) as Error & {
       code?: string | number;
       isWSFailure?: boolean;
       StatusCode?: string | number;
     };
-    error.code = isCloseEvent(event) ? event.code : undefined;
+    error.code = code;
     /**
      * StatusCode does not exist on any event types but has been left
      * as is to preserve JS functionality during the TS implementation
      */
-    // @ts-expect-error
-    error.StatusCode = event.StatusCode ? event.StatusCode : undefined;
+    error.StatusCode = statusCode;
     error.isWSFailure = isWSFailure;
     return error;
   };
