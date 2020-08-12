@@ -1987,6 +1987,30 @@ describe('Custom Commands', function() {
 
 	let updatedCommand;
 
+	it('Should fail on empty name', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: '',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on invalid name with spaces', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
 	it('Should create a new command', async function() {
 		let response = await client.createCommand({
 			name: newName,
