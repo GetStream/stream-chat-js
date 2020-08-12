@@ -2078,6 +2078,7 @@ describe('Custom Commands', function() {
 describe('Channel types', function() {
 	const client = getTestClient(true);
 	const newType = uuidv4();
+	let newChannelTypeCustomCmd;
 
 	describe('Creating channel types', function() {
 		let newChannelType;
@@ -2094,7 +2095,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2140,7 +2141,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2183,7 +2184,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['excuse', 'giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2200,6 +2201,30 @@ describe('Channel types', function() {
 			expect(newChanType.permissions).to.be.sortedBy('priority', {
 				descending: true,
 			});
+		});
+	});
+
+	describe('Creating channel types with custom command', function() {
+		it('should work fine', async function() {
+			newChannelTypeCustomCmd = await client.createChannelType({
+				name: uuidv4(),
+				commands: ['excuse', 'fun_set', 'ban'],
+			});
+			await sleep(1000);
+		});
+
+		it('should have the right commands', function() {
+			expect(newChannelTypeCustomCmd.commands).like(['excuse', 'giphy', 'ban']);
+		});
+
+		it('Should fail non-existing command', async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.createChannelType({
+					name: uuidv4(),
+					commands: ['xyz'],
+				}),
+			);
 		});
 	});
 
@@ -2378,6 +2403,28 @@ describe('Channel types', function() {
 				updated_at: 'something-else',
 			});
 			await expectHTTPErrorCode(400, p);
+		});
+	});
+
+	describe('Updating channel types with custom command', function() {
+		it('default is fine', async function() {
+			const response = await client.updateChannelType(
+				newChannelTypeCustomCmd.name,
+				{
+					commands: ['excuse', 'fun_set', 'ban'],
+				},
+			);
+
+			expect(response.commands).like(['excuse', 'giphy', 'ban']);
+		});
+
+		it('updating to a non existing command should fail', async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.updateChannelType(newChannelTypeCustomCmd.name, {
+					commands: ['xyz'],
+				}),
+			);
 		});
 	});
 
