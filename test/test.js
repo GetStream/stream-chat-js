@@ -3022,7 +3022,6 @@ describe.only('warm up', () => {
 		// populate cache
 		await channel.query();
 
-		// create a channel
 		// first request with warmUp
 		const warmUpClient = await getTestClientForUser(user);
 		let t0 = new Date().getTime();
@@ -3030,6 +3029,8 @@ describe.only('warm up', () => {
 		let t1 = new Date().getTime();
 		const withWarmUpDur = t1 - t0;
 		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
+
+		// second request without warmUp
 		const noWarmUpClient = await getTestClientForUserWithoutWarmUp(user);
 		t0 = new Date().getTime();
 		await noWarmUpClient.channel(channel.type, channel.id).query();
