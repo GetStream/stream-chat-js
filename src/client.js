@@ -799,10 +799,6 @@ export class StreamChat {
 
 		const handshake = await this.wsConnection.connect();
 		this.connectionID = this.wsConnection.connectionID;
-		if (this.options.warmUp) {
-			// wait for warm up connection to complete
-			await warmUp;
-		}
 		return handshake;
 	}
 
