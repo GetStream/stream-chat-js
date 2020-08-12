@@ -2146,6 +2146,18 @@ describe('Custom Commands', function() {
 		);
 	});
 
+	it('Should fail on reserved name update command', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.updateCommand(newName, {
+				name: 'giphy',
+				description: 'updated description',
+				args: 'updated args',
+				set: 'updated_set',
+			}),
+		);
+	});
+
 	it('Should list commands', async function() {
 		let response = await client.listCommands();
 		expect(response.commands).to.deep.contain(updatedCommand);
