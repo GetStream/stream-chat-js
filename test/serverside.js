@@ -2047,6 +2047,18 @@ describe('Custom Commands', function() {
 		);
 	});
 
+	it('Should fail on reserved name', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'giphy',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
 	it('Should create a new command', async function() {
 		let response = await client.createCommand({
 			name: newName,
