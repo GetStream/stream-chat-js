@@ -2171,7 +2171,26 @@ describe('Custom Commands', function() {
 	});
 
 	it('Should fail non-existing delete command', async function() {
-		await expectHTTPErrorCode(404, client.getCommand('non-existent'));
+		await expectHTTPErrorCode(404, client.deleteCommand('non-existent'));
+	});
+
+	it('Should fail delete command if command is in use', async function() {
+		await client.createCommand({
+			name: newName,
+			description: newDesc,
+			args: newArgs,
+			set: newSet,
+		});
+		await sleep(1000);
+		await client.createChannelType({
+			name: newName,
+			commands: [newName],
+		});
+
+		await expectHTTPErrorCode(400, client.deleteCommand(newName));
+
+		await client.deleteChannelType(newName);
+		client.deleteCommand(newName);
 	});
 });
 
