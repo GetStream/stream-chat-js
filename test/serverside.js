@@ -2126,7 +2126,7 @@ describe('Custom Commands', function() {
 		await expectHTTPErrorCode(
 			404,
 			client.updateCommand('non-existent', {
-				name: newName,
+				name: 'something-else',
 				description: 'updated description',
 				args: 'updated args',
 				set: 'updated_set',
@@ -2181,7 +2181,6 @@ describe('Custom Commands', function() {
 			args: newArgs,
 			set: newSet,
 		});
-		await sleep(1000);
 		await client.createChannelType({
 			name: newName,
 			commands: [newName],
