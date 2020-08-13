@@ -653,6 +653,9 @@ describe('App configs', function() {
 	});
 
 	it('Using a tampered token fails because of auth enabled', async function() {
+		await client.updateAppSettings({
+			disable_auth_checks: false,
+		});
 		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
 		client2.disconnect(5000);
 	});
