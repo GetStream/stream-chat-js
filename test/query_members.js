@@ -357,5 +357,15 @@ describe('Query Members', function() {
 			expect(resp.members[0].user_id).to.be.equal(user1);
 			expect(resp.members[1].user_id).to.be.equal(user2);
 		});
+
+		it('unsupported operator', async function() {
+			const p = channel.queryMembers({
+				last_active: { $in: [user1LastActive] },
+			});
+
+			await expect(p).to.be.rejectedWith(
+				'StreamChat error code 4: QueryMembers failed with error: "operator "$in" is not allowed for field "last_active"',
+			);
+		});
 	});
 });
