@@ -267,7 +267,7 @@ describe('Query Members', function() {
 		expect(result.members[0].user_id).to.be.equal(rob);
 	});
 
-	describe.only('query by user last_active', function() {
+	describe('query by user last_active', function() {
 		let channel;
 		const user1 = 'u1-' + uuidv4();
 		const user2 = 'u2-' + uuidv4();
