@@ -7,13 +7,9 @@
  *
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
-  promise
-    .then(() => {
-      // do nothing...
-    })
-    .catch(error => {
-      console.warn(`failed to do ${name}, ran into error: `, error);
-    });
+  promise.then().catch(error => {
+    console.warn(`failed to do ${name}, ran into error: `, error);
+  });
 }
 
 export const sleep = (m: number): Promise<void> => new Promise(r => setTimeout(r, m));
