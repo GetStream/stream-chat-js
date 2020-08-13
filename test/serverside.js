@@ -2134,28 +2134,19 @@ describe('Custom Commands', function() {
 		);
 	});
 
-	it('Should fail on invalid name update command', async function() {
-		await expectHTTPErrorCode(
-			400,
-			client.updateCommand(newName, {
-				name: 'invalid name',
-				description: 'updated description',
-				args: 'updated args',
-				set: 'updated_set',
-			}),
-		);
-	});
-
-	it('Should fail on reserved name update command', async function() {
-		await expectHTTPErrorCode(
-			400,
-			client.updateCommand(newName, {
-				name: 'giphy',
-				description: 'updated description',
-				args: 'updated args',
-				set: 'updated_set',
-			}),
-		);
+	it('Should ignore name on update command', async function() {
+		let response = await client.updateCommand(newName, {
+			name: 'giphy',
+			description: 'updated description',
+			args: 'updated args',
+			set: 'updated_set',
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
+		await sleep(1000);
 	});
 
 	it('Should list commands', async function() {
