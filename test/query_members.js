@@ -6,6 +6,7 @@ import {
 	createUsers,
 	getTestClientForUser,
 	expectHTTPErrorCode,
+	sleep,
 } from './utils';
 import uuidv4 from 'uuid/v4';
 
@@ -264,5 +265,61 @@ describe('Query Members', function() {
 		let result = await distinctChannel.queryMembers({ id: rob });
 		expect(result.members.length).to.be.equal(1);
 		expect(result.members[0].user_id).to.be.equal(rob);
+	});
+
+	describe.only('query by user last_active', function() {
+		let channel;
+		const user1 = 'u1-' + uuidv4();
+		const user2 = 'u2-' + uuidv4();
+		const user3 = 'u3-' + uuidv4();
+
+		let user1LastActive;
+		let user2LastActive;
+
+		before(async function() {
+			await createUsers([user1, user2, user3]);
+
+			channel = ssClient.channel('messaging', uuidv4(), {
+				created_by_id: user1,
+				members: [user1, user2, user3],
+			});
+			await channel.create();
+			const user1Client = await getTestClientForUser(user1);
+
+			await sleep(100);
+			const user2Client = await getTestClientForUser(user2);
+			user1Client.disconnect();
+			user2Client.disconnect();
+
+			const resp = await ssClient.queryUsers(
+				{ id: { $in: [user1, user2] } },
+				{},
+				{},
+			);
+
+			const getUser = function(user) {
+				return function(u) {
+					return u.id === user;
+				};
+			};
+
+			user1LastActive = resp.users.filter(getUser(user1))[0].last_active;
+			user2LastActive = resp.users.filter(getUser(user2))[0].last_active;
+		});
+		it('$eq match ', async function() {
+			const resp = await channel.queryMembers({ last_active: user1LastActive });
+			expect(resp.members).to.be.length(1);
+			expect(resp.members[0].user_id).to.be.equal(user1);
+		});
+
+		it('null match ', async function() {
+			const resp = await channel.queryMembers({ last_active: null });
+			console.log(resp);
+			//	expect(resp.members).to.be.length(1);
+			//	expect(resp.members[0].user_id).to.be.equal(user3);
+			for (let i = 0; i < resp.members.length; i++) {
+				console.log(resp.members[i].user);
+			}
+		});
 	});
 });
