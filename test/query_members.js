@@ -281,9 +281,12 @@ describe('Query Members', function() {
 
 			channel = ssClient.channel('messaging', uuidv4(), {
 				created_by_id: user1,
-				members: [user1, user2, user3],
 			});
 			await channel.create();
+			await channel.addMembers([user1]);
+			await channel.addMembers([user2]);
+			await channel.addMembers([user3]);
+
 			const user1Client = await getTestClientForUser(user1);
 
 			await sleep(100);
