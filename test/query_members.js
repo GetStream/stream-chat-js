@@ -358,6 +358,16 @@ describe('Query Members', function() {
 			expect(resp.members[1].user_id).to.be.equal(user2);
 		});
 
+		it('$ne null reverse', async function() {
+			const resp = await channel.queryMembers(
+				{ last_active: { $ne: null } },
+				{ created_at: -1 },
+			);
+			expect(resp.members).to.be.length(2);
+			expect(resp.members[0].user_id).to.be.equal(user2);
+			expect(resp.members[1].user_id).to.be.equal(user1);
+		});
+
 		it('unsupported operator', async function() {
 			const p = channel.queryMembers({
 				last_active: { $in: [user1LastActive] },
