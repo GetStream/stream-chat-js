@@ -286,6 +286,7 @@ describe('Query Members', function() {
 			await channel.addMembers([user1]);
 			await channel.addMembers([user2]);
 			await channel.addMembers([user3]);
+
 			const user1Client = await getTestClientForUser(user1);
 
 			await sleep(100);
