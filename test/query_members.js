@@ -381,4 +381,104 @@ describe('Query Members', function() {
 			);
 		});
 	});
+
+	describe('query by member.user.name', function() {
+		const zappa = { id: 'frank-' + uuidv4(), name: 'Frank Zappa' };
+		let zappaClient;
+		const nick = { id: 'nick-m-' + uuidv4(), name: 'Nick Cave' };
+		let nickClient;
+		const peter = { id: 'peter-' + uuidv4(), name: 'Peter Murphy' };
+		let peterClient;
+		const noname = { id: 'Arya-' + uuidv4() };
+		let nonameClient;
+
+		let channel;
+		let nonameChannel;
+		let ssClient;
+		const identifier = uuidv4();
+		before(async function() {
+			ssClient = await getServerTestClient();
+			await ssClient.upsertUsers([zappa, nick, peter, noname]);
+			channel = ssClient.channel('messaging', uuidv4(), {
+				created_by: zappa,
+				identifier,
+				members: [zappa.id, nick.id, peter.id, noname.id],
+			});
+			await channel.create();
+			nonameChannel = ssClient.channel('messaging', uuidv4(), {
+				created_by: noname,
+				identifier,
+				members: [noname.id],
+			});
+			await nonameChannel.create();
+			nickClient = await getTestClientForUser(nick.id);
+			peterClient = await getTestClientForUser(peter.id);
+			zappaClient = await getTestClientForUser(zappa.id);
+			nonameClient = await getTestClientForUser(noname.id);
+		});
+
+		it('search by last name', async function() {
+			const resp = await nickClient.queryChannels({
+				'member.user.name': { $autocomplete: 'Zappa' },
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+		});
+
+		it('search by similar member name should match', async function() {
+			let resp = await nickClient.queryChannels({
+				'member.user.name': { $autocomplete: 'Nick' },
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+			resp = await nickClient.queryChannels({
+				'member.user.name': { $autocomplete: 'Peter' },
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+			resp = await nickClient.queryChannels({
+				'member.user.name': { $autocomplete: 'Frank' },
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+		});
+
+		it('search by exact name', async function() {
+			const resp = await nickClient.queryChannels({
+				'member.user.name': nickClient.name,
+				identifier,
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+		});
+
+		it('search by null match should return 2 entries for noname', async function() {
+			const resp = await nonameClient.queryChannels({
+				'member.user.name': null,
+				identifier,
+			});
+			expect(resp.length).to.be.equal(2);
+			expect(resp[0].cid).to.be.equal(nonameChannel.cid);
+			expect(resp[1].cid).to.be.equal(channel.cid);
+		});
+
+		it('search by null match should return 1 entries for zappaClient', async function() {
+			const resp = await zappaClient.queryChannels({
+				'member.user.name': null,
+				identifier,
+			});
+			expect(resp.length).to.be.equal(1);
+			expect(resp[0].cid).to.be.equal(channel.cid);
+		});
+
+		it('return all entries for server side', async function() {
+			const resp = await ssClient.queryChannels({
+				'member.user.name': null,
+				identifier,
+			});
+			expect(resp.length).to.be.equal(2);
+			expect(resp[0].cid).to.be.equal(nonameChannel.cid);
+			expect(resp[1].cid).to.be.equal(channel.cid);
+		});
+	});
 });
