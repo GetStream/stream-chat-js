@@ -2151,6 +2151,8 @@ describe('Custom Commands', function() {
 
 	it('Should list commands', async function() {
 		let response = await client.listCommands();
+		console.log(response.commands);
+		console.log(updatedCommand);
 		expect(response.commands).to.deep.contain(updatedCommand);
 		await sleep(1000);
 	});
