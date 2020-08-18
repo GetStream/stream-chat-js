@@ -624,10 +624,10 @@ export type MuteUserOptions<UserType> = {
 };
 
 export type PaginationOptions = {
-  id_gt?: number;
-  id_gte?: number;
-  id_lt?: number;
-  id_lte?: number;
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
   limit?: number;
   offset?: number;
 };
