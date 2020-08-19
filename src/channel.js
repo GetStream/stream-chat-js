@@ -129,6 +129,33 @@ export class Channel {
 	}
 
 	/**
+	 * enableSlowMode - enable slow mode and set cooldown to coolDownInterval
+	 *
+	 * @param {object} coolDownInterval The object to update the custom properties of this channel with
+	 * @return {type} The server response
+	 */
+	async enableSlowMode(coolDownInterval) {
+		const data = await this.getClient().post(this._channelURL(), {
+			slow_mode_interval: coolDownInterval,
+		});
+		this.data = data.channel;
+		return data;
+	}
+
+	/**
+	 * disableSlowMode - disable slow mode
+	 *
+	 * @return {type} The server response
+	 */
+	async disableSlowMode() {
+		const data = await this.getClient().post(this._channelURL(), {
+			slow_mode_interval: 0,
+		});
+		this.data = data.channel;
+		return data;
+	}
+
+	/**
 	 * search - Query messages
 	 *
 	 * @param {object|string}  message search query or object MongoDB style filters
