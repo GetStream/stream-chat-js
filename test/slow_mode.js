@@ -64,7 +64,7 @@ describe.only('channel slow mode', function() {
 		}
 	});
 
-	it('cool down doesnt apply to admin', async function() {
+	it('cool down doesnt apply to admin users', async function() {
 		// send messages with admin
 		const adminChannel = adminClient.channel('messaging', channel.id);
 		for (let i = 0; i < 5; i++) {
@@ -79,5 +79,27 @@ describe.only('channel slow mode', function() {
 			const resp = await channel.sendMessage({ text: 'hi', user_id: admin });
 			expect(resp.message).to.not.be.undefined;
 		}
+	});
+
+	it('disable slow mode', async function() {
+		const resp = await channel.disableSlowMode();
+		expect(resp.channel.slow_mode_interval).to.be.undefined;
+	});
+
+	it('creating a channel with custom field slow_mode_interval should fail', async function() {
+		const ch = ssClient.channel('messaging', uuidv4(), {
+			members: [member, moderator],
+			created_by_id: admin,
+			slow_mode_interval: 2,
+		});
+		await expect(ch.create()).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "data.slow_mode_interval is a reserved field"',
+		);
+	});
+
+	it('update the channel with custom field slow_mode_interval return an error', async function() {
+		await expect(channel.update({ slow_mode_interval: 1 })).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateChannel failed with error: "data.slow_mode_interval is a reserved field"',
+		);
 	});
 });
