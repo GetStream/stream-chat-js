@@ -612,7 +612,7 @@ describe('Channels - Member limit', function() {
 		);
 	});
 
-	it('limit > 100 should return an errro', async function() {
+	it('limit > 100 should raise an error', async function() {
 		const p = ssClient.queryChannels({ unique }, {}, { member_limit: 101 });
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "member_limit must be 100 or less',
