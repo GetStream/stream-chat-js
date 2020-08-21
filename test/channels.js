@@ -563,7 +563,7 @@ describe('Channels - Members are updated correctly', function() {
 	});
 });
 
-describe.only('Channels - Member limit', function() {
+describe('Channels - Member limit', function() {
 	const memberOne = `one-${uuidv4()}`;
 	const memberTwo = `two-${uuidv4()}`;
 	const memberThree = `three-${uuidv4()}`;
