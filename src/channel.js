@@ -136,7 +136,7 @@ export class Channel {
 	 */
 	async enableSlowMode(coolDownInterval) {
 		const data = await this.getClient().post(this._channelURL(), {
-			slow_mode_interval: coolDownInterval,
+			cooldown: coolDownInterval,
 		});
 		this.data = data.channel;
 		return data;
@@ -149,7 +149,7 @@ export class Channel {
 	 */
 	async disableSlowMode() {
 		const data = await this.getClient().post(this._channelURL(), {
-			slow_mode_interval: 0,
+			cooldown: 0,
 		});
 		this.data = data.channel;
 		return data;

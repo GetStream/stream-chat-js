@@ -12,7 +12,7 @@ describe.only('channel slow mode', function() {
 	const admin = 'admin-' + uuidv4();
 	const member = 'member' + uuidv4();
 	let ssClient;
-	let modClient;
+	let moderatorClient;
 	let adminClient;
 	let memberClient;
 	let channel;
@@ -23,7 +23,7 @@ describe.only('channel slow mode', function() {
 			{ id: member },
 			{ id: moderator },
 		]);
-		modClient = await getTestClientForUser(moderator);
+		moderatorClient = await getTestClientForUser(moderator);
 		memberClient = await getTestClientForUser(member);
 		adminClient = await getTestClientForUser(admin);
 		channel = ssClient.channel('messaging', uuidv4(), {
@@ -34,9 +34,28 @@ describe.only('channel slow mode', function() {
 		await channel.addModerators([moderator]);
 	});
 
-	it('enable slow mode', async function() {
-		const resp = await channel.enableSlowMode(1);
-		expect(resp.channel.slow_mode_interval).to.be.equal(1);
+	it('server side auth clients should be able to change cooldown', async function() {
+		const resp = await channel.enableSlowMode(3);
+		expect(resp.channel.cooldown).to.be.equal(3);
+	});
+
+	it('moderator users should be able to change cooldown', async function() {
+		const resp = await moderatorClient
+			.channel('messaging', channel.id)
+			.enableSlowMode(2);
+		expect(resp.channel.cooldown).to.be.equal(2);
+	});
+
+	it('admin users should be able to change cooldown', async function() {
+		const resp = await adminClient.channel('messaging', channel.id).enableSlowMode(1);
+		expect(resp.channel.cooldown).to.be.equal(1);
+	});
+
+	it('regular members cannot change cooldown', async function() {
+		const p = memberClient.channel('messaging', channel.id).enableSlowMode(1);
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 17: UpdateChannel failed with error: "cooldown settings can only be updated by channel moderator or admin"',
+		);
 	});
 
 	it('an error must be returned for regular users when sending messages under coolDown period', async function() {
@@ -57,7 +76,7 @@ describe.only('channel slow mode', function() {
 
 	it('cool down doesnt apply to moderators', async function() {
 		// send messages with moderator
-		const modChannel = modClient.channel('messaging', channel.id);
+		const modChannel = moderatorClient.channel('messaging', channel.id);
 		for (let i = 0; i < 5; i++) {
 			const resp = await modChannel.sendMessage({ text: 'hi' });
 			expect(resp.message).to.not.be.undefined;
@@ -83,23 +102,23 @@ describe.only('channel slow mode', function() {
 
 	it('disable slow mode', async function() {
 		const resp = await channel.disableSlowMode();
-		expect(resp.channel.slow_mode_interval).to.be.undefined;
+		expect(resp.channel.cooldown).to.be.undefined;
 	});
 
-	it('creating a channel with custom field slow_mode_interval should fail', async function() {
+	it('creating a channel with custom field cooldown should fail', async function() {
 		const ch = ssClient.channel('messaging', uuidv4(), {
 			members: [member, moderator],
 			created_by_id: admin,
-			slow_mode_interval: 2,
+			cooldown: 2,
 		});
 		await expect(ch.create()).to.be.rejectedWith(
-			'StreamChat error code 4: GetOrCreateChannel failed with error: "data.slow_mode_interval is a reserved field"',
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "data.cooldown is a reserved field"',
 		);
 	});
 
-	it('update the channel with custom field slow_mode_interval return an error', async function() {
-		await expect(channel.update({ slow_mode_interval: 1 })).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateChannel failed with error: "data.slow_mode_interval is a reserved field"',
+	it('update the channel with custom field cooldown return an error', async function() {
+		await expect(channel.update({ cooldown: 1 })).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateChannel failed with error: "data.cooldown is a reserved field"',
 		);
 	});
 });
