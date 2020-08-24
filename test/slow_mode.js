@@ -7,7 +7,7 @@ import { sleep } from '../src/utils';
 const expect = chai.expect;
 chai.use(chaiAsPromised);
 
-describe.only('channel slow mode', function() {
+describe('channel slow mode', function() {
 	const moderator = 'mod-' + uuidv4();
 	const admin = 'admin-' + uuidv4();
 	const member = 'member' + uuidv4();
