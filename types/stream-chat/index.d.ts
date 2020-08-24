@@ -482,6 +482,9 @@ export class Channel {
   unmute(options?: object): Promise<UnmuteAPIResponse>;
 
   sync(channel_cids: string[], last_sync_at: string): Promise<SyncAPIResponse>;
+
+  enableSlowMode(coolDownInterval: number): Promise<UpdateChannelAPIResponse>;
+  disableSlowMode(): Promise<UpdateChannelAPIResponse>;
 }
 
 export interface ChannelMembership {

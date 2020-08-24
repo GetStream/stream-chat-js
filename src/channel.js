@@ -131,7 +131,7 @@ export class Channel {
 	/**
 	 * enableSlowMode - enable slow mode and set cooldown to coolDownInterval
 	 *
-	 * @param {object} coolDownInterval The object to update the custom properties of this channel with
+	 * @param {object} coolDownInterval the cool down interval in seconds
 	 * @return {type} The server response
 	 */
 	async enableSlowMode(coolDownInterval) {
