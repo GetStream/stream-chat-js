@@ -60,12 +60,13 @@ describe('channel slow mode', function() {
 
 	it('an error must be returned for regular users when sending messages under coolDown period', async function() {
 		const ch = memberClient.channel('messaging', channel.id);
+		await ch.query();
 		let resp = await ch.sendMessage({ text: 'hi' });
 		expect(resp.message).to.not.be.undefined;
 
 		// second message should return an error (under cooldown period)
 		await expect(ch.sendMessage({ text: 'hi' })).to.be.rejectedWith(
-			'StreamChat error code 17: SendMessage failed with error: "sending messages under cool down period is not allowed"',
+			`StreamChat error code 60: SendMessage failed with error: "user ${member} is not allowed to send messages on channel ${ch.cid} under cool down period(1s)"`,
 		);
 		// wait for cool down to complete
 		await sleep(1000);
