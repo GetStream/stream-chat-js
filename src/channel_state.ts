@@ -4,6 +4,7 @@ import {
   ChannelMembership,
   ChannelMemberResponse,
   Event,
+  LiteralStringForUnion,
   MessageResponse,
   ReactionResponse,
   UnknownType,
@@ -30,7 +31,8 @@ export class ChannelState<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion
 > {
   _channel: Channel<
     AttachmentType,
@@ -38,12 +40,21 @@ export class ChannelState<
     EventType,
     MessageType,
     ReactionType,
-    UserType
+    UserType,
+    CommandType
   >;
   watcher_count: number;
   typing: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<
-      Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>
+      Event<
+        EventType,
+        AttachmentType,
+        ChannelType,
+        MessageType,
+        ReactionType,
+        UserType,
+        CommandType
+      >
     >;
   }>;
   read: Immutable.ImmutableObject<{
@@ -57,7 +68,8 @@ export class ChannelState<
         EventType,
         MessageType,
         ReactionType,
-        UserType
+        UserType,
+        CommandType
       >['messageToImmutable']
     >
   >;
@@ -70,7 +82,8 @@ export class ChannelState<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          CommandType
         >['messageToImmutable']
       >
     >;
@@ -92,14 +105,23 @@ export class ChannelState<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >,
   ) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = Immutable<{
       [key: string]: Immutable.Immutable<
-        Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>
+        Event<
+          EventType,
+          AttachmentType,
+          ChannelType,
+          MessageType,
+          ReactionType,
+          UserType,
+          CommandType
+        >
       >;
     }>({});
     this.read = Immutable<{
@@ -118,7 +140,8 @@ export class ChannelState<
             EventType,
             MessageType,
             ReactionType,
-            UserType
+            UserType,
+            CommandType
           >['messageToImmutable']
         >
       >;
@@ -141,7 +164,7 @@ export class ChannelState<
   /**
    * addMessageSorted - Add a message to the state
    *
-   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} newMessage A new message
+   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>} newMessage A new message
    *
    */
   addMessageSorted(
@@ -150,7 +173,8 @@ export class ChannelState<
       AttachmentType,
       ChannelType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >,
   ) {
     return this.addMessagesSorted([newMessage]);
@@ -160,7 +184,7 @@ export class ChannelState<
    * messageToImmutable - Takes the message object. Parses the dates, sets __html
    * and sets the status to received if missing. Returns an immutable message object
    *
-   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>} message an Immutable message object
+   * @param {MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>} message an Immutable message object
    *
    */
   messageToImmutable(
@@ -169,7 +193,8 @@ export class ChannelState<
       AttachmentType,
       ChannelType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >,
   ) {
     return Immutable({
@@ -185,7 +210,7 @@ export class ChannelState<
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
-   * @param {Array<MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} newMessages A list of messages
+   * @param {Array<MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>>} newMessages A list of messages
    * @param {boolean} initializing Weather channel is being initialized.
    *
    */
@@ -195,7 +220,8 @@ export class ChannelState<
       AttachmentType,
       ChannelType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >[],
     initializing = false,
   ) {
@@ -207,7 +233,8 @@ export class ChannelState<
         EventType,
         MessageType,
         ReactionType,
-        UserType
+        UserType,
+        CommandType
       >['messageToImmutable']
     >[] = [];
     for (const message of newMessages) {
@@ -272,7 +299,8 @@ export class ChannelState<
       AttachmentType,
       ChannelType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >,
   ) {
     const { messages } = this;
@@ -319,7 +347,8 @@ export class ChannelState<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          CommandType
         >['messageToImmutable']
       >
     >,
@@ -359,7 +388,8 @@ export class ChannelState<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          CommandType
         >['messageToImmutable']
       >
     >,
@@ -381,7 +411,8 @@ export class ChannelState<
       AttachmentType,
       ChannelType,
       ReactionType,
-      UserType
+      UserType,
+      CommandType
     >,
   ) {
     const { messages } = this;
@@ -432,8 +463,8 @@ export class ChannelState<
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isnt found
    *
-   * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
-   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType, CommandType>['messageToImmutable']>>} messages A list of messages
+   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType, CommandType>['messageToImmutable']>} newMessage The new message
    *
    */
   _addToMessageList(
@@ -445,7 +476,8 @@ export class ChannelState<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          CommandType
         >['messageToImmutable']
       >
     >,
@@ -456,7 +488,8 @@ export class ChannelState<
         EventType,
         MessageType,
         ReactionType,
-        UserType
+        UserType,
+        CommandType
       >['messageToImmutable']
     >,
   ) {
@@ -468,7 +501,8 @@ export class ChannelState<
         EventType,
         MessageType,
         ReactionType,
-        UserType
+        UserType,
+        CommandType
       >['messageToImmutable']
     >> = Immutable([]);
 
@@ -532,7 +566,8 @@ export class ChannelState<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          CommandType
         >['messageToImmutable']
       >
     >,
@@ -570,7 +605,7 @@ export class ChannelState<
           type: 'typing.stop',
           user: { id: userID },
           cid: this._channel.cid,
-        } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType>);
+        } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>);
       }
     }
   }
