@@ -89,7 +89,6 @@ describe('Query Users', function() {
 			unique,
 			username: { $autocomplete: 'rove' },
 		});
-		console.log(response);
 		expect(response.users[0].username).to.equal('rover_curiosity');
 	});
 
