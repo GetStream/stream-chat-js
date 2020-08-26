@@ -476,7 +476,7 @@ describe('Channels - members', function() {
 	});
 });
 
-describe('Channels - Members are update correctly', function() {
+describe('Channels - Members are updated correctly', function() {
 	const channelId = uuidv4();
 	const cid = `messaging:${channelId}`;
 	const johnID = `john-${uuidv4()}`;
@@ -560,6 +560,63 @@ describe('Channels - Members are update correctly', function() {
 		expect(resp.members.length).to.be.equal(0);
 		const channelState = await channel.watch();
 		expect(channelState.members.length).to.be.equal(0);
+	});
+});
+
+describe('Channels - Member limit', function() {
+	const memberOne = `one-${uuidv4()}`;
+	const memberTwo = `two-${uuidv4()}`;
+	const memberThree = `three-${uuidv4()}`;
+	const unique = uuidv4();
+
+	let channel;
+	let ssClient;
+	before(async () => {
+		ssClient = await getServerTestClient();
+		await createUsers([memberOne, memberTwo, memberThree]);
+		channel = ssClient.channel('messaging', uuidv4(), {
+			unique,
+			members: [memberOne, memberTwo, memberThree],
+			created_by_id: memberOne,
+		});
+		await channel.create();
+		await ssClient.disconnect();
+	});
+
+	it('limit 0 should return 0 members', async function() {
+		const memberOneClient = await getTestClientForUser(memberOne);
+		const channels = await memberOneClient.queryChannels(
+			{ unique },
+			{},
+			{ member_limit: 0 },
+		);
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].state.members).to.be.empty;
+	});
+
+	it('limit 1 should return 1 members', async function() {
+		const memberOneClient = await getTestClientForUser(memberOne);
+		const channels = await memberOneClient.queryChannels(
+			{ unique },
+			{},
+			{ member_limit: 1 },
+		);
+		expect(channels.length).to.be.equal(1);
+		expect(channels[0].state.members[memberOne]).to.not.be.null;
+	});
+
+	it('negative limit should raise an error', async function() {
+		const p = ssClient.queryChannels({ unique }, {}, { member_limit: -1 });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "member_limit must be 0 or greater"',
+		);
+	});
+
+	it('limit > 100 should raise an error', async function() {
+		const p = ssClient.queryChannels({ unique }, {}, { member_limit: 101 });
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: QueryChannels failed with error: "member_limit must be 100 or less',
+		);
 	});
 });
 

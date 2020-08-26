@@ -42,7 +42,7 @@ describe('Query Users', function() {
 		expect(response.users[0].id).to.equal(userID);
 	});
 
-	it('autocomplete users by name', async function() {
+	it('autocomplete users by name or username', async function() {
 		const userID = uuidv4();
 		const userID2 = uuidv4();
 		const userID3 = uuidv4();
@@ -53,6 +53,7 @@ describe('Query Users', function() {
 				id: userID,
 				unique,
 				name: 'Curiosity Rover',
+				username: 'curiosity_rover',
 			},
 			{
 				id: userID2,
@@ -66,8 +67,11 @@ describe('Query Users', function() {
 			},
 		]);
 		const response = await serverClient.queryUsers({
-			unique,
-			name: { $autocomplete: 'ro' },
+			unique: unique,
+			$or: [
+				{ name: { $autocomplete: 'ro' } },
+				{ username: { $autocomplete: 'ro' } },
+			],
 		});
 		expect(response.users[0].name).to.equal('Roxy');
 		expect(response.users[1].name).to.equal('Roxanne');
