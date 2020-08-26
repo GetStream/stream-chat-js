@@ -541,10 +541,8 @@ export type CreateCommandOptions = {
 };
 
 export type CreateCommandResponse = APIResponse &
-  CreateCommandOptions & {
-    created_at: string;
-    updated_at: string;
-  };
+  CreateCommandOptions &
+  CreatedAtUpdatedAt;
 
 export type UpdateCommandOptions = {
   args?: string;
@@ -553,10 +551,9 @@ export type UpdateCommandOptions = {
 };
 
 export type UpdateCommandResponse = APIResponse &
-  UpdateCommandOptions & {
-    created_at: string;
+  UpdateCommandOptions &
+  CreatedAtUpdatedAt & {
     name: string;
-    updated_at: string;
   };
 
 export type DeleteCommandResponse = APIResponse & {
@@ -564,23 +561,11 @@ export type DeleteCommandResponse = APIResponse & {
 };
 
 export type GetCommandResponse = APIResponse & {
-  commands: Record<
-    string,
-    CreateCommandOptions & {
-      created_at: string;
-      updated_at: string;
-    }
-  >;
+  commands: Record<string, CreateCommandOptions & CreatedAtUpdatedAt>;
 };
 
 export type ListCommandsResponse = APIResponse & {
-  commands: Record<
-    string,
-    CreateCommandOptions & {
-      created_at: string;
-      updated_at: string;
-    }
-  >;
+  commands: Record<string, CreateCommandOptions & CreatedAtUpdatedAt>;
 };
 
 export type CreateChannelOptions = {
@@ -1097,18 +1082,13 @@ export type Attachment<T = UnknownType> = T & {
 };
 
 export type ChannelConfig = ChannelConfigFields &
-  ChannelConfigDBFields & {
+  CreatedAtUpdatedAt & {
     commands?: CommandVariants[];
   };
 
 export type ChannelConfigAutomod = 'disabled' | 'simple' | 'AI' | '';
 
 export type ChannelConfigAutomodBehavior = 'flag' | 'block' | '';
-
-export type ChannelConfigDBFields = {
-  created_at: string;
-  updated_at: string;
-};
 
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
@@ -1128,7 +1108,7 @@ export type ChannelConfigFields = {
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
-  ChannelConfigDBFields & {
+  CreatedAtUpdatedAt & {
     commands?: CommandResponse[];
   };
 
@@ -1200,6 +1180,11 @@ export type ConnectionOpen<
   created_at?: string;
   me?: OwnUserResponse<ChannelType, UserType>;
   type?: string;
+};
+
+export type CreatedAtUpdatedAt = {
+  created_at: string;
+  updated_at: string;
 };
 
 export type Device<UserType> = DeviceFields & {
