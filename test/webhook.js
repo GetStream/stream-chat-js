@@ -479,7 +479,7 @@ describe('Webhooks', function() {
 	});
 
 	it('channel.created', async function() {
-		let chan2 = client.channel('messaging', uuidv4(), {
+		const chan2 = client.channel('messaging', uuidv4(), {
 			created_by: { id: tommasoID },
 		});
 		const [events] = await Promise.all([
@@ -580,7 +580,7 @@ describe('Webhooks', function() {
 	});
 
 	it('message is flagged', async function() {
-		var messageResponse = await chan.sendMessage({
+		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
 			user_id: jaapID,
 		});
@@ -599,7 +599,7 @@ describe('Webhooks', function() {
 	});
 
 	it('message is unflagged', async function() {
-		var messageResponse = await chan.sendMessage({
+		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
 			user_id: jaapID,
 		});
@@ -785,7 +785,7 @@ describe('Webhooks', function() {
 
 	it('message is flagged', async function() {
 		await chan.create();
-		var messageResponse = await chan.sendMessage({
+		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
 			user_id: jaapID,
 		});
@@ -804,7 +804,7 @@ describe('Webhooks', function() {
 	});
 
 	it('message is unflagged', async function() {
-		var messageResponse = await chan.sendMessage({
+		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
 			user_id: jaapID,
 		});

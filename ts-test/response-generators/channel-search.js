@@ -4,11 +4,8 @@ const utils = require('../utils');
 const johnID = `john-${uuid4()}`;
 
 async function channelSearch() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`, {
-		members: [johnID],
-	});
-	await channel.create();
+	const authClient = await utils.getTestClientForUser(johnID);
+	const channel = await utils.createTestChannelForUser(`poppins-${uuid4()}`, johnID);
 	const keyword = 'supercalifragilisticexpialidocious';
 	await channel.sendMessage({ text: `words ${keyword} what?` });
 	await channel.sendMessage({ text: `great movie because of ${keyword}` });

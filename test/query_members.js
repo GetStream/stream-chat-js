@@ -27,14 +27,14 @@ Promise.config({
 });
 
 describe('Query Members', function() {
-	let mod = 'mod-' + uuidv4();
-	let rob = 'rob-' + uuidv4();
-	let rob2 = 'rob2-' + uuidv4();
-	let adam = 'adam-' + uuidv4();
-	let invited = 'invited-' + uuidv4();
-	let pending = 'pending-' + uuidv4();
-	let rejected = 'rejected-' + uuidv4();
-	let banned = 'banned-' + uuidv4();
+	const mod = 'mod-' + uuidv4();
+	const rob = 'rob-' + uuidv4();
+	const rob2 = 'rob2-' + uuidv4();
+	const adam = 'adam-' + uuidv4();
+	const invited = 'invited-' + uuidv4();
+	const pending = 'pending-' + uuidv4();
+	const rejected = 'rejected-' + uuidv4();
+	const banned = 'banned-' + uuidv4();
 	let channel;
 	let ssClient;
 	before(async function() {
@@ -255,14 +255,14 @@ describe('Query Members', function() {
 
 	it('queryMembers in distinct channels', async function() {
 		const creatorClient = await getTestClientForUser(rob);
-		let distinctChannel = creatorClient.channel('messaging', {
+		const distinctChannel = creatorClient.channel('messaging', {
 			members: [rob, adam, mod],
 		});
 		await distinctChannel.create();
-		let results = await distinctChannel.queryMembers({});
+		const results = await distinctChannel.queryMembers({});
 		expect(results.members.length).to.be.equal(3);
 		await distinctChannel.watch();
-		let result = await distinctChannel.queryMembers({ id: rob });
+		const result = await distinctChannel.queryMembers({ id: rob });
 		expect(result.members.length).to.be.equal(1);
 		expect(result.members[0].user_id).to.be.equal(rob);
 	});
