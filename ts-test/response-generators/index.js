@@ -1,11 +1,11 @@
 module.exports = {
-	...require('./channel-search'),
-	...require('./update-users'),
-	...require('./moderation'),
-	...require('./channel-type'),
-	...require('./message'),
 	...require('./event'),
-	...require('./reaction'),
 	...require('./channel'),
+	...require('./channel-search'),
+	...require('./channel-type'),
 	...require('./client'),
+	...require('./message'),
+	...require('./moderation'),
+	...require('./reaction'),
+	...require('./update-users'),
 };

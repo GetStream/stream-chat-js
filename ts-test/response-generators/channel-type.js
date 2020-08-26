@@ -10,6 +10,17 @@ async function createChannelType() {
 	});
 }
 
+async function deleteChannelType() {
+	const client = utils.getTestClient(true);
+	const newType = uuidv4();
+	await client.createChannelType({
+		name: newType,
+		commands: ['all'],
+	});
+
+	return await client.deleteChannelType(newType);
+}
+
 async function getChannelType() {
 	const client = utils.getTestClient(true);
 
@@ -22,20 +33,9 @@ async function listChannelTypes() {
 	return await client.listChannelTypes();
 }
 
-async function deleteChannelType() {
-	const client = utils.getTestClient(true);
-	const newType = uuidv4();
-	await client.createChannelType({
-		name: newType,
-		commands: ['all'],
-	});
-
-	return await client.deleteChannelType(newType);
-}
-
 module.exports = {
 	createChannelType,
+	deleteChannelType,
 	getChannelType,
 	listChannelTypes,
-	deleteChannelType,
 };

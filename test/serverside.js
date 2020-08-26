@@ -653,6 +653,9 @@ describe('App configs', function() {
 	});
 
 	it('Using a tampered token fails because of auth enabled', async function() {
+		await client.updateAppSettings({
+			disable_auth_checks: false,
+		});
 		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
 		client2.disconnect(5000);
 	});
@@ -1458,12 +1461,12 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Set custom_command_url', function() {
+	describe('Set custom_command_url', async function() {
 		it('Sets valid URL', async function() {
 			// Set custom command endpoint url
 			const custom_command_url = 'http://example.com';
 			await client.updateAppSettings({
-				custom_command_url: custom_command_url,
+				custom_command_url,
 			});
 
 			const response = await client.getAppSettings();
@@ -1838,7 +1841,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const response = await channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(response.message.html).to.equal(html);
@@ -1851,7 +1854,7 @@ describe('Import via Webhook compat', function() {
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
 		const sendPromise = channel.sendMessage({
-			html: html,
+			html,
 			user: created_by,
 		});
 		expect(sendPromise).to.be.rejectedWith('message.html');
@@ -1978,9 +1981,216 @@ describe('User management', function() {
 	});
 });
 
+describe('Custom Commands', function() {
+	const client = getTestClient(true);
+	const newName = uuidv4(),
+		newDesc = 'My amazing custom command',
+		newArgs = '[@username] [greeting]',
+		newSet = 'new_set';
+
+	let updatedCommand;
+
+	it('Should fail on empty name', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: '',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on invalid name with spaces', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on empty args', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: '',
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on empty description', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: '',
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should fail on empty set', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'invalid name',
+				description: newDesc,
+				args: newArgs,
+				set: '',
+			}),
+		);
+	});
+
+	it('Should fail on reserved name', async function() {
+		await expectHTTPErrorCode(
+			400,
+			client.createCommand({
+				name: 'giphy',
+				description: newDesc,
+				args: newArgs,
+				set: newSet,
+			}),
+		);
+	});
+
+	it('Should create a new command', async function() {
+		let response = await client.createCommand({
+			name: newName,
+			description: newDesc,
+			args: newArgs,
+			set: newSet,
+		});
+		expect(response.command.name).to.equal(newName);
+		expect(response.command.description).to.equal(newDesc);
+		expect(response.command.args).to.equal(newArgs);
+		expect(response.command.set).to.equal('new_set');
+		expect(response.command.created_at).to.not.equal('0001-01-01T00:00:00Z');
+		expect(response.command.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+		await sleep(1000);
+	});
+
+	it('Should retrieve command', async function() {
+		let response = await client.getCommand(newName);
+		expect(response.name).to.equal(newName);
+		expect(response.description).to.equal(newDesc);
+		expect(response.args).to.equal(newArgs);
+		expect(response.set).to.equal('new_set');
+		expect(response.created_at).to.not.equal('0001-01-01T00:00:00Z');
+		expect(response.updated_at).to.not.equal('0001-01-01T00:00:00Z');
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing get command', async function() {
+		await expectHTTPErrorCode(404, client.getCommand('non-existent'));
+	});
+
+	it('Should update command', async function() {
+		let response = await client.updateCommand(newName, {
+			name: newName,
+			description: 'updated description',
+			args: 'updated args',
+			set: 'updated_set',
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
+		await sleep(1000);
+	});
+
+	it('Should ignore AppPK on update command', async function() {
+		let response = await client.updateCommand(newName, {
+			name: newName,
+			description: 'updated description',
+			args: 'updated args',
+			set: 'updated_set',
+			app_pk: 0,
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.app_pk).to.not.equal(0);
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing update command', async function() {
+		await expectHTTPErrorCode(
+			404,
+			client.updateCommand('non-existent', {
+				name: 'something-else',
+				description: 'updated description',
+				args: 'updated args',
+				set: 'updated_set',
+			}),
+		);
+	});
+
+	it('Should ignore name on update command', async function() {
+		let response = await client.updateCommand(newName, {
+			name: 'giphy',
+			description: 'updated description',
+			args: 'updated args',
+			set: 'updated_set',
+		});
+		updatedCommand = response.command;
+		expect(updatedCommand.name).to.equal(newName);
+		expect(updatedCommand.description).to.equal('updated description');
+		expect(updatedCommand.args).to.equal('updated args');
+		expect(updatedCommand.set).to.equal('updated_set');
+		await sleep(1000);
+	});
+
+	it('Should list commands', async function() {
+		let response = await client.listCommands();
+		expect(response.commands).to.not.be.empty;
+		await sleep(1000);
+	});
+
+	it('Should delete command', async function() {
+		let response = await client.deleteCommand(newName);
+		expect(response.name).to.equal(newName);
+		await sleep(1000);
+	});
+
+	it('Should fail non-existing delete command', async function() {
+		await expectHTTPErrorCode(404, client.deleteCommand('non-existent'));
+	});
+
+	it('Should fail delete command if command is in use', async function() {
+		await client.createCommand({
+			name: newName,
+			description: newDesc,
+			args: newArgs,
+			set: newSet,
+		});
+		await client.createChannelType({
+			name: newName,
+			commands: [newName],
+		});
+
+		await expectHTTPErrorCode(400, client.deleteCommand(newName));
+
+		await client.deleteChannelType(newName);
+		client.deleteCommand(newName);
+	});
+});
+
 describe('Channel types', function() {
 	const client = getTestClient(true);
 	const newType = uuidv4();
+	let newChannelTypeCustomCmd;
 
 	describe('Creating channel types', function() {
 		let newChannelType;
@@ -1997,7 +2207,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2043,7 +2253,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2086,7 +2296,7 @@ describe('Channel types', function() {
 			const expectedData = {
 				automod: 'disabled',
 				automod_behavior: 'flag',
-				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute'],
+				commands: ['giphy', 'flag', 'ban', 'unban', 'mute', 'unmute', 'excuse'],
 				connect_events: true,
 				max_message_length: 5000,
 				message_retention: 'infinite',
@@ -2103,6 +2313,30 @@ describe('Channel types', function() {
 			expect(newChanType.permissions).to.be.sortedBy('priority', {
 				descending: true,
 			});
+		});
+	});
+
+	describe('Creating channel types with custom command', function() {
+		it('should work fine', async function() {
+			newChannelTypeCustomCmd = await client.createChannelType({
+				name: uuidv4(),
+				commands: ['excuse', 'fun_set', 'ban'],
+			});
+			await sleep(1000);
+		});
+
+		it('should have the right commands', function() {
+			expect(newChannelTypeCustomCmd.commands).like(['excuse', 'giphy', 'ban']);
+		});
+
+		it('Should fail non-existing command', async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.createChannelType({
+					name: uuidv4(),
+					commands: ['xyz'],
+				}),
+			);
 		});
 	});
 
@@ -2259,7 +2493,7 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
-			expect(response.commands).to.have.length(6);
+			expect(response.commands).to.have.length(7);
 		});
 
 		it('changing commands to fun_set', async function() {
@@ -2281,6 +2515,28 @@ describe('Channel types', function() {
 				updated_at: 'something-else',
 			});
 			await expectHTTPErrorCode(400, p);
+		});
+	});
+
+	describe('Updating channel types with custom command', function() {
+		it('default is fine', async function() {
+			const response = await client.updateChannelType(
+				newChannelTypeCustomCmd.name,
+				{
+					commands: ['excuse', 'fun_set', 'ban'],
+				},
+			);
+
+			expect(response.commands).like(['excuse', 'giphy', 'ban']);
+		});
+
+		it('updating to a non existing command should fail', async function() {
+			await expectHTTPErrorCode(
+				400,
+				client.updateChannelType(newChannelTypeCustomCmd.name, {
+					commands: ['xyz'],
+				}),
+			);
 		});
 	});
 

@@ -1,13 +1,16 @@
+## August 26, 2020 - 2.0.0
+
+- Library has been migrated to full typescript.
+- No breaking changes regarding underlying javascript api.
+
 ## August 11, 2020 - 1.14.1
 
 - Add support for channel.visible event [991c87b](https://github.com/GetStream/stream-chat-js/commit/991c87b094afa23bdae9973aa264e0789a3c12e0)
 - Added setter for userAgent [5d87550](https://github.com/GetStream/stream-chat-js/commit/5d87550f5097c9cbea687d598e3c947a56368cca)
 
-
 ## July 24, 2020 - 1.14.0
 
 - Added timeout for muteUser client method [6f44677](https://github.com/GetStream/stream-chat-js/commit/6f446772f42f5a475dcfd4e28d4a8d9c949513b3)
-
 
 ## July 16, 2020 - 1.13.2
 
