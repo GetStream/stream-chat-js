@@ -1,3 +1,8 @@
+## August 26, 2020 - 2.0.0
+
+- Library has been migrated to full typescript.
+- No breaking changes regarding underlying javascript api.
+
 ## August 11, 2020 - 1.14.1
 
 - Add support for channel.visible event [991c87b](https://github.com/GetStream/stream-chat-js/commit/991c87b094afa23bdae9973aa264e0789a3c12e0)
