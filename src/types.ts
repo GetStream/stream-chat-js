@@ -533,6 +533,56 @@ export type ChannelOptions = {
   watch?: boolean;
 };
 
+export type CreateCommandOptions = {
+  args?: string;
+  description?: string;
+  name?: string;
+  set?: string;
+};
+
+export type CreateCommandResponse = APIResponse &
+  CreateCommandOptions & {
+    created_at: string;
+    updated_at: string;
+  };
+
+export type UpdateCommandOptions = {
+  args?: string;
+  description?: string;
+  set?: string;
+};
+
+export type UpdateCommandResponse = APIResponse &
+  UpdateCommandOptions & {
+    created_at: string;
+    name: string;
+    updated_at: string;
+  };
+
+export type DeleteCommandResponse = APIResponse & {
+  name?: string;
+};
+
+export type GetCommandResponse = APIResponse & {
+  commands: Record<
+    string,
+    CreateCommandOptions & {
+      created_at: string;
+      updated_at: string;
+    }
+  >;
+};
+
+export type ListCommandsResponse = APIResponse & {
+  commands: Record<
+    string,
+    CreateCommandOptions & {
+      created_at: string;
+      updated_at: string;
+    }
+  >;
+};
+
 export type CreateChannelOptions = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
