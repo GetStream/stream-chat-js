@@ -3,18 +3,8 @@ const utils = require('../utils');
 
 const johnID = `john-${uuid4()}`;
 
-async function sendReaction() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
-	await channel.watch();
-	const { message } = await channel.sendMessage({ text: `Test message` });
-
-	return await channel.sendReaction(message.id, { type: 'love' }, johnID);
-}
-
 async function deleteReaction() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -24,8 +14,7 @@ async function deleteReaction() {
 }
 
 async function getReactions() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuid4()}`);
+	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
 	await channel.watch();
 	const text = 'testing reactions list';
 	const data = await channel.sendMessage({ text });
@@ -41,8 +30,16 @@ async function getReactions() {
 	return await channel.getReactions(messageID, { limit: 3 });
 }
 
+async function sendReaction() {
+	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+
+	return await channel.sendReaction(message.id, { type: 'love' }, johnID);
+}
+
 module.exports = {
+	deleteReaction,
 	getReactions,
 	sendReaction,
-	deleteReaction,
 };

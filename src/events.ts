@@ -1,0 +1,48 @@
+export const EVENT_MAP = {
+  'user.presence.changed': true,
+  'user.watching.start': true,
+  'user.watching.stop': true,
+  'user.updated': true,
+  'user.deleted': true,
+  'user.banned': true,
+  'user.unbanned': true,
+  'typing.start': true,
+  'typing.stop': true,
+  'message.new': true,
+  'message.updated': true,
+  'message.deleted': true,
+  'message.read': true,
+  'reaction.new': true,
+  'reaction.deleted': true,
+  'reaction.updated': true,
+  'member.added': true,
+  'member.updated': true,
+  'member.removed': true,
+  'channel.updated': true,
+  'channel.muted': true,
+  'channel.unmuted': true,
+  'channel.deleted': true,
+  'channel.truncated': true,
+  'channel.created': true,
+  'channel.hidden': true,
+  'channel.visible': true,
+  'health.check': true,
+  'notification.message_new': true,
+  'notification.mark_read': true,
+  'notification.invited': true,
+  'notification.invite_accepted': true,
+  'notification.added_to_channel': true,
+  'notification.removed_from_channel': true,
+  'notification.mutes_updated': true,
+  'notification.channel_deleted': true,
+  'notification.channel_truncated': true,
+  'notification.channel_mutes_updated': true,
+  // local events
+  'connection.changed': true,
+  'connection.recovered': true,
+};
+
+const IS_VALID_EVENT_MAP_TYPE = { ...EVENT_MAP, all: true };
+
+export const isValidEventType = (eventType: string): boolean =>
+  IS_VALID_EVENT_MAP_TYPE[eventType as keyof typeof IS_VALID_EVENT_MAP_TYPE] || false;

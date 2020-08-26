@@ -66,5 +66,6 @@ typings/
 
 /.vscode
 
-types/stream-chat/api-response-tests/data.js
-types/stream-chat/api-response-tests/data.ts
+ts-test/data.js
+ts-test/data.ts
+

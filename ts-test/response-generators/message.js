@@ -3,24 +3,6 @@ const utils = require('../utils');
 
 const johnID = `john-${uuidv4()}`;
 
-async function updateMessage() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
-	await channel.watch();
-	const { message } = await channel.sendMessage({ text: `Test message` });
-	await authClient.updateMessage({
-		id: message.id,
-		text: 'I mean, awesome chat',
-	});
-}
-
-async function sendMessage() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
-	await channel.watch();
-	return await channel.sendMessage({ text: `Test message` });
-}
-
 async function deleteMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
@@ -46,18 +28,6 @@ async function getMessagesById() {
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
 	return await channel.getMessagesById([message.id]);
-}
-
-async function sendAction() {
-	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
-	await channel.watch();
-	const { message } = await channel.sendMessage({ text: `/giphy wave` });
-
-	const messageID = message.id;
-	return await channel.sendAction(messageID, {
-		image_action: 'shuffle',
-	});
 }
 
 async function getReplies() {
@@ -94,12 +64,52 @@ async function getReplies() {
 	return await channel.getReplies(parent.id);
 }
 
+async function sendAction() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `/giphy wave` });
+
+	const messageID = message.id;
+	return await channel.sendAction(messageID, {
+		image_action: 'shuffle',
+	});
+}
+
+async function sendMessage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	return await channel.sendMessage({ text: `Test message` });
+}
+
+async function translateMessage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+
+	return await authClient.translateMessage(message.id, 'da');
+}
+
+async function updateMessage() {
+	const authClient = await utils.getTestClientForUser(johnID, {});
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	await channel.watch();
+	const { message } = await channel.sendMessage({ text: `Test message` });
+	await authClient.updateMessage({
+		id: message.id,
+		text: 'I mean, awesome chat',
+	});
+}
+
 module.exports = {
-	updateMessage,
-	sendMessage,
 	deleteMessage,
-	getMessagesById,
 	getMessage,
-	sendAction,
+	getMessagesById,
 	getReplies,
+	sendAction,
+	sendMessage,
+	translateMessage,
+	updateMessage,
 };

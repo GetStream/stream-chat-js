@@ -24,7 +24,7 @@ jobs:
         run: yarn lint
 
       - name: Run API type definition tests
-        run: yarn test-api-dts
+        run: yarn test-types
       # not running this, but we should, tests are broken though
       # - name: Test
       #   env:
