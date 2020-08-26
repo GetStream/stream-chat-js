@@ -32,7 +32,7 @@ yarn add stream-chat
 
 Documentation for this JavaScript client are available at the [Stream Website](https://getstream.io/chat/docs/?language=js).
 
-### Typescript
+### Typescript (v2.x.x)
 
 The StreamChat client is setup to allow extension of the base types through use of generics when instantiated. The default instantiation has all generics set to `Record<string, unknown>`.
 
