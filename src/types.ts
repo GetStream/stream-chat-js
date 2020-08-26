@@ -584,29 +584,30 @@ export type ChannelOptions = {
 };
 
 export type CreateCommandOptions<CommandType extends string = LiteralStringForUnion> = {
+  description: string;
+  name: CommandVariants<CommandType>;
   args?: string;
-  description?: string;
-  name?: CommandVariants<CommandType>;
   set?: CommandVariants<CommandType>;
 };
 
 export type CreateCommandResponse<
   CommandType extends string = LiteralStringForUnion
-> = APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
+> = APIResponse & { command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt };
 
 export type UpdateCommandOptions<CommandType extends string = LiteralStringForUnion> = {
+  description: string;
   args?: string;
-  description?: string;
   set?: CommandVariants<CommandType>;
 };
 
 export type UpdateCommandResponse<
   CommandType extends string = LiteralStringForUnion
-> = APIResponse &
-  UpdateCommandOptions<CommandType> &
-  CreatedAtUpdatedAt & {
-    name: CommandVariants<CommandType>;
-  };
+> = APIResponse & {
+  command: UpdateCommandOptions<CommandType> &
+    CreatedAtUpdatedAt & {
+      name: CommandVariants<CommandType>;
+    };
+};
 
 export type DeleteCommandResponse<
   CommandType extends string = LiteralStringForUnion
@@ -616,14 +617,12 @@ export type DeleteCommandResponse<
 
 export type GetCommandResponse<
   CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  commands: Record<string, CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
-};
+> = APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
 
 export type ListCommandsResponse<
   CommandType extends string = LiteralStringForUnion
 > = APIResponse & {
-  commands: Record<string, CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
 };
 
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
