@@ -1769,12 +1769,17 @@ export class StreamChat<
         clonedMessage.user = { id: userId.id } as UserResponse<UserType>;
       }
     }
-    return await this.post<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${message.id}`,
-      {
-        message: clonedMessage,
-      },
-    );
+    return await this.post<
+      UpdateMessageAPIResponse<
+        MessageType,
+        AttachmentType,
+        ChannelType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + `/messages/${message.id}`, {
+      message: clonedMessage,
+    });
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
