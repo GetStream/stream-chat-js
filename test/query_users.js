@@ -67,7 +67,7 @@ describe('Query Users', function() {
 			},
 		]);
 		const response = await serverClient.queryUsers({
-			unique: unique,
+			unique,
 			$or: [
 				{ name: { $autocomplete: 'ro' } },
 				{ username: { $autocomplete: 'ro' } },
@@ -80,19 +80,27 @@ describe('Query Users', function() {
 
 	it('autocomplete users by username', async function() {
 		const userID = uuidv4();
+		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
+			unique,
 			username: 'rover_curiosity',
 		});
-		const response = await client.queryUsers({ username: { $autocomplete: 'rove' } });
+		const response = await client.queryUsers({
+			unique,
+			username: { $autocomplete: 'rove' },
+		});
 		expect(response.users[0].username).to.equal('rover_curiosity');
 	});
 
 	it('autocomplete users by id', async function() {
 		const userID = uuidv4();
+		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
+			unique,
 			username: 'rover_curiosity',
 		});
 		const response = await client.queryUsers({
+			unique,
 			id: { $autocomplete: userID.slice(0, 8) },
 		});
 		expect(response.users[0].id).to.equal(userID);
@@ -101,10 +109,12 @@ describe('Query Users', function() {
 
 	it('query users unsupported field', async function() {
 		const userID = uuidv4();
+		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
+			unique,
 			mycustomfield: 'Curiosity Rover',
 		});
-		const queryPromise = client.queryUsers({ mycustomfield: { $q: 'rove' } });
+		const queryPromise = client.queryUsers({ unique, mycustomfield: { $q: 'rove' } });
 		await expect(queryPromise).to.be.rejectedWith(
 			'StreamChat error code 4: QueryUsers failed with error: "search is not enabled for field users.mycustomfield',
 		);
