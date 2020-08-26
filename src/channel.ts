@@ -470,6 +470,49 @@ export class Channel<
   }
 
   /**
+   * enableSlowMode - enable slow mode
+   *
+   * @param {coolDownInterval<number>} coolDownInterval the cooldown interval in seconds
+   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} The server response
+   */
+  async enableSlowMode(coolDownInterval: number) {
+    const data = await this.getClient().post<
+      UpdateChannelAPIResponse<
+        ChannelType,
+        AttachmentType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this._channelURL(), {
+      cooldown: coolDownInterval,
+    });
+    this.data = data.channel;
+    return data;
+  }
+
+  /**
+   * disableSlowMode - disable slow mode
+   *
+   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} The server response
+   */
+  async disableSlowMode() {
+    const data = await this.getClient().post<
+      UpdateChannelAPIResponse<
+        ChannelType,
+        AttachmentType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this._channelURL(), {
+      cooldown: 0,
+    });
+    this.data = data.channel;
+    return data;
+  }
+
+  /**
    * delete - Delete the channel. Messages are permanently removed.
    *
    * @return {Promise<DeleteChannelAPIResponse<ChannelType, UserType>>} The server response
