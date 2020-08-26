@@ -46,6 +46,13 @@ import {
   FlagMessageResponse,
   MarkAllReadOptions,
   StreamChatOptions,
+  CreateCommandOptions,
+  CreateCommandResponse,
+  UpdateCommandOptions,
+  UpdateCommandResponse,
+  DeleteCommandResponse,
+  GetCommandResponse,
+  ListCommandsResponse,
   CreateChannelOptions,
   CreateChannelResponse,
   GetChannelTypeResponse,
@@ -1661,6 +1668,26 @@ export class StreamChat<
     await this.post<APIResponse>(this.baseURL + '/channels/read', {
       ...data,
     });
+  }
+
+  createCommand(data: CreateCommandOptions) {
+    return this.post<CreateCommandResponse>(this.baseURL + '/commands', data);
+  }
+
+  getCommand(name: string) {
+    return this.get<GetCommandResponse>(this.baseURL + `/commands/${name}`);
+  }
+
+  updateCommand(name: string, data: UpdateCommandOptions) {
+    return this.put<UpdateCommandResponse>(this.baseURL + `/commands/${name}`, data);
+  }
+
+  deleteCommand(name: string) {
+    return this.delete<DeleteCommandResponse>(this.baseURL + `/commands/${name}`);
+  }
+
+  listCommands() {
+    return this.get<ListCommandsResponse>(this.baseURL + `/commands`);
   }
 
   createChannelType(data: CreateChannelOptions) {
