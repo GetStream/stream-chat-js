@@ -875,7 +875,7 @@ export class Channel<
    *
    * @return {Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} The server response
    */
-  async watch(options: ChannelQueryOptions<ChannelType, UserType>) {
+  async watch(options?: ChannelQueryOptions<ChannelType, UserType>) {
     const defaultOptions = {
       state: true,
       watch: true,

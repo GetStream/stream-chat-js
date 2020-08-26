@@ -144,6 +144,22 @@ export type ChannelMemberAPIResponse<UserType = UnknownType> = APIResponse & {
   members: ChannelMemberResponse<UserType>[];
 };
 
+export type UpdateMessageAPIResponse<
+  MessageType = UnknownType,
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = APIResponse & {
+  message: MessageResponse<
+    MessageType,
+    AttachmentType,
+    ChannelType,
+    ReactionType,
+    UserType
+  >;
+};
+
 export type ChannelMemberResponse<UserType = UnknownType> = {
   created_at?: string;
   invite_accepted_at?: string;
@@ -404,10 +420,10 @@ export type ReactionAPIResponse<
   reaction: ReactionResponse<ReactionType, UserType>;
 };
 
-export type ReactionResponse<ReactionType, UserType> = Reaction<
-  ReactionType,
-  UserType
-> & {
+export type ReactionResponse<
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Reaction<ReactionType, UserType> & {
   created_at: string;
   updated_at: string;
 };
@@ -1187,7 +1203,7 @@ export type MessageBase<
   user_id?: string;
 };
 
-export type Mute<UserType> = {
+export type Mute<UserType = UnknownType> = {
   created_at: string;
   target: UserResponse<UserType>;
   updated_at: string;
@@ -1298,3 +1314,5 @@ export type User<T = UnknownType> = T & {
   teams?: string[];
   username?: string;
 };
+
+export type TypingStartEvent = Event;
