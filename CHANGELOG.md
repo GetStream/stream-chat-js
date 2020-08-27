@@ -1,3 +1,22 @@
+## August 27, 2020 - 2.1.0
+
+- Added endpoints to enable and disable slow mode [06fe1b2](https://github.com/GetStream/stream-chat-js/commit/06fe1b2d8a73b06d15578e32887d4fdf3c520d61)
+
+  - enableSlowMode
+  - disableSlowMode
+
+- Added endpoints for custom commands [f79baa3](https://github.com/GetStream/stream-chat-js/commit/f79baa32c1512281f2bc7b4307910b7c16d2d2b9)
+
+  - createCommand
+  - getCommand
+  - updateCommand
+  - deleteCommand
+  - listCommand
+
+- Typescript related fixes [5f2ae83](https://github.com/GetStream/stream-chat-js/commit/5f2ae838aa567a40d6778f01e9e3dbcbf5ebe09c)
+  - added generic type `CommandType`
+  - Fixing backward compatibility related issues
+
 ## August 26, 2020 - 2.0.0
 
 - Library has been migrated to full typescript.
