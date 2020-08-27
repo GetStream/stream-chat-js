@@ -63,6 +63,12 @@ const executables = [
 	// 	type: "Unpacked<ReturnType<StreamChat['createChannelType']>>",
 	// },
 	{
+		f: rg.createCommand,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['createCommand']>>",
+	},
+	{
 		f: rg.createPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -88,6 +94,12 @@ const executables = [
 	// 	imports: ['StreamChat', 'Unpacked'],
 	// 	type: "Unpacked<ReturnType<StreamChat['deleteChannelType']>>",
 	// },
+	{
+		f: rg.deleteCommand,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['deleteCommand']>>",
+	},
 	{
 		f: rg.deleteFile,
 		imports: ['Channel', 'Unpacked'],
@@ -163,6 +175,12 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getChannelType']>>",
 	},
 	{
+		f: rg.getCommand,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['getCommand']>>",
+	},
+	{
 		f: rg.getConfig,
 		imports: ['Channel', 'Unpacked'],
 		type:
@@ -225,6 +243,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listChannelTypes']>>",
+	},
+	{
+		f: rg.listCommands,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['listCommands']>>",
 	},
 	{
 		f: rg.listPermissions,
@@ -436,6 +460,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateChannelType']>>",
+	},
+	{
+		f: rg.updateCommand,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['updateCommand']>>",
 	},
 	{
 		f: rg.updateMessage,
