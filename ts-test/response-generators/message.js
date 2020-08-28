@@ -9,7 +9,7 @@ async function deleteMessage() {
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
-	await authClient.deleteMessage(message.id);
+	return await authClient.deleteMessage(message.id);
 }
 
 async function getMessage() {
@@ -94,12 +94,17 @@ async function translateMessage() {
 
 async function updateMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
-	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
+	const userID = 'tommaso-' + uuidv4();
+	await utils.getTestClient(true).updateUser({ id: userID });
+	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`, {
+		members: [userID],
+	});
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
-	await authClient.updateMessage({
+	return await authClient.updateMessage({
 		id: message.id,
 		text: 'I mean, awesome chat',
+		mentioned_users: [userID],
 	});
 }
 

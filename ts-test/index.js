@@ -236,7 +236,7 @@ const executables = [
 		f: rg.lastMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Omit<ReturnType<Immutable<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>['asMutable']>>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
 	},
 	{
 		f: rg.listChannelTypes,
@@ -528,7 +528,7 @@ executables.forEach(i => {
 const uniqueTypes = types.filter((value, index, self) => self.indexOf(value) === index);
 imports = uniqueTypes.join(', ');
 
-imports = `import { Immutable } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
+imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
 const tsFileName = `${__dirname}/data.ts`;
 fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
 	if (err) {

@@ -76,6 +76,7 @@ import {
   PartialUserUpdate,
   UpdateMessageAPIResponse,
   LiteralStringForUnion,
+  Message,
 } from './types';
 
 function isReadableStream(
@@ -1792,14 +1793,7 @@ export class StreamChat<
    * @return {APIResponse & { message: MessageResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType> }} Response that includes the message
    */
   async updateMessage(
-    message: MessageResponse<
-      MessageType,
-      AttachmentType,
-      ChannelType,
-      ReactionType,
-      UserType,
-      CommandType
-    >,
+    message: Message<MessageType, AttachmentType, UserType>,
     userId?: string | { id: string },
   ) {
     if (!message.id) {
