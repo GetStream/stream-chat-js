@@ -107,7 +107,7 @@ export type ChannelResponse<
   type: string;
   config?: ChannelConfigWithInfo<CommandType>;
   created_at?: string;
-  created_by?: UserResponse<UserType>;
+  created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
   deleted_at?: string;
   invites?: string[];
@@ -139,7 +139,7 @@ export type ChannelAPIResponse<
     CommandType
   >[];
   hidden?: boolean;
-  membership?: ChannelMembership<UserType>;
+  membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
   watcher_count?: number;
   watchers?: UserResponse<UserType>[];
@@ -381,7 +381,7 @@ export type MessageResponse<
   ReactionType = UnknownType,
   UserType = UnknownType,
   CommandType extends string = LiteralStringForUnion
-> = MessageBase<MessageType, AttachmentType> & {
+> = MessageBase<MessageType, AttachmentType, UserType> & {
   args?: string;
   channel?: ChannelResponse<ChannelType, UserType, CommandType>;
   command?: string;
@@ -390,15 +390,14 @@ export type MessageResponse<
   deleted_at?: string;
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
-  own_reactions?: ReactionResponse<ReactionType, UserType>[];
-  reaction_counts?: { [key: string]: number };
-  reaction_scores?: { [key: string]: number };
+  own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  reaction_counts?: { [key: string]: number } | null;
+  reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   silent?: boolean;
   status?: string;
   type?: string;
   updated_at?: string;
-  user?: UserResponse<UserType>;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -1319,14 +1318,14 @@ export type Message<
   MessageType = UnknownType,
   AttachmentType = UnknownType,
   UserType = UnknownType
-> = MessageBase<MessageType, AttachmentType> & {
+> = MessageBase<MessageType, AttachmentType, UserType> & {
   mentioned_users?: string[];
-  user?: UserResponse<UserType>;
 };
 
 export type MessageBase<
   MessageType = UnknownType,
-  AttachmentType = UnknownType
+  AttachmentType = UnknownType,
+  UserType = UnknownType
 > = MessageType & {
   attachments?: Attachment<AttachmentType>[];
   html?: string;
@@ -1334,6 +1333,7 @@ export type MessageBase<
   parent_id?: string;
   show_in_channel?: boolean;
   text?: string;
+  user?: UserResponse<UserType> | null;
   user_id?: string;
 };
 
@@ -1385,7 +1385,7 @@ export type Reaction<
   type: string;
   message_id?: string;
   score?: number;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<UserType> | null;
   user_id?: string;
 };
 

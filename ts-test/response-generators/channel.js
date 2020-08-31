@@ -105,7 +105,10 @@ async function inviteMembers() {
 
 async function lastMessage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
 	await channel.sendMessage({ text: 'Hello World' });
+	await channel.sendMessage({ text: 'Hello World...again' });
+
 	return await channel.lastMessage();
 }
 
