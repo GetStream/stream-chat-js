@@ -1031,15 +1031,6 @@ export class StreamChat<
     );
     this.connectionID = this.wsConnection?.connectionID;
     const cids = Object.keys(this.activeChannels);
-    const lastMessageIDs: { [key: string]: string } = {};
-    for (const c of Object.values(this.activeChannels)) {
-      const lastMessage = c.lastMessage();
-      let lastMessageId: string;
-      if (lastMessage?.id) {
-        lastMessageId = lastMessage.id;
-        lastMessageIDs[c.cid] = lastMessageId;
-      }
-    }
     if (cids.length) {
       this.logger(
         'info',
@@ -1050,7 +1041,7 @@ export class StreamChat<
       await this.queryChannels(
         { cid: { $in: cids } } as ChannelFilters<ChannelType, UserType, CommandType>,
         { last_message_at: -1 },
-        { limit: 30, recovery: true, last_message_ids: lastMessageIDs },
+        { limit: 30 },
       );
 
       this.logger('info', 'client:recoverState() - Querying channels finished', {
