@@ -515,57 +515,63 @@ const executables = [
 	// },
 ];
 
-let imports = '';
-const types = [];
+let tsFileName;
+const run = async () => {
+	let imports = '';
+	const types = [];
 
-executables.forEach(i => {
-	if (i.imports) {
-		types.push(...i.imports);
-	} else {
-		types.push(i.type);
-	}
-});
-const uniqueTypes = types.filter((value, index, self) => self.indexOf(value) === index);
-imports = uniqueTypes.join(', ');
-
-imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
-const tsFileName = `${__dirname}/data.ts`;
-fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
-	if (err) {
-		return console.log(err);
-	}
-
-	console.log('✅ Imports statement set!');
-});
-
-executables.forEach(i => {
-	executeAndWrite(i.f, i.name, i.type);
-});
-
-function executeAndWrite(func, name, type) {
-	func().then(
-		response => {
-			fs.appendFile(
-				tsFileName,
-				`export const ${func.name}Response: ${type} = ${JSON.stringify(
-					response,
-				)}; \n`,
-				function(err) {
-					if (err) {
-						return console.log(err);
-					}
-
-					console.log(`✅ ${func.name}`);
-					countExecutables++;
-					checkIfComplete();
-				},
-			);
-		},
-		error => {
-			console.log(`${func.name} failed with error: `, error);
-		},
+	executables.forEach(i => {
+		if (i.imports) {
+			types.push(...i.imports);
+		} else {
+			types.push(i.type);
+		}
+	});
+	const uniqueTypes = types.filter(
+		(value, index, self) => self.indexOf(value) === index,
 	);
-}
+	imports = uniqueTypes.join(', ');
+
+	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
+	tsFileName = `${__dirname}/data.ts`;
+	fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
+		if (err) {
+			return console.log(err);
+		}
+
+		console.log('✅ Imports statement set!');
+	});
+
+	for (let i = 0; i < executables.length; i++) {
+		const executable = executables[i];
+		await executeAndWrite(executable.f, executable.name, executable.type);
+	}
+};
+
+const executeAndWrite = async (func, name, type) => {
+	try {
+		const response = await func();
+		fs.appendFile(
+			tsFileName,
+			`export const ${func.name}Response: ${type} = ${JSON.stringify(
+				response,
+			)}; \n`,
+			function(err) {
+				if (err) {
+					return console.log(err);
+				}
+
+				console.log(`✅ ${func.name}`);
+				countExecutables++;
+				checkIfComplete();
+			},
+		);
+
+		return;
+	} catch (error) {
+		console.log(`${func.name} failed with error: `, error);
+	}
+};
 
 function checkIfComplete() {
 	if (countExecutables === executables.length) {
@@ -573,3 +579,5 @@ function checkIfComplete() {
 		process.exit();
 	}
 }
+
+run();
