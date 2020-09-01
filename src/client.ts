@@ -1041,7 +1041,7 @@ export class StreamChat<
       await this.queryChannels(
         { cid: { $in: cids } } as ChannelFilters<ChannelType, UserType, CommandType>,
         { last_message_at: -1 },
-        { limit: 30, recovery: true },
+        { limit: 30 },
       );
 
       this.logger('info', 'client:recoverState() - Querying channels finished', {
