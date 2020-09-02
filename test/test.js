@@ -1659,7 +1659,7 @@ describe('Chat', () => {
 		});
 	});
 
-	describe.only('Slash Commands', () => {
+	describe('Slash Commands', () => {
 		describe('Success', () => {
 			it('Custom Command Sample Integration', async () => {
 				const text = '/excuse me';
