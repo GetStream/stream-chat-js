@@ -1659,8 +1659,41 @@ describe('Chat', () => {
 		});
 	});
 
-	describe('Slash Commands', () => {
+	describe.only('Slash Commands', () => {
 		describe('Success', () => {
+			it('Custom Command Sample Integration', async () => {
+				const text = '/excuse me';
+				const aiChannel = authClient.channel('ai', 'excuse-test');
+				await aiChannel.watch();
+				const data = await aiChannel.sendMessage({ text });
+				expect(data.message.command).to.equal('excuse');
+				expect(data.message.type).to.equal('ephemeral');
+				expect(data.message.args).to.equal('me');
+			});
+
+			it('Custom Command Sample Action Send', async () => {
+				const text = '/excuse me';
+				const aiChannel = authClient.channel('ai', 'excuse-test');
+				await aiChannel.watch();
+				const data = await aiChannel.sendMessage({ text });
+
+				const firstExcuse = data.message.attachments[0].text;
+				const messageID = data.message.id;
+				const actionData = await channel.sendAction(messageID, {
+					excuse_action: 'shuffle',
+				});
+
+				const selectedExcuse = actionData.message.attachments[0].text;
+				expect(selectedExcuse).to.not.equal(firstExcuse);
+				expect(actionData.message.type).to.equal('ephemeral');
+
+				const sendData = await channel.sendAction(messageID, {
+					excuse_action: 'send',
+				});
+				expect(sendData.message.type).to.equal('regular');
+				expect(sendData.message.text).to.equal(selectedExcuse);
+			});
+
 			it('Giphy Integration', async () => {
 				const text = '/giphy rock';
 				const data = await channel.sendMessage({ text });
