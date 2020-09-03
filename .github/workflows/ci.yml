@@ -23,8 +23,20 @@ jobs:
       - name: Lint
         run: yarn lint
 
+  test-types:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [12]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2-beta
+        with:
+          node-version: ${{ matrix.node }}
+
       - name: Run API type definition tests
-        run: yarn test-types
+        run: yarn && yarn test-types
+
       # not running this, but we should, tests are broken though
       # - name: Test
       #   env:

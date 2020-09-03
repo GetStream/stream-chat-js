@@ -393,14 +393,14 @@ export class Channel<
    *
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
-   * @param {string} user_id the id of the user (used only for server side request) default null
+   * @param {string} [user_id] the id of the user (used only for server side request) default null
    *
    * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType, CommandType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
-    user_id: string,
+    user_id?: string,
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -431,11 +431,11 @@ export class Channel<
    *
    * @param {string} messageID the id of the message from which te remove the reaction
    * @param {string} reactionType the type of reaction that should be removed
-   * @param {string} user_id the id of the user (used only for server side request) default null
+   * @param {string} [user_id] the id of the user (used only for server side request) default null
    *
    * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType, CommandType>>} The Server Response
    */
-  deleteReaction(messageID: string, reactionType: string, user_id: string) {
+  deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
       throw Error(

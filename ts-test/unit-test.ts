@@ -59,9 +59,9 @@ const client: StreamChat<
   AttachmentType,
   ReactionType,
   EventType
->(apiKey, null, {
+>(apiKey, undefined, {
   timeout: 3000,
-  logger: (logLevel: string, msg: string, extraData: {}) => {},
+  logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
 const clientWithoutSecret: StreamChat<ChannelType, UserType> = new StreamChat<
@@ -69,7 +69,7 @@ const clientWithoutSecret: StreamChat<ChannelType, UserType> = new StreamChat<
   UserType
 >(apiKey, {
   timeout: 3000,
-  logger: (logLevel: string, msg: string, extraData: {}) => {},
+  logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
 const devToken: string = client.devToken('joshua');
@@ -250,7 +250,7 @@ const permissions = [
 ];
 
 client.updateChannelType('messaging', { permissions }).then(response => {
-  const permissions: PermissionObject[] = response.permissions;
-  const permissionName: string = permissions[0].name;
-  const permissionRoles: string[] = permissions[0].roles;
+  const permissions: PermissionObject[] = response.permissions || [];
+  const permissionName: string = permissions[0].name || '';
+  const permissionRoles: string[] = permissions[0].roles || [];
 });

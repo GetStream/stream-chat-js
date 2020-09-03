@@ -1,3 +1,9 @@
+## August 31, 2020 - 2.1.1
+
+- Typescript related fixes [4e538e6](https://github.com/GetStream/stream-chat-js/commit/4e538e66fc68e99331f3c2a83365df26f9789c93)
+  - Add null checks for tests and correct types to reflect null returns on reactions
+  - Change updateMessage to use Message instead of MessageResponse
+
 ## August 27, 2020 - 2.1.0
 
 - Added endpoints to enable and disable slow mode [06fe1b2](https://github.com/GetStream/stream-chat-js/commit/06fe1b2d8a73b06d15578e32887d4fdf3c520d61)

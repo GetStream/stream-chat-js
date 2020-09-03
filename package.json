@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -118,7 +118,7 @@
     "types": "tsc --emitDeclarationOnly true",
     "prettier": "prettier --check '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
-    "test-types": "node ts-test/index.js && tsc --esModuleInterop true --noEmit true ts-test/*.ts",
+    "test-types": "node ts-test/index.js && tsc --esModuleInterop true --noEmit true --strictNullChecks true --noImplicitAny true --strict true ts-test/*.ts",
     "eslint": "eslint '**/*.{js,md,ts}' --max-warnings 0 --ignore-path ./.eslintignore",
     "eslint-fix": "npx eslint --fix '**/*.{js,md,ts}' --max-warnings 0 --ignore-path ./.eslintignore",
     "test": "NODE_ENV=test mocha --exit --bail --timeout 15000 --require ./babel-register test/*.js --async-stack-traces",
