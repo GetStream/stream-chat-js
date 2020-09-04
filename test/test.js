@@ -1685,6 +1685,41 @@ describe('Chat', () => {
 				);
 				expect(actionData.message.mml).to.equal(undefined);
 			});
+
+			it('Interact with multi step MML message', async () => {
+				const mml =
+					'<mml name="multi_step_form"><text>Please start the survey</text><button style="primary" name="action" value="start">Start</button></mml>';
+				const data = await channel.sendMessage({ mml });
+				expect(data.message.text).to.equal('');
+				expect(data.message.mml).to.equal(mml);
+
+				const messageID = data.message.id;
+				const step1Data = await channel.sendAction(messageID, {
+					mml_name: 'multi_step_form',
+					action: 'start',
+				});
+				expect(step1Data.message.mml).to.equal(
+					'<mml name="multi_step_form"><text>Please enter your name</text><input type="text" name="name" /><button style="primary" name="action" value="next">next</button></mml>',
+				);
+
+				const step2Data = await channel.sendAction(messageID, {
+					mml_name: 'multi_step_form',
+					name: 'Guyon',
+					action: 'next',
+				});
+				expect(step2Data.message.mml).to.equal(
+					'<mml name="multi_step_form"><text>Please enter your email</text><input type="text" name="email" /><button style="primary" name="action" value="finish">finish</button></mml>',
+				);
+
+				const step3Data = await channel.sendAction(messageID, {
+					mml_name: 'multi_step_form',
+					email: 'guyon@getstream.io',
+					action: 'finish',
+				});
+				expect(step3Data.message.mml).to.equal(
+					'<mml name="multi_step_form"><text>Thanks for participating Guyon (guyon@getstream.io)</text></mml>',
+				);
+			});
 		});
 	});
 
