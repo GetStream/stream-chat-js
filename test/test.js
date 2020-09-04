@@ -1659,7 +1659,36 @@ describe('Chat', () => {
 		});
 	});
 
-	describe.only('Slash Commands', () => {
+	describe('MML messages', () => {
+		describe('Success', () => {
+			it('Send MML message', async () => {
+				const mml = '<mml name="message"><text>Hi!</text></mml>';
+				const data = await channel.sendMessage({ mml });
+				expect(data.message.text).to.equal('');
+				expect(data.message.mml).to.equal(mml);
+			});
+
+			it('Interact with simple MML message', async () => {
+				const mml =
+					'<mml name="email_form"><input type="text" name="email" /><button style="primary" name="action" value="submit">Submit</button></mml>';
+				const data = await channel.sendMessage({ mml });
+
+				const messageID = data.message.id;
+				const actionData = await channel.sendAction(messageID, {
+					mml_name: 'email_form',
+					action: 'submit',
+					email: 'guyon@getstream.io',
+				});
+
+				expect(actionData.message.text).to.equal(
+					"Thanks for registering 'guyon@getstream.io'",
+				);
+				expect(actionData.message.mml).to.equal(undefined);
+			});
+		});
+	});
+
+	describe('Slash Commands', () => {
 		describe('Success', () => {
 			it('Custom Command Sample Integration', async () => {
 				const text = '/excuse me';
