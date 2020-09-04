@@ -1662,16 +1662,25 @@ describe('Chat', () => {
 	describe('MML messages', () => {
 		describe('Success', () => {
 			it('Send MML message', async () => {
-				const mml = '<mml name="message"><text>Hi!</text></mml>';
-				const data = await channel.sendMessage({ mml });
-				expect(data.message.text).to.equal('');
-				expect(data.message.mml).to.equal(mml);
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml hi';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.text).to.equal(cmd);
+				expect(data.message.mml).to.equal(
+					'\n\t\t<mml name="message">\n\t\t\t<text>Hi!</text>\n\t\t</mml>\n\t',
+				);
 			});
 
 			it('Interact with simple MML message', async () => {
-				const mml =
-					'<mml name="email_form"><input type="text" name="email" /><button style="primary" name="action" value="submit">Submit</button></mml>';
-				const data = await channel.sendMessage({ mml });
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml email';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.text).to.equal(cmd);
+				expect(data.message.mml).to.equal(
+					'\n\t\t<mml name="email_form">\n\t\t\t<input type="text" name="email" />\n\t\t\t<button style="primary" name="action" value="submit">Submit</button>\n\t\t</mml>\n\t',
+				);
 
 				const messageID = data.message.id;
 				const actionData = await channel.sendAction(messageID, {
@@ -1687,11 +1696,14 @@ describe('Chat', () => {
 			});
 
 			it('Interact with multi step MML message', async () => {
-				const mml =
-					'<mml name="multi_step_form"><text>Please start the survey</text><button style="primary" name="action" value="start">Start</button></mml>';
-				const data = await channel.sendMessage({ mml });
-				expect(data.message.text).to.equal('');
-				expect(data.message.mml).to.equal(mml);
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml multi_step';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.text).to.equal(cmd);
+				expect(data.message.mml).to.equal(
+					'\n\t\t<mml name="multi_step_form">\n\t\t\t<text>Please start the survey</text>\n\t\t\t<button style="primary" name="action" value="start">Start</button>\n\t\t</mml>\n\t',
+				);
 
 				const messageID = data.message.id;
 				const step1Data = await channel.sendAction(messageID, {
@@ -1727,9 +1739,9 @@ describe('Chat', () => {
 		describe('Success', () => {
 			it('Custom Command Sample Integration', async () => {
 				const text = '/excuse me';
-				const aiChannel = authClient.channel('ai', 'excuse-test');
-				await aiChannel.watch();
-				const data = await aiChannel.sendMessage({ text });
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const data = await cmdChannel.sendMessage({ text });
 				expect(data.message.attachments.length).to.equal(1);
 				expect(data.message.attachments[0].actions.length).to.equal(3);
 				expect(data.message.command).to.equal('excuse');
@@ -1739,9 +1751,9 @@ describe('Chat', () => {
 
 			it('Custom Command Sample Action Send', async () => {
 				const text = '/excuse me';
-				const aiChannel = authClient.channel('ai', 'excuse-test');
-				await aiChannel.watch();
-				const data = await aiChannel.sendMessage({ text });
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const data = await cmdChannel.sendMessage({ text });
 
 				const firstExcuse = data.message.attachments[0].text;
 				const messageID = data.message.id;
@@ -1762,9 +1774,9 @@ describe('Chat', () => {
 
 			it('Custom Command Sample MML Integration', async () => {
 				const text = '/excuse mml';
-				const aiChannel = authClient.channel('ai', 'excuse-test');
-				await aiChannel.watch();
-				const data = await aiChannel.sendMessage({ text });
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const data = await cmdChannel.sendMessage({ text });
 				expect(data.message.mml).to.contain('<mml name="excuse">');
 				expect(data.message.attachments.length).to.equal(0);
 				expect(data.message.command).to.equal('excuse');
