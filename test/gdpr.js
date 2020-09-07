@@ -205,7 +205,7 @@ describe('GDPR endpoints', function() {
 
 			const channel2 = serverClient.channel('livestream', channelID);
 			const state = await channel2.query();
-			expect(state.messages).to.be.ofSize(2);
+			expect(state.messages).to.be.lengthOf(2);
 			expect(state.messages[0].deleted_at).to.not.be.undefined;
 			expect(state.messages[0].type).to.be.equal('deleted');
 			expect(state.messages[1].id).to.be.equal(message.id);
@@ -243,7 +243,7 @@ describe('GDPR endpoints', function() {
 
 			const channel2 = serverClient.channel('livestream', channelID);
 			const state = await channel2.query();
-			expect(state.messages).to.be.ofSize(2);
+			expect(state.messages).to.be.lengthOf(2);
 			expect(state.messages[0].deleted_at).to.be.undefined;
 			expect(state.messages[1].id).to.equal(message.id);
 			expect(state.messages[1].deleted_at).to.be.undefined;
@@ -327,7 +327,7 @@ describe('GDPR endpoints', function() {
 			const channel2 = serverClient.channel('livestream', channelID);
 			const state = await channel2.query();
 
-			expect(state.messages).to.be.ofSize(3);
+			expect(state.messages).to.be.lengthOf(3);
 			expect(state.messages[0].deleted_at).to.be.undefined;
 			//this one remains deleted
 			expect(state.messages[1].id).to.equal(deletedID);

@@ -1,13 +1,50 @@
+## September 7, 2020 - 2.1.3
+
+- Move @types dependencies to devDependencies [#418](https://github.com/GetStream/stream-chat-js/pull/418)
+
+## September 4, 2020 - 2.1.2
+
+- Fix connection recovery of client [#414](https://github.com/GetStream/stream-chat-js/pull/414)
+- Removed unused recovery option from queryChannels api payload [#414](https://github.com/GetStream/stream-chat-js/pull/414)
+
+## August 31, 2020 - 2.1.1
+
+- Typescript related fixes [4e538e6](https://github.com/GetStream/stream-chat-js/commit/4e538e66fc68e99331f3c2a83365df26f9789c93)
+  - Add null checks for tests and correct types to reflect null returns on reactions
+  - Change updateMessage to use Message instead of MessageResponse
+
+## August 27, 2020 - 2.1.0
+
+- Added endpoints to enable and disable slow mode [06fe1b2](https://github.com/GetStream/stream-chat-js/commit/06fe1b2d8a73b06d15578e32887d4fdf3c520d61)
+
+  - enableSlowMode
+  - disableSlowMode
+
+- Added endpoints for custom commands [f79baa3](https://github.com/GetStream/stream-chat-js/commit/f79baa32c1512281f2bc7b4307910b7c16d2d2b9)
+
+  - createCommand
+  - getCommand
+  - updateCommand
+  - deleteCommand
+  - listCommand
+
+- Typescript related fixes [5f2ae83](https://github.com/GetStream/stream-chat-js/commit/5f2ae838aa567a40d6778f01e9e3dbcbf5ebe09c)
+  - added generic type `CommandType`
+  - Fixing backward compatibility related issues
+
+## August 26, 2020 - 2.0.0
+
+- Library has been migrated to full typescript.
+- No breaking changes regarding underlying javascript api.
+
 ## August 11, 2020 - 1.14.1
 
 - Add support for channel.visible event [991c87b](https://github.com/GetStream/stream-chat-js/commit/991c87b094afa23bdae9973aa264e0789a3c12e0)
 - Added setter for userAgent [5d87550](https://github.com/GetStream/stream-chat-js/commit/5d87550f5097c9cbea687d598e3c947a56368cca)
 
-
 ## July 24, 2020 - 1.14.0
 
 - Added timeout for muteUser client method [6f44677](https://github.com/GetStream/stream-chat-js/commit/6f446772f42f5a475dcfd4e28d4a8d9c949513b3)
-
 
 ## July 16, 2020 - 1.13.2
 
