@@ -1,3 +1,12 @@
+## September 7, 2020 - 2.1.3
+
+- Move @types dependencies to devDependencies [#418](https://github.com/GetStream/stream-chat-js/pull/418)
+
+## September 4, 2020 - 2.1.2
+
+- Fix connection recovery of client [#414](https://github.com/GetStream/stream-chat-js/pull/414)
+- Removed unused recovery option from queryChannels api payload [#414](https://github.com/GetStream/stream-chat-js/pull/414)
+
 ## August 31, 2020 - 2.1.1
 
 - Typescript related fixes [4e538e6](https://github.com/GetStream/stream-chat-js/commit/4e538e66fc68e99331f3c2a83365df26f9789c93)
