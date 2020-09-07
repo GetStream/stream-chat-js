@@ -2493,7 +2493,7 @@ describe('Channel types', function() {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
-			expect(response.commands).to.have.length(8);
+			expect(response.commands).to.have.length(7);
 		});
 
 		it('changing commands to fun_set', async function() {
