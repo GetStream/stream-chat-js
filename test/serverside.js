@@ -630,7 +630,7 @@ describe('CreatedBy storage', function() {
 	});
 });
 
-describe('App configs', function() {
+describe.only('App configs', function() {
 	const client = getTestClient(true);
 	const client2 = getTestClient(false);
 
@@ -1462,14 +1462,15 @@ describe('App configs', function() {
 	});
 
 	describe('Set custom_command_url', async function() {
+		const response = await client.getAppSettings();
+		const originalUrl = response.app.custom_command_url;
+
 		it('Sets valid URL', async function() {
 			// Set custom command endpoint url
 			const custom_command_url = 'http://example.com';
 			await client.updateAppSettings({
 				custom_command_url,
 			});
-
-			const response = await client.getAppSettings();
 			expect(response.app.custom_command_url).to.be.eq(custom_command_url);
 		});
 
@@ -1491,6 +1492,11 @@ describe('App configs', function() {
 
 			const response = await client.getAppSettings();
 			expect(response.app.custom_command_url).to.be.eq('');
+		});
+
+		// Reset custom command endpoint url to original
+		await client.updateAppSettings({
+			custom_command_url: originalUrl,
 		});
 	});
 });
