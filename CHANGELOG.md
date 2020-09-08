@@ -36,6 +36,7 @@
 
 - Library has been migrated to full typescript.
 - No breaking changes regarding underlying javascript api.
+- The `Event` type no longer takes a string generic that maps to the `type` property of the response. Event now takes multiple high level generics instantiated along with the client and the property `type` on the response is on of the string union `EventTypes`.
 
 ## August 11, 2020 - 1.14.1
 
