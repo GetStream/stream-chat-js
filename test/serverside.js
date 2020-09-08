@@ -630,7 +630,7 @@ describe('CreatedBy storage', function() {
 	});
 });
 
-describe.only('App configs', function() {
+describe('App configs', function() {
 	const client = getTestClient(true);
 	const client2 = getTestClient(false);
 
