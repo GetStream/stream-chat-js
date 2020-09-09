@@ -127,9 +127,18 @@ describe('Query Members', function() {
 		expect(members[1].user.id).to.be.equal(rob2);
 	});
 
-	it('query without filters return all the members', async function() {
-		const { members } = await channel.queryMembers({});
+	it('query without filters return all the members and sort by name', async function() {
+		const { members } = await channel.queryMembers({}, { name: 1 });
 		expect(members.length).to.be.equal(8);
+
+		expect(members[0].user.name).to.be.equal('Adame');
+		expect(members[1].user.name).to.be.equal('Carlos');
+		expect(members[2].user.name).to.be.equal('Evil');
+		expect(members[3].user.name).to.be.equal('Joseph');
+		expect(members[4].user.name).to.be.equal('Mary');
+		expect(members[5].user.name).to.be.equal('Robert');
+		expect(members[6].user.name).to.be.equal('Robert2');
+		expect(members[7].user.name).to.be.equal('Tomas');
 	});
 
 	it('paginate members', async function() {
