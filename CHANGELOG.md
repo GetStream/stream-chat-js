@@ -1,3 +1,7 @@
+## September 10, 2020 - 2.2.0
+
+- Add `warmUp` option for StreamChat constructor, to improve the network latency on api calls [74a9121](https://github.com/GetStream/stream-chat-js/commit/74a91214f69f0ccedadd39095640ac0f7237dcf5)
+
 ## September 7, 2020 - 2.1.3
 
 - Move @types dependencies to devDependencies [#418](https://github.com/GetStream/stream-chat-js/pull/418)
