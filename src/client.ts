@@ -1116,11 +1116,19 @@ export class StreamChat<
       logger: this.logger,
     });
 
+    let warmUpPromise;
     if (this.options.warmUp) {
-      this.doAxiosRequest('options', this.baseURL + '/connect');
+      warmUpPromise = this.doAxiosRequest('options', this.baseURL + '/connect');
+    }
+    const handshake = await this.wsConnection.connect();
+    try {
+      await warmUpPromise;
+    } catch (e) {
+      this.logger('error', 'Warmup request failed', {
+        error: e,
+      });
     }
 
-    const handshake = await this.wsConnection.connect();
     this.connectionID = this.wsConnection.connectionID;
     return handshake;
   }
