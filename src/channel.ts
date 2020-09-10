@@ -502,7 +502,7 @@ export class Channel<
   /**
    * enableSlowMode - enable slow mode
    *
-   * @param {coolDownInterval<number>} coolDownInterval the cooldown interval in seconds
+   * @param {number} coolDownInterval the cooldown interval in seconds
    * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
    */
   async enableSlowMode(coolDownInterval: number) {
