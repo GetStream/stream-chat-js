@@ -254,3 +254,45 @@ client.updateChannelType('messaging', { permissions }).then(response => {
   const permissionName: string = permissions[0].name || '';
   const permissionRoles: string[] = permissions[0].roles || [];
 });
+
+client.queryChannels({
+  members: {
+    $in: ['vishal'],
+  },
+  cid: {
+    $in: ['messaging:channelid'],
+  },
+  name: {
+    $autocomplete: 'chan',
+  },
+});
+
+// TODO: Fix this
+// channel.queryMembers({
+//   $or: [
+//     { name: { $autocomplete: 'Rob' } }, // rob, rob2
+//     { banned: true }, // banned
+//     { is_moderator: true }, // mod
+//     {
+//       // invited
+//       $and: [
+//         { name: { $q: 'Mar' } },
+//         { invite: 'accepted' },
+//         {
+//           $or: [
+//             { name: { $autocomplete: 'mar' } },
+//             { invite: 'rejected' },
+//           ],
+//         },
+//       ],
+//     },
+//     {
+//       // no match
+//       $nor: [
+//         {
+//           $and: [{ name: { $q: 'Car' } }, { invite: 'accepted' }],
+//         },
+//       ],
+//     },
+//   ],
+// });

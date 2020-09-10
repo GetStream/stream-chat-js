@@ -897,6 +897,8 @@ export type ChannelFilters<
   CommandType extends string = LiteralStringForUnion
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
+    members?: QueryFilter<string>;
+  } & {
     name?:
       | RequireOnlyOne<
           {
@@ -905,7 +907,10 @@ export type ChannelFilters<
         >
       | PrimitiveFilter<ChannelResponse<ChannelType, UserType, CommandType>['name']>;
   } & {
-      [Key in keyof Omit<ChannelResponse<{}, UserType, CommandType>, 'name'>]:
+      [Key in keyof Omit<
+        ChannelResponse<{}, UserType, CommandType>,
+        'name' | 'members'
+      >]:
         | RequireOnlyOne<QueryFilter<ChannelResponse<{}, UserType, CommandType>[Key]>>
         | PrimitiveFilter<ChannelResponse<{}, UserType, CommandType>[Key]>;
     }
