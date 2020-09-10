@@ -1,3 +1,11 @@
+## September 10, 2020 - 2.2.2
+
+- Fixing possible race condition betweek warmUp options request and first queryChannels call. [372b22c](https://github.com/GetStream/stream-chat-js/commit/372b22cffb90fcc4e5470af7d64524ff0d6457dc)
+
+## September 10, 2020 - 2.2.1
+
+- Fixing typescript for `filters` param in queryChannels endpoint [5e840ba](https://github.com/GetStream/stream-chat-js/commit/5e840ba79b9e9f34f987b459d86986cc661d20ca)
+
 ## September 10, 2020 - 2.2.0
 
 - Add `warmUp` option for StreamChat constructor, to improve the network latency on api calls [74a9121](https://github.com/GetStream/stream-chat-js/commit/74a91214f69f0ccedadd39095640ac0f7237dcf5)
