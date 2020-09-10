@@ -753,6 +753,7 @@ export type SearchOptions = {
 export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
   logger?: Logger;
+  warmUp?: boolean;
 };
 
 export type UnBanUserOptions = {

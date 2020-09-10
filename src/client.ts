@@ -199,6 +199,7 @@ export class StreamChat<
     const defaultOptions = {
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
+      warmUp: false,
     };
 
     if (this.node) {
@@ -754,6 +755,10 @@ export class StreamChat<
         case 'patch':
           response = await this.axiosInstance.patch(url, data, requestConfig);
           break;
+        case 'options':
+          // @ts-ignore
+          response = await this.axiosInstance.options(url, requestConfig);
+          break;
         default:
           throw new Error('Invalid request type');
       }
@@ -1110,6 +1115,10 @@ export class StreamChat<
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
     });
+
+    if (this.options.warmUp) {
+      this.doAxiosRequest('options', this.baseURL + '/connect');
+    }
 
     const handshake = await this.wsConnection.connect();
     this.connectionID = this.wsConnection.connectionID;

@@ -5,7 +5,7 @@ import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../src';
-import { expectHTTPErrorCode } from './utils';
+import { expectHTTPErrorCode, getTestClientWithWarmUp } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
 const mockServer = require('mockttp').getLocal();
@@ -3001,5 +3001,50 @@ describe('paginate order with id_gt{,e}', () => {
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(user + (3).toString());
 		expect(result.messages[1].id).to.be.equal(user + (4).toString());
+	});
+});
+
+describe('warm up', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	it('shouldReuseConnection', async () => {
+		const baseUrl = 'https://chat-us-east-1.stream-io-api.com';
+		const client = getTestClient(true);
+		client.setBaseURL(baseUrl);
+		const health = await client.setUser({ id: user }, createUserToken(user));
+		client.health = health;
+		channel = await client.channel('messaging', uuidv4());
+
+		// populate cache
+		await channel.query();
+
+		// first client uses warmUp
+		const warmUpClient = getTestClientWithWarmUp();
+		warmUpClient.setBaseURL(baseUrl);
+		warmUpClient.health = await warmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
+
+		let t0 = new Date().getTime();
+		await warmUpClient.channel(channel.type, channel.id).query();
+		let t1 = new Date().getTime();
+		const withWarmUpDur = t1 - t0;
+		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
+
+		// second client without warmUp
+		const noWarmUpClient = await getTestClient(false);
+		noWarmUpClient.setBaseURL(baseUrl);
+		noWarmUpClient.health = await noWarmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
+		t0 = new Date().getTime();
+		await noWarmUpClient.channel(channel.type, channel.id).query();
+		t1 = new Date().getTime();
+		const withoutWarmUpDur = t1 - t0;
+		console.log('time taken without warm up ' + withoutWarmUpDur + ' milliseconds.');
+		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
 	});
 });

@@ -29,6 +29,10 @@ export async function getTestClientForUser(userID, status, options) {
 	return client;
 }
 
+export function getTestClientWithWarmUp() {
+	return new StreamChat(apiKey, { warmUp: true });
+}
+
 export function createUserToken(userID, exp) {
 	const c = new StreamChat(apiKey, apiSecret);
 	return c.createToken(userID, exp);
