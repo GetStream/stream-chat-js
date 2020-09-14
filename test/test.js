@@ -1686,64 +1686,6 @@ describe('Chat', () => {
 
 	describe('Slash Commands', () => {
 		describe('Success', () => {
-			it('Custom Command Sample Integration', async () => {
-				const text = '/excuse me';
-				const cmdChannel = authClient.channel('ai', 'excuse-test');
-				await cmdChannel.watch();
-				const data = await cmdChannel.sendMessage({ text });
-				expect(data.message.attachments.length).to.equal(1);
-				expect(data.message.attachments[0].actions.length).to.equal(3);
-				expect(data.message.command).to.equal('excuse');
-				expect(data.message.type).to.equal('ephemeral');
-				expect(data.message.args).to.equal('me');
-			});
-
-			it('Custom Command Sample Action Send', async () => {
-				const text = '/excuse me';
-				const cmdChannel = authClient.channel('ai', 'excuse-test');
-				await cmdChannel.watch();
-				const data = await cmdChannel.sendMessage({ text });
-
-				const firstExcuse = data.message.attachments[0].text;
-				const messageID = data.message.id;
-				const actionData = await channel.sendAction(messageID, {
-					excuse_action: 'shuffle',
-				});
-
-				const selectedExcuse = actionData.message.attachments[0].text;
-				expect(selectedExcuse).to.not.equal(firstExcuse);
-				expect(actionData.message.type).to.equal('ephemeral');
-
-				const sendData = await channel.sendAction(messageID, {
-					excuse_action: 'send',
-				});
-				expect(sendData.message.type).to.equal('regular');
-				expect(sendData.message.text).to.equal(selectedExcuse);
-			});
-
-			it('Custom Command Sample MML Integration', async () => {
-				const text = '/excuse mml';
-				const cmdChannel = authClient.channel('ai', 'excuse-test');
-				await cmdChannel.watch();
-				const data = await cmdChannel.sendMessage({ text });
-				expect(data.message.mml).to.contain('<mml name="excuse">');
-				expect(data.message.attachments.length).to.equal(0);
-				expect(data.message.command).to.equal('excuse');
-				expect(data.message.type).to.equal('ephemeral');
-				expect(data.message.args).to.equal('mml');
-
-				// actions should work as usual
-				const messageID = data.message.id;
-				const actionData = await channel.sendAction(messageID, {
-					excuse_action: 'shuffle',
-				});
-				expect(actionData.message.type).to.equal('ephemeral');
-				const sendData = await channel.sendAction(messageID, {
-					excuse_action: 'send',
-				});
-				expect(sendData.message.type).to.equal('regular');
-			});
-
 			it('Giphy Integration', async () => {
 				const text = '/giphy rock';
 				const data = await channel.sendMessage({ text });
