@@ -142,6 +142,7 @@ describe('custom command hook', () => {
 	let handler = data => JSON.stringify(data.message);
 	let chan;
 	const channelID = `custom-commands-${uuidv4()}`;
+	const channelTypeID = `channel-type-${uuidv4()}`;
 
 	let responseCode = 200;
 
@@ -181,7 +182,11 @@ describe('custom command hook', () => {
 			custom_action_handler_url: 'http://127.0.0.1:4323',
 		});
 
-		chan = userAuth.channel('ai', channelID);
+		await serverAuth.createChannelType({
+			name: channelTypeID,
+			commands: ['mml-examples', 'excuse'],
+		});
+		chan = userAuth.channel(channelTypeID, channelID);
 		await chan.watch();
 	});
 
@@ -203,7 +208,6 @@ describe('custom command hook', () => {
 			});
 			const p = chan.sendMessage({ text: '/excuse me' });
 			const response = await p;
-
 			expect(response.message.type).to.equal('ephemeral');
 			expect(called).to.eql(true);
 			expect(response.message.user.id).to.eql(guyon.id);
@@ -402,7 +406,7 @@ describe('custom command hook', () => {
 
 	describe('"mml" custom command examples', () => {
 		it('should return a simple hi! text element', async () => {
-			const p = chan.sendMessage({ text: '/mml hi' });
+			const p = chan.sendMessage({ text: '/mml-examples hi' });
 			const response = await p;
 			expect(response.message.mml).to.contain(`<text>Hi!</text>`);
 		});
@@ -416,7 +420,7 @@ describe('custom command hook', () => {
 				return JSON.stringify(request);
 			});
 
-			const p = chan.sendMessage({ text: '/mml email' });
+			const p = chan.sendMessage({ text: '/mml-examples email' });
 			const response = await p;
 			expect(response.message.mml).to.contain(`<input type="text" name="email" />`);
 
@@ -454,7 +458,7 @@ describe('custom command hook', () => {
 				return JSON.stringify(request);
 			});
 
-			const p = chan.sendMessage({ text: '/mml multi_step' });
+			const p = chan.sendMessage({ text: '/mml-examples multi_step' });
 			const response = await p;
 			expect(response.message.mml).to.contain(
 				`<button style="primary" name="action" value="start">Start</button>`,
