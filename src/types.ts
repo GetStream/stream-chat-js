@@ -77,7 +77,7 @@ export type AppSettingsAPIResponse<
       }
     >;
     before_message_send_hook_url?: string;
-    custom_command_url?: string;
+    custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     multi_tenant_enabled?: boolean;
