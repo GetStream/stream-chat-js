@@ -175,11 +175,11 @@ describe('custom command hook', () => {
 			});
 		});
 
-		await server.listen(4323, '127.0.0.1');
+		await server.listen(4324, '127.0.0.1');
 		await sleep(100);
 
 		await serverAuth.updateAppSettings({
-			custom_action_handler_url: 'http://127.0.0.1:4323',
+			custom_action_handler_url: 'http://127.0.0.1:4324',
 		});
 
 		await serverAuth.createChannelType({
