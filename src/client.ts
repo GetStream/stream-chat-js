@@ -105,8 +105,30 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
+  _user?: UserResponse<UserType>;
+  activeChannels: {
+    [key: string]: Channel<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+  };
+  anonymous: boolean;
+  axiosInstance: AxiosInstance;
+  baseURL?: string;
+  browser: boolean;
+  cleaningIntervalRef?: NodeJS.Timeout;
+  clientID?: string;
+  configs: Configs<CommandType>;
+  connecting?: boolean;
+  connectionEstablishedCount?: number;
+  connectionID?: string;
+  failures?: number;
   key: string;
-  secret?: string;
   listeners: {
     [key: string]: Array<
       (
@@ -122,43 +144,21 @@ export class StreamChat<
       ) => void
     >;
   };
-  state: ClientState<UserType>;
+  logger: Logger;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
-  browser: boolean;
   node: boolean;
   options: StreamChatOptions;
-  axiosInstance: AxiosInstance;
+  secret?: string;
+  setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
+  state: ClientState<UserType>;
+  tokenManager: TokenManager<UserType>;
+  user?: UserResponse<UserType>;
+  userAgent?: string;
+  userID?: string;
+  UUID?: string;
+  wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
-  setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
-  activeChannels: {
-    [key: string]: Channel<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >;
-  };
-  configs: Configs<CommandType>;
-  anonymous: boolean;
-  tokenManager: TokenManager<UserType>;
-  logger: Logger;
-  baseURL?: string;
-  wsBaseURL?: string;
-  UUID?: string;
-  userID?: string;
-  clientID?: string;
-  connectionID?: string;
-  user?: UserResponse<UserType>;
-  _user?: UserResponse<UserType>;
-  userAgent?: string;
-  cleaningIntervalRef?: NodeJS.Timeout;
-  connectionEstablishedCount?: number;
-  connecting?: boolean;
-  failures?: number;
 
   constructor(key: string, options?: StreamChatOptions);
   constructor(key: string, secret?: string, options?: StreamChatOptions);
