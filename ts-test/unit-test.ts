@@ -13,7 +13,6 @@ import {
   APIResponse,
   AppSettingsAPIResponse,
   UserResponse,
-  ConnectionOpen,
   SendFileAPIResponse,
   UnknownType,
   Channel,
@@ -23,6 +22,7 @@ import {
   UpdateChannelAPIResponse,
   PartialUserUpdate,
   PermissionObject,
+  ConnectAPIResponse,
 } from '..';
 const apiKey = 'apiKey';
 
@@ -41,33 +41,41 @@ type AttachmentType = UnknownType;
 type EventType = UnknownType;
 type MessageType = UnknownType;
 type ReactionType = UnknownType;
+type CommandType = string & {};
 
 let voidReturn: void | { unsubscribe: () => void };
 let voidPromise: Promise<void>;
 
 const client: StreamChat<
-  ChannelType,
-  UserType,
-  MessageType,
   AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
   ReactionType,
-  EventType
+  UserType
 > = new StreamChat<
-  ChannelType,
-  UserType,
-  MessageType,
   AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
   ReactionType,
-  EventType
+  UserType
 >(apiKey, undefined, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
-const clientWithoutSecret: StreamChat<ChannelType, UserType> = new StreamChat<
+const clientWithoutSecret: StreamChat<
+  {},
   ChannelType,
+  string & {},
+  {},
+  {},
+  {},
   UserType
->(apiKey, {
+> = new StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
@@ -102,7 +110,7 @@ voidReturn = client.off(eventHandler);
 voidReturn = client.on('message.new', eventHandler);
 voidReturn = client.off('message.new', eventHandler);
 
-let userReturn: Promise<void | ConnectionOpen<ChannelType, UserType>>;
+let userReturn: ConnectAPIResponse<ChannelType, CommandType, UserType>;
 userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.setUser({ id: 'john', phone: 2 }, async () => 'token');
 
@@ -157,6 +165,7 @@ voidPromise = client.recoverState();
 const channels: Promise<Channel<
   AttachmentType,
   ChannelType,
+  CommandType,
   EventType,
   MessageType,
   ReactionType,
@@ -170,6 +179,7 @@ channels.then(response => {
 const channel: Channel<
   AttachmentType,
   ChannelType,
+  CommandType,
   EventType,
   MessageType,
   ReactionType,
@@ -178,6 +188,7 @@ const channel: Channel<
 const channelState: ChannelState<
   AttachmentType,
   ChannelType,
+  CommandType,
   EventType,
   MessageType,
   ReactionType,
@@ -191,17 +202,19 @@ const chUser2: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
 const chUser3: Immutable.ImmutableObject<UserResponse<UserType>> =
   channelState.read.someUserId.user;
 const typing: Immutable.ImmutableObject<Event<
-  EventType,
   AttachmentType,
   ChannelType,
+  CommandType,
+  EventType,
   MessageType,
   ReactionType,
   UserType
 >> = channelState.typing['someUserId'];
 
 const acceptInvite: Promise<UpdateChannelAPIResponse<
-  ChannelType,
   AttachmentType,
+  ChannelType,
+  CommandType,
   MessageType,
   ReactionType,
   UserType

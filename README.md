@@ -6,7 +6,7 @@
 
 stream-chat-js is the official JavaScript client for Stream Chat, a service for building chat applications.
 
-You can sign up for a Stream account at https://getstream.io/chat/get_started/.
+You can sign up for a Stream account at <https://getstream.io/chat/get_started/>.
 
 ## Installation
 
@@ -37,7 +37,7 @@ Documentation for this JavaScript client are available at the [Stream Website](h
 The StreamChat client is setup to allow extension of the base types through use of generics when instantiated. The default instantiation has all generics set to `Record<string, unknown>`.
 
 ```typescript
-StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType>
+StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
 ```
 
 Custom types provided when initializing the client will carry through to all client returns and provide intellisense to queries.
@@ -57,25 +57,32 @@ type AdminMessage = { priorityLevel: number };
 type ChatAttachment = { originalURL?: string };
 type CustomReaction = { size?: number };
 type ChatEvent = { quitChannel?: boolean };
+type CustomCommands = 'imgur';
 
 // Instantiate a new client (server side)
 const client = new StreamChat<
-  ChatChannel,
-  ChatUser1 | ChatUser2,
-  UserMessage | AdminMessage,
   ChatAttachment,
+  ChatChannel,
+  CustomCommands,
+  ChatEvent,
+  UserMessage | AdminMessage,
   CustomReaction,
-  ChatEvent
+  ChatUser1 | ChatUser2
 >('YOUR_API_KEY', 'API_KEY_SECRET');
 
 /**
  * Instantiate a new client (client side)
  * Unused generics default to Record<string, unknown>
+ * with the exception of Command which defaults to string & {}
  */
 const client = new StreamChat<
+  {},
   ChatChannel,
-  ChatUser1 | ChatUser2,
-  UserMessage | AdminMessage
+  {},
+  {},
+  UserMessage | AdminMessage,
+  {},
+  ChatUser1 | ChatUser2
 >('YOUR_API_KEY');
 ```
 
@@ -113,7 +120,7 @@ const channel = client.channel('messaging', 'TestChannel');
 await channel.create();
 
 // Valid queries
-// messages: SearchAPIResponse<UserMessage | AdminMessage, ChatAttachment, ChatChannel, CustomReaction, ChatUser1 | ChatUser2>
+// messages: SearchAPIResponse<ChatAttachment, ChatChannel, CommandTypes, UserMessage | AdminMessage, CustomReaction, ChatUser1 | ChatUser2>
 const messages = await channel.search({ country: 'NL' });
 const messages = await channel.search({ priorityLevel: { $gt: 5 } });
 const messages = await channel.search({

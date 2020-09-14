@@ -11,50 +11,55 @@ const executables = [
 		f: rg.acceptInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, { song?: string }>['acceptInvite']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, string & {}, {}, {}, {}, { song?: string }>['acceptInvite']>>",
 	},
 	{
 		f: rg.addDevice,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['addDevice']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['addDevice']>>",
 	},
 	{
 		f: rg.getDevices,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getDevices']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getDevices']>>",
 	},
 	{
 		f: rg.addMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addMembers']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['addMembers']>>",
 	},
 	{
 		f: rg.addModerators,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['addModerators']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['addModerators']>>",
 	},
 	{
 		f: rg.banUsers,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['banUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['banUser']>>",
 	},
 	{
 		f: rg.channelSearch,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['search']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['search']>>",
 	},
 	{
 		f: rg.connect,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['connect']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connect']>>",
 	},
 	{
 		f: rg.create,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['create']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['create']>>",
 	},
 	// createChannelType has a limit. So only run this when needed.
 	// {
@@ -66,25 +71,25 @@ const executables = [
 		f: rg.createCommand,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['createCommand']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two', {}, {}, {}, {} >['createCommand']>>",
 	},
 	{
 		f: rg.createPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createPermission']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['createPermission']>>",
 	},
 	{
 		f: rg.deactivateUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deactivateUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deactivateUser']>>",
 	},
 	{
 		f: rg.deleteChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['delete']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['delete']>>",
 	},
 	// TODO: Fix the error which results from deleteChannelType api call:
 	// `deleteChannelType failed with error:  { Error: StreamChat error code 16: DeleteChannelType failed with error: "bc0b09df-2cfd-4e80-93e7-1f0091e6a435 is not a defined channel type"`
@@ -98,420 +103,433 @@ const executables = [
 		f: rg.deleteCommand,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['deleteCommand']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two', {}, {}, {}, {}>['deleteCommand']>>",
 	},
 	{
 		f: rg.deleteFile,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteFile']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['deleteFile']>>",
 	},
 	{
 		f: rg.deleteImage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteImage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['deleteImage']>>",
 	},
 	{
 		f: rg.deleteMessage,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteMessage']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deleteMessage']>>",
 	},
 	{
 		f: rg.deletePermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deletePermission']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deletePermission']>>",
 	},
 	{
 		f: rg.deleteReaction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['deleteReaction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['deleteReaction']>>",
 	},
 	{
 		f: rg.deleteUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deleteUser']>>",
 	},
 	{
 		f: rg.demoteModerators,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['demoteModerators']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['demoteModerators']>>",
 	},
 	{
 		f: rg.disconnect,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['disconnect']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['disconnect']>>",
 	},
 	{
 		f: rg.exportUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['exportUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['exportUser']>>",
 	},
 	{
 		f: rg.flagMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['flagMessage']>>",
 	},
 	{
 		f: rg.flagUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['flagUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['flagUser']>>",
 	},
 	{
 		f: rg.getAppSettings,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getAppSettings']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getAppSettings']>>",
 	},
 	{
 		f: rg.getChannelType,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getChannelType']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getChannelType']>>",
 	},
 	{
 		f: rg.getCommand,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['getCommand']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two', {}, {}, {}, {}>['getCommand']>>",
 	},
 	{
 		f: rg.getConfig,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getConfig']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getConfig']>>",
 	},
 	{
 		f: rg.getMessage,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getMessage']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getMessage']>>",
 	},
 	{
 		f: rg.getMessagesById,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getMessagesById']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getMessagesById']>>",
 	},
 	{
 		f: rg.getPermission,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['getPermission']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getPermission']>>",
 	},
 	{
 		f: rg.getReactions,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['getReactions']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getReactions']>>",
 	},
 	{
 		f: rg.getReplies,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
+			"Unpacked<ReturnType<Channel<{ description?: string }, {}, string & {}, {}, {}, {}, { instrument?: string }>['getReplies']>>",
 	},
 	{
 		f: rg.hide,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['hide']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['hide']>>",
 	},
 	{
 		f: rg.inviteMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['inviteMembers']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['inviteMembers']>>",
 	},
 	{
 		f: rg.keystroke,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['keystroke']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['keystroke']>>",
 	},
 	{
 		f: rg.lastMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
 	},
 	{
 		f: rg.listChannelTypes,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listChannelTypes']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['listChannelTypes']>>",
 	},
 	{
 		f: rg.listCommands,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['listCommands']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two', {}, {}, {}, {}>['listCommands']>>",
 	},
 	{
 		f: rg.listPermissions,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listPermissions']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['listPermissions']>>",
 	},
 	{
 		f: rg.markAllRead,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['markAllRead']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['markAllRead']>>",
 	},
 	{
 		f: rg.markRead,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['markRead']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['markRead']>>",
 	},
 	{
 		f: rg.mute,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['mute']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['mute']>>",
 	},
 	{
 		f: rg.muteStatus,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['muteStatus']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['muteStatus']>>",
 	},
 	{
 		f: rg.muteUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['muteUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['muteUser']>>",
 	},
 	{
 		f: rg.partialUpdateUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { gender: string; unique: string }, {}, {}, {}, {}>['partialUpdateUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { gender: string; unique: string }>['partialUpdateUser']>>",
 	},
 	{
 		f: rg.partialUpdateUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { gender: string; unique: string; work?: string }, {}, {}, {}, {}>['partialUpdateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { gender: string; unique: string; work?: string }>['partialUpdateUsers']>>",
 	},
 	{
 		f: rg.query,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['query']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['query']>>",
 	},
 	{
 		f: rg.queryMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['queryMembers']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['queryMembers']>>",
 	},
 	{
 		f: rg.queryUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { nickname?: string }, {}, {}, {}, {}>['queryUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { nickname?: string }>['queryUsers']>>",
 	},
 	{
 		f: rg.reactivateUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['reactivateUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['reactivateUser']>>",
 	},
 	{
 		f: rg.rejectInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, {}, {}, {}, { song?: string }>['rejectInvite']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string; image?: string }, string & {}, {}, {}, {}, { song?: string }>['rejectInvite']>>",
 	},
 	{
 		f: rg.removeMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['removeMembers']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['removeMembers']>>",
 	},
 	{
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendAction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendAction']>>",
 	},
 	{
 		f: rg.sendFile,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendFile']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendFile']>>",
 	},
 	{
 		f: rg.sendImage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendImage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendImage']>>",
 	},
 	{
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendMessage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendMessage']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendEvent']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendEvent']>>",
 	},
 	{
 		f: rg.sendReaction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['sendReaction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
 		f: rg.setAnonymousUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setAnonymousUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setAnonymousUser']>>",
 	},
 	{
 		f: rg.setGuestUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setGuestUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setGuestUser']>>",
 	},
 	{
 		f: rg.setUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['setUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setUser']>>",
 	},
 	{
 		f: rg.show,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['show']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['show']>>",
 	},
 	{
 		f: rg.stopTyping,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopTyping']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['stopTyping']>>",
 	},
 	{
 		f: rg.stopWatching,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['stopWatching']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['stopWatching']>>",
 	},
 	{
 		f: rg.sync,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ description?: string }, {}, {}, {}, {}, {}>['sync']>>",
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sync']>>",
 	},
 	// Need translation on the account to run this test
 	// {
 	// 	f: rg.translateMessage,
 	// 	imports: ['StreamChat', 'Unpacked'],
 	// 	type:
-	// 		"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['translateMessage']>>",
+	// 		"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['translateMessage']>>",
 	// },
 	{
 		f: rg.truncateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['truncate']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['truncate']>>",
 	},
 	{
 		f: rg.unbanUsers,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unbanUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unbanUser']>>",
 	},
 	{
 		f: rg.unflagMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['unflagMessage']>>",
 	},
 	{
 		f: rg.unflagUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { image: string, status: string }, {}, {}, {}, {}>['unflagUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['unflagUser']>>",
 	},
 	{
 		f: rg.unmute,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['unmute']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['unmute']>>",
 	},
 	{
 		f: rg.unmuteUser,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['unmuteUser']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unmuteUser']>>",
 	},
 	{
 		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, {}, {}, {}, {}>['update']>>",
+			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, string & {}, {}, {}, {}, {}>['update']>>",
 	},
 	{
 		f: rg.updateChannelType,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateChannelType']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateChannelType']>>",
 	},
 	{
 		f: rg.updateCommand,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two' >['updateCommand']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, 'testCreateCommand' | 'testCreateCommand_set' | 'testDeleteCommand' | 'testDeleteCommand_set' | 'testGetCommand' | 'testGetCommand_set' | 'testListCommand' | 'testListCommand_set' | 'testUpdateCommand' | 'testUpdateCommand_set' | 'testUpdateCommand_set_two', {}, {}, {}, {}>['updateCommand']>>",
 	},
 	{
 		f: rg.updateMessage,
 		imports: ['StreamChat', 'Unpacked'],
-		type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updateMessage']>>",
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateMessage']>>",
 	},
 	{
 		f: rg.updatePermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['updatePermission']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updatePermission']>>",
 	},
 	{
 		f: rg.updateUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { unique: string }, {}, {}, {}, {}>['updateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { unique: string }>['updateUsers']>>",
 	},
 	{
 		f: rg.upsertUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, { nickname: string }, {}, {}, {}, {}>['upsertUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { nickname: string }>['upsertUser']>>",
 	},
 	{
 		f: rg.watch,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, {}, {}, {}, {}>['watch']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['watch']>>",
 	},
 
 	// Currently roles do not return
 	// {
 	// 	f: rg.createRole,
 	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['createRole']>>",
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['createRole']>>",
 	// },
 	// {
 	// 	f: rg.deleteRole,
 	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['deleteRole']>>",
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deleteRole']>>",
 	// },
 	// {
 	// 	f: rg.listRoles,
 	// 	imports: ['StreamChat', 'Unpacked'],
-	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, {}, {}, {}, {}>['listRoles']>>",
+	// 	type: "Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['listRoles']>>",
 	// },
 ];
 

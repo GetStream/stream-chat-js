@@ -2,6 +2,7 @@ import WebSocket from 'isomorphic-ws';
 import { chatCodes, sleep } from './utils';
 import { TokenManager } from './token_manager';
 import {
+  ConnectAPIResponse,
   ConnectionChangeEvent,
   ConnectionOpen,
   LiteralStringForUnion,
@@ -21,8 +22,8 @@ const isErrorEvent = (
 
 type Constructor<
   ChannelType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
 > = {
   apiKey: string;
   authType: 'anonymous' | 'jwt';
@@ -31,7 +32,7 @@ type Constructor<
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (
-    open?: ConnectionOpen<ChannelType, UserType, CommandType>,
+    open?: ConnectionOpen<ChannelType, CommandType, UserType>,
   ) => Promise<void>;
   tokenManager: TokenManager<UserType>;
   user: UserResponse<UserType>;
@@ -59,21 +60,21 @@ type Constructor<
  */
 export class StableWSConnection<
   ChannelType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
 > {
-  wsBaseURL: Constructor<ChannelType, UserType, CommandType>['wsBaseURL'];
-  clientID: Constructor<ChannelType, UserType, CommandType>['clientID'];
-  userID: Constructor<ChannelType, UserType, CommandType>['userID'];
-  user: Constructor<ChannelType, UserType, CommandType>['user'];
-  userAgent: Constructor<ChannelType, UserType, CommandType>['userAgent'];
-  authType: Constructor<ChannelType, UserType, CommandType>['authType'];
-  apiKey: Constructor<ChannelType, UserType, CommandType>['apiKey'];
-  tokenManager: Constructor<ChannelType, UserType, CommandType>['tokenManager'];
-  messageCallback: Constructor<ChannelType, UserType, CommandType>['messageCallback'];
-  recoverCallback: Constructor<ChannelType, UserType, CommandType>['recoverCallback'];
-  eventCallback: Constructor<ChannelType, UserType, CommandType>['eventCallback'];
-  logger: Constructor<ChannelType, UserType, CommandType>['logger'];
+  wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
+  clientID: Constructor<ChannelType, CommandType, UserType>['clientID'];
+  userID: Constructor<ChannelType, CommandType, UserType>['userID'];
+  user: Constructor<ChannelType, CommandType, UserType>['user'];
+  userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
+  authType: Constructor<ChannelType, CommandType, UserType>['authType'];
+  apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
+  tokenManager: Constructor<ChannelType, CommandType, UserType>['tokenManager'];
+  messageCallback: Constructor<ChannelType, CommandType, UserType>['messageCallback'];
+  recoverCallback: Constructor<ChannelType, CommandType, UserType>['recoverCallback'];
+  eventCallback: Constructor<ChannelType, CommandType, UserType>['eventCallback'];
+  logger: Constructor<ChannelType, CommandType, UserType>['logger'];
 
   consecutiveFailures: number;
   healthCheckInterval: number;
@@ -83,9 +84,7 @@ export class StableWSConnection<
   monitorInterval: number;
   totalFailures: number;
   connectionID?: string;
-  connectionOpen?: Promise<
-    ConnectionOpen<ChannelType, UserType, CommandType> | undefined
-  >;
+  connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
   healthCheckIntervalRef?: NodeJS.Timeout;
   isResolved?: boolean;
   monitorIntervalRef?: NodeJS.Timeout;
@@ -113,7 +112,7 @@ export class StableWSConnection<
     recoverCallback,
     eventCallback,
     logger,
-  }: Constructor<ChannelType, UserType, CommandType>) {
+  }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
     this.userID = userID;
@@ -149,10 +148,10 @@ export class StableWSConnection<
   /**
    * connect - Connect to the WS URL
    *
-   * @return {Promise<ConnectionOpen<ChannelType, UserType, CommandType> | void>} Promise that completes once the first health check message is received
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async connect() {
-    let healthCheck: ConnectionOpen<ChannelType, UserType, CommandType> | undefined;
+    let healthCheck: ConnectionOpen<ChannelType, CommandType, UserType> | undefined;
     if (this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
@@ -305,7 +304,7 @@ export class StableWSConnection<
   /**
    * _connect - Connect to the WS endpoint
    *
-   * @return {Promise<ConnectionOpen<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType> | undefined>} Promise that completes once the first health check message is received
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async _connect() {
     await this.tokenManager.tokenReady();
@@ -721,8 +720,8 @@ export class StableWSConnection<
         if (e.data && typeof e.data === 'string') {
           const data = JSON.parse(e.data) as ConnectionOpen<
             ChannelType,
-            UserType,
-            CommandType
+            CommandType,
+            UserType
           > & {
             error?: unknown;
           };
