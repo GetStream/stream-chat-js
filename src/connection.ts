@@ -63,30 +63,29 @@ export class StableWSConnection<
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
 > {
-  wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
-  clientID: Constructor<ChannelType, CommandType, UserType>['clientID'];
-  userID: Constructor<ChannelType, CommandType, UserType>['userID'];
-  user: Constructor<ChannelType, CommandType, UserType>['user'];
-  userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
-  authType: Constructor<ChannelType, CommandType, UserType>['authType'];
   apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
-  tokenManager: Constructor<ChannelType, CommandType, UserType>['tokenManager'];
-  messageCallback: Constructor<ChannelType, CommandType, UserType>['messageCallback'];
-  recoverCallback: Constructor<ChannelType, CommandType, UserType>['recoverCallback'];
+  authType: Constructor<ChannelType, CommandType, UserType>['authType'];
+  clientID: Constructor<ChannelType, CommandType, UserType>['clientID'];
   eventCallback: Constructor<ChannelType, CommandType, UserType>['eventCallback'];
   logger: Constructor<ChannelType, CommandType, UserType>['logger'];
+  messageCallback: Constructor<ChannelType, CommandType, UserType>['messageCallback'];
+  recoverCallback: Constructor<ChannelType, CommandType, UserType>['recoverCallback'];
+  tokenManager: Constructor<ChannelType, CommandType, UserType>['tokenManager'];
+  user: Constructor<ChannelType, CommandType, UserType>['user'];
+  userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
+  userID: Constructor<ChannelType, CommandType, UserType>['userID'];
+  wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
 
-  consecutiveFailures: number;
-  healthCheckInterval: number;
-  isConnecting: boolean;
-  isHealthy: boolean;
-  lastEvent: Date | null;
-  monitorInterval: number;
-  totalFailures: number;
   connectionID?: string;
   connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
+  consecutiveFailures: number;
+  healthCheckInterval: number;
   healthCheckIntervalRef?: NodeJS.Timeout;
+  isConnecting: boolean;
+  isHealthy: boolean;
   isResolved?: boolean;
+  lastEvent: Date | null;
+  monitorInterval: number;
   monitorIntervalRef?: NodeJS.Timeout;
   rejectPromise?: (
     reason?: Error & {
@@ -96,22 +95,23 @@ export class StableWSConnection<
     },
   ) => void;
   resolvePromise?: (value?: WebSocket.MessageEvent) => void;
+  totalFailures: number;
   ws?: WebSocket;
   wsID: number;
 
   constructor({
-    wsBaseURL,
-    clientID,
-    userID,
-    user,
-    userAgent,
     apiKey,
-    tokenManager,
     authType,
-    messageCallback,
-    recoverCallback,
+    clientID,
     eventCallback,
     logger,
+    messageCallback,
+    recoverCallback,
+    tokenManager,
+    user,
+    userAgent,
+    userID,
+    wsBaseURL,
   }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
