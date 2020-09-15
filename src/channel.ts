@@ -8,9 +8,10 @@ import {
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
+  ChannelMemberAPIResponse,
   ChannelMemberResponse,
-  ChannelResponse,
   ChannelQueryOptions,
+  ChannelResponse,
   DeleteChannelAPIResponse,
   Event,
   EventAPIResponse,
@@ -31,12 +32,11 @@ import {
   SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
-  UpdateChannelAPIResponse,
-  ChannelMemberAPIResponse,
   UnknownType,
+  UpdateChannelAPIResponse,
+  UserFilters,
   UserResponse,
   UserSort,
-  UserFilters,
 } from './types';
 
 /**
@@ -45,52 +45,52 @@ import {
 export class Channel<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion
+  UserType extends UnknownType = UnknownType
 > {
   _client: StreamChat<
-    ChannelType,
-    UserType,
-    MessageType,
     AttachmentType,
-    ReactionType,
+    ChannelType,
+    CommandType,
     EventType,
-    CommandType
+    MessageType,
+    ReactionType,
+    UserType
   >;
   type: string;
   id: string | undefined;
   data:
     | ChannelData<ChannelType>
-    | ChannelResponse<ChannelType, UserType, CommandType>
-    | Immutable.Immutable<ChannelResponse<ChannelType, UserType, CommandType>>
+    | ChannelResponse<ChannelType, CommandType, UserType>
+    | Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
     | undefined;
-  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, UserType, CommandType>;
+  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
   cid: string;
   listeners: {
     [key: string]: (
       | string
       | EventHandler<
-          EventType,
           AttachmentType,
           ChannelType,
+          CommandType,
+          EventType,
           MessageType,
           ReactionType,
-          UserType,
-          CommandType
+          UserType
         >
     )[];
   };
   state: ChannelState<
     AttachmentType,
     ChannelType,
+    CommandType,
     EventType,
     MessageType,
     ReactionType,
-    UserType,
-    CommandType
+    UserType
   >;
   initialized: boolean;
   lastKeyStroke?: Date;
@@ -101,22 +101,22 @@ export class Channel<
   /**
    * constructor - Create a channel
    *
-   * @param {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType, CommandType>} client the chat client
+   * @param {StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} client the chat client
    * @param {string} type  the type of channel
    * @param {string} [id]  the id of the chat
    * @param {ChannelData<ChannelType>} data any additional custom params
    *
-   * @return {Channel<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType, CommandType>} Returns a new uninitialized channel
+   * @return {Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} Returns a new uninitialized channel
    */
   constructor(
     client: StreamChat<
-      ChannelType,
-      UserType,
-      MessageType,
       AttachmentType,
-      ReactionType,
+      ChannelType,
+      CommandType,
       EventType,
-      CommandType
+      MessageType,
+      ReactionType,
+      UserType
     >,
     type: string,
     id: string | undefined,
@@ -145,11 +145,11 @@ export class Channel<
     this.state = new ChannelState<
       AttachmentType,
       ChannelType,
+      CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >(this);
     this.initialized = false;
     this.lastTypingEvent = null;
@@ -160,16 +160,16 @@ export class Channel<
   /**
    * getClient - Get the chat client for this channel. If client.disconnect() was called, this function will error
    *
-   * @return {StreamChat<ChannelType, UserType, MessageType, AttachmentType, ReactionType, EventType, CommandType>}
+   * @return {StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>}
    */
   getClient(): StreamChat<
-    ChannelType,
-    UserType,
-    MessageType,
     AttachmentType,
-    ReactionType,
+    ChannelType,
+    CommandType,
     EventType,
-    CommandType
+    MessageType,
+    ReactionType,
+    UserType
   > {
     if (this.disconnected === true) {
       throw Error(`You can't use a channel after client.disconnect() was called`);
@@ -190,19 +190,19 @@ export class Channel<
   /**
    * sendMessage - Send a message to this channel
    *
-   * @param {Message<MessageType, AttachmentType, UserType>} message The Message object
+   * @param {Message<AttachmentType, MessageType, UserType>} message The Message object
    *
-   * @return {Promise<SendMessageAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>>} The Server Response
+   * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendMessage(message: Message<MessageType, AttachmentType, UserType>) {
+  async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
     return await this.getClient().post<
       SendMessageAPIResponse<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL() + '/message', {
       message,
@@ -250,31 +250,31 @@ export class Channel<
   /**
    * sendEvent - Send an event on this channel
    *
-   * @param {Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>} event for example {type: 'message.read'}
+   * @param {Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} event for example {type: 'message.read'}
    *
-   * @return {Promise<EventAPIResponse<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>>} The Server Response
+   * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendEvent(
     event: Event<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ) {
     this._checkInitialized();
     return await this.getClient().post<
       EventAPIResponse<
-        EventType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        EventType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL() + '/event', {
       event,
@@ -284,20 +284,20 @@ export class Channel<
   /**
    * search - Query messages
    *
-   * @param { MessageFilters<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType> | string}  query search query or object MongoDB style filters
-   * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<MessageType, AttachmentType, ReactionType, UserType, CommandType>;}} options Option object, {user_id: 'tommaso'}
+   * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string}  query search query or object MongoDB style filters
+   * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
    *
-   * @return {Promise<SearchAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType>>} search messages response
+   * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
   async search(
     query:
       | MessageFilters<
-          MessageType,
           AttachmentType,
           ChannelType,
+          CommandType,
+          MessageType,
           ReactionType,
-          UserType,
-          CommandType
+          UserType
         >
       | string,
     options: {
@@ -305,12 +305,12 @@ export class Channel<
       connection_id?: string;
       limit?: number;
       message_filter_conditions?: MessageFilters<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >;
       offset?: number;
       query?: string;
@@ -334,12 +334,12 @@ export class Channel<
 
     return await this.getClient().get<
       SearchAPIResponse<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this.getClient().baseURL + '/search', {
       payload,
@@ -395,7 +395,7 @@ export class Channel<
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
    * @param {string} [user_id] the id of the user (used only for server side request) default null
    *
-   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType, CommandType>>} The Server Response
+   * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
@@ -416,12 +416,12 @@ export class Channel<
     }
     return await this.getClient().post<
       ReactionAPIResponse<
-        ReactionType,
         AttachmentType,
         ChannelType,
+        CommandType,
         MessageType,
-        UserType,
-        CommandType
+        ReactionType,
+        UserType
       >
     >(this.getClient().baseURL + `/messages/${messageID}/reaction`, body);
   }
@@ -433,7 +433,7 @@ export class Channel<
    * @param {string} reactionType the type of reaction that should be removed
    * @param {string} [user_id] the id of the user (used only for server side request) default null
    *
-   * @return {Promise<ReactionAPIResponse<ReactionType, AttachmentType, ChannelType, MessageType, UserType, CommandType>>} The Server Response
+   * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
@@ -449,24 +449,24 @@ export class Channel<
     if (user_id) {
       return this.getClient().delete<
         ReactionAPIResponse<
-          ReactionType,
           AttachmentType,
           ChannelType,
+          CommandType,
           MessageType,
-          UserType,
-          CommandType
+          ReactionType,
+          UserType
         >
       >(url, { user_id });
     }
 
     return this.getClient().delete<
       ReactionAPIResponse<
-        ReactionType,
         AttachmentType,
         ChannelType,
+        CommandType,
         MessageType,
-        UserType,
-        CommandType
+        ReactionType,
+        UserType
       >
     >(url, {});
   }
@@ -475,21 +475,21 @@ export class Channel<
    * update - Edit the channel's custom properties
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
-   * @param {Message<MessageType, AttachmentType, UserType>} [updateMessage] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
     channelData: ChannelData<ChannelType>,
-    updateMessage?: Message<MessageType, AttachmentType, UserType>,
+    updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       message: updateMessage,
@@ -503,17 +503,17 @@ export class Channel<
    * enableSlowMode - enable slow mode
    *
    * @param {number} coolDownInterval the cooldown interval in seconds
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async enableSlowMode(coolDownInterval: number) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       cooldown: coolDownInterval,
@@ -530,12 +530,12 @@ export class Channel<
   async disableSlowMode() {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       cooldown: 0,
@@ -547,50 +547,50 @@ export class Channel<
   /**
    * delete - Delete the channel. Messages are permanently removed.
    *
-   * @return {Promise<DeleteChannelAPIResponse<ChannelType, UserType, CommandType>>} The server response
+   * @return {Promise<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
   async delete() {
     return await this.getClient().delete<
-      DeleteChannelAPIResponse<ChannelType, UserType, CommandType>
+      DeleteChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this._channelURL(), {});
   }
 
   /**
    * truncate - Removes all messages from the channel
    *
-   * @return {Promise<TruncateChannelAPIResponse<ChannelType, UserType, CommandType>>} The server response
+   * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
   async truncate() {
     return await this.getClient().post<
-      TruncateChannelAPIResponse<ChannelType, UserType, CommandType>
+      TruncateChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this._channelURL() + '/truncate', {});
   }
 
   /**
    * acceptInvite - accept invitation to the channel
    *
-   * @param {InviteOptions<AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>} [options] The object to update the custom properties of this channel with
+   * @param {InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
    *
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async acceptInvite(
     options: InviteOptions<
       AttachmentType,
       ChannelType,
+      CommandType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     > = {},
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       accept_invite: true,
@@ -603,28 +603,28 @@ export class Channel<
   /**
    * rejectInvite - reject invitation to the channel
    *
-   * @param {InviteOptions<AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>} [options] The object to update the custom properties of this channel with
+   * @param {InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
    *
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async rejectInvite(
     options: InviteOptions<
       AttachmentType,
       ChannelType,
+      CommandType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     > = {},
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       reject_invite: true,
@@ -638,21 +638,21 @@ export class Channel<
    * addMembers - add members to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<MessageType, AttachmentType, UserType>} [message] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
     members: string[],
-    message?: Message<MessageType, AttachmentType, UserType>,
+    message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       add_members: members,
@@ -666,21 +666,21 @@ export class Channel<
    * addModerators - add moderators to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<MessageType, AttachmentType, UserType>} [message] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addModerators(
     members: string[],
-    message?: Message<MessageType, AttachmentType, UserType>,
+    message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       add_moderators: members,
@@ -694,21 +694,21 @@ export class Channel<
    * inviteMembers - invite members to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<MessageType, AttachmentType, UserType>} [message] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
     members: string[],
-    message?: Message<MessageType, AttachmentType, UserType>,
+    message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       invites: members,
@@ -722,21 +722,21 @@ export class Channel<
    * removeMembers - remove members from channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<MessageType, AttachmentType, UserType>} [message] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async removeMembers(
     members: string[],
-    message?: Message<MessageType, AttachmentType, UserType>,
+    message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       remove_members: members,
@@ -750,21 +750,21 @@ export class Channel<
    * demoteModerators - remove moderator role from channel members
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<MessageType, AttachmentType, UserType>} [message] Optional message object for channel members notification
-   * @return {Promise<UpdateChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType, CommandType>>} The server response
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async demoteModerators(
     members: string[],
-    message?: Message<MessageType, AttachmentType, UserType>,
+    message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL(), {
       demote_moderators: members,
@@ -777,7 +777,7 @@ export class Channel<
   /**
    * mute - mutes the current channel
    * @param {{ user_id?: string, expiration?: string }} opts expiration in minutes or user_id
-   * @return {Promise<MuteChannelAPIResponse<ChannelType, UserType, CommandType>>} The server response
+   * @return {Promise<MuteChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    *
    * example with expiration:
    * await channel.mute({expiration: moment.duration(2, 'weeks')});
@@ -788,7 +788,7 @@ export class Channel<
    */
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
     return await this.getClient().post<
-      MuteChannelAPIResponse<ChannelType, UserType, CommandType>
+      MuteChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this.getClient().baseURL + '/moderation/mute/channel', {
       channel_cid: this.cid,
       ...opts,
@@ -833,12 +833,12 @@ export class Channel<
     }
     return this.getClient().post<
       SendMessageAPIResponse<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this.getClient().baseURL + `/messages/${messageID}/action`, {
       message_id: messageID,
@@ -865,7 +865,7 @@ export class Channel<
       this.lastTypingEvent = new Date();
       await this.sendEvent({
         type: 'typing.start',
-      } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>);
+      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }
   }
 
@@ -880,13 +880,13 @@ export class Channel<
     this.isTyping = false;
     await this.sendEvent({
       type: 'typing.stop',
-    } as Event<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>);
+    } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
   }
 
   /**
    * lastMessage - return the last message, takes into account that last few messages might not be perfectly sorted
    *
-   * @return {Immutable.Immutable<ReturnType<ChannelState<AttachmentType, ChannelType, EventType, MessageType, ReactionType, UserType, CommandType>['messageToImmutable']>> | undefined} Description
+   * @return {Immutable.Immutable<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>> | undefined} Description
    */
   lastMessage() {
     // get last 5 messages, sort, return the latest
@@ -912,7 +912,7 @@ export class Channel<
    * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled
    *
    * @param {MarkReadOptions<UserType>} data
-   * @return {Promise<EventAPIResponse<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType> | null>} Description
+   * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> | null>} Description
    */
   async markRead(data: MarkReadOptions<UserType> = {}) {
     this._checkInitialized();
@@ -923,13 +923,13 @@ export class Channel<
 
     return await this.getClient().post<
       EventAPIResponse<
-        EventType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        EventType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL() + '/read', {
       ...data,
@@ -954,11 +954,11 @@ export class Channel<
   /**
    * watch - Loads the initial channel state and watches for changes
    *
-   * @param {ChannelQueryOptions<ChannelType, UserType, CommandType>} options additional options for the query endpoint
+   * @param {ChannelQueryOptions<ChannelType, CommandType, UserType>} options additional options for the query endpoint
    *
-   * @return {Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} The server response
+   * @return {Promise<ChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async watch(options?: ChannelQueryOptions<ChannelType, UserType, CommandType>) {
+  async watch(options?: ChannelQueryOptions<ChannelType, CommandType, UserType>) {
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1018,7 +1018,7 @@ export class Channel<
    * @param {string} parent_id The message parent id, ie the top of the thread
    * @param {PaginationOptions & { user?: UserResponse<UserType>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
    *
-   * @return {Promise<GetRepliesAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>>} A response with a list of messages
+   * @return {Promise<GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} A response with a list of messages
    */
   async getReplies(
     parent_id: string,
@@ -1026,12 +1026,12 @@ export class Channel<
   ) {
     const data = await this.getClient().get<
       GetRepliesAPIResponse<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this.getClient().baseURL + `/messages/${parent_id}/replies`, {
       ...options,
@@ -1067,17 +1067,17 @@ export class Channel<
    *
    * @param {string[]} messageIds The ids of the messages to retrieve from this channel
    *
-   * @return {Promise<GetMultipleMessagesAPIResponse<MessageType, AttachmentType, ChannelType, ReactionType, UserType, CommandType>>} Server response
+   * @return {Promise<GetMultipleMessagesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} Server response
    */
   getMessagesById(messageIds: string[]) {
     return this.getClient().get<
       GetMultipleMessagesAPIResponse<
-        MessageType,
         AttachmentType,
         ChannelType,
+        CommandType,
+        MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(this._channelURL() + '/messages', {
       ids: messageIds.join(','),
@@ -1160,7 +1160,7 @@ export class Channel<
   /**
    * create - Creates a new channel
    *
-   * @return {Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} The Server Response
+   * @return {Promise<ChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   create = async () => {
     const options = {
@@ -1174,11 +1174,11 @@ export class Channel<
   /**
    * query - Query the API, get messages, members or other channel fields
    *
-   * @param {ChannelQueryOptions<ChannelType, UserType>} options The query options
+   * @param {ChannelQueryOptions<ChannelType, CommandType, UserType>} options The query options
    *
-   * @return {Promise<ChannelAPIResponse<ChannelType, AttachmentType, MessageType, ReactionType, UserType>>} Returns a query response
+   * @return {Promise<ChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} Returns a query response
    */
-  async query(options: ChannelQueryOptions<ChannelType, UserType, CommandType>) {
+  async query(options: ChannelQueryOptions<ChannelType, CommandType, UserType>) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -1189,12 +1189,12 @@ export class Channel<
 
     const state = await this.getClient().post<
       ChannelAPIResponse<
-        ChannelType,
         AttachmentType,
+        ChannelType,
+        CommandType,
         MessageType,
         ReactionType,
-        UserType,
-        CommandType
+        UserType
       >
     >(queryURL + '/query', {
       data: this._data,
@@ -1287,52 +1287,52 @@ export class Channel<
    * or
    * channel.on(event => {console.log(event.type)})
    *
-   * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType> | EventTypes} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler<EventType, AttachmentType, ChannelType, MessageType, ReactionType, UserType, CommandType>} [callbackOrNothing] The callback to call
+   * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> | EventTypes} callbackOrString  The event type to listen for (optional)
+   * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
    */
   on(
     eventType: EventTypes,
     callback: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void;
   on(
     callback: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void;
   on(
     callbackOrString:
       | EventHandler<
-          EventType,
           AttachmentType,
           ChannelType,
+          CommandType,
+          EventType,
           MessageType,
           ReactionType,
-          UserType,
-          CommandType
+          UserType
         >
       | EventTypes,
     callbackOrNothing?: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
@@ -1363,46 +1363,46 @@ export class Channel<
   off(
     eventType: EventTypes,
     callback: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void;
   off(
     callback: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void;
   off(
     callbackOrString:
       | EventHandler<
-          EventType,
           AttachmentType,
           ChannelType,
+          CommandType,
+          EventType,
           MessageType,
           ReactionType,
-          UserType,
-          CommandType
+          UserType
         >
       | EventTypes,
     callbackOrNothing?: EventHandler<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
@@ -1425,13 +1425,13 @@ export class Channel<
 
   _handleChannelEvent(
     event: Event<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ) {
     const channel = this;
@@ -1527,13 +1527,13 @@ export class Channel<
 
   _callChannelListeners = (
     event: Event<
-      EventType,
       AttachmentType,
       ChannelType,
+      CommandType,
+      EventType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ) => {
     const channel = this;
@@ -1576,12 +1576,12 @@ export class Channel<
 
   _initializeState(
     state: ChannelAPIResponse<
-      ChannelType,
       AttachmentType,
+      ChannelType,
+      CommandType,
       MessageType,
       ReactionType,
-      UserType,
-      CommandType
+      UserType
     >,
   ) {
     // add the Users
