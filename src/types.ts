@@ -363,6 +363,10 @@ export type ListChannelResponse<
   >;
 };
 
+export type ListChannelTypesAPIResponse<
+  CommandType extends string = LiteralStringForUnion
+> = ListChannelResponse<CommandType>;
+
 export type MuteChannelAPIResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -542,6 +546,22 @@ export type UpdateChannelAPIResponse<
   >;
 };
 
+export type UpdateChannelResponse<
+  CommandType extends string = LiteralStringForUnion
+> = APIResponse &
+  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
+    created_at: string;
+    updated_at: string;
+  };
+
+export type UsersAPIResponse<UserType = UnknownType> = APIResponse & {
+  users: Array<UserResponse<UserType>>;
+};
+
+export type UpdateUsersAPIResponse<UserType = UnknownType> = APIResponse & {
+  users: { [key: string]: UserResponse<UserType> };
+};
+
 export type UserResponse<T = UnknownType> = User<T> & {
   banned?: boolean;
   created_at?: string;
@@ -551,14 +571,6 @@ export type UserResponse<T = UnknownType> = User<T> & {
   online?: boolean;
   updated_at?: string;
 };
-
-export type UpdateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
-    created_at: string;
-    updated_at: string;
-  };
 
 /**
  * Option Types
