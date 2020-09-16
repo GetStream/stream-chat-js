@@ -1,3 +1,7 @@
+## September 16, 2020 - 2.3.0
+
+- Changed ordering of Typescript generics from usage preference based to alphabetical for consistency throughout the project [#425](https://github.com/GetStream/stream-chat-js/pull/425/files)
+
 ## September 10, 2020 - 2.2.2
 
 - Fixing possible race condition betweek warmUp options request and first queryChannels call. [372b22c](https://github.com/GetStream/stream-chat-js/commit/372b22cffb90fcc4e5470af7d64524ff0d6457dc)
