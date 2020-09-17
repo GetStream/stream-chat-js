@@ -212,7 +212,10 @@ export class StreamChat<
 
     this.axiosInstance = axios.create(this.options);
 
-    this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
+    // Making BE url configurable so that library can be used against any BE
+    this.setBaseURL(
+      process?.env?.STREAM_BE_BASE_URL || 'https://chat-us-east-1.stream-io-api.com',
+    );
 
     if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
