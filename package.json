@@ -79,7 +79,6 @@
     "@types/rollup-plugin-json": "^3.0.2",
     "@types/rollup-plugin-peer-deps-external": "^2.2.0",
     "@types/rollup-plugin-url": "^2.2.0",
-    "@types/seamless-immutable": "7.1.13",
     "@types/sinon": "^7.5.1",
     "@typescript-eslint/eslint-plugin": "^3.6.0",
     "@typescript-eslint/parser": "^3.6.0",
