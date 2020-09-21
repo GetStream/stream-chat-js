@@ -15,56 +15,6 @@ const excuses = [
 	'Coronavirus. Will WFH.',
 ];
 
-const StateMachine = {
-	state: 'start',
-	data: {
-		errors: [],
-	},
-	dispatch(actionName, ...payload) {
-		const actions = this.transitions[this.state];
-		const action = this.transitions[this.state][actionName];
-
-		if (action) {
-			action.apply(this, ...payload);
-		}
-	},
-	changeStateTo(newState) {
-		this.state = newState;
-	},
-	transitions: {
-		start: {
-			start: function() {
-				this.changeStateTo('askName');
-			},
-		},
-		askName: {
-			enter: function(name) {
-				let isValid;
-				if (isValid) {
-					this.data.name = name;
-					this.changeStateTo('askEmail');
-				} else {
-					this.data.errors.push({ name: 'name', error: '`name` is required' });
-				}
-			},
-		},
-		askEmail: {
-			enter: function(email) {
-				let isValid;
-				if (isValid) {
-					this.data.email = email;
-					this.changeStateTo('end');
-				} else {
-					this.data.errors.push({
-						name: 'email',
-						error: '`email` is required',
-					});
-				}
-			},
-		},
-	},
-};
-
 const excuseCmd = request => {
 	const action = request.form_data ? request.form_data['excuse_action'] : undefined;
 
