@@ -87,7 +87,7 @@ describe('blacklist moderation CRUD', () => {
 		});
 	});
 
-	it('shuold block messages that match the blacklist', async () => {
+	it('should block messages that match the blacklist', async () => {
 		const userClient = await getTestClientForUser('tommaso');
 		const chan = userClient.channel('messaging', 'caaakes');
 		await chan.watch();
@@ -98,8 +98,35 @@ describe('blacklist moderation CRUD', () => {
 		expect(response.message.type).to.eql('error');
 	});
 
+	it('update blacklist again', async () => {
+		await client.updateBlacklist('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla', 'jam'],
+		});
+	});
+
+	it('should block messages that match the blacklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'you should add more jam there ;)',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
 	it('delete a blacklist', async () => {
 		await client.deleteBlacklist('no-cakes');
+	});
+
+	it('should not block messages anymore', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('put some sugar and fudge on that!');
 	});
 
 	it('list available blacklists', async () => {
