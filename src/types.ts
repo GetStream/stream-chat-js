@@ -1330,6 +1330,7 @@ export type MessageBase<
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   id?: string;
+  mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;
   text?: string;
