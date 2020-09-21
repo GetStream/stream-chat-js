@@ -77,7 +77,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  Blacklist,
+  BlockList,
 } from './types';
 
 function isReadableStream(
@@ -2065,29 +2065,29 @@ export class StreamChat<
     });
   }
 
-  createBlacklist(blacklist: Blacklist) {
-    return this.post<APIResponse>(`${this.baseURL}/blacklists`, blacklist);
+  createBlockList(blockList: BlockList) {
+    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
 
-  listBlacklists() {
-    return this.get<APIResponse & { blacklists: Blacklist[] }>(
-      `${this.baseURL}/blacklists`,
+  listBlockLists() {
+    return this.get<APIResponse & { blocklists: BlockList[] }>(
+      `${this.baseURL}/blocklists`,
     );
   }
 
-  getBlacklist(name: string) {
-    return this.get<APIResponse & { blacklist: Blacklist }>(
-      `${this.baseURL}/blacklists/${name}`,
+  getBlockList(name: string) {
+    return this.get<APIResponse & { blocklist: BlockList }>(
+      `${this.baseURL}/blocklists/${name}`,
     );
   }
 
-  updateBlacklist(name: string, data: { words: string[] }) {
-    return this.put<APIResponse>(`${this.baseURL}/blacklists/${name}`, data);
+  updateBlockList(name: string, data: { words: string[] }) {
+    return this.put<APIResponse>(`${this.baseURL}/blocklists/${name}`, data);
   }
 
-  deleteBlacklist(name: string) {
-    return this.delete<APIResponse & { blacklist: Blacklist }>(
-      `${this.baseURL}/blacklists/${name}`,
+  deleteBlockList(name: string) {
+    return this.delete<APIResponse & { blocklist: BlockList }>(
+      `${this.baseURL}/blocklists/${name}`,
     );
   }
 }

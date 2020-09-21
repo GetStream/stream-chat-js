@@ -1471,7 +1471,7 @@ export type User<T = UnknownType> = T & {
 
 export type TypingStartEvent = Event;
 
-export type Blacklist = {
+export type BlockList = {
   name: string;
   words: string[];
 };
