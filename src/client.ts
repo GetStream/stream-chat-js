@@ -77,6 +77,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  Blacklist,
 } from './types';
 
 function isReadableStream(
@@ -2062,5 +2063,31 @@ export class StreamChat<
       channel_cids,
       last_sync_at,
     });
+  }
+
+  createBlacklist(blacklist: Blacklist) {
+    return this.post<APIResponse>(`${this.baseURL}/blacklists`, blacklist);
+  }
+
+  listBlacklists() {
+    return this.get<APIResponse & { blacklists: Blacklist[] }>(
+      `${this.baseURL}/blacklists`,
+    );
+  }
+
+  getBlacklists(name: string) {
+    return this.get<APIResponse & { blacklist: Blacklist }>(
+      `${this.baseURL}/blacklists/${name}`,
+    );
+  }
+
+  updateBlacklist(name: string, data: { words: string[] }) {
+    return this.put<APIResponse>(`${this.baseURL}/blacklists/${name}`, data);
+  }
+
+  deleteBlacklists(name: string) {
+    return this.delete<APIResponse & { blacklist: Blacklist }>(
+      `${this.baseURL}/blacklists/${name}`,
+    );
   }
 }

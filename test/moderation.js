@@ -7,6 +7,7 @@ import {
 	expectHTTPErrorCode,
 	sleep,
 	createEventWaiter,
+	getServerTestClient,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -25,6 +26,94 @@ Promise.config({
 });
 
 chai.use(chaiAsPromised);
+
+describe('blacklist moderation CRUD', () => {
+	const client = getServerTestClient();
+
+	it('list available blacklists', async () => {
+		const response = await client.listBlacklists();
+		expect(response.blacklists).to.have.length(1);
+	});
+
+	it('get blacklist profanity_en_2020_v1', async () => {
+		const response = await client.getBlacklists('profanity_en_2020_v1');
+		expect(response.blacklist.name).to.eq('profanity_en_2020_v1');
+	});
+
+	it('create a new blacklist', async () => {
+		const words = ['fudge', 'cream', 'sugar'];
+		await client.createBlacklist({
+			name: 'no-cakes',
+			words,
+		});
+	});
+
+	it('list available blacklists', async () => {
+		const response = await client.listBlacklists();
+		expect(response.blacklists).to.have.length(2);
+	});
+
+	it('get blacklist info', async () => {
+		const response = await client.getBlacklists('no-cakes');
+		expect(response.blacklist.name).to.eq('no-cakes');
+		expect(response.blacklist.words).to.eql(['fudge', 'cream', 'sugar']);
+	});
+
+	it('update a default blacklist should fail', async () => {
+		const p = client.updateBlacklist('profanity_en_2020_v1', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+		await expect(p).to.be.rejectedWith(
+			`cannot update the builtin blacklist "profanity_en_2020_v1"`,
+		);
+	});
+
+	it('update blacklist', async () => {
+		await client.updateBlacklist('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+	});
+
+	it('get blacklist info again', async () => {
+		const response = await client.getBlacklists('no-cakes');
+		expect(response.blacklist.name).to.eq('no-cakes');
+		expect(response.blacklist.words).to.eql(['fudge', 'cream', 'sugar', 'vanilla']);
+	});
+
+	it('use the blacklist for a channel type', async () => {
+		await client.updateChannelType('messaging', {
+			blacklist: 'no-cakes',
+			blacklist_behavior: 'block',
+		});
+	});
+
+	it('shuold block messages that match the blacklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
+	it('delete a blacklist', async () => {
+		await client.deleteBlacklists('no-cakes');
+	});
+
+	it('list available blacklists', async () => {
+		const response = await client.listBlacklists();
+		expect(response.blacklists).to.have.length(1);
+	});
+
+	it('delete a default blacklist should fail', async () => {
+		const p = client.deleteBlacklists('profanity_en_2020_v1');
+		await expect(p).to.be.rejectedWith(
+			`cannot delete the builtin blacklist "profanity_en_2020_v1"`,
+		);
+	});
+});
 
 describe('Moderation', function() {
 	it('Mute', async function() {
