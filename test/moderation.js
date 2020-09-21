@@ -36,7 +36,7 @@ describe('blacklist moderation CRUD', () => {
 	});
 
 	it('get blacklist profanity_en_2020_v1', async () => {
-		const response = await client.getBlacklists('profanity_en_2020_v1');
+		const response = await client.getBlacklist('profanity_en_2020_v1');
 		expect(response.blacklist.name).to.eq('profanity_en_2020_v1');
 	});
 
@@ -54,7 +54,7 @@ describe('blacklist moderation CRUD', () => {
 	});
 
 	it('get blacklist info', async () => {
-		const response = await client.getBlacklists('no-cakes');
+		const response = await client.getBlacklist('no-cakes');
 		expect(response.blacklist.name).to.eq('no-cakes');
 		expect(response.blacklist.words).to.eql(['fudge', 'cream', 'sugar']);
 	});
@@ -75,7 +75,7 @@ describe('blacklist moderation CRUD', () => {
 	});
 
 	it('get blacklist info again', async () => {
-		const response = await client.getBlacklists('no-cakes');
+		const response = await client.getBlacklist('no-cakes');
 		expect(response.blacklist.name).to.eq('no-cakes');
 		expect(response.blacklist.words).to.eql(['fudge', 'cream', 'sugar', 'vanilla']);
 	});
@@ -99,7 +99,7 @@ describe('blacklist moderation CRUD', () => {
 	});
 
 	it('delete a blacklist', async () => {
-		await client.deleteBlacklists('no-cakes');
+		await client.deleteBlacklist('no-cakes');
 	});
 
 	it('list available blacklists', async () => {
@@ -108,7 +108,7 @@ describe('blacklist moderation CRUD', () => {
 	});
 
 	it('delete a default blacklist should fail', async () => {
-		const p = client.deleteBlacklists('profanity_en_2020_v1');
+		const p = client.deleteBlacklist('profanity_en_2020_v1');
 		await expect(p).to.be.rejectedWith(
 			`cannot delete the builtin blacklist "profanity_en_2020_v1"`,
 		);

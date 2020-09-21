@@ -2075,7 +2075,7 @@ export class StreamChat<
     );
   }
 
-  getBlacklists(name: string) {
+  getBlacklist(name: string) {
     return this.get<APIResponse & { blacklist: Blacklist }>(
       `${this.baseURL}/blacklists/${name}`,
     );
@@ -2085,7 +2085,7 @@ export class StreamChat<
     return this.put<APIResponse>(`${this.baseURL}/blacklists/${name}`, data);
   }
 
-  deleteBlacklists(name: string) {
+  deleteBlacklist(name: string) {
     return this.delete<APIResponse & { blacklist: Blacklist }>(
       `${this.baseURL}/blacklists/${name}`,
     );
