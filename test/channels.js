@@ -72,7 +72,7 @@ describe('query by frozen', function() {
 	it('send messages on a frozen channel should fail', async function() {
 		const resp = await channel.sendMessage({ text: 'hi' });
 		expect(resp.message.text).to.be.equal(
-			'Sorry, this channel has been frozen by the admin',
+			"Sorry, this channel has been frozen by the admin and you don't have permission to send messages to frozen channels.",
 		);
 	});
 
