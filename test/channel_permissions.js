@@ -129,32 +129,46 @@ function createMessage(ctx, user, message, responseTest) {
 	};
 }
 
-async function createMessageFrozen(ctx, user, expectedErrorStatus) {
+async function createMessageFrozen(ctx, user, shouldFail) {
 	const userClient = await getUserClient(ctx, user);
 	const userChannel = userClient.channel(ctx.channelType, ctx.channelId, {});
-	try {
-		const res = await userChannel.sendMessage(simpleMessage);
+	const res = await userChannel.sendMessage(simpleMessage);
+
+	if (shouldFail) {
+		assert.equal(
+			res.message.text,
+			"Sorry, this channel has been frozen by the admin and you don't have permission to send messages to frozen channels.",
+		);
+	} else {
 		assert.notEqual(res.message, undefined);
 		assert.notEqual(res.message.id, undefined);
-		assert.notEqual(res.message.id, '');
-	} catch (e) {
-		assert.equal(e.status, expectedErrorStatus);
+		assert.isNotEmpty(res.message.id);
 	}
 }
 
-async function createDeleteReactionFrozen(ctx, user, expectedErrorStatus) {
+async function createDeleteReactionFrozen(ctx, user, shouldFail) {
 	const userClient = await getUserClient(ctx, user);
 	const userChannel = userClient.channel(ctx.channelType, ctx.channelId, {});
 	await userChannel.watch();
-	try {
-		const res = await userChannel.sendMessage(simpleMessage);
+	const res = await userChannel.sendMessage(simpleMessage);
+	if (shouldFail) {
+		assert.equal(
+			res.message.text,
+			"Sorry, this channel has been frozen by the admin and you don't have permission to send messages to frozen channels.",
+		);
+	} else {
 		assert.notEqual(res.message, undefined);
 		assert.notEqual(res.message.id, undefined);
-		assert.notEqual(res.message.id, '');
+		assert.isNotEmpty(res.message.id);
+	}
+
+	try {
 		await userChannel.sendReaction(res.message.id, { type: 'love' });
 		await userChannel.deleteReaction(res.message.id, 'love');
 	} catch (e) {
-		assert.equal(e.status, expectedErrorStatus);
+		if (!shouldFail) {
+			assert.fail('send reaction or delete reaction failed: ', e);
+		}
 	}
 }
 
@@ -442,11 +456,11 @@ describe('Messaging permissions', function() {
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
-			await createMessageFrozen(ctx, ctx.adminUser, 403);
+			await createMessageFrozen(ctx, ctx.adminUser, true);
 		});
 
 		it("admins can't create / delete reply to messages in a frozen channel", async () => {
-			await createDeleteReactionFrozen(ctx, ctx.adminUser, 403);
+			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
 		describe('after admins get the SendMessageFrozenPermission', () => {
@@ -455,11 +469,11 @@ describe('Messaging permissions', function() {
 			});
 
 			it('admins can create a message', async () => {
-				await createMessageFrozen(ctx, ctx.adminUser, 200);
+				await createMessageFrozen(ctx, ctx.adminUser, false);
 			});
 
 			it('admins can create / delete reactions', async () => {
-				await createDeleteReactionFrozen(ctx, ctx.adminUser, 200);
+				await createDeleteReactionFrozen(ctx, ctx.adminUser, false);
 			});
 		});
 	});
@@ -734,11 +748,11 @@ describe('Live stream', function() {
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
-			await createMessageFrozen(ctx, ctx.adminUser, 403);
+			await createMessageFrozen(ctx, ctx.adminUser, true);
 		});
 
 		it("admins can't create / delete reply to messages in a frozen channel", async () => {
-			await createDeleteReactionFrozen(ctx, ctx.adminUser, 403);
+			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
 		describe('after admins get the SendMessageFrozenPermission', () => {
@@ -747,11 +761,11 @@ describe('Live stream', function() {
 			});
 
 			it('admins can create a message', async () => {
-				await createMessageFrozen(ctx, ctx.adminUser, 200);
+				await createMessageFrozen(ctx, ctx.adminUser, false);
 			});
 
 			it('admins can create / delete reactions', async () => {
-				await createDeleteReactionFrozen(ctx, ctx.adminUser, 200);
+				await createDeleteReactionFrozen(ctx, ctx.adminUser, false);
 			});
 		});
 	});
@@ -1019,11 +1033,11 @@ describe('Gaming', function() {
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
-			await createMessageFrozen(ctx, ctx.adminUser, 403);
+			await createMessageFrozen(ctx, ctx.adminUser, true);
 		});
 
 		it("admins can't create / delete reply to messages in a frozen channel", async () => {
-			await createDeleteReactionFrozen(ctx, ctx.adminUser, 403);
+			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
 		describe('after admins get the SendMessageFrozenPermission', () => {
@@ -1032,11 +1046,11 @@ describe('Gaming', function() {
 			});
 
 			it('admins can create a message', async () => {
-				await createMessageFrozen(ctx, ctx.adminUser, 200);
+				await createMessageFrozen(ctx, ctx.adminUser, false);
 			});
 
 			it('admins can create / delete reactions', async () => {
-				await createDeleteReactionFrozen(ctx, ctx.adminUser, 200);
+				await createDeleteReactionFrozen(ctx, ctx.adminUser, false);
 			});
 		});
 	});
@@ -1298,11 +1312,11 @@ describe('Commerce permissions', function() {
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
-			await createMessageFrozen(ctx, ctx.adminUser, 403);
+			await createMessageFrozen(ctx, ctx.adminUser, true);
 		});
 
 		it("admins can't create / delete reply to messages in a frozen channel", async () => {
-			await createDeleteReactionFrozen(ctx, ctx.adminUser, 403);
+			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
 		describe('after admins get the SendMessageFrozenPermission', () => {
@@ -1311,11 +1325,11 @@ describe('Commerce permissions', function() {
 			});
 
 			it('admins can create a message', async () => {
-				await createMessageFrozen(ctx, ctx.adminUser, 200);
+				await createMessageFrozen(ctx, ctx.adminUser, false);
 			});
 
 			it('admins can create / delete reactions', async () => {
-				await createDeleteReactionFrozen(ctx, ctx.adminUser, 200);
+				await createDeleteReactionFrozen(ctx, ctx.adminUser, false);
 			});
 		});
 	});
