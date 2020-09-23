@@ -1375,14 +1375,39 @@ export class StreamChat<
    * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
    *
    * @param {string} channelType The channel type
-   * @param {string} channelID   The channel ID, you can leave this out if you want to create a conversation channel
+   * @param {string | ChannelData<ChannelType> | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
    * @param {object} [custom]    Custom data to attach to the channel
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
   channel(
     channelType: string,
-    channelID: string,
+    channelID?: string | null,
+    custom?: ChannelData<ChannelType>,
+  ): Channel<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel(
+    channelType: string,
+    custom?: ChannelData<ChannelType>,
+  ): Channel<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel(
+    channelType: string,
+    channelIDOrCustom?: string | ChannelData<ChannelType> | null,
     custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
@@ -1396,7 +1421,7 @@ export class StreamChat<
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (channelID == null || channelID === '') {
+    if (channelIDOrCustom == null || channelIDOrCustom === '') {
       return new Channel<
         AttachmentType,
         ChannelType,
@@ -1408,7 +1433,7 @@ export class StreamChat<
       >(this, channelType, undefined, custom);
     }
     // support channel("messaging", {options})
-    if (typeof channelID === 'object' && arguments.length === 2) {
+    if (typeof channelIDOrCustom === 'object') {
       return new Channel<
         AttachmentType,
         ChannelType,
@@ -1417,15 +1442,17 @@ export class StreamChat<
         MessageType,
         ReactionType,
         UserType
-      >(this, channelType, undefined, channelID);
+      >(this, channelType, undefined, channelIDOrCustom);
     }
 
-    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
+    if (typeof channelIDOrCustom === 'string' && ~channelIDOrCustom.indexOf(':')) {
+      throw Error(
+        `Invalid channel id ${channelIDOrCustom}, can't contain the : character`,
+      );
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelID}`;
+    const cid = `${channelType}:${channelIDOrCustom}`;
     if (cid in this.activeChannels) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
@@ -1442,7 +1469,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType
-    >(this, channelType, channelID, custom);
+    >(this, channelType, channelIDOrCustom, custom);
     this.activeChannels[channel.cid] = channel;
 
     return channel;

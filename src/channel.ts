@@ -479,7 +479,12 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
-    channelData: ChannelData<ChannelType>,
+    channelData:
+      | Partial<ChannelData<ChannelType>>
+      | Partial<ChannelResponse<ChannelType, CommandType, UserType>>
+      | Partial<
+          Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
+        > = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
     // Strip out reserved names that will result in API errors.

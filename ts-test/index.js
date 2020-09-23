@@ -470,7 +470,13 @@ const executables = [
 		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, string & {}, {}, {}, {}, {}>['update']>>",
+			"Unpacked<ReturnType<Channel<{}, { description: string }, string & {}, {}, {}, {}, {}>['update']>>",
+	},
+	{
+		f: rg.updateChannelFromOriginal,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description: string; smallTitle: string }, string & {}, {}, {}, {}, {}>['update']>>",
 	},
 	{
 		f: rg.updateChannelType,
