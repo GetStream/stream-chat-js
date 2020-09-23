@@ -7,6 +7,7 @@ import {
 	expectHTTPErrorCode,
 	sleep,
 	createEventWaiter,
+	getServerTestClient,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -25,6 +26,121 @@ Promise.config({
 });
 
 chai.use(chaiAsPromised);
+
+describe('block list moderation CRUD', () => {
+	const client = getServerTestClient();
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(1);
+	});
+
+	it('get blocklist profanity_en_2020_v1', async () => {
+		const response = await client.getBlockList('profanity_en_2020_v1');
+		expect(response.blocklist.name).to.eq('profanity_en_2020_v1');
+	});
+
+	it('create a new blocklist', async () => {
+		const words = ['fudge', 'cream', 'sugar'];
+		await client.createBlockList({
+			name: 'no-cakes',
+			words,
+		});
+	});
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(2);
+	});
+
+	it('get blocklist info', async () => {
+		const response = await client.getBlockList('no-cakes');
+		expect(response.blocklist.name).to.eq('no-cakes');
+		expect(response.blocklist.words).to.eql(['fudge', 'cream', 'sugar']);
+	});
+
+	it('update a default blocklist should fail', async () => {
+		const p = client.updateBlockList('profanity_en_2020_v1', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+		await expect(p).to.be.rejectedWith(
+			`cannot update the builtin block list "profanity_en_2020_v1"`,
+		);
+	});
+
+	it('update blocklist', async () => {
+		await client.updateBlockList('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+	});
+
+	it('get blocklist info again', async () => {
+		const response = await client.getBlockList('no-cakes');
+		expect(response.blocklist.name).to.eq('no-cakes');
+		expect(response.blocklist.words).to.eql(['fudge', 'cream', 'sugar', 'vanilla']);
+	});
+
+	it('use the blocklist for a channel type', async () => {
+		await client.updateChannelType('messaging', {
+			blocklist: 'no-cakes',
+			blocklist_behavior: 'block',
+		});
+	});
+
+	it('should block messages that match the blocklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
+	it('update blocklist again', async () => {
+		await client.updateBlockList('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla', 'jam'],
+		});
+	});
+
+	it('should block messages that match the blocklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'you should add more jam there ;)',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
+	it('delete a blocklist', async () => {
+		await client.deleteBlockList('no-cakes');
+	});
+
+	it('should not block messages anymore', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('put some sugar and fudge on that!');
+	});
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(1);
+	});
+
+	it('delete a default blocklist should fail', async () => {
+		const p = client.deleteBlockList('profanity_en_2020_v1');
+		await expect(p).to.be.rejectedWith(
+			`cannot delete the builtin block list "profanity_en_2020_v1"`,
+		);
+	});
+});
 
 describe('Moderation', function() {
 	it('Mute', async function() {

@@ -77,6 +77,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  BlockList,
 } from './types';
 
 function isReadableStream(
@@ -2062,5 +2063,31 @@ export class StreamChat<
       channel_cids,
       last_sync_at,
     });
+  }
+
+  createBlockList(blockList: BlockList) {
+    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
+  }
+
+  listBlockLists() {
+    return this.get<APIResponse & { blocklists: BlockList[] }>(
+      `${this.baseURL}/blocklists`,
+    );
+  }
+
+  getBlockList(name: string) {
+    return this.get<APIResponse & { blocklist: BlockList }>(
+      `${this.baseURL}/blocklists/${name}`,
+    );
+  }
+
+  updateBlockList(name: string, data: { words: string[] }) {
+    return this.put<APIResponse>(`${this.baseURL}/blocklists/${name}`, data);
+  }
+
+  deleteBlockList(name: string) {
+    return this.delete<APIResponse & { blocklist: BlockList }>(
+      `${this.baseURL}/blocklists/${name}`,
+    );
   }
 }

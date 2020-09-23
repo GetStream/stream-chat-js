@@ -1470,3 +1470,8 @@ export type User<T = UnknownType> = T & {
 };
 
 export type TypingStartEvent = Event;
+
+export type BlockList = {
+  name: string;
+  words: string[];
+};
