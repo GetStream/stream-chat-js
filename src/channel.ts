@@ -482,6 +482,12 @@ export class Channel<
     channelData: ChannelData<ChannelType>,
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
+    // Strip out reserved names that will result in API errors.
+    const reserved = ['config', 'cid', 'created_by', 'id', 'member_count', 'type'];
+    reserved.forEach(key => {
+      delete channelData[key];
+    });
+
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
         AttachmentType,
