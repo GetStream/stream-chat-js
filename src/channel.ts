@@ -483,7 +483,7 @@ export class Channel<
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
     // Strip out reserved names that will result in API errors.
-    const reserved = ['config', 'cid', 'created_by', 'id', 'member_count', 'type'];
+    const reserved = ['config', 'cid', 'created_by', 'id', 'member_count', 'type', 'created_at', 'updated_at', 'last_message_at'];
     reserved.forEach(key => {
       delete channelData[key];
     });
