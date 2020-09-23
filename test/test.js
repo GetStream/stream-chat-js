@@ -1997,15 +1997,14 @@ describe('Chat', () => {
 		});
 
 		it('Typing Helpers', async () => {
-			let occurences = 0;
-			conversation.on('typing.start', () => {
-				occurences += 1;
-				if (occurences > 1) {
-					throw Error('too many typing.start events');
-				}
-			});
+			let occurrences = 0;
+			conversation.on('typing.start', () => occurrences++);
+
 			await conversation.keystroke();
 			await conversation.keystroke();
+
+			if (occurrences === 0) throw Error('typing.start never called');
+			if (occurrences > 1) throw Error('too many typing.start events');
 		});
 
 		it('Message Read', async () => {
