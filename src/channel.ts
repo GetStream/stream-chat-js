@@ -857,11 +857,11 @@ export class Channel<
       return;
     }
     const now = new Date();
-    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent?.getTime();
+    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent.getTime();
     this.lastKeyStroke = now;
     this.isTyping = true;
     // send a typing.start every 2 seconds
-    if (diff && diff > 2000) {
+    if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
         type: 'typing.start',
