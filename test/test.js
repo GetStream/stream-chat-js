@@ -1659,6 +1659,31 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('MML messages', () => {
+		describe('Error', () => {
+			it('Send invalid MML message', async () => {
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml-examples non-existing';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.type).to.equal('error');
+			});
+		});
+
+		describe('Success', () => {
+			it('Send MML message', async () => {
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml-examples hi';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.text).to.equal(cmd);
+				expect(data.message.mml).to.equal(
+					'\n\t\t<mml name="message">\n\t\t\t<text>Hi!</text>\n\t\t</mml>\n\t',
+				);
+			});
+		});
+	});
+
 	describe('Slash Commands', () => {
 		describe('Success', () => {
 			it('Giphy Integration', async () => {
