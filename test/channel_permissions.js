@@ -137,7 +137,7 @@ async function createMessageFrozen(ctx, user, shouldFail) {
 	if (shouldFail) {
 		assert.equal(
 			res.message.text,
-			"Sorry, this channel has been frozen by the admin and you don't have permission to send messages to frozen channels.",
+			'Sorry, this channel has been frozen by the admin.',
 		);
 	} else {
 		assert.notEqual(res.message, undefined);
@@ -154,7 +154,7 @@ async function createDeleteReactionFrozen(ctx, user, shouldFail) {
 	if (shouldFail) {
 		assert.equal(
 			res.message.text,
-			"Sorry, this channel has been frozen by the admin and you don't have permission to send messages to frozen channels.",
+			'Sorry, this channel has been frozen by the admin.',
 		);
 	} else {
 		assert.notEqual(res.message, undefined);
