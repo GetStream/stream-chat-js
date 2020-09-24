@@ -280,6 +280,26 @@ client.queryChannels({
   },
 });
 
+const testChannelUpdate = channel.update({
+  ...channel._data,
+  name: 'helloWorld',
+  color: 'yellow',
+});
+
+const testChannelUpdate2 = channel.update({
+  ...channel.data,
+  name: 'helloWorld2',
+  color: 'yellow',
+});
+
+// Good
+const testChannel1 = client.channel('hello', { color: 'red' });
+const testChannel2 = client.channel('hello2', 'myId', { color: 'green' });
+const testChannel3 = client.channel('hello3');
+const testChannel4 = client.channel('hello4', undefined, { color: 'red ' });
+// Bad
+// const testChannel5 = client.channel('hello3', { color: 'newColor' }, { color: 'green' });
+
 // TODO: Fix this
 // channel.queryMembers({
 //   $or: [

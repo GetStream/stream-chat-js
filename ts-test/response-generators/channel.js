@@ -215,6 +215,20 @@ async function updateChannel() {
 	});
 }
 
+async function updateChannelFromOriginal() {
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
+	await channel.update({
+		...channel.data,
+		frozen: true,
+		description: 'Updating original data',
+	});
+	return await channel.update({
+		...channel.data,
+		smallTitle: 'Updating original data too/two',
+	});
+}
+
 async function updateChannelType() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.updateChannelType('messaging', { uploads: true });
@@ -252,6 +266,7 @@ module.exports = {
 	truncateChannel,
 	unmute,
 	updateChannel,
+	updateChannelFromOriginal,
 	updateChannelType,
 	watch,
 };

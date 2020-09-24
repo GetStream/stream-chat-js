@@ -65,7 +65,7 @@ typings/
 .tern-port
 
 /.vscode
+/.idea
 
 ts-test/data.js
 ts-test/data.ts
-
