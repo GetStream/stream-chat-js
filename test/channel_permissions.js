@@ -137,7 +137,7 @@ async function createMessageFrozen(ctx, user, shouldFail) {
 	if (shouldFail) {
 		assert.equal(
 			res.message.text,
-			'Sorry, this channel has been frozen by the admin.',
+			'Sorry, this channel has been frozen by the admin',
 		);
 	} else {
 		assert.notEqual(res.message, undefined);
@@ -154,7 +154,7 @@ async function createDeleteReactionFrozen(ctx, user, shouldFail) {
 	if (shouldFail) {
 		assert.equal(
 			res.message.text,
-			'Sorry, this channel has been frozen by the admin.',
+			'Sorry, this channel has been frozen by the admin',
 		);
 	} else {
 		assert.notEqual(res.message, undefined);
@@ -172,10 +172,10 @@ async function createDeleteReactionFrozen(ctx, user, shouldFail) {
 	}
 }
 
-async function removeSendMessageFrozenPermissions(ctx) {
+async function removeUseFrozenChannelPermissions(ctx) {
 	const { permissions } = await ctx.authClient.getChannelType(ctx.channelType);
 	permissions.forEach((v, k) => {
-		if (v.name === BuiltinPermissions.SendMessageFrozen) {
+		if (v.name === BuiltinPermissions.UseFrozenChannel) {
 			permissions.splice(k, 1);
 		}
 	});
@@ -183,11 +183,11 @@ async function removeSendMessageFrozenPermissions(ctx) {
 	await ctx.authClient.updateChannelType(ctx.channelType, { permissions });
 }
 
-async function addSendMessageFrozenPermissions(ctx) {
+async function addUseFrozenChannelPermissions(ctx) {
 	const permission = new Permission(
-		BuiltinPermissions.SendMessageFrozen,
+		BuiltinPermissions.UseFrozenChannel,
 		910,
-		['SendMessageFrozen'],
+		['UseFrozenChannel'],
 		[BuiltinRoles.Admin],
 		false,
 		Allow,
@@ -446,13 +446,13 @@ describe('Messaging permissions', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		after(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: false });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
@@ -463,9 +463,9 @@ describe('Messaging permissions', function() {
 			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
-		describe('after admins get the SendMessageFrozenPermission', () => {
+		describe('after admins get the UseFrozenChannelPermission', () => {
 			before(async () => {
-				await addSendMessageFrozenPermissions(ctx);
+				await addUseFrozenChannelPermissions(ctx);
 			});
 
 			it('admins can create a message', async () => {
@@ -738,13 +738,13 @@ describe('Live stream', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		after(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: false });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
@@ -755,9 +755,9 @@ describe('Live stream', function() {
 			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
-		describe('after admins get the SendMessageFrozenPermission', () => {
+		describe('after admins get the UseFrozenChannelPermission', () => {
 			before(async () => {
-				await addSendMessageFrozenPermissions(ctx);
+				await addUseFrozenChannelPermissions(ctx);
 			});
 
 			it('admins can create a message', async () => {
@@ -1023,13 +1023,13 @@ describe('Gaming', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		after(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: false });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
@@ -1040,9 +1040,9 @@ describe('Gaming', function() {
 			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
-		describe('after admins get the SendMessageFrozenPermission', () => {
+		describe('after admins get the UseFrozenChannelPermission', () => {
 			before(async () => {
-				await addSendMessageFrozenPermissions(ctx);
+				await addUseFrozenChannelPermissions(ctx);
 			});
 
 			it('admins can create a message', async () => {
@@ -1302,13 +1302,13 @@ describe('Commerce permissions', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		after(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: false });
-			await removeSendMessageFrozenPermissions(ctx);
+			await removeUseFrozenChannelPermissions(ctx);
 		});
 
 		it("admins can't send messages to a frozen channel", async () => {
@@ -1319,9 +1319,9 @@ describe('Commerce permissions', function() {
 			await createDeleteReactionFrozen(ctx, ctx.adminUser, true);
 		});
 
-		describe('after admins get the SendMessageFrozenPermission', () => {
+		describe('after admins get the UseFrozenChannelPermission', () => {
 			before(async () => {
-				await addSendMessageFrozenPermissions(ctx);
+				await addUseFrozenChannelPermissions(ctx);
 			});
 
 			it('admins can create a message', async () => {
