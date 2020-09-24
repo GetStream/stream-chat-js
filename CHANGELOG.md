@@ -1,3 +1,13 @@
+## September 17, 2020 - 2.4.0
+
+### Feature
+
+- BlockLists [#437](https://github.com/GetStream/stream-chat-js/pull/437/). Refer to docs on how to use this new feature [docs](https://getstream.io/chat/docs/block_lists/?language=js)
+
+### Fix
+
+- `Channel.keystroke` not firing for the first typing event [#440](https://github.com/GetStream/stream-chat-js/pull/440/)
+
 ## September 17, 2020 - 2.3.1
 
 - Added backward compatible types and move type definitions for production out of dev dependencies [#432](https://github.com/GetStream/stream-chat-js/pull/432/)

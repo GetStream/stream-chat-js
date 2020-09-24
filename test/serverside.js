@@ -1461,16 +1461,19 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Set custom_command_url', async function() {
+	describe('Set custom_action_handler_url', async function() {
+		const response = await client.getAppSettings();
+		const originalUrl = response.app.custom_action_handler_url;
+
 		it('Sets valid URL', async function() {
 			// Set custom command endpoint url
-			const custom_command_url = 'http://example.com';
+			const custom_action_handler_url = 'http://example.com';
 			await client.updateAppSettings({
-				custom_command_url,
+				custom_action_handler_url,
 			});
-
-			const response = await client.getAppSettings();
-			expect(response.app.custom_command_url).to.be.eq(custom_command_url);
+			expect(response.app.custom_action_handler_url).to.be.eq(
+				custom_action_handler_url,
+			);
 		});
 
 		it('Rejects invalid URL', async function() {
@@ -1478,7 +1481,7 @@ describe('App configs', function() {
 			await expectHTTPErrorCode(
 				400,
 				client.updateAppSettings({
-					custom_command_url: 'gibbrish',
+					custom_action_handler_url: 'gibbrish',
 				}),
 			);
 		});
@@ -1486,11 +1489,16 @@ describe('App configs', function() {
 		it('Accepts empty URL', async function() {
 			// reset custom endpoint url
 			await client.updateAppSettings({
-				custom_command_url: '',
+				custom_action_handler_url: '',
 			});
 
 			const response = await client.getAppSettings();
-			expect(response.app.custom_command_url).to.be.eq('');
+			expect(response.app.custom_action_handler_url).to.be.eq('');
+		});
+
+		// Reset custom command endpoint url to original
+		await client.updateAppSettings({
+			custom_action_handler_url: originalUrl,
 		});
 	});
 });

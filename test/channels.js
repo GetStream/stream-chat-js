@@ -875,26 +875,26 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[3].cid);
 
 		/*result = await tommasoClient.queryChannels(
-			{ members: { $in: [tommaso] } },
-			{ unread_count: 1, last_message_at: -1 },
-		);
+      { members: { $in: [tommaso] } },
+      { unread_count: 1, last_message_at: -1 },
+    );
 
-		expect(result.length).to.be.equal(4);
-		expect(result[0].cid).to.be.equal(channels[3].cid);
-		expect(result[1].cid).to.be.equal(channels[2].cid);
-		expect(result[2].cid).to.be.equal(channels[1].cid);
-		expect(result[3].cid).to.be.equal(channels[0].cid);
+    expect(result.length).to.be.equal(4);
+    expect(result[0].cid).to.be.equal(channels[3].cid);
+    expect(result[1].cid).to.be.equal(channels[2].cid);
+    expect(result[2].cid).to.be.equal(channels[1].cid);
+    expect(result[3].cid).to.be.equal(channels[0].cid);
 
-		result = await tommasoClient.queryChannels(
-			{ members: { $in: [tommaso] } },
-			{ unread_count: 1, last_message_at: 1 },
-		);
+    result = await tommasoClient.queryChannels(
+      { members: { $in: [tommaso] } },
+      { unread_count: 1, last_message_at: 1 },
+    );
 
-		expect(result.length).to.be.equal(4);
-		expect(result[0].cid).to.be.equal(channels[2].cid);
-		expect(result[1].cid).to.be.equal(channels[3].cid);
-		expect(result[2].cid).to.be.equal(channels[0].cid);
-		expect(result[3].cid).to.be.equal(channels[1].cid);*/
+    expect(result.length).to.be.equal(4);
+    expect(result[0].cid).to.be.equal(channels[2].cid);
+    expect(result[1].cid).to.be.equal(channels[3].cid);
+    expect(result[2].cid).to.be.equal(channels[0].cid);
+    expect(result[3].cid).to.be.equal(channels[1].cid);*/
 	});
 
 	it('limit results should work fine', async function() {
@@ -1970,5 +1970,35 @@ describe('pagination with invalid offset', function() {
 	it('offset > than total channel messages', async function() {
 		const result = await channel.query({ messages: { limit: 10, offset: 35 } });
 		expect(result.messages.length).to.be.equal(0);
+	});
+});
+
+describe('update channel with reserved fields', function() {
+	const user = uuidv4();
+	const channelType = uuidv4();
+	const channelId = uuidv4();
+	let channel;
+	let client;
+	before(async function() {
+		client = await getServerTestClient();
+
+		await client.createChannelType({
+			name: channelType,
+			commands: ['giphy'],
+		});
+
+		channel = client.channel(channelType, channelId, {
+			members: [user],
+			created_by_id: user,
+		});
+		await channel.watch();
+	});
+
+	it('should not fail when re-using channel.data', async function() {
+		await channel.update(channel.data);
+	});
+
+	it('should not fail when re-using channel._data', async function() {
+		await channel.update(channel._data);
 	});
 });

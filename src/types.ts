@@ -77,7 +77,7 @@ export type AppSettingsAPIResponse<
       }
     >;
     before_message_send_hook_url?: string;
-    custom_command_url?: string;
+    custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     multi_tenant_enabled?: boolean;
@@ -1348,6 +1348,7 @@ export type MessageBase<
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   id?: string;
+  mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;
   text?: string;
@@ -1470,3 +1471,8 @@ export type User<T = UnknownType> = T & {
 };
 
 export type TypingStartEvent = Event;
+
+export type BlockList = {
+  name: string;
+  words: string[];
+};

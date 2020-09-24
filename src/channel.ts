@@ -479,9 +479,30 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
-    channelData: ChannelData<ChannelType>,
+    channelData:
+      | Partial<ChannelData<ChannelType>>
+      | Partial<ChannelResponse<ChannelType, CommandType, UserType>>
+      | Partial<
+          Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
+        > = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
+    // Strip out reserved names that will result in API errors.
+    const reserved = [
+      'config',
+      'cid',
+      'created_by',
+      'id',
+      'member_count',
+      'type',
+      'created_at',
+      'updated_at',
+      'last_message_at',
+    ];
+    reserved.forEach(key => {
+      delete channelData[key];
+    });
+
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
         AttachmentType,
@@ -857,11 +878,11 @@ export class Channel<
       return;
     }
     const now = new Date();
-    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent?.getTime();
+    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent.getTime();
     this.lastKeyStroke = now;
     this.isTyping = true;
     // send a typing.start every 2 seconds
-    if (diff && diff > 2000) {
+    if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
         type: 'typing.start',
