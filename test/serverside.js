@@ -1470,6 +1470,13 @@ describe('App configs', function() {
 			originalUrl = response.app.custom_action_handler_url;
 		});
 
+		after(async function() {
+			// Reset custom command endpoint url to original
+			await client.updateAppSettings({
+				custom_action_handler_url: originalUrl,
+			});
+		});
+
 		it('Sets valid URL', async function() {
 			// Set custom command endpoint url
 			const custom_action_handler_url = 'http://example.com';
@@ -1500,13 +1507,6 @@ describe('App configs', function() {
 
 			const response = await client.getAppSettings();
 			expect(response.app.custom_action_handler_url).to.be.eq('');
-		});
-
-		before(async function() {
-			// Reset custom command endpoint url to original
-			await client.updateAppSettings({
-				custom_action_handler_url: originalUrl,
-			});
 		});
 	});
 });
