@@ -73,6 +73,16 @@ describe('Query Users', function() {
 				{ username: { $autocomplete: 'ro' } },
 			],
 		});
+
+		// the users are not always returned in the same order, sort 'em
+		response.users.sort((a, b) => {
+			if (a.name === b.name) return 0;
+			if (a.name > b.name) {
+				return -1;
+			} else {
+				return 1;
+			}
+		});
 		expect(response.users[0].name).to.equal('Roxy');
 		expect(response.users[1].name).to.equal('Roxanne');
 		expect(response.users[2].name).to.equal('Curiosity Rover');
