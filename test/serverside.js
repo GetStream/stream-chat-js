@@ -1461,9 +1461,14 @@ describe('App configs', function() {
 		});
 	});
 
-	describe('Set custom_action_handler_url', async function() {
-		const response = await client.getAppSettings();
-		const originalUrl = response.app.custom_action_handler_url;
+	describe('Set custom_action_handler_url', function() {
+		let response;
+		let originalUrl;
+
+		before(async function() {
+			response = await client.getAppSettings();
+			originalUrl = response.app.custom_action_handler_url;
+		});
 
 		it('Sets valid URL', async function() {
 			// Set custom command endpoint url
@@ -1471,6 +1476,7 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				custom_action_handler_url,
 			});
+			response = await client.getAppSettings();
 			expect(response.app.custom_action_handler_url).to.be.eq(
 				custom_action_handler_url,
 			);
@@ -1496,9 +1502,11 @@ describe('App configs', function() {
 			expect(response.app.custom_action_handler_url).to.be.eq('');
 		});
 
-		// Reset custom command endpoint url to original
-		await client.updateAppSettings({
-			custom_action_handler_url: originalUrl,
+		before(async function() {
+			// Reset custom command endpoint url to original
+			await client.updateAppSettings({
+				custom_action_handler_url: originalUrl,
+			});
 		});
 	});
 });
