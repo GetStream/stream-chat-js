@@ -1462,11 +1462,10 @@ describe('App configs', function() {
 	});
 
 	describe('Set custom_action_handler_url', function() {
-		let response;
 		let originalUrl;
 
 		before(async function() {
-			response = await client.getAppSettings();
+			const response = await client.getAppSettings();
 			originalUrl = response.app.custom_action_handler_url;
 		});
 
@@ -1483,7 +1482,8 @@ describe('App configs', function() {
 			await client.updateAppSettings({
 				custom_action_handler_url,
 			});
-			response = await client.getAppSettings();
+
+			const response = await client.getAppSettings();
 			expect(response.app.custom_action_handler_url).to.be.eq(
 				custom_action_handler_url,
 			);
