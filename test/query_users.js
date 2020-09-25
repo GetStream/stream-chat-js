@@ -66,13 +66,17 @@ describe('Query Users', function() {
 				name: 'Roxanne',
 			},
 		]);
-		const response = await serverClient.queryUsers({
-			unique,
-			$or: [
-				{ name: { $autocomplete: 'ro' } },
-				{ username: { $autocomplete: 'ro' } },
-			],
-		});
+		const response = await serverClient.queryUsers(
+			{
+				unique,
+				$or: [
+					{ name: { $autocomplete: 'ro' } },
+					{ username: { $autocomplete: 'ro' } },
+				],
+			},
+			{ name: 1 },
+		);
+
 		expect(response.users[0].name).to.equal('Roxy');
 		expect(response.users[1].name).to.equal('Roxanne');
 		expect(response.users[2].name).to.equal('Curiosity Rover');
