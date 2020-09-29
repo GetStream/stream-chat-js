@@ -1346,6 +1346,7 @@ export type MessageBase<
   UserType = UnknownType
 > = MessageType & {
   attachments?: Attachment<AttachmentType>[];
+  cid?: string;
   html?: string;
   id?: string;
   mml?: string;

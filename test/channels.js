@@ -29,6 +29,27 @@ Promise.config({
 	},
 });
 
+describe('message has exposed cid', function() {
+	let client;
+	let channel;
+	const user = uuidv4();
+
+	before(async function() {
+		await createUsers([user]);
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4(), {
+			members: [user],
+		});
+		await channel.create();
+	});
+
+	it('should return a non-empty cid', async () => {
+		const msg = await channel.sendMessage({ text: 'test123' });
+		expect(msg.message.text).to.equal('test123');
+		expect(msg.message.cid).to.not.be.empty;
+	});
+});
+
 describe('query by frozen', function() {
 	let client;
 	let channel;
