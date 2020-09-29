@@ -1,4 +1,4 @@
-import { getTestClient } from './utils';
+import { getTestClient, getTestClientForUser } from './utils';
 import {
 	Permission,
 	Deny,
@@ -28,13 +28,13 @@ class Context {
 	}
 
 	async setup() {
-		await this.authClient.upsertUser(this.adminUser);
-		await this.authClient.upsertUser(this.moderator);
-		await this.authClient.upsertUser(this.guestUser);
-		await this.authClient.upsertUser(this.channelMember);
-		await this.authClient.upsertUser(this.channelOwner);
-		await this.authClient.upsertUser(this.messageOwner);
-		await this.authClient.upsertUser(this.scapegoatUser);
+		await this.authClient.updateUser(this.adminUser);
+		await this.authClient.updateUser(this.moderator);
+		await this.authClient.updateUser(this.guestUser);
+		await this.authClient.updateUser(this.channelMember);
+		await this.authClient.updateUser(this.channelOwner);
+		await this.authClient.updateUser(this.messageOwner);
+		await this.authClient.updateUser(this.scapegoatUser);
 
 		this.channel = this.authClient.channel(this.channelType, this.channelId, {
 			created_by: this.channelOwner,
@@ -63,13 +63,6 @@ function setupUser(ctx, user, done, test) {
 			console.log(e);
 			done('failed to setUser');
 		});
-}
-
-async function getUserClient(ctx, user) {
-	const client = getTestClient(false);
-	const token = ctx.authClient.createToken(user.id);
-	await client.setUser(user, token);
-	return client;
 }
 
 function createChannel(ctx, user, responseTest) {
@@ -130,7 +123,7 @@ function createMessage(ctx, user, message, responseTest) {
 }
 
 async function createMessageFrozen(ctx, user, shouldFail) {
-	const userClient = await getUserClient(ctx, user);
+	const userClient = await getTestClientForUser(user.id);
 	const userChannel = userClient.channel(ctx.channelType, ctx.channelId, {});
 	const res = await userChannel.sendMessage(simpleMessage);
 
@@ -147,7 +140,7 @@ async function createMessageFrozen(ctx, user, shouldFail) {
 }
 
 async function createDeleteReactionFrozen(ctx, user, shouldFail) {
-	const userClient = await getUserClient(ctx, user);
+	const userClient = await getTestClientForUser(user.id);
 	const userChannel = userClient.channel(ctx.channelType, ctx.channelId, {});
 	await userChannel.watch();
 	const res = await userChannel.sendMessage(simpleMessage);
@@ -174,13 +167,11 @@ async function createDeleteReactionFrozen(ctx, user, shouldFail) {
 
 async function removeUseFrozenChannelPermissions(ctx) {
 	const { permissions } = await ctx.authClient.getChannelType(ctx.channelType);
-	permissions.forEach((v, k) => {
-		if (v.name === BuiltinPermissions.UseFrozenChannel) {
-			permissions.splice(k, 1);
-		}
+	await ctx.authClient.updateChannelType(ctx.channelType, {
+		permissions: permissions.filter(
+			v => v.name === BuiltinPermissions.UseFrozenChannel,
+		),
 	});
-
-	await ctx.authClient.updateChannelType(ctx.channelType, { permissions });
 }
 
 async function addUseFrozenChannelPermissions(ctx) {
@@ -442,7 +433,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Create message on frozen channel', function() {
+	describe('Use frozen channel', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -734,7 +725,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Create message on frozen channel', function() {
+	describe('Use frozen channel', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -1019,7 +1010,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Create message on frozen channel', function() {
+	describe('Use frozen channel', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -1298,7 +1289,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Create message on frozen channel', function() {
+	describe('Use frozen channel', function() {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
