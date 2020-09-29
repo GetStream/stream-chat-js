@@ -89,4 +89,5 @@ export const BuiltinPermissions = {
   UpdateOwnChannel: 'Update Own Channel',
   UpdateOwnMessage: 'Update Own Message',
   UploadAttachment: 'Upload Attachment',
+  UseFrozenChannel: 'Send messages and reactions to frozen channels',
 };
