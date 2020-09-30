@@ -265,7 +265,7 @@ describe('Query Members', function() {
 	it('query members fills role correctly', async function() {
 		const { members } = await channel.queryMembers({ id: mod });
 		expect(members.length).to.be.equal(1);
-		expect(members[0].user_id).to.be.equal(mod);
+		expect(members[0].user.id).to.be.equal(mod);
 		expect(members[0].role).to.be.equal('owner');
 	});
 
@@ -280,7 +280,7 @@ describe('Query Members', function() {
 		await distinctChannel.watch();
 		const result = await distinctChannel.queryMembers({ id: rob });
 		expect(result.members.length).to.be.equal(1);
-		expect(result.members[0].user_id).to.be.equal(rob);
+		expect(result.members[0].user.id).to.be.equal(rob);
 	});
 
 	describe('query by user last_active', function() {
@@ -329,13 +329,13 @@ describe('Query Members', function() {
 		it('$eq match ', async function() {
 			const resp = await channel.queryMembers({ last_active: user1LastActive });
 			expect(resp.members).to.be.length(1);
-			expect(resp.members[0].user_id).to.be.equal(user1);
+			expect(resp.members[0].user.id).to.be.equal(user1);
 		});
 
 		it('null match ', async function() {
 			const resp = await channel.queryMembers({ last_active: null });
 			expect(resp.members).to.be.length(1);
-			expect(resp.members[0].user_id).to.be.equal(user3);
+			expect(resp.members[0].user.id).to.be.equal(user3);
 		});
 
 		it('$gt', async function() {
@@ -343,7 +343,7 @@ describe('Query Members', function() {
 				last_active: { $gt: user1LastActive },
 			});
 			expect(resp.members).to.be.length(1);
-			expect(resp.members[0].user_id).to.be.equal(user2);
+			expect(resp.members[0].user.id).to.be.equal(user2);
 		});
 
 		it('$gte', async function() {
@@ -351,8 +351,8 @@ describe('Query Members', function() {
 				last_active: { $gte: user1LastActive },
 			});
 			expect(resp.members).to.be.length(2);
-			expect(resp.members[0].user_id).to.be.equal(user1);
-			expect(resp.members[1].user_id).to.be.equal(user2);
+			expect(resp.members[0].user.id).to.be.equal(user1);
+			expect(resp.members[1].user.id).to.be.equal(user2);
 		});
 
 		it('$lt', async function() {
@@ -367,14 +367,14 @@ describe('Query Members', function() {
 				last_active: { $lte: user1LastActive },
 			});
 			expect(resp.members).to.be.length(1);
-			expect(resp.members[0].user_id).to.be.equal(user1);
+			expect(resp.members[0].user.id).to.be.equal(user1);
 		});
 
 		it('$ne null', async function() {
 			const resp = await channel.queryMembers({ last_active: { $ne: null } });
 			expect(resp.members).to.be.length(2);
-			expect(resp.members[0].user_id).to.be.equal(user1);
-			expect(resp.members[1].user_id).to.be.equal(user2);
+			expect(resp.members[0].user.id).to.be.equal(user1);
+			expect(resp.members[1].user.id).to.be.equal(user2);
 		});
 
 		it('$ne null reverse', async function() {
@@ -383,8 +383,8 @@ describe('Query Members', function() {
 				{ created_at: -1 },
 			);
 			expect(resp.members).to.be.length(2);
-			expect(resp.members[0].user_id).to.be.equal(user2);
-			expect(resp.members[1].user_id).to.be.equal(user1);
+			expect(resp.members[0].user.id).to.be.equal(user2);
+			expect(resp.members[1].user.id).to.be.equal(user1);
 		});
 
 		it('unsupported operator', async function() {
