@@ -31,22 +31,195 @@ Promise.config({
 
 describe('message has exposed cid', function() {
 	let client;
+	let serverClient;
 	let channel;
 	const user = uuidv4();
 
 	before(async function() {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
+		serverClient = await getServerTestClient();
 		channel = client.channel('messaging', uuidv4(), {
 			members: [user],
 		});
 		await channel.create();
 	});
 
-	it('should return a non-empty cid', async () => {
-		const msg = await channel.sendMessage({ text: 'test123' });
-		expect(msg.message.text).to.equal('test123');
-		expect(msg.message.cid).to.not.be.empty;
+	describe('when sending and deleting a reaction', function() {
+		before(async () => {
+			await channel.watch();
+		});
+
+		it('should populate cid', async () => {
+			const res1 = await channel.sendMessage({ text: 'test123' });
+			expect(res1.message.id).to.not.be.empty;
+			expect(res1.message.text).to.equal('test123');
+			expect(res1.message.cid).to.not.be.empty;
+
+			const res2 = await channel.sendReaction(res1.message.id, { type: 'love' });
+			expect(res2.message.id).to.not.be.empty;
+			expect(res2.message.cid).to.not.be.empty;
+
+			const res3 = await channel.deleteReaction(res2.message.id, 'love');
+			expect(res3.message.id).to.not.be.empty;
+			expect(res3.message.cid).to.not.be.empty;
+		});
+	});
+
+	describe('when sending and deleting a message', function() {
+		it('should populate cid', async () => {
+			const res1 = await channel.sendMessage({ text: 'test123' });
+			expect(res1.message.id).to.not.be.empty;
+			expect(res1.message.text).to.equal('test123');
+			expect(res1.message.cid).to.not.be.empty;
+
+			const res2 = await client.deleteMessage(res1.message.id);
+			expect(res2.message.cid).to.not.be.empty;
+		});
+	});
+
+	describe('when sending a message on a frozen channel', function() {
+		before(async () => {
+			await channel.update({ frozen: true });
+		});
+
+		after(async () => {
+			await channel.update({ frozen: false });
+		});
+
+		it('should NOT populate cid', async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.type).to.equal('error');
+			expect(res.message.cid).to.be.empty;
+		});
+	});
+
+	describe('when exporting a user', function() {
+		// Make sure a message is available on the user
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.id).to.not.be.empty;
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await serverClient.exportUser(user);
+			expect(res.messages).to.not.have.lengthOf(0);
+			expect(
+				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+			).to.have.lengthOf(0);
+		});
+	});
+
+	describe('when getting a single message', function() {
+		let msgId = '';
+
+		// Make sure a message is available on the channel
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.id).to.not.be.empty;
+			msgId = res.message.id;
+		});
+
+		it('should populate cid on message', async () => {
+			const res = await client.getMessage(msgId);
+			expect(res.message).to.exist;
+			expect(res.message).to.not.be.empty;
+			expect(res.message.cid).to.not.be.empty;
+		});
+	});
+
+	describe('when getting multiple messages', function() {
+		let messageIds = [];
+
+		// Make sure multiple messages are available on the channel
+		before(async () => {
+			const res1 = await channel.sendMessage({ text: 'test123' });
+			expect(res1.message.id).to.not.be.empty;
+			messageIds.push(res1.message.id);
+
+			const res2 = await channel.sendMessage({ text: 'test123' });
+			expect(res2.message.id).to.not.be.empty;
+			messageIds.push(res2.message.id);
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await channel.getMessagesById(messageIds);
+			expect(res.messages).to.have.lengthOf(messageIds.length);
+			expect(
+				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+			).to.have.lengthOf(0);
+		});
+	});
+
+	describe('when getOrCreate an existing channel', function() {
+		// Make sure a message is available on the channel
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.id).to.not.be.empty;
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await client.channel(channel.type, channel.id);
+			expect(res.state).to.not.be.empty;
+			expect(res.state.messages).to.exist;
+			expect(res.state.messages.length).to.be.greaterThan(0);
+			expect(
+				res.state.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+			).to.have.lengthOf(0);
+		});
+	});
+
+	describe('when getting replies to a message', function() {
+		let msgId;
+
+		// Make sure a message with a reply is available on the channel
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.id).to.not.be.empty;
+			msgId = res.message.id;
+
+			const res2 = await channel.sendMessage({
+				text: 'reply123',
+				parent_id: res.message.id,
+			});
+			expect(res2.message.id).to.not.be.empty;
+
+			const res3 = await channel.sendMessage({
+				text: 'reply1234',
+				parent_id: res.message.id,
+			});
+			expect(res3.message.id).to.not.be.empty;
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await channel.getReplies(msgId);
+			expect(res.messages).to.exist;
+			expect(res.messages).to.have.lengthOf(2);
+			expect(
+				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+			).to.have.lengthOf(0);
+		});
+	});
+
+	describe('when querying channels', async () => {
+		// Make sure a message is available on the channel
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'test123' });
+			expect(res.message.id).to.not.be.empty;
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await client.queryChannels({ type: 'messaging', id: channel.id });
+			expect(res).to.have.lengthOf(1);
+			expect(res[0].id).to.equal(channel.id);
+			expect(res[0].state.messages).to.not.be.undefined;
+			expect(res[0].state.messages.length).to.be.greaterThan(0);
+			expect(
+				res[0].state.messages.filter(
+					msg => msg.cid === undefined || msg.cid === '',
+				),
+			).to.have.lengthOf(0);
+		});
 	});
 });
 
