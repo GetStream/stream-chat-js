@@ -129,7 +129,6 @@ describe('Webhooks', function() {
 		expect(userFlaggedEvent.channel_type).to.eq(chan.type);
 		expect(userFlaggedEvent.channel_id).to.eq(chan.id);
 		expect(userFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
-		console.log(JSON.stringify(userFlaggedEvent));
 		expect(userFlaggedEvent.total_flags).to.eq(1);
 
 		// expect message.unflagged event
