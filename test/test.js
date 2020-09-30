@@ -2004,10 +2004,16 @@ describe('Chat', () => {
 			async function runTest() {
 				conversation.on('typing.stop', event => {
 					// start, stop
+					expect(event.parent_id).to.be.equal(undefined);
 					expect(conversation.state.typing.asMutable()).to.deep.equal({});
 					conversation.listeners = {};
 					done();
 				});
+
+				conversation.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(undefined);
+				});
+
 				// run for 5 seconds or till typing.stop is received
 				await conversation.sendEvent({
 					type: 'typing.start',
@@ -2019,6 +2025,41 @@ describe('Chat', () => {
 			runTest().catch(exc => {
 				done(exc);
 			});
+		});
+
+		it('Typing events in Thread', function(done) {
+			async function runTest() {
+				const {
+					message: { id },
+				} = await conversation.sendMessage({ text: 'message' });
+
+				let started = false;
+				let timeout;
+
+				conversation.on('typing.stop', event => {
+					if (!started) throw new Error('typing.start event failed');
+					conversation.listeners = {};
+
+					expect(event.parent_id).to.be.equal(id);
+					expect(conversation.state.typing.asMutable()).to.deep.equal({});
+					clearTimeout(timeout);
+					done();
+				});
+
+				conversation.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(id);
+					expect(conversation.state.typing.asMutable()).to.not.be.empty;
+					started = true;
+				});
+
+				await conversation.sendEvent({ type: 'typing.start', parent_id: id });
+				await conversation.sendEvent({ type: 'typing.stop', parent_id: id });
+
+				timeout = setTimeout(() => {
+					throw new Error('Typing tests took too long');
+				}, 10000);
+			}
+			runTest().catch(done);
 		});
 
 		it('Typing Helpers', async () => {
