@@ -265,6 +265,7 @@ describe('Query Members', function() {
 	it('query members fills role correctly', async function() {
 		const { members } = await channel.queryMembers({ id: mod });
 		expect(members.length).to.be.equal(1);
+		expect(members[0].user_id).to.be.equal(mod);
 		expect(members[0].role).to.be.equal('owner');
 	});
 
