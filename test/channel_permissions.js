@@ -169,7 +169,7 @@ async function removeUseFrozenChannelPermissions(ctx) {
 	const { permissions } = await ctx.authClient.getChannelType(ctx.channelType);
 	await ctx.authClient.updateChannelType(ctx.channelType, {
 		permissions: permissions.filter(
-			v => v.name === BuiltinPermissions.UseFrozenChannel,
+			v => v.name !== BuiltinPermissions.UseFrozenChannel,
 		),
 	});
 }
