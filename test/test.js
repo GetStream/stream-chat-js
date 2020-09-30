@@ -2126,6 +2126,21 @@ describe('Chat', () => {
 			})().catch(done);
 		});
 
+		it('Keystroke in thread', done => {
+			(async () => {
+				const {
+					message: { id },
+				} = await eventChannel.sendMessage({ text: 'message' });
+
+				eventChannel.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(id);
+					done();
+				});
+
+				await eventChannel.keystroke(id);
+			})().catch(done);
+		});
+
 		it('Typing Helpers', async () => {
 			let occurrences = 0;
 			eventChannel.on('typing.start', () => occurrences++);

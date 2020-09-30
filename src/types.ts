@@ -826,6 +826,7 @@ export type Event<
     UserType
   >;
   online?: boolean;
+  parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
   unread_count?: number;
