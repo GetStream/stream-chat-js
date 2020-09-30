@@ -28,7 +28,7 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
-describe.only('shadow banning users', function() {
+describe('shadow banning users', function() {
 	const client = getTestClient(true);
 
 	const admin = uuidv4();
