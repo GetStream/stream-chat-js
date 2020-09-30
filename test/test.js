@@ -2901,6 +2901,12 @@ describe('Chat', () => {
 				expect(data.file).to.be.not.empty;
 			});
 
+			it('Upload a buffer', async () => {
+				const file = Buffer.from('random string');
+				const data = await channel.sendFile(file, 'hello_world.txt');
+				expect(data.file).to.be.not.empty;
+			});
+
 			it('Upload an image', async () => {
 				const file = fs.createReadStream('./helloworld.jpg');
 				const data = await channel.sendImage(file, 'hello_world.jpg');
