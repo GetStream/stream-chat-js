@@ -23,8 +23,7 @@ Promise.config({
 
 async function getTestMessage(text, channel) {
 	const data = await channel.sendMessage({ text });
-	const message = data.message;
-	return message;
+	return data.message;
 }
 
 describe('Reactions', function() {

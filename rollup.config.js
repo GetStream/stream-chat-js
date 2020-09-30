@@ -1,14 +1,9 @@
-// @flow
-import babel from 'rollup-plugin-babel';
+import babel from '@rollup/plugin-babel';
 import external from 'rollup-plugin-peer-deps-external';
-import commonjs from 'rollup-plugin-commonjs';
-import scss from 'rollup-plugin-scss';
-import json from 'rollup-plugin-json';
-import url from 'rollup-plugin-url';
-import resolve from 'rollup-plugin-node-resolve';
-import { terser } from 'rollup-plugin-terser';
-
+import commonjs from '@rollup/plugin-commonjs';
 import replace from 'rollup-plugin-replace';
+import { terser } from 'rollup-plugin-terser';
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 import pkg from './package.json';
 
@@ -17,28 +12,12 @@ process.env.NODE_ENV = 'production';
 
 const externalPackages = [
 	'axios',
-	'cross-fetch',
 	'form-data',
 	'isomorphic-ws',
-	'lodash',
 	'seamless-immutable',
 	'uuid/v4',
 	'base64-js',
-	'@babel/runtime/regenerator',
-	'@babel/runtime/helpers/asyncToGenerator',
-	'@babel/runtime/helpers/objectWithoutProperties',
-	'@babel/runtime/helpers/toConsumableArray',
-	'@babel/runtime/helpers/objectSpread',
-	'@babel/runtime/helpers/extends',
-	'@babel/runtime/helpers/defineProperty',
-	'@babel/runtime/helpers/assertThisInitialized',
-	'@babel/runtime/helpers/inherits',
-	'@babel/runtime/helpers/getPrototypeOf',
-	'@babel/runtime/helpers/possibleConstructorReturn',
-	'@babel/runtime/helpers/createClass',
-	'@babel/runtime/helpers/classCallCheck',
-	'@babel/runtime/helpers/slicedToArray',
-	'@babel/runtime/helpers/typeof',
+	/@babel\/runtime/,
 ];
 
 const browserIgnore = {
@@ -51,8 +30,16 @@ const browserIgnore = {
 			: null,
 };
 
+const extensions = ['.mjs', '.json', '.node', '.js', '.ts'];
+
+const babelConfig = {
+	babelHelpers: 'runtime',
+	exclude: 'node_modules/**',
+	extensions,
+};
+
 const baseConfig = {
-	input: 'src/index.js',
+	input: 'src/index.ts',
 	cache: false,
 	watch: {
 		chokidar: false,
@@ -74,22 +61,14 @@ const normalBundle = {
 	],
 	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
 	plugins: [
-		replace({
-			'process.env.NODE_ENV': JSON.stringify('production'),
-		}),
+		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		external(),
-		babel({
-			runtimeHelpers: true,
-			exclude: 'node_modules/**',
-		}),
-		scss({
-			output: pkg.style,
-		}),
+		nodeResolve({ extensions }),
+		babel(babelConfig),
 		commonjs(),
-		url(),
-		json(),
 	],
 };
+
 const browserBundle = {
 	...baseConfig,
 	output: [
@@ -106,21 +85,12 @@ const browserBundle = {
 	],
 	external: externalPackages,
 	plugins: [
-		replace({
-			'process.env.NODE_ENV': JSON.stringify('production'),
-		}),
+		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		browserIgnore,
 		external(),
-		babel({
-			runtimeHelpers: true,
-			exclude: 'node_modules/**',
-		}),
-		scss({
-			output: pkg.style,
-		}),
+		nodeResolve({ extensions }),
+		babel(babelConfig),
 		commonjs(),
-		url(),
-		json(),
 	],
 };
 const fullBrowserBundle = {
@@ -132,26 +102,15 @@ const fullBrowserBundle = {
 			name: 'window', // write all exported values to window
 			extend: true, // extend window, not overwrite it
 			sourcemap: true,
-			browser: true,
 		},
 	],
 	plugins: [
-		replace({
-			'process.env.NODE_ENV': JSON.stringify('production'),
-		}),
-		external(),
-		babel({
-			runtimeHelpers: true,
-			exclude: 'node_modules/**',
-		}),
-		scss({
-			output: pkg.style,
-		}),
+		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		browserIgnore,
-		resolve({ browser: true }),
+		external(),
+		nodeResolve({ extensions, browser: true }),
+		babel(babelConfig),
 		commonjs(),
-		url(),
-		json(),
 		terser(),
 	],
 };

@@ -5,7 +5,7 @@ import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../src';
-import { expectHTTPErrorCode } from './utils';
+import { expectHTTPErrorCode, getTestClientWithWarmUp } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
 const mockServer = require('mockttp').getLocal();
@@ -534,7 +534,7 @@ describe('Chat', () => {
 			await channel.sendMessage({ text: 'hi' });
 
 			const channelFilters = { unique };
-			const messageFilters = { text: 'hi', unique: unique };
+			const messageFilters = { text: 'hi', unique };
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.equal(unique);
@@ -561,6 +561,28 @@ describe('Chat', () => {
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.be.undefined;
+		});
+
+		it('query messages with empty text', async () => {
+			const unique = uuidv4();
+			const channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await channel.create();
+			const attachments = [
+				{
+					type: 'hashtag',
+					name: 'awesome',
+					awesome: true,
+				},
+			];
+			const resp = await channel.sendMessage({ attachments });
+
+			const channelFilters = { unique };
+			const messageFilters = { text: '' };
+			const response = await authClient.search(channelFilters, messageFilters);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(resp.message.id);
 		});
 
 		it('Basic Query using $q syntax', async () => {
@@ -1637,6 +1659,31 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('MML messages', () => {
+		describe('Error', () => {
+			it('Send invalid MML message', async () => {
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml-examples non-existing';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.type).to.equal('error');
+			});
+		});
+
+		describe('Success', () => {
+			it('Send MML message', async () => {
+				const cmdChannel = authClient.channel('ai', 'excuse-test');
+				await cmdChannel.watch();
+				const cmd = '/mml-examples hi';
+				const data = await cmdChannel.sendMessage({ text: cmd });
+				expect(data.message.text).to.equal(cmd);
+				expect(data.message.mml).to.equal(
+					'\n\t\t<mml name="message">\n\t\t\t<text>Hi!</text>\n\t\t</mml>\n\t',
+				);
+			});
+		});
+	});
+
 	describe('Slash Commands', () => {
 		describe('Success', () => {
 			it('Giphy Integration', async () => {
@@ -1787,7 +1834,9 @@ describe('Chat', () => {
 			expect(result.messages.length).to.equal(2);
 			// verify that the id lte filter works
 			for (const m of result.messages) {
-				expect(m.created_at).to.be.below(oldestMessage.created_at);
+				const createdAt = new Date(m.created_at);
+				const oldestMessageCreatedAt = new Date(oldestMessage.created_at);
+				expect(createdAt).to.be.below(oldestMessageCreatedAt);
 			}
 			// the state should have 4 messages
 			expect(paginationChannel.state.messages.length).to.equal(4);
@@ -1973,15 +2022,14 @@ describe('Chat', () => {
 		});
 
 		it('Typing Helpers', async () => {
-			let occurences = 0;
-			conversation.on('typing.start', () => {
-				occurences += 1;
-				if (occurences > 1) {
-					throw Error('too many typing.start events');
-				}
-			});
+			let occurrences = 0;
+			conversation.on('typing.start', () => occurrences++);
+
 			await conversation.keystroke();
 			await conversation.keystroke();
+
+			if (occurrences === 0) throw Error('typing.start never called');
+			if (occurrences > 1) throw Error('too many typing.start events');
 		});
 
 		it('Message Read', async () => {
@@ -2632,9 +2680,7 @@ describe('Chat', () => {
 				await channel.show();
 			});
 
-			it('receives event', () => {
-				return expect(event).to.be.fulfilled;
-			});
+			it('receives event', () => expect(event).to.be.fulfilled);
 
 			it('removes messages for the channel', () => {
 				expect(channel.state.messages).to.have.length(0);
@@ -2933,7 +2979,7 @@ describe('Chat', () => {
 describe('paginate order with id_gt{,e}', () => {
 	let channel;
 	let client;
-	let user = uuidv4();
+	const user = uuidv4();
 	before(async () => {
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4());
@@ -2979,5 +3025,50 @@ describe('paginate order with id_gt{,e}', () => {
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(user + (3).toString());
 		expect(result.messages[1].id).to.be.equal(user + (4).toString());
+	});
+});
+
+describe('warm up', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	it('shouldReuseConnection', async () => {
+		const baseUrl = 'https://chat-us-east-1.stream-io-api.com';
+		const client = getTestClient(true);
+		client.setBaseURL(baseUrl);
+		const health = await client.setUser({ id: user }, createUserToken(user));
+		client.health = health;
+		channel = await client.channel('messaging', uuidv4());
+
+		// populate cache
+		await channel.query();
+
+		// first client uses warmUp
+		const warmUpClient = getTestClientWithWarmUp();
+		warmUpClient.setBaseURL(baseUrl);
+		warmUpClient.health = await warmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
+
+		let t0 = new Date().getTime();
+		await warmUpClient.channel(channel.type, channel.id).query();
+		let t1 = new Date().getTime();
+		const withWarmUpDur = t1 - t0;
+		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
+
+		// second client without warmUp
+		const noWarmUpClient = await getTestClient(false);
+		noWarmUpClient.setBaseURL(baseUrl);
+		noWarmUpClient.health = await noWarmUpClient.setUser(
+			{ id: user },
+			createUserToken(user),
+		);
+		t0 = new Date().getTime();
+		await noWarmUpClient.channel(channel.type, channel.id).query();
+		t1 = new Date().getTime();
+		const withoutWarmUpDur = t1 - t0;
+		console.log('time taken without warm up ' + withoutWarmUpDur + ' milliseconds.');
+		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
 	});
 });

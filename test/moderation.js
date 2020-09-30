@@ -7,6 +7,7 @@ import {
 	expectHTTPErrorCode,
 	sleep,
 	createEventWaiter,
+	getServerTestClient,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -26,6 +27,121 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
+describe('block list moderation CRUD', () => {
+	const client = getServerTestClient();
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(1);
+	});
+
+	it('get blocklist profanity_en_2020_v1', async () => {
+		const response = await client.getBlockList('profanity_en_2020_v1');
+		expect(response.blocklist.name).to.eq('profanity_en_2020_v1');
+	});
+
+	it('create a new blocklist', async () => {
+		const words = ['fudge', 'cream', 'sugar'];
+		await client.createBlockList({
+			name: 'no-cakes',
+			words,
+		});
+	});
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(2);
+	});
+
+	it('get blocklist info', async () => {
+		const response = await client.getBlockList('no-cakes');
+		expect(response.blocklist.name).to.eq('no-cakes');
+		expect(response.blocklist.words).to.eql(['fudge', 'cream', 'sugar']);
+	});
+
+	it('update a default blocklist should fail', async () => {
+		const p = client.updateBlockList('profanity_en_2020_v1', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+		await expect(p).to.be.rejectedWith(
+			`cannot update the builtin block list "profanity_en_2020_v1"`,
+		);
+	});
+
+	it('update blocklist', async () => {
+		await client.updateBlockList('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla'],
+		});
+	});
+
+	it('get blocklist info again', async () => {
+		const response = await client.getBlockList('no-cakes');
+		expect(response.blocklist.name).to.eq('no-cakes');
+		expect(response.blocklist.words).to.eql(['fudge', 'cream', 'sugar', 'vanilla']);
+	});
+
+	it('use the blocklist for a channel type', async () => {
+		await client.updateChannelType('messaging', {
+			blocklist: 'no-cakes',
+			blocklist_behavior: 'block',
+		});
+	});
+
+	it('should block messages that match the blocklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
+	it('update blocklist again', async () => {
+		await client.updateBlockList('no-cakes', {
+			words: ['fudge', 'cream', 'sugar', 'vanilla', 'jam'],
+		});
+	});
+
+	it('should block messages that match the blocklist', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'you should add more jam there ;)',
+		});
+		expect(response.message.text).to.eql('Automod blocked your message');
+		expect(response.message.type).to.eql('error');
+	});
+
+	it('delete a blocklist', async () => {
+		await client.deleteBlockList('no-cakes');
+	});
+
+	it('should not block messages anymore', async () => {
+		const userClient = await getTestClientForUser('tommaso');
+		const chan = userClient.channel('messaging', 'caaakes');
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'put some sugar and fudge on that!',
+		});
+		expect(response.message.text).to.eql('put some sugar and fudge on that!');
+	});
+
+	it('list available blocklists', async () => {
+		const response = await client.listBlockLists();
+		expect(response.blocklists).to.have.length(1);
+	});
+
+	it('delete a default blocklist should fail', async () => {
+		const p = client.deleteBlockList('profanity_en_2020_v1');
+		await expect(p).to.be.rejectedWith(
+			`cannot delete the builtin block list "profanity_en_2020_v1"`,
+		);
+	});
+});
+
 describe('Moderation', function() {
 	it('Mute', async function() {
 		const user1 = uuidv4();
@@ -43,6 +159,36 @@ describe('Moderation', function() {
 		const response = await client1.muteUser(user2);
 		expect(response.mute.created_at).to.not.be.undefined;
 		expect(response.mute.updated_at).to.not.be.undefined;
+		expect(response.mute.user.id).to.equal(user1);
+		expect(response.mute.target.id).to.equal(user2);
+		// verify we return the right user mute upon connect
+		const client = getTestClient(false);
+		const connectResponse = await client.setUser(
+			{ id: user1 },
+			createUserToken(user1),
+		);
+		expect(connectResponse.me.mutes.length).to.equal(1);
+		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
+		await eventPromise;
+	});
+
+	it('Mute with expiration', async function() {
+		const user1 = uuidv4();
+		const user2 = uuidv4();
+		await createUsers([user1, user2]);
+		const client1 = await getTestClientForUser(user1);
+
+		const eventPromise = new Promise(resolve => {
+			// verify that the notification is sent
+			client1.on('notification.mutes_updated', e => {
+				expect(e.me.mutes.length).to.equal(1);
+				resolve();
+			});
+		});
+		const response = await client1.muteUser(user2, null, { timeout: 10 });
+		expect(response.mute.created_at).to.not.be.undefined;
+		expect(response.mute.updated_at).to.not.be.undefined;
+		expect(response.mute.expires).to.not.be.undefined;
 		expect(response.mute.user.id).to.equal(user1);
 		expect(response.mute.target.id).to.equal(user2);
 		// verify we return the right user mute upon connect
@@ -112,18 +258,18 @@ describe('Moderation', function() {
 });
 
 describe('mute channels', function() {
-	let user1 = uuidv4();
-	let user2 = uuidv4();
+	const user1 = uuidv4();
+	const user2 = uuidv4();
 	let client1;
-	let mutedChannelId = uuidv4();
+	const mutedChannelId = uuidv4();
 	it('mute channel and expect notification)', async function() {
 		await createUsers([user1, user2]);
 		client1 = await getTestClientForUser(user1);
 
 		const eventPromise = new Promise(resolve => {
-			let onChannelMute = e => {
+			const onChannelMute = e => {
 				expect(e.me.channel_mutes.length).to.equal(1);
-				let mute = e.me.channel_mutes[0];
+				const mute = e.me.channel_mutes[0];
 				expect(mute.created_at).to.not.be.undefined;
 				expect(mute.updated_at).to.not.be.undefined;
 				expect(mute.user.id).to.equal(user1);
@@ -137,7 +283,7 @@ describe('mute channels', function() {
 			client1.on('notification.channel_mutes_updated', onChannelMute);
 		});
 
-		let channel = client1.channel('messaging', mutedChannelId, {
+		const channel = client1.channel('messaging', mutedChannelId, {
 			members: [user1, user2],
 		});
 		await channel.create();
@@ -162,7 +308,7 @@ describe('mute channels', function() {
 	});
 
 	it('sending messages to muted channels dont increment unread counts', async function() {
-		let client2 = await getTestClientForUser(user2);
+		const client2 = await getTestClientForUser(user2);
 		await client2
 			.channel('messaging', mutedChannelId)
 			.sendMessage({ text: 'message to muted channel' });
@@ -204,7 +350,7 @@ describe('mute channels', function() {
 
 	it('unmute channel ', async function() {
 		const eventPromise = new Promise(resolve => {
-			let onChannelMute = e => {
+			const onChannelMute = e => {
 				expect(e.me.channel_mutes.length).to.equal(0);
 				resolve();
 				//cleanup
@@ -227,7 +373,7 @@ describe('mute channels', function() {
 	});
 
 	it('muted and mute_expires_at are reserved fields', async function() {
-		let channel = client1.channel('messaging', uuidv4(), {
+		const channel = client1.channel('messaging', uuidv4(), {
 			muted: true,
 			mute_expires_at: new Date(),
 		});
@@ -321,7 +467,7 @@ describe('mute channels', function() {
 
 describe('channel muteStatus', function() {
 	let channel;
-	let userID = uuidv4();
+	const userID = uuidv4();
 	let client;
 
 	before(async function() {
