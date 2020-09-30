@@ -11,6 +11,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+
 const expect = chai.expect;
 
 if (process.env.NODE_ENV !== 'production') {
@@ -26,6 +27,43 @@ Promise.config({
 });
 
 chai.use(chaiAsPromised);
+
+describe.only('shadow banning users', function() {
+	const client = getTestClient(true);
+
+	const admin = uuidv4();
+	const bannedFromChannel = uuidv4();
+	const bannedFromApp = uuidv4();
+
+	const channelID = uuidv4();
+	let channel;
+
+	before(async function() {
+		await createUsers([admin, bannedFromApp, bannedFromChannel]);
+
+		channel = client.channel('livestream', channelID, {
+			members: [bannedFromChannel, bannedFromApp],
+			created_by_id: admin,
+		});
+		await channel.create();
+	});
+
+	it('should shadow ban a user from a channel', async function() {
+		await channel.shadowBan(bannedFromChannel, { user_id: admin });
+	});
+
+	it('should remove a shadow ban from a channel', async function() {
+		await channel.removeShadowBan(bannedFromChannel);
+	});
+
+	it('should shadow ban a user from the application', async function() {
+		await client.shadowBan(bannedFromChannel, { user_id: admin });
+	});
+
+	it('should remove a shadow ban from the application', async function() {
+		await client.removeShadowBan(bannedFromChannel);
+	});
+});
 
 describe('block list moderation CRUD', () => {
 	const client = getServerTestClient();

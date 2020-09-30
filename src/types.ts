@@ -772,6 +772,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
+  is_shadow_ban?: boolean;
   target_user_id?: string;
   type?: string;
 };

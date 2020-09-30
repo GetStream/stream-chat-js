@@ -1302,6 +1302,36 @@ export class Channel<
   }
 
   /**
+   * shadowBan - Shadow bans a user from a channel
+   *
+   * @param {string} targetUserID
+   * @param {BanUserOptions<UserType>} options
+   * @returns {Promise<APIResponse>}
+   */
+  async shadowBan(targetUserID: string, options: BanUserOptions<UserType>) {
+    this._checkInitialized();
+    return await this.getClient().shadowBan(targetUserID, {
+      ...options,
+      type: this.type,
+      id: this.id,
+    });
+  }
+
+  /**
+   * removeShadowBan - Removes the shadow ban for a user on a channel
+   *
+   * @param {string} targetUserID
+   * @returns {Promise<APIResponse>}
+   */
+  async removeShadowBan(targetUserID: string) {
+    this._checkInitialized();
+    return await this.getClient().removeShadowBan(targetUserID, {
+      type: this.type,
+      id: this.id,
+    });
+  }
+
+  /**
    * on - Listen to events on this channel.
    *
    * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
