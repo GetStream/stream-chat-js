@@ -95,6 +95,7 @@ export class ChannelState<
   members: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
   }>;
+  unreadCount: number;
   membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
 
@@ -155,6 +156,7 @@ export class ChannelState<
       [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
     }>({});
     this.membership = Immutable<ChannelMembership<UserType>>({});
+    this.unreadCount = 0;
     this.last_message_at =
       channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)

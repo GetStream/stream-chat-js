@@ -1097,16 +1097,17 @@ export class Channel<
   }
 
   /**
-   * countUnread - Count the number of messages with a date thats newer than the last read timestamp
+   * countUnread - Count of unread messages
    *
    * @param {Date | Immutable.ImmutableDate | null} [lastRead] lastRead the time that the user read a message, defaults to current user's read state
    *
    * @return {number} Unread count
    */
   countUnread(lastRead?: Date | Immutable.ImmutableDate | null) {
-    if (lastRead == null) {
-      lastRead = this.lastRead();
+    if (!lastRead) {
+      return this.state.unreadCount;
     }
+
     let count = 0;
     for (const m of this.state.messages.asMutable()) {
       const message = m.asMutable({ deep: true });
@@ -1423,6 +1424,7 @@ export class Channel<
     this.listeners[key] = this.listeners[key].filter(value => value !== callback);
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(
     event: Event<
       AttachmentType,
@@ -1462,6 +1464,10 @@ export class Channel<
             event.user.id,
             Immutable({ user: { ...event.user }, last_read: event.received_at }),
           );
+
+          if (event.user?.id === this.getClient().user?.id) {
+            s.unreadCount = 0;
+          }
         }
         break;
       case 'user.watching.start':
@@ -1476,6 +1482,11 @@ export class Channel<
         }
         break;
       case 'message.new':
+        s.unreadCount = s.unreadCount + 1;
+        if (event.message) {
+          s.addMessageSorted(event.message);
+        }
+        break;
       case 'message.updated':
       case 'message.deleted':
         if (event.message) {
@@ -1574,6 +1585,7 @@ export class Channel<
     }
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   _initializeState(
     state: ChannelAPIResponse<
       AttachmentType,
@@ -1642,6 +1654,9 @@ export class Channel<
         const parsedRead = Object.assign({ ...read });
         parsedRead.last_read = new Date(read.last_read);
         this.state.read = this.state.read.set(read.user.id, parsedRead);
+        if (read.user.id === this.getClient().user?.id) {
+          this.state.unreadCount = parsedRead.unread_messages;
+        }
       }
     }
 
