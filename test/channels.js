@@ -66,15 +66,26 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when sending and deleting a message', function() {
+	describe('when sending, updating, getting and deleting a message', function() {
 		it('should populate cid', async () => {
 			const res1 = await channel.sendMessage({ text: 'test123' });
 			expect(res1.message.id).to.not.be.empty;
 			expect(res1.message.text).to.equal('test123');
 			expect(res1.message.cid).to.not.be.empty;
 
-			const res2 = await client.deleteMessage(res1.message.id);
+			const res2 = await client.updateMessage({
+				id: res1.message.id,
+				text: 'test123',
+			});
+			expect(res2.message.id).to.equal(res1.message.id);
 			expect(res2.message.cid).to.not.be.empty;
+
+			const res3 = await client.getMessage(res1.message.id);
+			expect(res3.message.id).to.equal(res1.message.id);
+			expect(res3.message.cid).to.not.be.empty;
+
+			const res4 = await client.deleteMessage(res1.message.id);
+			expect(res4.message.cid).to.not.be.empty;
 		});
 	});
 
@@ -107,24 +118,6 @@ describe('message has exposed cid', function() {
 			expect(
 				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
 			).to.have.lengthOf(0);
-		});
-	});
-
-	describe('when getting a single message', function() {
-		let msgId = '';
-
-		// Make sure a message is available on the channel
-		before(async () => {
-			const res = await channel.sendMessage({ text: 'test123' });
-			expect(res.message.id).to.not.be.empty;
-			msgId = res.message.id;
-		});
-
-		it('should populate cid on message', async () => {
-			const res = await client.getMessage(msgId);
-			expect(res.message).to.exist;
-			expect(res.message).to.not.be.empty;
-			expect(res.message.cid).to.not.be.empty;
 		});
 	});
 
@@ -201,7 +194,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when querying channels', async () => {
+	describe('when querying channels', function() {
 		// Make sure a message is available on the channel
 		before(async () => {
 			const res = await channel.sendMessage({ text: 'test123' });
@@ -219,6 +212,85 @@ describe('message has exposed cid', function() {
 					msg => msg.cid === undefined || msg.cid === '',
 				),
 			).to.have.lengthOf(0);
+		});
+	});
+
+	describe('when running message action', function() {
+		it('should populate cid on message', async () => {
+			const res1 = await channel.sendMessage({ text: '/giphy test' });
+			expect(res1.message.id).to.not.be.empty;
+			expect(res1.message.type).to.equal('ephemeral');
+			expect(res1.message.attachments).to.not.be.empty;
+
+			const res2 = await channel.sendAction(res1.message.id, {
+				image_action: 'send',
+			});
+
+			expect(res2.message.id).to.not.be.empty;
+			expect(res2.message.cid).to.not.be.empty;
+		});
+	});
+
+	describe('when searching messages', function() {
+		const msgText = 'supercalifragilisticexpialidocious';
+		// Make sure a message is available on the channel
+		before(async () => {
+			const res = await channel.sendMessage({ text: msgText });
+			expect(res.message.id).to.not.be.empty;
+		});
+
+		it('should populate cid on messages', async () => {
+			const res = await client.search({ id: { $eq: channel.id } }, msgText, {
+				limit: 1,
+			});
+			expect(res.results.length).to.be.greaterThan(0);
+			expect(res.results[0].message).to.exist;
+			expect(res.results[0].message).to.not.be.empty;
+			expect(res.results[0].message.id).to.not.be.empty;
+			expect(res.results[0].message.cid).to.not.be.empty;
+		});
+	});
+
+	describe('when triggering an event with a message', function() {
+		it('should populate cid on message', async () => {
+			let p = new Promise(res => {
+				channel.on('message.new', event => {
+					expect(event.message.id).not.to.be.empty;
+					expect(event.message.cid).not.to.be.empty;
+					res();
+				});
+			});
+
+			const res1 = await channel.sendMessage({ text: 'test123' });
+			expect(res1.message.id).to.not.be.empty;
+			await p;
+		});
+	});
+
+	describe('when translating a message', function() {
+		let msgId;
+
+		before(async () => {
+			const res = await channel.sendMessage({ text: 'this is a test' });
+			expect(res.message.id).to.not.be.empty;
+			msgId = res.message.id;
+		});
+
+		it('should populate cid on message', async () => {
+			const res = await client.translateMessage(msgId, 'nl');
+			expect(res.message.id).not.to.be.empty;
+			expect(res.message.cid).not.to.be.empty;
+		});
+	});
+
+	describe('when updating a channel with a message', function() {
+		it('should populate cid on message', async () => {
+			const res = await channel.update(
+				{ frozen: false },
+				{ text: 'this is a test' },
+			);
+			expect(res.message.id).not.to.be.empty;
+			expect(res.message.cid).not.to.be.empty;
 		});
 	});
 });
