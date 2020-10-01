@@ -2,7 +2,6 @@
 /* global process */
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
-import FormData from 'form-data';
 import https from 'https';
 import uuidv4 from 'uuid/v4';
 import WebSocket from 'isomorphic-ws';
@@ -12,7 +11,7 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, chatCodes } from './utils';
+import { isFunction, addFileToFormData, chatCodes } from './utils';
 
 import {
   APIResponse,
@@ -78,19 +77,6 @@ import {
   UserSort,
   BlockList,
 } from './types';
-
-function isReadableStream(
-  obj: string | NodeJS.ReadableStream | File,
-): obj is NodeJS.ReadableStream {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._read === 'function' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._readableState === 'object'
-  );
-}
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -814,33 +800,14 @@ export class StreamChat<
 
   sendFile(
     url: string,
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    const data = new FormData();
-    let fileField:
-      | File
-      | NodeJS.ReadableStream
-      | { name: string; uri: string; type?: string };
+    const data = addFileToFormData(uri, name, contentType);
+    if (user != null) data.append('user', JSON.stringify(user));
 
-    if (isReadableStream(uri) || uri instanceof File) {
-      fileField = uri;
-    } else {
-      fileField = {
-        uri,
-        name: name || uri.split('/').reverse()[0],
-      };
-      if (contentType != null) {
-        fileField.type = contentType;
-      }
-    }
-
-    if (user != null) {
-      data.append('user', JSON.stringify(user));
-    }
-    data.append('file', fileField);
     return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
