@@ -54,15 +54,15 @@ describe('message has exposed cid', function() {
 			const res1 = await channel.sendMessage({ text: 'test123' });
 			expect(res1.message.id).to.not.be.empty;
 			expect(res1.message.text).to.equal('test123');
-			expect(res1.message.cid).to.not.be.empty;
+			expect(res1.message.cid).to.equal(channel.cid);
 
 			const res2 = await channel.sendReaction(res1.message.id, { type: 'love' });
 			expect(res2.message.id).to.not.be.empty;
-			expect(res2.message.cid).to.not.be.empty;
+			expect(res2.message.cid).to.equal(channel.cid);
 
 			const res3 = await channel.deleteReaction(res2.message.id, 'love');
 			expect(res3.message.id).to.not.be.empty;
-			expect(res3.message.cid).to.not.be.empty;
+			expect(res3.message.cid).to.equal(channel.cid);
 		});
 	});
 
@@ -71,21 +71,21 @@ describe('message has exposed cid', function() {
 			const res1 = await channel.sendMessage({ text: 'test123' });
 			expect(res1.message.id).to.not.be.empty;
 			expect(res1.message.text).to.equal('test123');
-			expect(res1.message.cid).to.not.be.empty;
+			expect(res1.message.cid).to.equal(channel.cid);
 
 			const res2 = await client.updateMessage({
 				id: res1.message.id,
 				text: 'test123',
 			});
 			expect(res2.message.id).to.equal(res1.message.id);
-			expect(res2.message.cid).to.not.be.empty;
+			expect(res2.message.cid).to.equal(channel.cid);
 
 			const res3 = await client.getMessage(res1.message.id);
 			expect(res3.message.id).to.equal(res1.message.id);
-			expect(res3.message.cid).to.not.be.empty;
+			expect(res3.message.cid).to.equal(channel.cid);
 
 			const res4 = await client.deleteMessage(res1.message.id);
-			expect(res4.message.cid).to.not.be.empty;
+			expect(res4.message.cid).to.equal(channel.cid);
 		});
 	});
 
@@ -227,7 +227,7 @@ describe('message has exposed cid', function() {
 			});
 
 			expect(res2.message.id).to.not.be.empty;
-			expect(res2.message.cid).to.not.be.empty;
+			expect(res2.message.cid).to.equal(channel.cid);
 		});
 	});
 
@@ -247,7 +247,7 @@ describe('message has exposed cid', function() {
 			expect(res.results[0].message).to.exist;
 			expect(res.results[0].message).to.not.be.empty;
 			expect(res.results[0].message.id).to.not.be.empty;
-			expect(res.results[0].message.cid).to.not.be.empty;
+			expect(res.results[0].message.cid).to.equal(channel.cid);
 		});
 	});
 
