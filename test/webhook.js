@@ -129,7 +129,6 @@ describe('Webhooks', function() {
 		expect(userFlaggedEvent.channel_type).to.eq(chan.type);
 		expect(userFlaggedEvent.channel_id).to.eq(chan.id);
 		expect(userFlaggedEvent.message.id).to.eq(sendMessageResp.message.id);
-		console.log(JSON.stringify(userFlaggedEvent));
 		expect(userFlaggedEvent.total_flags).to.eq(1);
 
 		// expect message.unflagged event
@@ -711,7 +710,11 @@ describe('Webhooks', function() {
 		// Ban the user
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.banned'),
-			client.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+			client.banUser(newUserID, {
+				reason: 'testy mctestify',
+				user_id: thierryID,
+				timeout: 120,
+			}),
 		]);
 
 		const event = events[0];
@@ -720,6 +723,8 @@ describe('Webhooks', function() {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
+		expect(event.expiration).to.not.be.null;
+		expect(event.created_by.id).to.be.eq(thierryID);
 		expect(event.created_by.id).to.be.eq(thierryID);
 		expect(event.total_bans).to.be.eq(1);
 	});

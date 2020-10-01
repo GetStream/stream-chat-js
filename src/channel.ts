@@ -210,7 +210,7 @@ export class Channel<
   }
 
   sendFile(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
