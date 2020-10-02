@@ -1499,7 +1499,7 @@ export class Channel<
         break;
       case 'message.deleted':
         if (event.message) {
-          if (event.hard_delete) s.removeMessage(event.message as { id: string });
+          if (event.hard_delete) s.removeMessage(event.message);
           else s.addMessageSorted(event.message);
         }
         break;
