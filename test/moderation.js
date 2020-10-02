@@ -31,9 +31,9 @@ chai.use(chaiAsPromised);
 describe('shadow banning users in a channel', function() {
 	const client = getTestClient(true);
 
-	const admin = uuidv4();
-	const bannedFromChannel = uuidv4();
-	const someoneElse = uuidv4();
+	const admin = `admin-${uuidv4()}`;
+	const bannedFromChannel = `bannedFromChannel-${uuidv4()}`;
+	const someoneElse = `someoneElse-${uuidv4()}`;
 
 	const channelID = uuidv4();
 	let channel;
@@ -108,6 +108,102 @@ describe('shadow banning users in a channel', function() {
 
 	it('should still not show messages as "shadowed" to sender in sendMessage() response after removeShadowBan()', async function() {
 		const userClient = await getTestClientForUser(bannedFromChannel);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'hi, this message is NOT shadow banned!',
+		});
+		shadowBannedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should not show messages as "shadowed" to others after removeShadowBan()', async function() {
+		const userClient = await getTestClientForUser(someoneElse);
+		const response = await userClient.getMessage(shadowBannedMessageID);
+		expect(response.message.shadowed).to.eq(false);
+	});
+});
+
+describe('shadow banning users from global app', function() {
+	const client = getTestClient(true);
+
+	const admin = `admin-${uuidv4()}`;
+	const bannedFromApp = `bannedFromApp-${uuidv4()}`;
+	const someoneElse = `someoneElse-${uuidv4()}`;
+
+	const channelID = uuidv4();
+	let channel;
+
+	let shadowBannedMessageID;
+
+	before(async function() {
+		await createUsers([admin, someoneElse, bannedFromApp]);
+
+		channel = client.channel('livestream', channelID, {
+			members: [bannedFromApp, someoneElse],
+			created_by_id: admin,
+		});
+		await channel.create();
+	});
+
+	it('should shadow ban a user from a global app', async function() {
+		await client.shadowBan(bannedFromApp, { user_id: admin });
+	});
+
+	it('should not show messages as "shadowed" to sender in sendMessage() response', async function() {
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.sendMessage({
+			text: 'hi, this message is shadow banned!',
+		});
+		shadowBannedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should not show messages as "shadowed" to sender in getMessage() response', async function() {
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await userClient.getMessage(shadowBannedMessageID);
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should show messages as "shadowed" to others', async function() {
+		const userClient = await getTestClientForUser(someoneElse);
+		const response = await userClient.getMessage(shadowBannedMessageID);
+		expect(response.message.shadowed).to.eq(true);
+	});
+
+	it('should not show messages as "shadowed" to sender in updateMessage() response', async function() {
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const response = await userClient.updateMessage({
+			id: shadowBannedMessageID,
+			text: 'hi, this message is still definitely shadow banned!',
+		});
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should not show messages as "shadowed" to sender in getMessage() response after updateMessage()', async function() {
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await userClient.getMessage(shadowBannedMessageID);
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should still show messages as "shadowed" to others after update()', async function() {
+		const userClient = await getTestClientForUser(someoneElse);
+		const response = await userClient.getMessage(shadowBannedMessageID);
+		expect(response.message.shadowed).to.eq(true);
+	});
+
+	it('should remove a shadow ban from global app', async function() {
+		await client.removeShadowBan(bannedFromApp);
+	});
+
+	it('should still not show messages as "shadowed" to sender in sendMessage() response after removeShadowBan()', async function() {
+		const userClient = await getTestClientForUser(bannedFromApp);
 		const chan = userClient.channel('livestream', channelID);
 		await chan.watch();
 		const response = await chan.sendMessage({

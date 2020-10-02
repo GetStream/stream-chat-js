@@ -569,6 +569,7 @@ export type UserResponse<T = UnknownType> = User<T> & {
   deleted_at?: string;
   last_active?: string;
   online?: boolean;
+  shadow_banned?: boolean;
   updated_at?: string;
 };
 
