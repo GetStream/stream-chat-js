@@ -1,3 +1,5 @@
+import FormData, { AppendOptions } from 'form-data';
+
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
  *  use this when you want to run the promise and handle errors by logging a warning
@@ -27,3 +29,51 @@ export const chatCodes = {
   TOKEN_EXPIRED: 40,
   WS_CLOSED_SUCCESS: 1000,
 };
+
+function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    ((obj as NodeJS.ReadStream).readable ||
+      typeof (obj as NodeJS.ReadStream)._read === 'function')
+  );
+}
+
+function isBuffer(obj: unknown): obj is Buffer {
+  return (
+    obj != null &&
+    (obj as Buffer).constructor != null &&
+    // @ts-expect-error
+    typeof obj.constructor.isBuffer === 'function' &&
+    // @ts-expect-error
+    obj.constructor.isBuffer(obj)
+  );
+}
+
+function isFileWebAPI(uri: unknown): uri is File {
+  return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
+}
+
+export function addFileToFormData(
+  uri: string | NodeJS.ReadableStream | Buffer | File,
+  name?: string,
+  contentType?: string,
+) {
+  const data = new FormData();
+
+  const appendOptions: AppendOptions = {};
+  if (name) appendOptions.filename = name;
+  if (contentType) appendOptions.contentType = contentType;
+
+  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri)) {
+    data.append('file', uri, appendOptions);
+  } else {
+    data.append('file', {
+      uri,
+      name: name || (uri as string).split('/').reverse()[0],
+      contentType: contentType || undefined,
+    });
+  }
+
+  return data;
+}

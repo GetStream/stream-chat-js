@@ -1,3 +1,17 @@
+## October 1, 2020 - 2.5.0
+
+### Feature
+
+- Add permission for using frozen channels `UseFrozenChannel` [#444](https://github.com/GetStream/stream-chat-js/pull/444/)
+- `SendFile` accepts buffer and other types of streams [#448](https://github.com/GetStream/stream-chat-js/pull/448/)
+
+### Fix
+
+- Discard reservered fields from `channel.update()` [#439](https://github.com/GetStream/stream-chat-js/pull/439/)
+- Custom Command handler in `AppSettingsAPIResponse` renamed to `custom_action_handler_url` from `custom_command_url` [#409](https://github.com/GetStream/stream-chat-js/pull/409/)
+- Regenerate yarn.lock file [#449](https://github.com/GetStream/stream-chat-js/pull/449/)
+- `SendFile` properly check for `File` instances [#448](https://github.com/GetStream/stream-chat-js/pull/448)
+
 ## September 17, 2020 - 2.4.0
 
 ### Feature

@@ -23,11 +23,9 @@ const externalPackages = [
 const browserIgnore = {
 	name: 'browser-remapper',
 	resolveId: importee =>
-		['jsonwebtoken', 'http', 'https', 'crypto'].includes(importee) ? importee : null,
+		['jsonwebtoken', 'https', 'crypto'].includes(importee) ? importee : null,
 	load: id =>
-		['jsonwebtoken', 'http', 'https', 'crypto'].includes(id)
-			? 'export default null;'
-			: null,
+		['jsonwebtoken', 'https', 'crypto'].includes(id) ? 'export default null;' : null,
 };
 
 const extensions = ['.mjs', '.json', '.node', '.js', '.ts'];
@@ -59,7 +57,7 @@ const normalBundle = {
 			sourcemap: true,
 		},
 	],
-	external: externalPackages.concat(['http', 'https', 'jsonwebtoken', 'crypto']),
+	external: externalPackages.concat(['https', 'jsonwebtoken', 'crypto']),
 	plugins: [
 		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		external(),
