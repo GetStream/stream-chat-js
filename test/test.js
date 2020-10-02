@@ -1499,6 +1499,7 @@ describe('Chat', () => {
 					channel.on('message.deleted', event => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
+						expect(event.hard_delete).to.be.undefined;
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
@@ -1509,6 +1510,23 @@ describe('Chat', () => {
 				runTest().catch(exc => {
 					done(exc);
 				});
+			});
+
+			it('Hard Delete a Chat message', function(done) {
+				(async () => {
+					const channel = authClient.channel('messaging', uuidv4());
+					await channel.watch();
+
+					channel.on('message.deleted', event => {
+						expect(event.message.deleted_at).to.not.be.null;
+						expect(event.message.type).to.be.equal('deleted');
+						expect(event.hard_delete).to.be.true;
+						done();
+					});
+
+					const data = await channel.sendMessage({ text: 'hard delete event' });
+					await serverAuthClient.deleteMessage(data.message.id, true);
+				})().catch(done);
 			});
 
 			it('Add a Chat Message with an attachment', async () => {
