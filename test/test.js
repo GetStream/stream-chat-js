@@ -1492,6 +1492,9 @@ describe('Chat', () => {
 
 			it('Delete a Chat message', function(done) {
 				async function runTest() {
+					const channel = authClient.channel('messaging', uuidv4());
+					await channel.watch();
+
 					const text = 'testing the delete flow, does it work?';
 					const data = await channel.sendMessage({ text });
 					expect(data.message.text).to.equal(text);
@@ -1500,6 +1503,9 @@ describe('Chat', () => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
 						expect(event.hard_delete).to.be.undefined;
+						expect(channel.state.messages).to.be.deep.equal([
+							channel.state.messageToImmutable(event.message),
+						]);
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
@@ -1521,6 +1527,7 @@ describe('Chat', () => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
 						expect(event.hard_delete).to.be.true;
+						expect(channel.state.messages).to.be.deep.equal([]);
 						done();
 					});
 

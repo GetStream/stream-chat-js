@@ -1444,6 +1444,7 @@ export class Channel<
     this.listeners[key] = this.listeners[key].filter(value => value !== callback);
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(
     event: Event<
       AttachmentType,
@@ -1496,9 +1497,14 @@ export class Channel<
           s.watchers = s.watchers.without(event.user.id);
         }
         break;
+      case 'message.deleted':
+        if (event.message) {
+          if (event.hard_delete) s.removeMessage(event.message as { id: string });
+          else s.addMessageSorted(event.message);
+        }
+        break;
       case 'message.new':
       case 'message.updated':
-      case 'message.deleted':
         if (event.message) {
           s.addMessageSorted(event.message);
         }
