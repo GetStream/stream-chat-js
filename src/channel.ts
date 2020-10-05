@@ -871,9 +871,10 @@ export class Channel<
 
   /**
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
-   *  Call this on every keystroke
+   * Call this on every keystroke
+   * @param {string} parent_id optional, in a thread use message.id to limit the scope of typing event
    */
-  async keystroke() {
+  async keystroke(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -885,6 +886,7 @@ export class Channel<
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
+        parent_id,
         type: 'typing.start',
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }

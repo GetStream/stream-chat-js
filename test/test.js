@@ -1991,48 +1991,6 @@ describe('Chat', () => {
 	});
 
 	describe('Events', () => {
-		/*
-		 * Events enable the typing start, typing stop and mark read states
-		 */
-		it('Typing Start', async () => {
-			// run for 5 seconds or till typing.stop is received
-			await conversation.sendEvent({
-				type: 'typing.start',
-			});
-		});
-
-		it('Typing Stop', function(done) {
-			async function runTest() {
-				conversation.on('typing.stop', event => {
-					// start, stop
-					expect(conversation.state.typing.asMutable()).to.deep.equal({});
-					conversation.listeners = {};
-					done();
-				});
-				// run for 5 seconds or till typing.stop is received
-				await conversation.sendEvent({
-					type: 'typing.start',
-				});
-				await conversation.sendEvent({
-					type: 'typing.stop',
-				});
-			}
-			runTest().catch(exc => {
-				done(exc);
-			});
-		});
-
-		it('Typing Helpers', async () => {
-			let occurrences = 0;
-			conversation.on('typing.start', () => occurrences++);
-
-			await conversation.keystroke();
-			await conversation.keystroke();
-
-			if (occurrences === 0) throw Error('typing.start never called');
-			if (occurrences > 1) throw Error('too many typing.start events');
-		});
-
 		it('Message Read', async () => {
 			conversation.on('message.read', event => {
 				expect(event.user.id).to.equal('thierry2');
@@ -2099,6 +2057,100 @@ describe('Chat', () => {
 			}
 
 			expect(result).to.be.ok;
+		});
+	});
+
+	describe('Typing Events', () => {
+		let eventChannel;
+		beforeEach(async () => {
+			eventChannel = authClient.channel('messaging', uuidv4(), {
+				members: ['thierry', 'tommaso'],
+			});
+			await eventChannel.watch();
+		});
+
+		/*
+		 * Events enable the typing start, typing stop and mark read states
+		 */
+		it('Typing Start', async () => {
+			// run for 5 seconds or till typing.stop is received
+			await eventChannel.sendEvent({ type: 'typing.start' });
+		});
+
+		it('Typing Stop', function(done) {
+			(async () => {
+				eventChannel.on('typing.stop', event => {
+					// start, stop
+					expect(event.parent_id).to.be.equal(undefined);
+					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					done();
+				});
+
+				eventChannel.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(undefined);
+				});
+
+				// run for 5 seconds or till typing.stop is received
+				await eventChannel.sendEvent({ type: 'typing.start' });
+				await eventChannel.sendEvent({ type: 'typing.stop' });
+			})().catch(done);
+		});
+
+		it('Typing events in Thread', function(done) {
+			(async () => {
+				const {
+					message: { id },
+				} = await eventChannel.sendMessage({ text: 'message' });
+
+				const timeout = setTimeout(() => {
+					throw new Error('Typing tests took too long');
+				}, 15000);
+
+				let started = false;
+				eventChannel.on('typing.stop', event => {
+					if (!started) throw new Error('typing.start event failed');
+
+					expect(event.parent_id).to.be.equal(id);
+					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					clearTimeout(timeout);
+					done();
+				});
+
+				eventChannel.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(id);
+					expect(eventChannel.state.typing.asMutable()).to.not.be.empty;
+					started = true;
+				});
+
+				await eventChannel.sendEvent({ type: 'typing.start', parent_id: id });
+				await eventChannel.sendEvent({ type: 'typing.stop', parent_id: id });
+			})().catch(done);
+		});
+
+		it('Keystroke in thread', done => {
+			(async () => {
+				const {
+					message: { id },
+				} = await eventChannel.sendMessage({ text: 'message' });
+
+				eventChannel.on('typing.start', event => {
+					expect(event.parent_id).to.be.equal(id);
+					done();
+				});
+
+				await eventChannel.keystroke(id);
+			})().catch(done);
+		});
+
+		it('Typing Helpers', async () => {
+			let occurrences = 0;
+			eventChannel.on('typing.start', () => occurrences++);
+
+			await eventChannel.keystroke();
+			await eventChannel.keystroke();
+
+			if (occurrences === 0) throw Error('typing.start never called');
+			if (occurrences > 1) throw Error('too many typing.start events');
 		});
 	});
 
