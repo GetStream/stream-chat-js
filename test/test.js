@@ -1,5 +1,6 @@
 /* eslint no-unused-vars: "off" */
 
+import https from 'https';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
@@ -2949,6 +2950,21 @@ describe('Chat', () => {
 
 			it('Upload a file', async () => {
 				const file = fs.createReadStream('./helloworld.txt');
+				const data = await channel.sendFile(file, 'hello_world.txt');
+				expect(data.file).to.be.not.empty;
+			});
+
+			it('Upload a stream', done => {
+				https.get('https://nodejs.org/static/legacy/images/logo.png', file => {
+					channel.sendFile(file).then(data => {
+						expect(data.file).to.be.not.empty;
+						done();
+					});
+				});
+			});
+
+			it('Upload a buffer', async () => {
+				const file = Buffer.from('random string');
 				const data = await channel.sendFile(file, 'hello_world.txt');
 				expect(data.file).to.be.not.empty;
 			});

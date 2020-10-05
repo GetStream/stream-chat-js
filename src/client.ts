@@ -2,8 +2,6 @@
 /* global process */
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
-import FormData from 'form-data';
-import http from 'http';
 import https from 'https';
 import uuidv4 from 'uuid/v4';
 import WebSocket from 'isomorphic-ws';
@@ -13,7 +11,7 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, chatCodes } from './utils';
+import { isFunction, addFileToFormData, chatCodes } from './utils';
 
 import {
   APIResponse,
@@ -21,6 +19,8 @@ import {
   AppSettingsAPIResponse,
   AscDesc,
   BanUserOptions,
+  BlockList,
+  BlockListResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -77,21 +77,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  BlockList,
 } from './types';
-
-function isReadableStream(
-  obj: string | NodeJS.ReadableStream | File,
-): obj is NodeJS.ReadableStream {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._read === 'function' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._readableState === 'object'
-  );
-}
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -161,6 +147,23 @@ export class StreamChat<
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
 
+  /**
+   * Initialize a client
+   * @param {string} key - the api key
+   * @param {string} [secret] - the api secret
+   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
+   * @param {boolean} [options.browser] - enforce the client to be in browser mode
+   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
+   * @param {Logger} [options.Logger] - custom logger
+   * @param {number} [options.timeout] - default to 3000
+   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * @example <caption>initialize the client in user mode</caption>
+   * new StreamChat('api_key')
+   * @example <caption>initialize the client in user mode with options</caption>
+   * new StreamChat('api_key', { warmUp:true, timeout:5000 })
+   * @example <caption>secret is optional and only used in server side mode</caption>
+   * new StreamChat('api_key', "secret", { httpsAgent: customAgent })
+   */
   constructor(key: string, options?: StreamChatOptions);
   constructor(key: string, secret?: string, options?: StreamChatOptions);
   constructor(
@@ -193,22 +196,18 @@ export class StreamChat<
         : typeof window !== 'undefined';
     this.node = !this.browser;
 
-    const defaultOptions = {
+    this.options = {
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
+      ...inputOptions,
     };
 
     if (this.node) {
-      const nodeOptions = {
-        httpAgent: new http.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
-        httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
-      };
-      this.options = { ...nodeOptions, ...defaultOptions, ...inputOptions };
-    } else {
-      this.options = { ...defaultOptions, ...inputOptions };
-      delete this.options.httpAgent;
-      delete this.options.httpsAgent;
+      this.options.httpsAgent = new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 3000,
+      });
     }
 
     this.axiosInstance = axios.create(this.options);
@@ -802,33 +801,14 @@ export class StreamChat<
 
   sendFile(
     url: string,
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    const data = new FormData();
-    let fileField:
-      | File
-      | NodeJS.ReadableStream
-      | { name: string; uri: string; type?: string };
+    const data = addFileToFormData(uri, name, contentType);
+    if (user != null) data.append('user', JSON.stringify(user));
 
-    if (isReadableStream(uri) || uri instanceof File) {
-      fileField = uri;
-    } else {
-      fileField = {
-        uri,
-        name: name || uri.split('/').reverse()[0],
-      };
-      if (contentType != null) {
-        fileField.type = contentType;
-      }
-    }
-
-    if (user != null) {
-      data.append('user', JSON.stringify(user));
-    }
-    data.append('file', fileField);
     return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
@@ -2097,13 +2077,13 @@ export class StreamChat<
   }
 
   listBlockLists() {
-    return this.get<APIResponse & { blocklists: BlockList[] }>(
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
       `${this.baseURL}/blocklists`,
     );
   }
 
   getBlockList(name: string) {
-    return this.get<APIResponse & { blocklist: BlockList }>(
+    return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${name}`,
     );
   }
@@ -2113,8 +2093,6 @@ export class StreamChat<
   }
 
   deleteBlockList(name: string) {
-    return this.delete<APIResponse & { blocklist: BlockList }>(
-      `${this.baseURL}/blocklists/${name}`,
-    );
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 }
