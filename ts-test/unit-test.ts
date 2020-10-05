@@ -162,16 +162,18 @@ const event = {
 voidReturn = client.dispatchEvent(event);
 voidPromise = client.recoverState();
 
-const channels: Promise<Channel<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
->[]> = client.queryChannels({}, {}, {});
-channels.then(response => {
+const channels: Promise<
+  Channel<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[]
+> = client.queryChannels({}, {}, {});
+channels.then((response) => {
   const type: string = response[0].type;
   const cid: string = response[0].cid;
 });
@@ -262,7 +264,7 @@ const permissions = [
   new Permission('Discard all', 100, AnyResource, AnyRole, false, Deny),
 ];
 
-client.updateChannelType('messaging', { permissions }).then(response => {
+client.updateChannelType('messaging', { permissions }).then((response) => {
   const permissions: PermissionObject[] = response.permissions || [];
   const permissionName: string = permissions[0].name || '';
   const permissionRoles: string[] = permissions[0].roles || [];

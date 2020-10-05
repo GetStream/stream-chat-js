@@ -15,7 +15,7 @@ const excuses = [
 	'Coronavirus. Will WFH.',
 ];
 
-const excuseCmd = request => {
+const excuseCmd = (request) => {
 	const action = request.form_data ? request.form_data['excuse_action'] : undefined;
 
 	// default action / shuffle
@@ -89,30 +89,30 @@ describe('custom command hook', () => {
 	userAuth.setUser(guyon, createUserToken(guyon.id));
 
 	let server;
-	let handler = data => JSON.stringify(data.message);
+	let handler = (data) => JSON.stringify(data.message);
 	let chan;
 	const channelID = `custom-commands-${uuidv4()}`;
 	const channelTypeID = `channel-type-${uuidv4()}`;
 
 	let responseCode = 200;
 
-	const setHandler = h => {
+	const setHandler = (h) => {
 		handler = h;
 	};
 
 	beforeEach(() => {
 		responseCode = 200;
-		setHandler(m => {
+		setHandler((m) => {
 			JSON.stringify(m);
 		});
 	});
 
 	before(async () => {
-		server = http.createServer(function(req, res) {
+		server = http.createServer(function (req, res) {
 			let body = '';
 			let signature = '';
 
-			req.on('data', chunk => {
+			req.on('data', (chunk) => {
 				body += chunk.toString(); // convert Buffer to string
 			});
 
@@ -151,7 +151,7 @@ describe('custom command hook', () => {
 	describe('"Excuse" custom command', () => {
 		it('should return an excuse and message actions', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -168,7 +168,7 @@ describe('custom command hook', () => {
 
 		it('shuffle action should return a different excuse', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -191,7 +191,7 @@ describe('custom command hook', () => {
 
 		it('send action should finalize excuse', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -214,7 +214,7 @@ describe('custom command hook', () => {
 
 		it('cancel action should delete the message', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -238,7 +238,7 @@ describe('custom command hook', () => {
 	describe('"Excuse" custom command with MML interactions', () => {
 		it('should return an excuse and message actions', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -271,7 +271,7 @@ describe('custom command hook', () => {
 
 		it('shuffle action should return a different excuse', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -309,7 +309,7 @@ describe('custom command hook', () => {
 
 		it('send action should finalize excuse', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -333,7 +333,7 @@ describe('custom command hook', () => {
 
 		it('cancel action should delete the message', async () => {
 			let called = false;
-			setHandler(message => {
+			setHandler((message) => {
 				called = true;
 				excuseCmd(message);
 				return JSON.stringify(message);
@@ -363,7 +363,7 @@ describe('custom command hook', () => {
 
 		it('should show & process an email form element', async () => {
 			let called = false;
-			setHandler(request => {
+			setHandler((request) => {
 				called = true;
 				const email = request.form_data.email;
 				request.message.text = `Thanks for registering '${email}'`;
@@ -389,7 +389,7 @@ describe('custom command hook', () => {
 		it('should show & process a multi-step interaction', async () => {
 			let called = false;
 			const state = {};
-			setHandler(request => {
+			setHandler((request) => {
 				called = true;
 				const action = request.form_data.action;
 				switch (action) {

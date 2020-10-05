@@ -8,29 +8,29 @@ const expect = chai.expect;
 describe('before message send hook', () => {
 	const client = getTestClient(true);
 	let server;
-	let handler = data => JSON.stringify(data.message);
+	let handler = (data) => JSON.stringify(data.message);
 	let chan;
 	const channelID = `fun-${uuidv4()}`;
 	const tommasoID = `tommaso-${uuidv4()}`;
 	let responseCode = 200;
 
-	const setHandler = h => {
+	const setHandler = (h) => {
 		handler = h;
 	};
 
 	beforeEach(() => {
 		responseCode = 200;
-		setHandler(m => {
+		setHandler((m) => {
 			JSON.stringify(m);
 		});
 	});
 
 	before(async () => {
-		server = http.createServer(function(req, res) {
+		server = http.createServer(function (req, res) {
 			let body = '';
 			let signature = '';
 
-			req.on('data', chunk => {
+			req.on('data', (chunk) => {
 				body += chunk.toString(); // convert Buffer to string
 			});
 
@@ -60,7 +60,7 @@ describe('before message send hook', () => {
 	it('when not enabled hook is not called', async () => {
 		let called = false;
 		await client.updateAppSettings({ before_message_send_hook_url: '' });
-		setHandler(message => {
+		setHandler((message) => {
 			called = true;
 			expect(message.channel.id).to.equal(channelID);
 			return JSON.stringify(message);
@@ -79,7 +79,7 @@ describe('before message send hook', () => {
 
 	it('return nothing should be OK', async () => {
 		let called = false;
-		setHandler(message => {
+		setHandler((message) => {
 			called = true;
 			expect(message.channel.id).to.equal(channelID);
 			return JSON.stringify(message);
@@ -118,7 +118,7 @@ describe('before message send hook', () => {
 	});
 
 	it('rewrite from update', async () => {
-		setHandler(data => {
+		setHandler((data) => {
 			data.message.text = 'bad bad bad';
 			return JSON.stringify(data);
 		});
@@ -128,7 +128,7 @@ describe('before message send hook', () => {
 	});
 
 	it('return an error from update', async () => {
-		setHandler(data => {
+		setHandler((data) => {
 			data.message.type = 'error';
 			return JSON.stringify(data);
 		});
@@ -138,7 +138,7 @@ describe('before message send hook', () => {
 	});
 
 	it('add a custom field should work', async () => {
-		setHandler(data => {
+		setHandler((data) => {
 			data.message.myCustomThingie = 42;
 			return JSON.stringify(data);
 		});
@@ -152,7 +152,7 @@ describe('before message send hook', () => {
 	});
 
 	it('rewriting text should work', async () => {
-		setHandler(data => {
+		setHandler((data) => {
 			data.message.text = 'this is the text now...';
 			return JSON.stringify(data);
 		});
@@ -163,7 +163,7 @@ describe('before message send hook', () => {
 	});
 
 	it('return an error', async () => {
-		setHandler(data => {
+		setHandler((data) => {
 			data.message.type = 'error';
 			return JSON.stringify(data);
 		});
@@ -189,7 +189,7 @@ describe('before message send hook', () => {
 	});
 
 	it('should let the message go on timeout', async () => {
-		setHandler(async data => {
+		setHandler(async (data) => {
 			await sleep(1501);
 			data.message.type = 'error';
 			return JSON.stringify(data);

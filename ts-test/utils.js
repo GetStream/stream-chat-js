@@ -57,12 +57,12 @@ module.exports = {
 	runAndLogPromise: function runAndLogPromise(promiseCallable) {
 		promiseCallable()
 			.then(() => {})
-			.catch(err => {
+			.catch((err) => {
 				console.warn('runAndLogPromise failed with error', err);
 			});
 	},
 	sleep: function sleep(ms) {
-		return new Promise(resolve => {
+		return new Promise((resolve) => {
 			setTimeout(resolve, ms);
 		});
 	},

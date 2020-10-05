@@ -39,7 +39,7 @@ export function createUserToken(userID, exp) {
 }
 
 export function sleep(ms) {
-	return new Promise(resolve => {
+	return new Promise((resolve) => {
 		setTimeout(resolve, ms);
 	});
 }
@@ -82,7 +82,7 @@ export async function expectHTTPErrorCode(code, request, expectedMessage) {
 export function runAndLogPromise(promiseCallable) {
 	promiseCallable()
 		.then(() => {})
-		.catch(err => {
+		.catch((err) => {
 			console.warn('runAndLogPromise failed with error', err);
 		});
 }
@@ -103,8 +103,8 @@ export function createEventWaiter(clientOrChannel, eventTypes) {
 		eventTypes = [eventTypes];
 	}
 
-	return new Promise(resolve => {
-		const handler = event => {
+	return new Promise((resolve) => {
+		const handler = (event) => {
 			console.log(event.type);
 			const i = eventTypes.indexOf(event.type);
 			if (i !== -1) {

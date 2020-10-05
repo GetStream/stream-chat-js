@@ -15,7 +15,7 @@ chai.use(assertArrays);
 chai.use(chaiAsPromised);
 chai.use(chaiLike);
 
-describe('token_manager', function() {
+describe('token_manager', function () {
 	it('allows empty token for server side client', () => {
 		const tm = new TokenManager(uuidv4());
 		tm.getToken();
@@ -65,7 +65,7 @@ describe('token_manager', function() {
 		const tm = new TokenManager();
 		let didLoadTokenResolve;
 		const tokenPrvider = () =>
-			new Promise(resolve => {
+			new Promise((resolve) => {
 				setTimeout(() => {
 					didLoadTokenResolve = true;
 					resolve('demo_token');

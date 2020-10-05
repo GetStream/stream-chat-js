@@ -34,10 +34,10 @@ Promise.config({
 	},
 });
 
-describe('GDPR endpoints', function() {
+describe('GDPR endpoints', function () {
 	const serverClient = getServerTestClient();
 
-	it('export data for a user', async function() {
+	it('export data for a user', async function () {
 		// setup a message and a reaction
 		const userID = uuidv4();
 		const creatorID = uuidv4();
@@ -71,8 +71,8 @@ describe('GDPR endpoints', function() {
 		expect(exportResponse.reactions.length).to.equal(1);
 	});
 
-	describe('deactivate user', function() {
-		it('cannot update deactivated user', async function() {
+	describe('deactivate user', function () {
+		it('cannot update deactivated user', async function () {
 			// setup
 			const userID = uuidv4();
 
@@ -87,7 +87,7 @@ describe('GDPR endpoints', function() {
 			await expect(p).to.be.rejectedWith('was deactivated');
 		});
 
-		it('deactivate a user', async function() {
+		it('deactivate a user', async function () {
 			// setup
 			const userID = uuidv4();
 			const creatorID = uuidv4();
@@ -124,7 +124,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].deleted_at).to.equal(undefined);
 		});
 
-		it('deactivate a user and remove their messages', async function() {
+		it('deactivate a user and remove their messages', async function () {
 			// setup
 			const userID = uuidv4();
 			const creatorID = uuidv4();
@@ -166,8 +166,8 @@ describe('GDPR endpoints', function() {
 		});
 	});
 
-	describe('reactivate user', function() {
-		it('cannot reactivate active user', async function() {
+	describe('reactivate user', function () {
+		it('cannot reactivate active user', async function () {
 			const userID = uuidv4();
 			await serverClient.updateUser({ id: userID, name: 'hello' });
 
@@ -176,7 +176,7 @@ describe('GDPR endpoints', function() {
 			await expect(p).to.be.rejectedWith('is not deactivated');
 		});
 
-		it('reactivate user without restoring messages', async function() {
+		it('reactivate user without restoring messages', async function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
@@ -212,7 +212,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
 
-		it('reactivate user and restore messages', async function() {
+		it('reactivate user and restore messages', async function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
@@ -249,7 +249,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[1].deleted_at).to.be.undefined;
 		});
 
-		it('hard delete a message with replies on the channel', async function() {
+		it('hard delete a message with replies on the channel', async function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
@@ -286,7 +286,7 @@ describe('GDPR endpoints', function() {
 			expect(channelResponse.messages).to.have.length(0);
 		});
 
-		it('deleted messages do not get restored', async function() {
+		it('deleted messages do not get restored', async function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
@@ -339,8 +339,8 @@ describe('GDPR endpoints', function() {
 		});
 	});
 
-	describe('delete user', function() {
-		it('cannot update deleted user', async function() {
+	describe('delete user', function () {
+		it('cannot update deleted user', async function () {
 			// setup
 			const userID = uuidv4();
 
@@ -355,7 +355,7 @@ describe('GDPR endpoints', function() {
 			await expect(p).to.be.rejectedWith('was deleted');
 		});
 
-		it('delete a user', async function() {
+		it('delete a user', async function () {
 			// setup
 			const userID = uuidv4();
 			const creatorID = uuidv4();
@@ -394,7 +394,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].deleted_at).to.equal(undefined);
 		});
 
-		it('delete a user and their message', async function() {
+		it('delete a user and their message', async function () {
 			// setup
 			const userID = uuidv4();
 			const creatorID = uuidv4();
@@ -435,7 +435,7 @@ describe('GDPR endpoints', function() {
 			expect(state.messages[0].text).to.equal('hi');
 		});
 
-		it('hard delete with delete_conversation_channels', async function() {
+		it('hard delete with delete_conversation_channels', async function () {
 			const userID = uuidv4();
 			const userID2 = uuidv4();
 			const userID3 = uuidv4();
@@ -505,7 +505,7 @@ describe('GDPR endpoints', function() {
 			await expectHTTPErrorCode(400, chan1.query());
 		});
 
-		it('hard delete a user, their message and reactions', async function() {
+		it('hard delete a user, their message and reactions', async function () {
 			// setup
 			const userID = uuidv4();
 			const userID2 = uuidv4();

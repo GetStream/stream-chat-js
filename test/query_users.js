@@ -33,8 +33,8 @@ Promise.config({
 	},
 });
 
-describe('Query Users', function() {
-	it('query users by id', async function() {
+describe('Query Users', function () {
+	it('query users by id', async function () {
 		const userID = uuidv4();
 		const client = await getTestClientForUser(userID);
 		const response = await client.queryUsers({ id: { $in: [userID] } });
@@ -42,7 +42,7 @@ describe('Query Users', function() {
 		expect(response.users[0].id).to.equal(userID);
 	});
 
-	it('autocomplete users by name or username', async function() {
+	it('autocomplete users by name or username', async function () {
 		const userID = uuidv4();
 		const userID2 = uuidv4();
 		const userID3 = uuidv4();
@@ -82,7 +82,7 @@ describe('Query Users', function() {
 		expect(response.users[2].name).to.equal('Curiosity Rover');
 	});
 
-	it('autocomplete users by username', async function() {
+	it('autocomplete users by username', async function () {
 		const userID = uuidv4();
 		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
@@ -96,7 +96,7 @@ describe('Query Users', function() {
 		expect(response.users[0].username).to.equal('rover_curiosity');
 	});
 
-	it('autocomplete users by id', async function() {
+	it('autocomplete users by id', async function () {
 		const userID = uuidv4();
 		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
@@ -111,7 +111,7 @@ describe('Query Users', function() {
 		expect(response.users[0].username).to.equal('rover_curiosity');
 	});
 
-	it('query users unsupported field', async function() {
+	it('query users unsupported field', async function () {
 		const userID = uuidv4();
 		const unique = uuidv4();
 		const client = await getTestClientForUser(userID, 'just cruising', {
@@ -124,7 +124,7 @@ describe('Query Users', function() {
 		);
 	});
 
-	it('return mutes for server side client', async function() {
+	it('return mutes for server side client', async function () {
 		const client = getServerTestClient();
 		const userID = uuidv4();
 		const userID2 = uuidv4();
@@ -167,7 +167,7 @@ describe('Query Users', function() {
 		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
 	});
 
-	it('return mutes with expiration for server side client', async function() {
+	it('return mutes with expiration for server side client', async function () {
 		const client = getServerTestClient();
 		const userID = uuidv4();
 		const userID2 = uuidv4();
