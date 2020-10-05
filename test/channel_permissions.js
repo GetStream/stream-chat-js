@@ -6,7 +6,7 @@ import {
 	BuiltinPermissions,
 	Allow,
 } from '../src/permissions';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import chai from 'chai';
 

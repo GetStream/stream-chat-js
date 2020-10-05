@@ -8,7 +8,7 @@ import {
 	createUsers,
 	createEventWaiter,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 describe('Notifications - members not watching', function () {
 	const serverSideClient = getTestClient(true);

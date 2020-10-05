@@ -15,7 +15,7 @@ const externalPackages = [
 	'form-data',
 	'isomorphic-ws',
 	'seamless-immutable',
-	'uuid/v4',
+	'uuid',
 	'base64-js',
 	/@babel\/runtime/,
 ];
