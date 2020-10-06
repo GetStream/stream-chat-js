@@ -195,7 +195,7 @@ export class Channel<
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
-    return await this.getClient().post<
+    const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
         AttachmentType,
         ChannelType,
@@ -207,6 +207,11 @@ export class Channel<
     >(this._channelURL() + '/message', {
       message,
     });
+
+    // Reset unreadCount to 0.
+    this.state.unreadCount = 0;
+
+    return sendMessageResponse;
   }
 
   sendFile(
@@ -1482,7 +1487,11 @@ export class Channel<
         }
         break;
       case 'message.new':
-        s.unreadCount = s.unreadCount + 1;
+        if (event.user?.id === this.getClient().user?.id) {
+          s.unreadCount = 0;
+        } else {
+          s.unreadCount = s.unreadCount + 1;
+        }
         if (event.message) {
           s.addMessageSorted(event.message);
         }
