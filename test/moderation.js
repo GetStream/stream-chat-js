@@ -144,6 +144,7 @@ describe('shadow banning users from global app', function() {
 			created_by_id: admin,
 		});
 		await channel.create();
+		await channel.addModerators([admin]);
 	});
 
 	it('should shadow ban a user from a global app', async function() {
@@ -170,31 +171,31 @@ describe('shadow banning users from global app', function() {
 	});
 
 	it('should not show user as shadowed in queryUsers output to sender', async function() {
-		// const userClient = await getTestClientForUser(bannedFromApp);
-		// const response = await userClient.queryUsers({ id: bannedFromApp });
-		// expect(response.users[0].shadow_banned).to.eq(false);
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const response = await userClient.queryChannels({ id: channelID });
+		expect(response[0].state.members[bannedFromApp].shadow_banned).to.eq(false);
 	});
 
-	it('should show user as shadowed in queryUsers output to others', async function() {
-		// const userClient = await getTestClientForUser(someoneElse);
-		// const response = await userClient.queryUsers({ id: bannedFromApp });
-		// expect(response.users[0].shadow_banned).to.eq(true);
+	it('should show user as shadowed in queryUsers output to moderators', async function() {
+		const userClient = await getTestClientForUser(admin);
+		const response = await userClient.queryChannels({ id: channelID });
+		expect(response[0].state.members[bannedFromApp].shadow_banned).to.eq(true);
 	});
 
 	it('should not show user as shadowed in queryMembers output to sender', async function() {
-		// const userClient = await getTestClientForUser(bannedFromApp);
-		// const chan = userClient.channel('livestream', channelID);
-		// await chan.watch();
-		// const response = await chan.queryMembers({ id: bannedFromApp });
-		// expect(response.members[0].user.shadow_banned).to.eq(false);
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.queryMembers({ id: bannedFromApp });
+		expect(response.members[0].shadow_banned).to.eq(false);
 	});
 
-	it('should show user as shadowed in queryMembers output to others', async function() {
-		// const userClient = await getTestClientForUser(someoneElse);
-		// const chan = userClient.channel('livestream', channelID);
-		// await chan.watch();
-		// const response = await chan.queryMembers({ id: bannedFromApp });
-		// expect(response.members[0].user.shadow_banned).to.eq(true);
+	it('should show user as shadowed in queryMembers output to moderators', async function() {
+		const userClient = await getTestClientForUser(admin);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.queryMembers({ id: bannedFromApp });
+		expect(response.members[0].shadow_banned).to.eq(true);
 	});
 
 	it('should show user and messages as "shadowed" to others', async function() {
