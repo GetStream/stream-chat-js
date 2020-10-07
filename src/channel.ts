@@ -215,7 +215,7 @@ export class Channel<
   }
 
   sendFile(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
@@ -484,9 +484,30 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
-    channelData: ChannelData<ChannelType>,
+    channelData:
+      | Partial<ChannelData<ChannelType>>
+      | Partial<ChannelResponse<ChannelType, CommandType, UserType>>
+      | Partial<
+          Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
+        > = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
   ) {
+    // Strip out reserved names that will result in API errors.
+    const reserved = [
+      'config',
+      'cid',
+      'created_by',
+      'id',
+      'member_count',
+      'type',
+      'created_at',
+      'updated_at',
+      'last_message_at',
+    ];
+    reserved.forEach(key => {
+      delete channelData[key];
+    });
+
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
         AttachmentType,
@@ -855,20 +876,22 @@ export class Channel<
 
   /**
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
-   *  Call this on every keystroke
+   * Call this on every keystroke
+   * @param {string} parent_id optional, in a thread use message.id to limit the scope of typing event
    */
-  async keystroke() {
+  async keystroke(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
     const now = new Date();
-    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent?.getTime();
+    const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent.getTime();
     this.lastKeyStroke = now;
     this.isTyping = true;
     // send a typing.start every 2 seconds
-    if (diff && diff > 2000) {
+    if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
+        parent_id,
         type: 'typing.start',
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }

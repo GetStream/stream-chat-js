@@ -77,7 +77,7 @@ export type AppSettingsAPIResponse<
       }
     >;
     before_message_send_hook_url?: string;
-    custom_command_url?: string;
+    custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     multi_tenant_enabled?: boolean;
@@ -94,6 +94,11 @@ export type AppSettingsAPIResponse<
     user_search_disallowed_roles?: string[];
     webhook_url?: string;
   };
+};
+
+export type BlockListResponse = BlockList & {
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type ChannelResponse<
@@ -826,6 +831,7 @@ export type Event<
     UserType
   >;
   online?: boolean;
+  parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
   unread_count?: number;
@@ -1188,6 +1194,11 @@ export type Attachment<T = UnknownType> = T & {
   type?: string;
 };
 
+export type BlockList = {
+  name: string;
+  words: string[];
+};
+
 export type ChannelConfig<
   CommandType extends string = LiteralStringForUnion
 > = ChannelConfigFields &
@@ -1348,6 +1359,7 @@ export type MessageBase<
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   id?: string;
+  mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;
   text?: string;

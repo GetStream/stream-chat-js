@@ -2,8 +2,6 @@
 /* global process */
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
-import FormData from 'form-data';
-import http from 'http';
 import https from 'https';
 import uuidv4 from 'uuid/v4';
 import WebSocket from 'isomorphic-ws';
@@ -13,7 +11,7 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, chatCodes } from './utils';
+import { isFunction, addFileToFormData, chatCodes } from './utils';
 
 import {
   APIResponse,
@@ -21,6 +19,8 @@ import {
   AppSettingsAPIResponse,
   AscDesc,
   BanUserOptions,
+  BlockList,
+  BlockListResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -78,19 +78,6 @@ import {
   UserResponse,
   UserSort,
 } from './types';
-
-function isReadableStream(
-  obj: string | NodeJS.ReadableStream | File,
-): obj is NodeJS.ReadableStream {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._read === 'function' &&
-    // @ts-expect-error
-    typeof (obj as NodeJS.ReadableStream)._readableState === 'object'
-  );
-}
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -160,6 +147,23 @@ export class StreamChat<
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
 
+  /**
+   * Initialize a client
+   * @param {string} key - the api key
+   * @param {string} [secret] - the api secret
+   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
+   * @param {boolean} [options.browser] - enforce the client to be in browser mode
+   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
+   * @param {Logger} [options.Logger] - custom logger
+   * @param {number} [options.timeout] - default to 3000
+   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * @example <caption>initialize the client in user mode</caption>
+   * new StreamChat('api_key')
+   * @example <caption>initialize the client in user mode with options</caption>
+   * new StreamChat('api_key', { warmUp:true, timeout:5000 })
+   * @example <caption>secret is optional and only used in server side mode</caption>
+   * new StreamChat('api_key', "secret", { httpsAgent: customAgent })
+   */
   constructor(key: string, options?: StreamChatOptions);
   constructor(key: string, secret?: string, options?: StreamChatOptions);
   constructor(
@@ -192,22 +196,18 @@ export class StreamChat<
         : typeof window !== 'undefined';
     this.node = !this.browser;
 
-    const defaultOptions = {
+    this.options = {
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
+      ...inputOptions,
     };
 
     if (this.node) {
-      const nodeOptions = {
-        httpAgent: new http.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
-        httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
-      };
-      this.options = { ...nodeOptions, ...defaultOptions, ...inputOptions };
-    } else {
-      this.options = { ...defaultOptions, ...inputOptions };
-      delete this.options.httpAgent;
-      delete this.options.httpsAgent;
+      this.options.httpsAgent = new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 3000,
+      });
     }
 
     this.axiosInstance = axios.create(this.options);
@@ -801,33 +801,14 @@ export class StreamChat<
 
   sendFile(
     url: string,
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    const data = new FormData();
-    let fileField:
-      | File
-      | NodeJS.ReadableStream
-      | { name: string; uri: string; type?: string };
+    const data = addFileToFormData(uri, name, contentType);
+    if (user != null) data.append('user', JSON.stringify(user));
 
-    if (isReadableStream(uri) || uri instanceof File) {
-      fileField = uri;
-    } else {
-      fileField = {
-        uri,
-        name: name || uri.split('/').reverse()[0],
-      };
-      if (contentType != null) {
-        fileField.type = contentType;
-      }
-    }
-
-    if (user != null) {
-      data.append('user', JSON.stringify(user));
-    }
-    data.append('file', fileField);
     return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
@@ -1375,14 +1356,39 @@ export class StreamChat<
    * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
    *
    * @param {string} channelType The channel type
-   * @param {string} channelID   The channel ID, you can leave this out if you want to create a conversation channel
+   * @param {string | ChannelData<ChannelType> | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
    * @param {object} [custom]    Custom data to attach to the channel
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
   channel(
     channelType: string,
-    channelID: string,
+    channelID?: string | null,
+    custom?: ChannelData<ChannelType>,
+  ): Channel<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel(
+    channelType: string,
+    custom?: ChannelData<ChannelType>,
+  ): Channel<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  channel(
+    channelType: string,
+    channelIDOrCustom?: string | ChannelData<ChannelType> | null,
     custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
@@ -1396,7 +1402,7 @@ export class StreamChat<
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (channelID == null || channelID === '') {
+    if (channelIDOrCustom == null || channelIDOrCustom === '') {
       return new Channel<
         AttachmentType,
         ChannelType,
@@ -1408,7 +1414,7 @@ export class StreamChat<
       >(this, channelType, undefined, custom);
     }
     // support channel("messaging", {options})
-    if (typeof channelID === 'object' && arguments.length === 2) {
+    if (typeof channelIDOrCustom === 'object') {
       return new Channel<
         AttachmentType,
         ChannelType,
@@ -1417,15 +1423,17 @@ export class StreamChat<
         MessageType,
         ReactionType,
         UserType
-      >(this, channelType, undefined, channelID);
+      >(this, channelType, undefined, channelIDOrCustom);
     }
 
-    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
+    if (typeof channelIDOrCustom === 'string' && ~channelIDOrCustom.indexOf(':')) {
+      throw Error(
+        `Invalid channel id ${channelIDOrCustom}, can't contain the : character`,
+      );
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelID}`;
+    const cid = `${channelType}:${channelIDOrCustom}`;
     if (cid in this.activeChannels) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
@@ -1442,7 +1450,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType
-    >(this, channelType, channelID, custom);
+    >(this, channelType, channelIDOrCustom, custom);
     this.activeChannels[channel.cid] = channel;
 
     return channel;
@@ -2062,5 +2070,29 @@ export class StreamChat<
       channel_cids,
       last_sync_at,
     });
+  }
+
+  createBlockList(blockList: BlockList) {
+    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
+  }
+
+  listBlockLists() {
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
+      `${this.baseURL}/blocklists`,
+    );
+  }
+
+  getBlockList(name: string) {
+    return this.get<APIResponse & { blocklist: BlockListResponse }>(
+      `${this.baseURL}/blocklists/${name}`,
+    );
+  }
+
+  updateBlockList(name: string, data: { words: string[] }) {
+    return this.put<APIResponse>(`${this.baseURL}/blocklists/${name}`, data);
+  }
+
+  deleteBlockList(name: string) {
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 }

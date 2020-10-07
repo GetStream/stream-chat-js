@@ -1,10 +1,38 @@
+## October 1, 2020 - 2.5.0
+
+### Feature
+
+- Add permission for using frozen channels `UseFrozenChannel` [#444](https://github.com/GetStream/stream-chat-js/pull/444/)
+- `SendFile` accepts buffer and other types of streams [#448](https://github.com/GetStream/stream-chat-js/pull/448/)
+
+### Fix
+
+- Discard reservered fields from `channel.update()` [#439](https://github.com/GetStream/stream-chat-js/pull/439/)
+- Custom Command handler in `AppSettingsAPIResponse` renamed to `custom_action_handler_url` from `custom_command_url` [#409](https://github.com/GetStream/stream-chat-js/pull/409/)
+- Regenerate yarn.lock file [#449](https://github.com/GetStream/stream-chat-js/pull/449/)
+- `SendFile` properly check for `File` instances [#448](https://github.com/GetStream/stream-chat-js/pull/448)
+
+## September 17, 2020 - 2.4.0
+
+### Feature
+
+- BlockLists [#437](https://github.com/GetStream/stream-chat-js/pull/437/). Refer to docs on how to use this new feature [docs](https://getstream.io/chat/docs/block_lists/?language=js)
+
+### Fix
+
+- `Channel.keystroke` not firing for the first typing event [#440](https://github.com/GetStream/stream-chat-js/pull/440/)
+
+## September 17, 2020 - 2.3.1
+
+- Added backward compatible types and move type definitions for production out of dev dependencies [#432](https://github.com/GetStream/stream-chat-js/pull/432/)
+
 ## September 16, 2020 - 2.3.0
 
 - Changed ordering of Typescript generics from usage preference based to alphabetical for consistency throughout the project [#425](https://github.com/GetStream/stream-chat-js/pull/425/files)
 
 ## September 10, 2020 - 2.2.2
 
-- Fixing possible race condition betweek warmUp options request and first queryChannels call. [372b22c](https://github.com/GetStream/stream-chat-js/commit/372b22cffb90fcc4e5470af7d64524ff0d6457dc)
+- Fixing possible race condition between warmUp options request and first queryChannels call. [372b22c](https://github.com/GetStream/stream-chat-js/commit/372b22cffb90fcc4e5470af7d64524ff0d6457dc)
 
 ## September 10, 2020 - 2.2.1
 

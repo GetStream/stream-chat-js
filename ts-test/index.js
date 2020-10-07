@@ -61,6 +61,12 @@ const executables = [
 		type:
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['create']>>",
 	},
+	{
+		f: rg.createBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['createBlockList']>>",
+	},
 	// createChannelType has a limit. So only run this when needed.
 	// {
 	// 	f: rg.createChannelType,
@@ -84,6 +90,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deactivateUser']>>",
+	},
+	{
+		f: rg.deleteBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['deleteBlockList']>>",
 	},
 	{
 		f: rg.deleteChannel,
@@ -178,6 +190,12 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getAppSettings']>>",
 	},
 	{
+		f: rg.getBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getBlockList']>>",
+	},
+	{
 		f: rg.getChannelType,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -248,6 +266,12 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type:
 			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+	},
+	{
+		f: rg.listBlockLists,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['listBlockLists']>>",
 	},
 	{
 		f: rg.listChannelTypes,
@@ -467,10 +491,22 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unmuteUser']>>",
 	},
 	{
+		f: rg.updateBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description: string }, string & {}, {}, {}, {}, {}>['updateBlockList']>>",
+	},
+	{
 		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ description?: string }, { description?: string }, string & {}, {}, {}, {}, {}>['update']>>",
+			"Unpacked<ReturnType<Channel<{}, { description: string }, string & {}, {}, {}, {}, {}>['update']>>",
+	},
+	{
+		f: rg.updateChannelFromOriginal,
+		imports: ['Channel', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<Channel<{}, { description: string; smallTitle: string }, string & {}, {}, {}, {}, {}>['update']>>",
 	},
 	{
 		f: rg.updateChannelType,
