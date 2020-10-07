@@ -19,6 +19,8 @@ import {
   AppSettingsAPIResponse,
   AscDesc,
   BanUserOptions,
+  BlockList,
+  BlockListResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -75,7 +77,6 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  BlockList,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -2076,13 +2077,13 @@ export class StreamChat<
   }
 
   listBlockLists() {
-    return this.get<APIResponse & { blocklists: BlockList[] }>(
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
       `${this.baseURL}/blocklists`,
     );
   }
 
   getBlockList(name: string) {
-    return this.get<APIResponse & { blocklist: BlockList }>(
+    return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${name}`,
     );
   }
@@ -2092,8 +2093,6 @@ export class StreamChat<
   }
 
   deleteBlockList(name: string) {
-    return this.delete<APIResponse & { blocklist: BlockList }>(
-      `${this.baseURL}/blocklists/${name}`,
-    );
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 }
