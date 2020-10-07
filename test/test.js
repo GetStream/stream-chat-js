@@ -1518,12 +1518,12 @@ describe('Chat', () => {
 				});
 			});
 
-			it('Hard Delete a Chat message', function(done) {
+			it('Hard Delete a Chat message', function (done) {
 				(async () => {
 					const channel = authClient.channel('messaging', uuidv4());
 					await channel.watch();
 
-					channel.on('message.deleted', event => {
+					channel.on('message.deleted', (event) => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
 						expect(event.hard_delete).to.be.true;
