@@ -1,7 +1,7 @@
 import { StableWSConnection } from '../src/connection';
 import { sleep } from '../src/utils';
 import { getTestClientForUser, getTestClient, createUserToken } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 import chai from 'chai';
 const expect = chai.expect;
@@ -43,15 +43,15 @@ async function createTestWSConnection(
 		...connectionOptions,
 	});
 	// disable the retry interval to speedup tests
-	conn._retryInterval = function() {
+	conn._retryInterval = function () {
 		return 10;
 	};
 
 	return conn;
 }
 
-describe('Connection and reconnect behaviour', function() {
-	it('Integration test for recover', async function() {
+describe('Connection and reconnect behaviour', function () {
+	it('Integration test for recover', async function () {
 		const user1 = await getTestClientForUser('user-connection-1');
 		const user2 = await getTestClientForUser('user-connection-2');
 
@@ -73,8 +73,8 @@ describe('Connection and reconnect behaviour', function() {
 
 		// setup handlers
 		const user1Channel = user1.channel('messaging', channelID);
-		const recoverPromise = new Promise(function(resolve, reject) {
-			user1.on(e => {
+		const recoverPromise = new Promise(function (resolve, reject) {
+			user1.on((e) => {
 				// should have a recover event.
 				if (e.type === 'connection.recovered') {
 					resolve(e);
@@ -91,7 +91,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(lastMessage.id).to.equal(messageResponse.message.id);
 	});
 
-	it('Connect', async function() {
+	it('Connect', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const result = healthCheck;
@@ -101,7 +101,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.isConnecting).to.equal(false);
 	});
 
-	it('Connect twice should fail', async function() {
+	it('Connect twice should fail', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		try {
@@ -112,7 +112,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.isConnecting).to.equal(false);
 	});
 
-	it('Reconnect', async function() {
+	it('Reconnect', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		conn.isHealthy = false;
@@ -126,11 +126,11 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Reconnect with a code bug should not trigger infinite loop', async function() {
+	it('Reconnect with a code bug should not trigger infinite loop', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		const original = conn._retryInterval;
-		conn._retryInterval = function() {
+		conn._retryInterval = function () {
 			throw new Error('stuff is broken in the retry interval');
 		};
 		try {
@@ -143,10 +143,10 @@ describe('Connection and reconnect behaviour', function() {
 		}
 	});
 
-	it('Reconnect with a code bug should not trigger infinite loop part 2', async function() {
+	it('Reconnect with a code bug should not trigger infinite loop part 2', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
-		conn._connect = function() {
+		conn._connect = function () {
 			throw new Error('stuff is broken in the connect');
 		};
 		try {
@@ -157,7 +157,7 @@ describe('Connection and reconnect behaviour', function() {
 		}
 	});
 
-	it('Connection closed', async function() {
+	it('Connection closed', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
@@ -173,7 +173,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Connection error', async function() {
+	it('Connection error', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
@@ -189,7 +189,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Health check failure', async function() {
+	it('Health check failure', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
@@ -204,7 +204,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Browser offline', async function() {
+	it('Browser offline', async function () {
 		const conn = await createTestWSConnection();
 		const healthCheck = await conn.connect();
 		expect(conn.isConnecting).to.equal(false);
@@ -221,7 +221,7 @@ describe('Connection and reconnect behaviour', function() {
 		expect(conn.eventCallback.called).to.equal(true);
 	});
 
-	it('Connect auth error', async function() {
+	it('Connect auth error', async function () {
 		try {
 			await createTestWSConnection('', { authType: '' });
 		} catch (e) {
@@ -229,7 +229,7 @@ describe('Connection and reconnect behaviour', function() {
 		}
 	});
 
-	it('Disconnect', async function() {
+	it('Disconnect', async function () {
 		const conn = await createTestWSConnection();
 		await conn.connect();
 		expect(conn.isConnecting).to.equal(false);

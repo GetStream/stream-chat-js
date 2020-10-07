@@ -8,7 +8,7 @@ import {
 	getTestClient,
 	getTestClientForUser,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
@@ -104,8 +104,8 @@ describe('Member style channel init', () => {
 	it('Create an invite', async () => {
 		const nickC = await getTestClientForUser('nick');
 
-		const messageReceived = new Promise(resolve => {
-			nickC.on('notification.invited', e => {
+		const messageReceived = new Promise((resolve) => {
+			nickC.on('notification.invited', (e) => {
 				expect(e.channel).to.be.an('object');
 				resolve();
 			});
@@ -136,8 +136,8 @@ describe('Member style channel init', () => {
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
 
-		const notificationReceived = new Promise(resolve => {
-			nickC.on('notification.invite_accepted', e => {
+		const notificationReceived = new Promise((resolve) => {
+			nickC.on('notification.invite_accepted', (e) => {
 				expect(e.channel).to.be.an('object');
 				resolve();
 			});
@@ -167,8 +167,8 @@ describe('Member style channel init', () => {
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
 		const thierryChannel = thierryC.channel('messaging', c.id);
-		const updateReceived = new Promise(resolve => {
-			thierryC.on(e => {
+		const updateReceived = new Promise((resolve) => {
+			thierryC.on((e) => {
 				if (e.type === 'member.updated') {
 					expect(e.member.invite_rejected_at).to.not.equal(null);
 					resolve();
@@ -186,7 +186,7 @@ describe('Member style channel init', () => {
 	});
 });
 
-describe('Query invites', function() {
+describe('Query invites', function () {
 	const users = [
 		'thierry-' + uuidv4(),
 		'tommaso-' + uuidv4(),
@@ -207,8 +207,8 @@ describe('Query invites', function() {
 		scottClient = await getTestClientForUser(users[3]);
 	});
 
-	describe('Bad Input', async function() {
-		it('Invalid invite value', async function() {
+	describe('Bad Input', async function () {
+		it('Invalid invite value', async function () {
 			const channels = tommasoClient.queryChannels({
 				invite: 'invalid',
 			});
@@ -216,7 +216,7 @@ describe('Query invites', function() {
 				'StreamChat error code 4: QueryChannels failed with error: "invalid invite parameter. should be one of pending|accepted|rejected"',
 			);
 		});
-		it('Invalid invite value type number', async function() {
+		it('Invalid invite value type number', async function () {
 			const channels = tommasoClient.queryChannels({
 				invite: 1,
 			});
@@ -224,7 +224,7 @@ describe('Query invites', function() {
 				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type number. expecting string"',
 			);
 		});
-		it('Invalid invite value type bool', async function() {
+		it('Invalid invite value type bool', async function () {
 			const channels = tommasoClient.queryChannels({
 				invite: true,
 			});
@@ -232,7 +232,7 @@ describe('Query invites', function() {
 				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type bool. expecting string"',
 			);
 		});
-		it('Invalid invite query', async function() {
+		it('Invalid invite query', async function () {
 			const channels = tommasoClient.queryChannels({
 				invite: { $gt: 'pending' },
 			});
@@ -240,7 +240,7 @@ describe('Query invites', function() {
 				'StreamChat error code 4: QueryChannels failed with error: "invalid invite operator, expecting {invite:"pending"} or {invite:{$eq:"pending"}}"',
 			);
 		});
-		it('Invalid invite operator II', async function() {
+		it('Invalid invite operator II', async function () {
 			const channels = tommasoClient.queryChannels({
 				invite: [null],
 			});
@@ -249,14 +249,14 @@ describe('Query invites', function() {
 			);
 		});
 	});
-	it('Querying for invites with server side auth require an user to be set', async function() {
+	it('Querying for invites with server side auth require an user to be set', async function () {
 		const ssClient = await getTestClient(true);
 		const resp = ssClient.queryChannels({ invite: 'pending' });
 		expect(resp).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "invite requires a valid user"',
 		);
 	});
-	it('Thierry creates a channel and invite Tommaso, Josh and Scott', async function() {
+	it('Thierry creates a channel and invite Tommaso, Josh and Scott', async function () {
 		const c = thierryClient.channel('messaging', channelID, {
 			name: 'Founder Chat',
 			image: 'http://bit.ly/2O35mws',
@@ -267,7 +267,7 @@ describe('Query invites', function() {
 		const state = await c.create();
 		expect(state.channel.id).to.be.equal(channelID);
 	});
-	it('Querying for invites with server side user should work if the user is provided', async function() {
+	it('Querying for invites with server side user should work if the user is provided', async function () {
 		const ssClient = await getTestClient(true);
 		const resp = await ssClient.queryChannels(
 			{ invite: 'pending' },
@@ -277,12 +277,12 @@ describe('Query invites', function() {
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].id).to.be.equal(channelID);
 	});
-	it('Tommaso should have pending invites', async function() {
+	it('Tommaso should have pending invites', async function () {
 		const channels = await tommasoClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-	it('Mixing Queries should work fine', async function() {
+	it('Mixing Queries should work fine', async function () {
 		const channels = await tommasoClient.queryChannels({
 			invite: 'pending',
 			color: 'red',
@@ -290,40 +290,40 @@ describe('Query invites', function() {
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-	it('Mixing Queries should work fine II', async function() {
+	it('Mixing Queries should work fine II', async function () {
 		const channels = await tommasoClient.queryChannels({
 			invite: 'pending',
 			color: 'blue',
 		});
 		expect(channels.length).to.be.equal(0);
 	});
-	it('Josh should have pending invites', async function() {
+	it('Josh should have pending invites', async function () {
 		const channels = await joshClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-	it('Scott should have pending invites', async function() {
+	it('Scott should have pending invites', async function () {
 		const channels = await scottClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-	it('Tommaso accept the invite and pending invites go to zero', async function() {
+	it('Tommaso accept the invite and pending invites go to zero', async function () {
 		let channels = await tommasoClient.queryChannels({ invite: 'pending' });
 		await channels[0].acceptInvite();
 
 		channels = await tommasoClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(0);
 	});
-	it('Tommaso queries for accepted invites it should return one result', async function() {
+	it('Tommaso queries for accepted invites it should return one result', async function () {
 		const channels = await tommasoClient.queryChannels({ invite: 'accepted' });
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
-	it('Tommaso queries for pending invites it should return one result', async function() {
+	it('Tommaso queries for pending invites it should return one result', async function () {
 		const channels = await tommasoClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(0);
 	});
-	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop for pending and rejected invites', async function() {
+	it('Josh Reject the invite. the channel state is still available but watch:true and presence:true is a noop for pending and rejected invites', async function () {
 		//reject invite
 		let channels = await joshClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(1);
@@ -335,27 +335,27 @@ describe('Query invites', function() {
 
 		// ensure that we dont deliver events on rejected invites
 		const rejectedChannelJosh = joshClient.channel('messaging', channelID);
-		rejectedChannelJosh.on(function(e) {
+		rejectedChannelJosh.on(function (e) {
 			expect.fail("rejected or pending invites shouldn't receive msg.new events");
 		});
 		await rejectedChannelJosh.watch({ watch: true, presence: true });
 
 		// ensure that we dont deliver events on pending invites
 		const pendingChannelScott = scottClient.channel('messaging', channelID);
-		pendingChannelScott.on(function(e) {
+		pendingChannelScott.on(function (e) {
 			expect.fail("pending invites shouldn't receive msg.new events");
 		});
 		await pendingChannelScott.watch({ watch: true, presence: true });
 
 		let doneCallback;
-		const allEventsReceived = new Promise(resolve => {
+		const allEventsReceived = new Promise((resolve) => {
 			doneCallback = resolve;
 		});
 		let numberEvents = 0;
 
 		// ensure that we deliver events on accepted invites
 		const acceptedChannel = tommasoClient.channel('messaging', channelID);
-		acceptedChannel.on('message.new', function(e) {
+		acceptedChannel.on('message.new', function (e) {
 			numberEvents++;
 			if (numberEvents === 3) {
 				expect(e.message.text).to.be.equal('hi 3');
@@ -371,24 +371,24 @@ describe('Query invites', function() {
 		await allEventsReceived;
 	});
 
-	it('Josh Reject should have rejected invites', async function() {
+	it('Josh Reject should have rejected invites', async function () {
 		const channels = await joshClient.queryChannels({ invite: 'rejected' });
 		expect(channels.length).to.be.equal(1);
 		expect(channels[0].id).to.be.equal(channelID);
 	});
 
-	it('Josh Reject should have 0 pending invites', async function() {
+	it('Josh Reject should have 0 pending invites', async function () {
 		const channels = await joshClient.queryChannels({ invite: 'pending' });
 		expect(channels.length).to.be.equal(0);
 	});
 });
 
-describe('update channel - invites', function() {
+describe('update channel - invites', function () {
 	let channel;
 	let client;
 	const creatorId = uuidv4();
 	const invitedId = uuidv4();
-	before(async function() {
+	before(async function () {
 		await createUsers([creatorId, invitedId]);
 		client = await getTestClientForUser(creatorId);
 		channel = client.channel('messaging', uuidv4(), {
@@ -397,7 +397,7 @@ describe('update channel - invites', function() {
 		await channel.create();
 	});
 
-	it('invite after channel creation', async function() {
+	it('invite after channel creation', async function () {
 		const inviteResp = await channel.inviteMembers([invitedId]);
 		expect(inviteResp.members.length).to.be.equal(2);
 		expect(inviteResp.members[0].user_id).to.be.equal(creatorId);
@@ -406,7 +406,7 @@ describe('update channel - invites', function() {
 		expect(inviteResp.members[1].invited).to.be.equal(true);
 	});
 
-	it('accept the invite', async function() {
+	it('accept the invite', async function () {
 		const invitedUserClient = await getTestClientForUser(invitedId);
 		const invites = await invitedUserClient.queryChannels(
 			{ invite: 'pending' },
@@ -417,7 +417,7 @@ describe('update channel - invites', function() {
 		await invites[0].acceptInvite();
 	});
 
-	it('query for accepted invites', async function() {
+	it('query for accepted invites', async function () {
 		const invitedUserClient = await getTestClientForUser(invitedId);
 		const invites = await invitedUserClient.queryChannels(
 			{ invite: 'accepted' },
@@ -427,7 +427,7 @@ describe('update channel - invites', function() {
 		expect(invites.length).to.be.equal(1);
 	});
 
-	it('query for rejected invites should return 0', async function() {
+	it('query for rejected invites should return 0', async function () {
 		const invitedUserClient = await getTestClientForUser(invitedId);
 		const invites = await invitedUserClient.queryChannels(
 			{ invite: 'rejected' },
@@ -437,7 +437,7 @@ describe('update channel - invites', function() {
 		expect(invites.length).to.be.equal(0);
 	});
 
-	it('invite on distinct channel is not allowed', async function() {
+	it('invite on distinct channel is not allowed', async function () {
 		const initialMembers = [uuidv4(), uuidv4()];
 		const invited = uuidv4();
 		await createUsers(initialMembers);
@@ -451,7 +451,7 @@ describe('update channel - invites', function() {
 		);
 	});
 
-	it('invited members are present in channel.updated event', async function() {
+	it('invited members are present in channel.updated event', async function () {
 		let channel;
 		let client;
 		const creatorId = uuidv4();
@@ -464,8 +464,8 @@ describe('update channel - invites', function() {
 		});
 		await channel.watch();
 
-		const evtReceived = new Promise(resolve => {
-			channel.on('channel.updated', function(e) {
+		const evtReceived = new Promise((resolve) => {
+			channel.on('channel.updated', function (e) {
 				expect(e.channel.members.length).to.be.equal(2);
 				expect(e.channel.member_count).to.be.equal(2);
 				expect(e.channel.members[0].user_id).to.be.equal(creatorId);

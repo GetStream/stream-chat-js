@@ -1,4 +1,4 @@
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
 	createUsers,
@@ -29,11 +29,11 @@ Promise.config({
 	},
 });
 
-describe('query by frozen', function() {
+describe('query by frozen', function () {
 	let client;
 	let channel;
 	const user = uuidv4();
-	before(async function() {
+	before(async function () {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4(), {
@@ -42,7 +42,7 @@ describe('query by frozen', function() {
 		await channel.create();
 	});
 
-	it('frozen:false should return 1 active channels', async function() {
+	it('frozen:false should return 1 active channels', async function () {
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
 			frozen: false,
@@ -51,7 +51,7 @@ describe('query by frozen', function() {
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 
-	it('frozen:true should return 0 results', async function() {
+	it('frozen:true should return 0 results', async function () {
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
 			frozen: true,
@@ -59,7 +59,7 @@ describe('query by frozen', function() {
 		expect(resp.length).to.be.equal(0);
 	});
 
-	it('mark the channel as frozen and search frozen:true should return 1 result', async function() {
+	it('mark the channel as frozen and search frozen:true should return 1 result', async function () {
 		await channel.update({ frozen: true });
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
@@ -69,14 +69,14 @@ describe('query by frozen', function() {
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 
-	it('send messages on a frozen channel should fail', async function() {
+	it('send messages on a frozen channel should fail', async function () {
 		const resp = await channel.sendMessage({ text: 'hi' });
 		expect(resp.message.text).to.be.equal(
 			'Sorry, this channel has been frozen by the admin',
 		);
 	});
 
-	it('remove the frozen property and search frozen:false should return 1 result', async function() {
+	it('remove the frozen property and search frozen:false should return 1 result', async function () {
 		await channel.update({ frozen: false });
 		const resp = await client.queryChannels({
 			members: { $in: [user] },
@@ -87,10 +87,10 @@ describe('query by frozen', function() {
 	});
 });
 
-describe('Channels - Constructor', function() {
+describe('Channels - Constructor', function () {
 	const client = getServerTestClient();
 
-	it('canonical form', function(done) {
+	it('canonical form', function (done) {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
@@ -98,34 +98,34 @@ describe('Channels - Constructor', function() {
 		done();
 	});
 
-	it('default options', function(done) {
+	it('default options', function (done) {
 		const channel = client.channel('messaging', '123');
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 		done();
 	});
 
-	it('null ID no options', function(done) {
+	it('null ID no options', function (done) {
 		const channel = client.channel('messaging', null);
 		expect(channel.id).to.eq(undefined);
 		done();
 	});
 
-	it('undefined ID no options', function(done) {
+	it('undefined ID no options', function (done) {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
 		expect(channel.data).to.eql({});
 		done();
 	});
 
-	it('short version with options', function(done) {
+	it('short version with options', function (done) {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
 		done();
 	});
 
-	it('null ID with options', function(done) {
+	it('null ID with options', function (done) {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
@@ -134,7 +134,7 @@ describe('Channels - Constructor', function() {
 		done();
 	});
 
-	it('empty ID  with options', function(done) {
+	it('empty ID  with options', function (done) {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
@@ -143,7 +143,7 @@ describe('Channels - Constructor', function() {
 		done();
 	});
 
-	it('empty ID  with options', function(done) {
+	it('empty ID  with options', function (done) {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
@@ -153,10 +153,10 @@ describe('Channels - Constructor', function() {
 	});
 });
 
-describe('Channels - Create', function() {
+describe('Channels - Create', function () {
 	const johnID = `john-${uuidv4()}`;
 
-	it('john creates a channel with members', async function() {
+	it('john creates a channel with members', async function () {
 		const c = await getTestClientForUser(johnID);
 		const channelId = uuidv4();
 		const johnChannel = c.channel('messaging', channelId, {
@@ -177,7 +177,7 @@ describe('Channels - Create', function() {
 	});
 });
 
-describe('Channels - members', function() {
+describe('Channels - members', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 
@@ -205,10 +205,10 @@ describe('Channels - members', function() {
 		await thierryClient.setUser({ id: thierryID }, thierryToken);
 	});
 
-	it('tommaso creates a new channel', async function() {
+	it('tommaso creates a new channel', async function () {
 		tommasoChannel = tommasoClient.channel(channelGroup, channelId);
-		tommasoPromise = new Promise(resolve => {
-			tommasoChannel.on(event => {
+		tommasoPromise = new Promise((resolve) => {
+			tommasoChannel.on((event) => {
 				tommasoChannelEventQueue.push(event);
 				if (tommasoChannelEventQueue.length === 4) {
 					resolve();
@@ -218,7 +218,7 @@ describe('Channels - members', function() {
 		await tommasoChannel.watch();
 	});
 
-	it(`tommaso tries to create a channel that's too large`, async function() {
+	it(`tommaso tries to create a channel that's too large`, async function () {
 		await expectHTTPErrorCode(
 			413,
 			tommasoClient
@@ -229,29 +229,29 @@ describe('Channels - members', function() {
 		);
 	});
 
-	it(`tommaso tries to create a channel with a reserved character`, async function() {
+	it(`tommaso tries to create a channel with a reserved character`, async function () {
 		await expectHTTPErrorCode(
 			400,
 			tommasoClient.channel(channelGroup, `!${channelId}`).watch(),
 		);
 	});
 
-	it('thierry tries to join the channel', async function() {
+	it('thierry tries to join the channel', async function () {
 		await expectHTTPErrorCode(
 			403,
 			thierryClient.channel(channelGroup, channelId).watch(),
 		);
 	});
 
-	it('tommaso adds thierry as channel member', async function() {
+	it('tommaso adds thierry as channel member', async function () {
 		await tommasoChannel.addMembers([thierryID]);
 	});
 
-	it('thierry tries to join the channel', async function() {
+	it('thierry tries to join the channel', async function () {
 		thierryChannel = thierryClient.channel(channelGroup, channelId);
-		thierryPromise2 = new Promise(resolve2 => {
-			thierryPromise1 = new Promise(resolve1 => {
-				thierryChannel.on(event => {
+		thierryPromise2 = new Promise((resolve2) => {
+			thierryPromise1 = new Promise((resolve1) => {
+				thierryChannel.on((event) => {
 					thierryChannelEventQueue.push(event);
 					if (thierryChannelEventQueue.length === 2) {
 						resolve1();
@@ -265,7 +265,7 @@ describe('Channels - members', function() {
 		await thierryChannel.watch();
 	});
 
-	it('tommaso gets an event about Thierry joining', async function() {
+	it('tommaso gets an event about Thierry joining', async function () {
 		await tommasoPromise;
 		let event = tommasoChannelEventQueue.pop();
 		expect(event.type).to.eql('user.watching.start');
@@ -277,36 +277,36 @@ describe('Channels - members', function() {
 		expect(event.type).to.eql('member.added');
 	});
 
-	it('tommaso posts a message', async function() {
+	it('tommaso posts a message', async function () {
 		await tommasoChannel.sendMessage(message);
 	});
 
-	it('thierry gets the new message from tommaso', async function() {
+	it('thierry gets the new message from tommaso', async function () {
 		await thierryPromise1;
 		const event = thierryChannelEventQueue.pop();
 		expect(event.type).to.eql('message.new');
 		tommasoMessageID = event.message.id;
 	});
 
-	it('thierry tries to update the channel description', async function() {
+	it('thierry tries to update the channel description', async function () {
 		await expectHTTPErrorCode(
 			403,
 			thierryChannel.update({ description: 'taking over this channel now!' }),
 		);
 	});
 
-	it('tommaso updates the channel description', async function() {
+	it('tommaso updates the channel description', async function () {
 		await tommasoChannel.update({ description: 'taking over this channel now!' });
 	});
 
-	it('tommaso updates his own message', async function() {
+	it('tommaso updates his own message', async function () {
 		await tommasoClient.updateMessage({
 			id: tommasoMessageID,
 			text: 'I mean, awesome chat',
 		});
 	});
 
-	it('thierry tries to update tommaso message', async function() {
+	it('thierry tries to update tommaso message', async function () {
 		await expectHTTPErrorCode(
 			403,
 			thierryClient.updateMessage({
@@ -316,18 +316,18 @@ describe('Channels - members', function() {
 		);
 	});
 
-	it('thierry mutes himself', async function() {
+	it('thierry mutes himself', async function () {
 		const response = await thierryChannel.sendMessage({
 			text: `/mute @${thierryID}`,
 		});
 		expect(response.message.type).to.eql('error');
 	});
 
-	it('thierry gets promoted', async function() {
+	it('thierry gets promoted', async function () {
 		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
 	});
 
-	it('correct member count', async function() {
+	it('correct member count', async function () {
 		const members = [uuidv4(), uuidv4()];
 		await createUsers(members);
 
@@ -345,71 +345,75 @@ describe('Channels - members', function() {
 		expect(resp.channel.member_count).to.be.equal(4);
 	});
 
-	describe('Channel members', function() {
+	describe('Channel members', function () {
 		const channelId = `test-member-cache-${uuidv4()}`;
 		const initialMembers = [tommasoID, thierryID];
 		const newMembers = [uuidv4(), uuidv4()];
 
 		let channel;
 
-		before(async function() {
+		before(async function () {
 			await createUsers(newMembers);
 			channel = tommasoClient.channel('messaging', channelId);
 		});
 
-		describe('When creating channel', function() {
-			before(async function() {
+		describe('When creating channel', function () {
+			before(async function () {
 				await channel.create();
 			});
 
-			it('returns empty channel members list', async function() {
+			it('returns empty channel members list', async function () {
 				const resp = await channel.watch();
 
 				expect(resp.members.length).to.be.equal(0);
 			});
 		});
 
-		describe('When adding members to new channel', function() {
-			before(async function() {
+		describe('When adding members to new channel', function () {
+			before(async function () {
 				await channel.addMembers(initialMembers);
 			});
 
-			it('returns channel members', async function() {
+			it('returns channel members', async function () {
 				const resp = await channel.watch();
 
 				expect(resp.members.length).to.be.equal(initialMembers.length);
-				expect(resp.members.map(m => m.user.id)).to.have.members(initialMembers);
+				expect(resp.members.map((m) => m.user.id)).to.have.members(
+					initialMembers,
+				);
 			});
 		});
 
-		describe('When adding members to existing channel', function() {
-			before(async function() {
+		describe('When adding members to existing channel', function () {
+			before(async function () {
 				await channel.addMembers(newMembers);
 			});
 
-			it('returns existing members and new ones', async function() {
+			it('returns existing members and new ones', async function () {
 				const resp = await channel.watch();
 				expect(resp.members.length).to.be.equal(4);
-				expect(resp.members.map(m => m.user.id)).to.have.members(
+				expect(resp.members.map((m) => m.user.id)).to.have.members(
 					initialMembers.concat(newMembers),
 				);
 			});
 		});
 
-		describe('When removing members', function() {
-			before(async function() {
+		describe('When removing members', function () {
+			before(async function () {
 				await channel.removeMembers(newMembers);
 			});
 
-			it('returns members without deleted', async function() {
+			it('returns members without deleted', async function () {
 				const resp = await channel.watch();
 				expect(resp.members.length).to.be.equal(2);
-				expect(resp.members.map(m => m.user.id)).to.have.members(initialMembers);
+				expect(resp.members.map((m) => m.user.id)).to.have.members(
+					initialMembers,
+				);
 			});
 		});
 	});
 
-	it('channel messages and last_message_at are correctly returned', async function() {
+	it('channel messages and last_message_at are correctly returned', async function () {
 		const unique = uuidv4();
 		const newMembers = ['member1', 'member2'];
 		await createUsers(newMembers);
@@ -476,7 +480,7 @@ describe('Channels - members', function() {
 	});
 });
 
-describe('Channels - Members are updated correctly', function() {
+describe('Channels - Members are updated correctly', function () {
 	const channelId = uuidv4();
 	const cid = `messaging:${channelId}`;
 	const johnID = `john-${uuidv4()}`;
@@ -498,7 +502,7 @@ describe('Channels - Members are updated correctly', function() {
 		},
 	];
 
-	const runWithOtherOperations = async function(op) {
+	const runWithOtherOperations = async function (op) {
 		const op2 = channel.update({ color: 'green' }, { text: 'got new message!' });
 		const op3 = channel.sendMessage({ text: 'new message' });
 		const op4 = channel.sendMessage({ text: 'new message' });
@@ -508,10 +512,10 @@ describe('Channels - Members are updated correctly', function() {
 
 	let channel;
 	let client;
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(johnID);
 		await createUsers(
-			members.map(function(member) {
+			members.map(function (member) {
 				return member.id;
 			}),
 		);
@@ -527,14 +531,14 @@ describe('Channels - Members are updated correctly', function() {
 		expect(response.members.length).to.equal(1);
 	});
 
-	it('channel state must be updated after removing a member', async function() {
+	it('channel state must be updated after removing a member', async function () {
 		const resp = await runWithOtherOperations(channel.removeMembers([members[0].id]));
 		expect(resp.members.length).to.be.equal(0);
 		const channelState = await channel.watch();
 		expect(channelState.members.length).to.be.equal(0);
 	});
 
-	it('channel state must be updated after adding a member', async function() {
+	it('channel state must be updated after adding a member', async function () {
 		const resp = await runWithOtherOperations(channel.addMembers([members[0].id]));
 		expect(resp.members.length).to.be.equal(1);
 		const channelState = await channel.watch();
@@ -542,18 +546,18 @@ describe('Channels - Members are updated correctly', function() {
 		expect(channelState.members[0].user.id).to.be.equal(members[0].id);
 	});
 
-	it('channel state must be updated after adding multiple members', async function() {
+	it('channel state must be updated after adding multiple members', async function () {
 		const resp = await runWithOtherOperations(
 			channel.addMembers([members[0].id, members[1].id, members[2].id]),
 		);
 		expect(resp.members.length).to.be.equal(3);
 		const channelState = await channel.watch();
 		expect(channelState.members.length).to.be.equal(3);
-		const memberIDs = channelState.members.map(m => m.user.id);
-		expect(memberIDs).to.deep.members(members.map(m => m.id));
+		const memberIDs = channelState.members.map((m) => m.user.id);
+		expect(memberIDs).to.deep.members(members.map((m) => m.id));
 	});
 
-	it('channel state must be updated after removing multiple members', async function() {
+	it('channel state must be updated after removing multiple members', async function () {
 		const resp = await runWithOtherOperations(
 			channel.removeMembers([members[0].id, members[1].id, members[2].id]),
 		);
@@ -563,7 +567,7 @@ describe('Channels - Members are updated correctly', function() {
 	});
 });
 
-describe('Channels - Member limit', function() {
+describe('Channels - Member limit', function () {
 	const memberOne = `one-${uuidv4()}`;
 	const memberTwo = `two-${uuidv4()}`;
 	const memberThree = `three-${uuidv4()}`;
@@ -583,7 +587,7 @@ describe('Channels - Member limit', function() {
 		await ssClient.disconnect();
 	});
 
-	it('limit 0 should return 0 members', async function() {
+	it('limit 0 should return 0 members', async function () {
 		const memberOneClient = await getTestClientForUser(memberOne);
 		const channels = await memberOneClient.queryChannels(
 			{ unique },
@@ -594,7 +598,7 @@ describe('Channels - Member limit', function() {
 		expect(channels[0].state.members).to.be.empty;
 	});
 
-	it('limit 1 should return 1 members', async function() {
+	it('limit 1 should return 1 members', async function () {
 		const memberOneClient = await getTestClientForUser(memberOne);
 		const channels = await memberOneClient.queryChannels(
 			{ unique },
@@ -605,14 +609,14 @@ describe('Channels - Member limit', function() {
 		expect(channels[0].state.members[memberOne]).to.not.be.null;
 	});
 
-	it('negative limit should raise an error', async function() {
+	it('negative limit should raise an error', async function () {
 		const p = ssClient.queryChannels({ unique }, {}, { member_limit: -1 });
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "member_limit must be 0 or greater"',
 		);
 	});
 
-	it('limit > 100 should raise an error', async function() {
+	it('limit > 100 should raise an error', async function () {
 		const p = ssClient.queryChannels({ unique }, {}, { member_limit: 101 });
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "member_limit must be 100 or less',
@@ -620,7 +624,7 @@ describe('Channels - Member limit', function() {
 	});
 });
 
-describe('Channels - Distinct channels', function() {
+describe('Channels - Distinct channels', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 	const newMember = `member-${uuidv4()}`;
@@ -640,7 +644,7 @@ describe('Channels - Distinct channels', function() {
 		await createUsers([newMember]);
 	});
 
-	it('create a distinct channel without specifying members should fail', async function() {
+	it('create a distinct channel without specifying members should fail', async function () {
 		const channel = thierryClient.channel(channelGroup, '');
 		await expectHTTPErrorCode(
 			400,
@@ -649,7 +653,7 @@ describe('Channels - Distinct channels', function() {
 		);
 	});
 
-	it('create a distinct channel with only one member should fail', async function() {
+	it('create a distinct channel with only one member should fail', async function () {
 		const channel = thierryClient.channel(channelGroup, '', {
 			members: [tommasoID],
 		});
@@ -660,7 +664,7 @@ describe('Channels - Distinct channels', function() {
 		);
 	});
 
-	it('create a distinct channel with 2 members should succeed', async function() {
+	it('create a distinct channel with 2 members should succeed', async function () {
 		distinctChannel = thierryClient.channel(channelGroup, null, {
 			members: [tommasoID, thierryID],
 			unique,
@@ -668,7 +672,7 @@ describe('Channels - Distinct channels', function() {
 		await distinctChannel.create();
 	});
 
-	it('query previous created distinct channel', async function() {
+	it('query previous created distinct channel', async function () {
 		const channels = await thierryClient.queryChannels({
 			members: [tommasoID, thierryID],
 			unique,
@@ -677,7 +681,7 @@ describe('Channels - Distinct channels', function() {
 		expect(channels[0].data.unique).to.be.equal(unique);
 	});
 
-	it('adding members to distinct channel should fail', async function() {
+	it('adding members to distinct channel should fail', async function () {
 		await expectHTTPErrorCode(
 			400,
 			distinctChannel.addMembers([newMember]),
@@ -685,7 +689,7 @@ describe('Channels - Distinct channels', function() {
 		);
 	});
 
-	it('removing members from a distinct channel should fail', async function() {
+	it('removing members from a distinct channel should fail', async function () {
 		await expectHTTPErrorCode(
 			400,
 			distinctChannel.removeMembers([tommasoID]),
@@ -694,13 +698,13 @@ describe('Channels - Distinct channels', function() {
 	});
 });
 
-describe('Query Channels and sort by unread', function() {
+describe('Query Channels and sort by unread', function () {
 	const channels = [];
 	const tommaso = 'tommaso' + uuidv4();
 	const thierry = 'thierry' + uuidv4();
 	let tommasoClient;
 	let thierryClient;
-	before(async function() {
+	before(async function () {
 		thierryClient = await getTestClientForUser(thierry);
 		await createUsers([tommaso, thierry]);
 		const cidPrefix = uuidv4();
@@ -721,7 +725,7 @@ describe('Query Channels and sort by unread', function() {
 		}
 	});
 
-	it('sort by has_unread and last_message_at asc should work', async function() {
+	it('sort by has_unread and last_message_at asc should work', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
@@ -735,7 +739,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[3].cid);
 	});
 
-	it('sort by has_unread and last_message_at', async function() {
+	it('sort by has_unread and last_message_at', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
@@ -749,7 +753,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[0].cid);
 	});
 
-	it.skip('sort by unread_count asc', async function() {
+	it.skip('sort by unread_count asc', async function () {
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{ unread_count: 1 },
@@ -762,7 +766,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[0].cid);
 	});
 
-	it('sort by unread_count desc', async function() {
+	it('sort by unread_count desc', async function () {
 		const result = await tommasoClient.queryChannels(
 			{ members: { $in: [tommaso] } },
 			{ unread_count: -1 },
@@ -775,7 +779,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[3].cid);
 	});
 
-	it.skip('zero the counts and sort by has_unread and last_message_at asc', async function() {
+	it.skip('zero the counts and sort by has_unread and last_message_at asc', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
@@ -793,7 +797,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[3].cid);
 	});
 
-	it('zero the counts and sort by has_unread and last_message_at desc', async function() {
+	it('zero the counts and sort by has_unread and last_message_at desc', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
@@ -811,7 +815,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[0].cid);
 	});
 
-	it.skip('zero the counts and sort by unread_count and last_message_at asc', async function() {
+	it.skip('zero the counts and sort by unread_count and last_message_at asc', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
@@ -829,7 +833,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[3].cid);
 	});
 
-	it.skip('zero the counts and sort by unread_count and last_message_at desc', async function() {
+	it.skip('zero the counts and sort by unread_count and last_message_at desc', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
@@ -847,7 +851,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[3].cid).to.be.equal(channels[0].cid);
 	});
 
-	it('test "grouping"', async function() {
+	it('test "grouping"', async function () {
 		tommasoClient = await getTestClientForUser(tommaso);
 		await channels[0].sendMessage({ text: 'hi' });
 		await sleep(200);
@@ -897,7 +901,7 @@ describe('Query Channels and sort by unread', function() {
     expect(result[3].cid).to.be.equal(channels[1].cid);*/
 	});
 
-	it('limit results should work fine', async function() {
+	it('limit results should work fine', async function () {
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
@@ -923,7 +927,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[0].cid).to.be.equal(channels[0].cid);
 	});
 
-	it('unread count + custom query should work', async function() {
+	it('unread count + custom query should work', async function () {
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
@@ -941,7 +945,7 @@ describe('Query Channels and sort by unread', function() {
 		expect(result[1].data.color).to.be.equal('blue');
 	});
 
-	it('unread count + custom query with limit should work', async function() {
+	it('unread count + custom query with limit should work', async function () {
 		await tommasoClient.markAllRead();
 		tommasoClient = await getTestClientForUser(tommaso);
 		expect(tommasoClient.health.me.total_unread_count).to.be.equal(0);
@@ -959,7 +963,7 @@ describe('Query Channels and sort by unread', function() {
 	});
 });
 
-describe('members and unread count', function() {
+describe('members and unread count', function () {
 	let client1;
 	let client2;
 
@@ -968,7 +972,7 @@ describe('members and unread count', function() {
 
 	const channelID = uuidv4();
 
-	before(async function() {
+	before(async function () {
 		client1 = await getTestClientForUser(user1);
 		await getTestClientForUser(user2);
 		await client1
@@ -976,7 +980,7 @@ describe('members and unread count', function() {
 			.create();
 	});
 
-	it('adding a member twice should not mark the channel as read', async function() {
+	it('adding a member twice should not mark the channel as read', async function () {
 		const channel = client1.channel('messaging', channelID);
 		await channel.sendMessage({ text: 'hi 1' });
 		await channel.addMembers([user2]);
@@ -985,7 +989,7 @@ describe('members and unread count', function() {
 	});
 });
 
-describe('hard delete messages', function() {
+describe('hard delete messages', function () {
 	const channelID = uuidv4();
 	const user = uuidv4();
 	let client, ssclient;
@@ -994,26 +998,26 @@ describe('hard delete messages', function() {
 	let secondMeessage;
 	let thirdMeessage;
 
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(user);
 		ssclient = await getTestClient(true);
 		channel = client.channel('messaging', channelID);
 		await channel.create();
 	});
 
-	it('send 3 messages to the channel', async function() {
+	it('send 3 messages to the channel', async function () {
 		firstMessage = await channel.sendMessage({ text: 'hi 1' });
 		secondMeessage = await channel.sendMessage({ text: 'hi 2' });
 		thirdMeessage = await channel.sendMessage({ text: 'hi 3' });
 	});
 
-	it('hard delete messages is not allowed client side', function() {
+	it('hard delete messages is not allowed client side', function () {
 		expect(client.deleteMessage(firstMessage.message.id, true)).to.be.rejectedWith(
 			'StreamChat error code 4: DeleteMessage failed with error: "hard delete messages is only allowed with server side auth"',
 		);
 	});
 
-	it('hard delete the second message should work and not update  channel.last_message_id', async function() {
+	it('hard delete the second message should work and not update  channel.last_message_id', async function () {
 		channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
 		expect(channel.data.last_message_at).to.be.equal(
@@ -1031,7 +1035,7 @@ describe('hard delete messages', function() {
 		);
 	});
 
-	it('hard delete the third message should update the channel last_message_at', async function() {
+	it('hard delete the third message should update the channel last_message_at', async function () {
 		const resp = await ssclient.deleteMessage(thirdMeessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 		expect(resp.message.type).to.be.equal('deleted');
@@ -1041,7 +1045,7 @@ describe('hard delete messages', function() {
 		expect(channel.data.last_message_at).to.be.equal(firstMessage.message.created_at);
 	});
 
-	it('hard delete the last message in the channel should clear channel messages and last_message_at', async function() {
+	it('hard delete the last message in the channel should clear channel messages and last_message_at', async function () {
 		const resp = await ssclient.deleteMessage(firstMessage.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 		expect(resp.message.type).to.be.equal('deleted');
@@ -1052,7 +1056,7 @@ describe('hard delete messages', function() {
 		expect(channelResp.messages.length).to.be.equal(0);
 	});
 
-	it('messages with reactions are hard deleted properly', async function() {
+	it('messages with reactions are hard deleted properly', async function () {
 		let channel = ssclient.channel('messaging', channelID, { created_by_id: user });
 		await channel.watch();
 
@@ -1067,14 +1071,14 @@ describe('hard delete messages', function() {
 		expect(channelResp.messages.length).to.be.equal(0);
 	});
 
-	it('query the channel should also return correct results', async function() {
+	it('query the channel should also return correct results', async function () {
 		const channels = await ssclient.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
 		expect(theChannel.data.last_message_at).to.be.undefined;
 	});
 
-	it('validate channel.last_message_at correctly updated', async function() {
+	it('validate channel.last_message_at correctly updated', async function () {
 		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
@@ -1099,7 +1103,7 @@ describe('hard delete messages', function() {
 		}
 	});
 
-	it('validate first channel message', async function() {
+	it('validate first channel message', async function () {
 		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
@@ -1124,7 +1128,7 @@ describe('hard delete messages', function() {
 		}
 	});
 
-	it('hard delete threads should work fine', async function() {
+	it('hard delete threads should work fine', async function () {
 		const channels = await client.queryChannels({ cid: 'messaging:' + channelID });
 		expect(channels.length).to.be.equal(1);
 		const theChannel = channels[0];
@@ -1141,16 +1145,16 @@ describe('hard delete messages', function() {
 	});
 });
 
-describe('query channels by field $exists', function() {
+describe('query channels by field $exists', function () {
 	const creator = uuidv4();
 	const testID = uuidv4();
 	let client;
 
-	const channelCID = function(i) {
+	const channelCID = function (i) {
 		return 'messaging:' + i + '-' + testID;
 	};
 	//create 10 channels, even index contains even custom field and odd index contains odd custom field
-	before(async function() {
+	before(async function () {
 		await createUsers([creator]);
 		client = await getTestClientForUser(creator);
 		for (let i = 0; i < 10; i++) {
@@ -1171,7 +1175,7 @@ describe('query channels by field $exists', function() {
 		}
 	});
 
-	it('only boolean values are allowed in $exists', async function() {
+	it('only boolean values are allowed in $exists', async function () {
 		await expect(
 			client.queryChannels({ testid: testID, even: { $exists: [] } }),
 		).to.be.rejectedWith(
@@ -1179,13 +1183,13 @@ describe('query channels by field $exists', function() {
 		);
 	});
 
-	it('query $exists true on a custom field should work', async function() {
+	it('query $exists true on a custom field should work', async function () {
 		const resp = await client.queryChannels({
 			testid: testID,
 			even: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(resp.map(c => c.cid)).to.be.eql([
+		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(8),
 			channelCID(6),
 			channelCID(4),
@@ -1194,13 +1198,13 @@ describe('query channels by field $exists', function() {
 		]);
 	});
 
-	it('query $exists false on a custom field should work', async function() {
+	it('query $exists false on a custom field should work', async function () {
 		const resp = await client.queryChannels({
 			testid: testID,
 			even: { $exists: false },
 		});
 		expect(resp.length).to.be.equal(5);
-		expect(resp.map(c => c.cid)).to.be.eql([
+		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(7),
 			channelCID(5),
@@ -1209,13 +1213,13 @@ describe('query channels by field $exists', function() {
 		]);
 	});
 
-	it('query $exists true on reserved field', async function() {
+	it('query $exists true on reserved field', async function () {
 		const resp = await client.queryChannels({
 			testid: testID,
 			cid: { $exists: true },
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(resp.map(c => c.cid)).to.be.eql([
+		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),
@@ -1229,7 +1233,7 @@ describe('query channels by field $exists', function() {
 		]);
 	});
 
-	it('query $exists false on reserved field should return 0 results', async function() {
+	it('query $exists false on reserved field should return 0 results', async function () {
 		const resp = await client.queryChannels({
 			testid: testID,
 			cid: { $exists: false },
@@ -1237,13 +1241,13 @@ describe('query channels by field $exists', function() {
 		expect(resp.length).to.be.equal(0);
 	});
 
-	it('combine multiple $exists should work', async function() {
+	it('combine multiple $exists should work', async function () {
 		const resp = await client.queryChannels({
 			testid: testID,
 			$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
 		});
 		expect(resp.length).to.be.equal(10);
-		expect(resp.map(c => c.cid)).to.be.eql([
+		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
 			channelCID(8),
 			channelCID(7),
@@ -1258,12 +1262,12 @@ describe('query channels by field $exists', function() {
 	});
 });
 
-describe('query channels members $nin', function() {
+describe('query channels members $nin', function () {
 	const creator = uuidv4();
 	const membersIdS = [uuidv4(), uuidv4(), uuidv4(), uuidv4()];
 	let client;
 
-	before(async function() {
+	before(async function () {
 		await createUsers(membersIdS);
 		await createUsers(creator);
 		client = await getTestClientForUser(creator);
@@ -1277,7 +1281,7 @@ describe('query channels members $nin', function() {
 		}
 	});
 
-	it('query $in/$nin', async function() {
+	it('query $in/$nin', async function () {
 		const resp = await client.queryChannels({
 			$and: [
 				{ members: { $in: [creator] } },
@@ -1293,7 +1297,7 @@ describe('query channels members $nin', function() {
 	});
 });
 
-describe('Unread state for non members', function() {
+describe('Unread state for non members', function () {
 	let client;
 	const watcher = uuidv4();
 	const otherUser = uuidv4();
@@ -1302,7 +1306,7 @@ describe('Unread state for non members', function() {
 	const chanId = uuidv4();
 	let chan;
 
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(watcher);
 		otherUserClient = await getTestClientForUser(otherUser);
 		const c = otherUserClient.channel('livestream', emptyChan, {
@@ -1316,21 +1320,21 @@ describe('Unread state for non members', function() {
 		await chan.sendMessage({ text: 'Test Message 3' });
 	});
 
-	it('connect to empty channel', async function() {
+	it('connect to empty channel', async function () {
 		const c = client.channel('livestream', emptyChan);
 		await c.watch();
 		const unreadCount = c.countUnread();
 		expect(unreadCount).to.be.equal(0);
 	});
 
-	it('connect to a channel with 3 messages', async function() {
+	it('connect to a channel with 3 messages', async function () {
 		const c = client.channel('livestream', chanId);
 		await c.watch();
 		const unreadCount = c.countUnread();
 		expect(unreadCount).to.be.equal(0);
 	});
 
-	it('unread count should go up when new messages are received', async function() {
+	it('unread count should go up when new messages are received', async function () {
 		const c = client.channel('livestream', chanId);
 		await c.watch();
 		const unreadCount = c.countUnread();
@@ -1342,7 +1346,7 @@ describe('Unread state for non members', function() {
 	});
 });
 
-describe('Query channels using last_updated', function() {
+describe('Query channels using last_updated', function () {
 	const CHANNELS_ORDER = [1, 2, 0];
 	const NUM_OF_CHANNELS = CHANNELS_ORDER.length;
 	const CHANGED_CHANNEL = 1;
@@ -1351,7 +1355,7 @@ describe('Query channels using last_updated', function() {
 	const channels = [];
 	let client;
 	const unique = uuidv4();
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(creator);
 		await createUsers([creator]);
 		for (let i = 0; i < NUM_OF_CHANNELS; i++) {
@@ -1365,7 +1369,7 @@ describe('Query channels using last_updated', function() {
 		await channels[CHANGED_CHANNEL].sendMessage({ text: 'Test Message' });
 	});
 
-	it('with the parameter', async function() {
+	it('with the parameter', async function () {
 		const list = await client.queryChannels({ unique });
 
 		expect(list.length).equal(channels.length);
@@ -1374,7 +1378,7 @@ describe('Query channels using last_updated', function() {
 		}
 	});
 
-	it('without parameters', async function() {
+	it('without parameters', async function () {
 		const list = await client.queryChannels({ unique }, { last_updated: -1 });
 
 		expect(list.length).equal(channels.length);
@@ -1383,7 +1387,7 @@ describe('Query channels using last_updated', function() {
 		}
 	});
 
-	it('filtering by the parameter', async function() {
+	it('filtering by the parameter', async function () {
 		const list = await client.queryChannels({
 			unique,
 			last_updated: channels[0].data.created_at,
@@ -1394,14 +1398,14 @@ describe('Query channels using last_updated', function() {
 	});
 });
 
-describe('Channels op $in with custom fields', function() {
+describe('Channels op $in with custom fields', function () {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	const channelId = uuidv4();
 	const channelId2 = uuidv4();
 	const unique = uuidv4(); //used to return consistent results in test
 	let user1Client;
-	before(async function() {
+	before(async function () {
 		await createUsers([user1, user2]);
 		user1Client = await getTestClientForUser(user1);
 
@@ -1422,7 +1426,7 @@ describe('Channels op $in with custom fields', function() {
 		await channel2.create();
 	});
 
-	it('query $in on custom string field subset', async function() {
+	it('query $in on custom string field subset', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			color: { $in: ['red'] },
@@ -1431,7 +1435,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom string $or custom $in int', async function() {
+	it('query $in on custom string $or custom $in int', async function () {
 		const channels = await user1Client.queryChannels({
 			$or: [{ color: { $in: ['red'] } }, { customField: { $in: [6] } }],
 			unique,
@@ -1441,7 +1445,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[1].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom string field full set out of order', async function() {
+	it('query $in on custom string field full set out of order', async function () {
 		const channels = await user1Client.queryChannels({
 			color: { $in: ['red', 'blue'] },
 			unique,
@@ -1450,7 +1454,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom int field subset', async function() {
+	it('query $in on custom int field subset', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			age: { $in: [30] },
@@ -1459,7 +1463,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom int field full set out of order', async function() {
+	it('query $in on custom int field full set out of order', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			age: { $in: [31, 30] },
@@ -1468,7 +1472,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom array field subset', async function() {
+	it('query $in on custom array field subset', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			array: { $in: [[1]] },
@@ -1477,7 +1481,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom array field full set out of order', async function() {
+	it('query $in on custom array field full set out of order', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			array: { $in: [[2], [1]] },
@@ -1486,7 +1490,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom object field subset', async function() {
+	it('query $in on custom object field subset', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			object: { $in: [{ a: 1 }] },
@@ -1495,7 +1499,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom object field full set out of order', async function() {
+	it('query $in on custom object field full set out of order', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			object: { $in: [{ a: 1 }, { b: 1 }] },
@@ -1504,7 +1508,7 @@ describe('Channels op $in with custom fields', function() {
 		expect(channels[0].cid).to.be.equal(`messaging:${channelId}`);
 	});
 
-	it('query $in on custom field (wrong value types)', async function() {
+	it('query $in on custom field (wrong value types)', async function () {
 		const channels = await user1Client.queryChannels({
 			unique,
 			object: { $in: [3] },
@@ -1513,13 +1517,13 @@ describe('Channels op $in with custom fields', function() {
 	});
 });
 
-describe('$ne operator', function() {
+describe('$ne operator', function () {
 	let client;
 	const channels = [];
 	const unique = uuidv4();
 	const creator = uuidv4();
 
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(creator);
 		for (let i = 1; i < 5; i++) {
 			const c = client.channel('messaging', uuidv4(), {
@@ -1534,20 +1538,20 @@ describe('$ne operator', function() {
 		}
 	});
 
-	it('query $ne on reserved fields', async function() {
+	it('query $ne on reserved fields', async function () {
 		const response = await client.queryChannels({
 			unique,
 			id: { $ne: channels[0].id },
 		});
 		expect(response.length).to.be.equal(3);
 		expect(
-			response.findIndex(function(c) {
+			response.findIndex(function (c) {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
 	});
 
-	it('query $ne with invalid type on reserved fields', async function() {
+	it('query $ne with invalid type on reserved fields', async function () {
 		await expectHTTPErrorCode(
 			400,
 			client.queryChannels({ unique, id: { $ne: 1 } }),
@@ -1555,64 +1559,64 @@ describe('$ne operator', function() {
 		);
 	});
 
-	it('query $ne on custom int fields', async function() {
+	it('query $ne on custom int fields', async function () {
 		const response = await client.queryChannels({
 			unique,
 			number: { $ne: channels[0].data.number },
 		});
 		expect(response.length).to.be.equal(3);
 		expect(
-			response.findIndex(function(c) {
+			response.findIndex(function (c) {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
 	});
 
-	it('query $ne on custom string fields', async function() {
+	it('query $ne on custom string fields', async function () {
 		const response = await client.queryChannels({
 			unique,
 			string: { $ne: channels[0].data.string },
 		});
 		expect(response.length).to.be.equal(3);
 		expect(
-			response.findIndex(function(c) {
+			response.findIndex(function (c) {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
 	});
 
-	it('query $ne on custom object fields', async function() {
+	it('query $ne on custom object fields', async function () {
 		const response = await client.queryChannels({
 			unique,
 			object: { $ne: channels[0].data.object },
 		});
 		expect(response.length).to.be.equal(3);
 		expect(
-			response.findIndex(function(c) {
+			response.findIndex(function (c) {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
 	});
 
-	it('query $ne on custom array fields', async function() {
+	it('query $ne on custom array fields', async function () {
 		const response = await client.queryChannels({
 			unique,
 			array: { $ne: channels[0].data.array },
 		});
 		expect(response.length).to.be.equal(3);
 		expect(
-			response.findIndex(function(c) {
+			response.findIndex(function (c) {
 				return c.id === channels[0].id;
 			}),
 		).to.be.equal(-1);
 	});
 });
 
-describe('query by $autocomplete operator on channels.name', function() {
+describe('query by $autocomplete operator on channels.name', function () {
 	let client;
 	let channel;
 	const user = uuidv4();
-	before(async function() {
+	before(async function () {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4(), {
@@ -1622,7 +1626,7 @@ describe('query by $autocomplete operator on channels.name', function() {
 		await channel.create();
 	});
 
-	it('return 1 result', async function() {
+	it('return 1 result', async function () {
 		const resp = await client.queryChannels({
 			members: [user],
 			name: {
@@ -1634,7 +1638,7 @@ describe('query by $autocomplete operator on channels.name', function() {
 	});
 });
 
-describe('unread counts on hard delete messages', function() {
+describe('unread counts on hard delete messages', function () {
 	let channel;
 	let client;
 	let ssclient;
@@ -1642,7 +1646,7 @@ describe('unread counts on hard delete messages', function() {
 	const thierry = uuidv4();
 	const nick = uuidv4();
 	const messages = [];
-	before(async function() {
+	before(async function () {
 		await createUsers([tommaso, thierry, nick]);
 		client = await getTestClientForUser(tommaso);
 		ssclient = await getTestClient(true);
@@ -1653,17 +1657,17 @@ describe('unread counts on hard delete messages', function() {
 		await channel.create();
 	});
 
-	it('tommaso sends 3 messages', async function() {
+	it('tommaso sends 3 messages', async function () {
 		for (let i = 0; i < 3; i++) {
 			messages.push(await channel.sendMessage({ text: 'hi' }));
 		}
 	});
 
-	it('tommaso deletes the 1st message', async function() {
+	it('tommaso deletes the 1st message', async function () {
 		await ssclient.deleteMessage(messages[0].message.id, true);
 	});
 
-	it('validates unread counts for all the users', async function() {
+	it('validates unread counts for all the users', async function () {
 		const tommasoClient = await getTestClientForUser(tommaso);
 		// expect 0 conts since tommaso is the sender
 		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
@@ -1680,7 +1684,7 @@ describe('unread counts on hard delete messages', function() {
 		expect(nickClient.health.me.unread_channels).to.be.equal(1);
 	});
 
-	it('nick and thierry mark the channel as read', async function() {
+	it('nick and thierry mark the channel as read', async function () {
 		const nickClient = await getTestClientForUser(nick);
 		const nickChannel = nickClient.channel(channel.type, channel.id);
 		await nickChannel.watch();
@@ -1692,12 +1696,12 @@ describe('unread counts on hard delete messages', function() {
 		await thierryChannel.markRead();
 	});
 
-	it('tommaso hard delete the remaining messages', async function() {
+	it('tommaso hard delete the remaining messages', async function () {
 		await ssclient.deleteMessage(messages[1].message.id, true);
 		await ssclient.deleteMessage(messages[2].message.id, true);
 	});
 
-	it('unread counts should be zero for all the users', async function() {
+	it('unread counts should be zero for all the users', async function () {
 		const tommasoClient = await getTestClientForUser(tommaso);
 		// expect 0 conts since tommaso is the sender
 		expect(tommasoClient.health.me.unread_count).to.be.equal(0);
@@ -1715,13 +1719,13 @@ describe('unread counts on hard delete messages', function() {
 	});
 });
 
-describe('channel message search', function() {
+describe('channel message search', function () {
 	let authClient;
 	before(async () => {
 		authClient = await getTestClientForUser(uuidv4());
 	});
 
-	it('Basic Query (old format)', async function() {
+	it('Basic Query (old format)', async function () {
 		const channelId = uuidv4();
 		// add a very special message
 		const channel = authClient.channel('messaging', channelId);
@@ -1741,7 +1745,7 @@ describe('channel message search', function() {
 		);
 	});
 
-	it('invalid query argument type should return an error', async function() {
+	it('invalid query argument type should return an error', async function () {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
 			unique,
@@ -1754,7 +1758,7 @@ describe('channel message search', function() {
 		}
 	});
 
-	it('query message custom fields', async function() {
+	it('query message custom fields', async function () {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
 			unique,
@@ -1768,7 +1772,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.unique).to.equal(unique);
 	});
 
-	it('search by message type', async function() {
+	it('search by message type', async function () {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
 			unique,
@@ -1792,7 +1796,7 @@ describe('channel message search', function() {
 		expect(response.results.length).to.equal(2);
 	});
 
-	it('query message text and custom field', async function() {
+	it('query message text and custom field', async function () {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
 			unique,
@@ -1807,7 +1811,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.unique).to.equal(unique);
 	});
 
-	it('query messages with attachments', async function() {
+	it('query messages with attachments', async function () {
 		const unique = uuidv4();
 		const channel = authClient.channel('messaging', uuidv4(), {
 			unique,
@@ -1829,7 +1833,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.unique).to.be.undefined;
 	});
 
-	it('basic Query using $q syntax', async function() {
+	it('basic Query using $q syntax', async function () {
 		// add a very special message
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
@@ -1847,7 +1851,7 @@ describe('channel message search', function() {
 		);
 	});
 
-	it('query by message id', async function() {
+	it('query by message id', async function () {
 		// add a very special messsage
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
@@ -1861,7 +1865,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
 
-	it('query by message parent_id', async function() {
+	it('query by message parent_id', async function () {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
 		const smResp = await channel.sendMessage({ text: 'awesome response' });
@@ -1878,7 +1882,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(reply.message.id);
 	});
 
-	it('query parent_id $exists + custom field', async function() {
+	it('query parent_id $exists + custom field', async function () {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
 		const smResp = await channel.sendMessage({ text: 'awesome response' });
@@ -1896,7 +1900,7 @@ describe('channel message search', function() {
 		expect(response.results[0].message.id).to.equal(reply.message.id);
 	});
 
-	it('query by message reply count', async function() {
+	it('query by message reply count', async function () {
 		const channel = authClient.channel('messaging', uuidv4());
 		await channel.create();
 		const smResp = await channel.sendMessage({ text: 'awesome response' });
@@ -1914,12 +1918,12 @@ describe('channel message search', function() {
 	});
 });
 
-describe('search on deleted channels', function() {
+describe('search on deleted channels', function () {
 	const user = uuidv4();
 	const channelId = uuidv4();
 	let channel;
 	let client;
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', channelId, {
 			members: [user],
@@ -1927,7 +1931,7 @@ describe('search on deleted channels', function() {
 		await channel.create();
 	});
 
-	it('add some messages to the channel', async function() {
+	it('add some messages to the channel', async function () {
 		for (let i = 0; i < 5; i++) {
 			await channel.sendMessage({
 				text: `supercalifragilisticexpialidocious ${i}`,
@@ -1935,12 +1939,12 @@ describe('search on deleted channels', function() {
 		}
 	});
 
-	it('search by text', async function() {
+	it('search by text', async function () {
 		const resp = await channel.search('supercalifragilisticexpialidocious');
 		expect(resp.results.length).to.be.equal(5);
 	});
 
-	it('delete and recreate the channel', async function() {
+	it('delete and recreate the channel', async function () {
 		await channel.delete();
 		channel = client.channel('messaging', channelId, {
 			members: [user],
@@ -1948,17 +1952,17 @@ describe('search on deleted channels', function() {
 		await channel.create();
 	});
 
-	it('search on previously deleted chanel', async function() {
+	it('search on previously deleted chanel', async function () {
 		const resp = await channel.search('supercalifragilisticexpialidocious');
 		expect(resp.results.length).to.be.equal(0);
 	});
 });
 
-describe('pagination with invalid offset', function() {
+describe('pagination with invalid offset', function () {
 	let channel;
 	let client;
 	const user = uuidv4();
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4());
 		await channel.create();
@@ -1967,19 +1971,19 @@ describe('pagination with invalid offset', function() {
 			const m = await channel.sendMessage({ text: i.toString() });
 		}
 	});
-	it('offset > than total channel messages', async function() {
+	it('offset > than total channel messages', async function () {
 		const result = await channel.query({ messages: { limit: 10, offset: 35 } });
 		expect(result.messages.length).to.be.equal(0);
 	});
 });
 
-describe('update channel with reserved fields', function() {
+describe('update channel with reserved fields', function () {
 	const user = uuidv4();
 	const channelType = uuidv4();
 	const channelId = uuidv4();
 	let channel;
 	let client;
-	before(async function() {
+	before(async function () {
 		client = await getServerTestClient();
 
 		await client.createChannelType({
@@ -1994,11 +1998,11 @@ describe('update channel with reserved fields', function() {
 		await channel.watch();
 	});
 
-	it('should not fail when re-using channel.data', async function() {
+	it('should not fail when re-using channel.data', async function () {
 		await channel.update(channel.data);
 	});
 
-	it('should not fail when re-using channel._data', async function() {
+	it('should not fail when re-using channel._data', async function () {
 		await channel.update(channel._data);
 	});
 });

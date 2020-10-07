@@ -9,12 +9,12 @@ import FormData, { AppendOptions } from 'form-data';
  *
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
-  promise.then().catch(error => {
+  promise.then().catch((error) => {
     console.warn(`failed to do ${name}, ran into error: `, error);
   });
 }
 
-export const sleep = (m: number): Promise<void> => new Promise(r => setTimeout(r, m));
+export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
 export function isFunction<T>(value: Function | T): value is Function {
   return (
