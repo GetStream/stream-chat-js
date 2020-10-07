@@ -623,7 +623,8 @@ const executeAndWrite = async (func, name, type) => {
 
 		return;
 	} catch (error) {
-		console.log(`${func.name} failed with error: `, error);
+		console.log(`❌ ${func.name} failed with error: `, error);
+		process.exit(1);
 	}
 };
 
