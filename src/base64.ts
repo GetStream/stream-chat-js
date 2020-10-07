@@ -45,7 +45,7 @@ function map<T, U>(
 }
 
 export const encodeBase64 = (data: string): string =>
-  fromByteArray(new Uint8Array(map(data, char => char.charCodeAt(0))));
+  fromByteArray(new Uint8Array(map(data, (char) => char.charCodeAt(0))));
 
 // base-64 decoder throws exception if encoded string is not padded by '=' to make string length
 // in multiples of 4. So gonna use our own method for this purpose to keep backwards compatibility

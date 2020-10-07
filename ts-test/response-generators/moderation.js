@@ -1,4 +1,4 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const utils = require('../utils');
 
 async function banUsers() {
@@ -14,6 +14,15 @@ async function banUsers() {
 	});
 }
 
+async function createBlockList() {
+	const name = 'FWord';
+	const client = utils.getTestClient(true);
+
+	const returnValue = await client.createBlockList({ name, words: ['F*!k'] });
+	await client.deleteBlockList(name);
+	return returnValue;
+}
+
 async function createPermission() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.createPermission({
@@ -25,6 +34,18 @@ async function createPermission() {
 async function createRole() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.createRole(uuidv4());
+}
+
+async function deleteBlockList() {
+	const name = 'FWord';
+	const name2 = 'SWord';
+	const client = await utils.getTestClient(true);
+	await client.createBlockList({ name, words: ['F*!k'] });
+	await client.createBlockList({ name: name2, words: ['S!*t'] });
+
+	const returnValue = await client.deleteBlockList(name);
+	await client.deleteBlockList(name2);
+	return returnValue;
 }
 
 async function deletePermission() {
@@ -118,6 +139,16 @@ async function flagUser() {
 	return await authClient.flagUser(evilId);
 }
 
+async function getBlockList() {
+	const name = 'FWord';
+	const client = await utils.getTestClient(true);
+	await client.createBlockList({ name, words: ['F*!k'] });
+
+	const returnValue = await client.getBlockList(name);
+	await client.deleteBlockList(name);
+	return returnValue;
+}
+
 async function getPermission() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
@@ -125,6 +156,16 @@ async function getPermission() {
 		resource: 'ReadChannel',
 	});
 	return await authClient.getPermission('TestGetPermission');
+}
+
+async function listBlockLists() {
+	const name = 'FWord';
+	const client = await utils.getTestClient(true);
+	await client.createBlockList({ name, words: ['F*!k'] });
+
+	const returnValue = await client.listBlockLists();
+	await client.deleteBlockList(name);
+	return returnValue;
 }
 
 async function listPermissions() {
@@ -251,6 +292,18 @@ async function unmuteUser() {
 	return await client1.unmuteUser(user2);
 }
 
+async function updateBlockList() {
+	const name = 'FWord';
+	const client = await utils.getTestClient(true);
+	await client.createBlockList({ name, words: ['F*!k'] });
+
+	const returnValue = await client.updateBlockList(name, {
+		words: ['S*!t'],
+	});
+	await client.deleteBlockList(name);
+	return returnValue;
+}
+
 async function updatePermission() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
@@ -264,13 +317,17 @@ async function updatePermission() {
 
 module.exports = {
 	banUsers,
+	createBlockList,
 	createPermission,
 	createRole,
+	deleteBlockList,
 	deletePermission,
 	deleteRole,
 	flagMessage,
 	flagUser,
+	getBlockList,
 	getPermission,
+	listBlockLists,
 	listPermissions,
 	listRoles,
 	muteUser,
@@ -278,5 +335,6 @@ module.exports = {
 	unflagMessage,
 	unflagUser,
 	unmuteUser,
+	updateBlockList,
 	updatePermission,
 };

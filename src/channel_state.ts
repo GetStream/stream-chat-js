@@ -95,6 +95,7 @@ export class ChannelState<
   members: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
   }>;
+  unreadCount: number;
   membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
 
@@ -155,6 +156,7 @@ export class ChannelState<
       [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
     }>({});
     this.membership = Immutable<ChannelMembership<UserType>>({});
+    this.unreadCount = 0;
     this.last_message_at =
       channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)
@@ -397,7 +399,7 @@ export class ChannelState<
   ) {
     const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
       old.filter(
-        item => item.type !== reaction.type || item.user?.id !== reaction.user?.id,
+        (item) => item.type !== reaction.type || item.user?.id !== reaction.user?.id,
       );
     let newMessage = message.update('own_reactions', filterReaction);
     newMessage = newMessage.update('latest_reactions', filterReaction);
@@ -574,7 +576,7 @@ export class ChannelState<
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter(
-      message => !(!!message.id && !!msg.id && message.id === msg.id),
+      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
     );
 
     return { removed: result.length < msgArray.length, result };
@@ -584,7 +586,7 @@ export class ChannelState<
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.messages.filter(message => message.type !== 'error');
+    const filteredMessages = this.messages.filter((message) => message.type !== 'error');
 
     this.messages = filteredMessages;
   }

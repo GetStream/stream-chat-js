@@ -8,7 +8,7 @@ import {
 	expectHTTPErrorCode,
 	sleep,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
@@ -26,7 +26,7 @@ Promise.config({
 	},
 });
 
-describe('Query Members', function() {
+describe('Query Members', function () {
 	const mod = 'mod-' + uuidv4();
 	const rob = 'rob-' + uuidv4();
 	const rob2 = 'rob2-' + uuidv4();
@@ -37,7 +37,7 @@ describe('Query Members', function() {
 	const banned = 'banned-' + uuidv4();
 	let channel;
 	let ssClient;
-	before(async function() {
+	before(async function () {
 		ssClient = await getServerTestClient();
 		await ssClient.updateUser({ id: rob, name: 'Robert' });
 		await ssClient.updateUser({ id: rob2, name: 'Robert2' });
@@ -71,7 +71,7 @@ describe('Query Members', function() {
 		await clientR.channel('messaging', channel.id).rejectInvite();
 	});
 
-	it('with multiple filters client side', async function() {
+	it('with multiple filters client side', async function () {
 		const csClient = await getTestClientForUser(mod);
 		const csChannel = csClient.channel('messaging', channel.id);
 		const { members } = await csChannel.queryMembers({
@@ -111,13 +111,13 @@ describe('Query Members', function() {
 		expect(members[4].user.id).to.be.equal(invited);
 	});
 
-	it('with name Robert', async function() {
+	it('with name Robert', async function () {
 		const { members } = await channel.queryMembers({ name: 'Robert' });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(rob);
 	});
 
-	it('autocomplete member with name Robert', async function() {
+	it('autocomplete member with name Robert', async function () {
 		const { members } = await channel.queryMembers({
 			name: { $autocomplete: 'Rob' },
 		});
@@ -127,7 +127,7 @@ describe('Query Members', function() {
 		expect(members[1].user.id).to.be.equal(rob2);
 	});
 
-	it('query without filters return all the members and sort by name', async function() {
+	it('query without filters return all the members and sort by name', async function () {
 		const { members } = await channel.queryMembers({}, { name: 1 });
 		expect(members.length).to.be.equal(8);
 
@@ -141,7 +141,7 @@ describe('Query Members', function() {
 		expect(members[7].user.name).to.be.equal('Tomas');
 	});
 
-	it('paginate members', async function() {
+	it('paginate members', async function () {
 		const { members } = await channel.queryMembers({});
 		expect(members.length).to.be.equal(8);
 		for (let i = 0; i < members.length; i++) {
@@ -155,27 +155,27 @@ describe('Query Members', function() {
 		}
 	});
 
-	it('member with name containing Robert', async function() {
+	it('member with name containing Robert', async function () {
 		const { members } = await channel.queryMembers({ name: { $q: 'Rob' } });
 		expect(members.length).to.be.equal(2);
 		expect(members[0].user.id).to.be.equal(rob);
 		expect(members[1].user.id).to.be.equal(rob2);
 	});
 
-	it('query members by id', async function() {
+	it('query members by id', async function () {
 		const { members } = await channel.queryMembers({ id: mod });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(mod);
 	});
 
-	it('query multiple users by id', async function() {
+	it('query multiple users by id', async function () {
 		const { members } = await channel.queryMembers({ id: { $in: [rob, adam] } });
 		expect(members.length).to.be.equal(2);
 		expect(members[0].user.id).to.be.equal(rob);
 		expect(members[1].user.id).to.be.equal(adam);
 	});
 
-	it('query multiple users by name', async function() {
+	it('query multiple users by name', async function () {
 		const { members } = await channel.queryMembers({
 			name: { $in: ['Robert', 'Robert2'] },
 		});
@@ -184,49 +184,49 @@ describe('Query Members', function() {
 		expect(members[1].user.id).to.be.equal(rob2);
 	});
 
-	it('query members with pending invites', async function() {
+	it('query members with pending invites', async function () {
 		const { members } = await channel.queryMembers({ invite: 'pending' });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(pending);
 	});
 
-	it('query members with accepted invites', async function() {
+	it('query members with accepted invites', async function () {
 		const { members } = await channel.queryMembers({ invite: 'accepted' });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(invited);
 	});
 
-	it('query members with rejected invites', async function() {
+	it('query members with rejected invites', async function () {
 		const { members } = await channel.queryMembers({ invite: 'rejected' });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(rejected);
 	});
 
-	it('query channel moderators', async function() {
+	it('query channel moderators', async function () {
 		const { members } = await channel.queryMembers({ is_moderator: true });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(mod);
 	});
 
-	it('query for banned members', async function() {
+	it('query for banned members', async function () {
 		const { members } = await channel.queryMembers({ banned: true });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(banned);
 	});
 
-	it('query for members not banned', async function() {
+	it('query for members not banned', async function () {
 		const { members } = await channel.queryMembers({ banned: false });
 		expect(members.length).to.be.equal(7);
 	});
 
-	it('weird queries work fine', async function() {
+	it('weird queries work fine', async function () {
 		const { members } = await channel.queryMembers({
 			$or: [{ $nor: [{ is_moderator: true }] }, { is_moderator: true }],
 		});
 		expect(members.length).to.be.equal(8);
 	});
 
-	it('query by cid is not allowed', async function() {
+	it('query by cid is not allowed', async function () {
 		const results = channel.queryMembers({ cid: channel.cid });
 		await expectHTTPErrorCode(
 			400,
@@ -235,7 +235,7 @@ describe('Query Members', function() {
 		);
 	});
 
-	it('invalid fields return an error', async function() {
+	it('invalid fields return an error', async function () {
 		const results = channel.queryMembers({ invalid: channel.cid });
 		await expectHTTPErrorCode(
 			400,
@@ -244,7 +244,7 @@ describe('Query Members', function() {
 		);
 	});
 
-	it('invalid operator for field', async function() {
+	it('invalid operator for field', async function () {
 		const results = channel.queryMembers({ id: { $q: 's' } });
 		await expectHTTPErrorCode(
 			400,
@@ -253,7 +253,7 @@ describe('Query Members', function() {
 		);
 	});
 
-	it('invalid invite value', async function() {
+	it('invalid invite value', async function () {
 		const results = channel.queryMembers({ invite: 'sd' });
 		await expectHTTPErrorCode(
 			400,
@@ -262,14 +262,14 @@ describe('Query Members', function() {
 		);
 	});
 
-	it('query members fills role correctly', async function() {
+	it('query members fills role correctly', async function () {
 		const { members } = await channel.queryMembers({ id: mod });
 		expect(members.length).to.be.equal(1);
 		expect(members[0].user.id).to.be.equal(mod);
 		expect(members[0].role).to.be.equal('owner');
 	});
 
-	it('queryMembers in distinct channels', async function() {
+	it('queryMembers in distinct channels', async function () {
 		const creatorClient = await getTestClientForUser(rob);
 		const distinctChannel = creatorClient.channel('messaging', {
 			members: [rob, adam, mod],
@@ -283,7 +283,7 @@ describe('Query Members', function() {
 		expect(result.members[0].user.id).to.be.equal(rob);
 	});
 
-	describe('query by user last_active', function() {
+	describe('query by user last_active', function () {
 		let channel;
 		const user1 = 'u1-' + uuidv4();
 		const user2 = 'u2-' + uuidv4();
@@ -292,7 +292,7 @@ describe('Query Members', function() {
 		let user1LastActive;
 		let user2LastActive;
 
-		before(async function() {
+		before(async function () {
 			await createUsers([user1, user2, user3]);
 
 			channel = ssClient.channel('messaging', uuidv4(), {
@@ -316,8 +316,8 @@ describe('Query Members', function() {
 				{},
 			);
 
-			const getUser = function(user) {
-				return function(u) {
+			const getUser = function (user) {
+				return function (u) {
 					return u.id === user;
 				};
 			};
@@ -326,19 +326,19 @@ describe('Query Members', function() {
 			user2LastActive = resp.users.filter(getUser(user2))[0].last_active;
 		});
 
-		it('$eq match ', async function() {
+		it('$eq match ', async function () {
 			const resp = await channel.queryMembers({ last_active: user1LastActive });
 			expect(resp.members).to.be.length(1);
 			expect(resp.members[0].user.id).to.be.equal(user1);
 		});
 
-		it('null match ', async function() {
+		it('null match ', async function () {
 			const resp = await channel.queryMembers({ last_active: null });
 			expect(resp.members).to.be.length(1);
 			expect(resp.members[0].user.id).to.be.equal(user3);
 		});
 
-		it('$gt', async function() {
+		it('$gt', async function () {
 			const resp = await channel.queryMembers({
 				last_active: { $gt: user1LastActive },
 			});
@@ -346,7 +346,7 @@ describe('Query Members', function() {
 			expect(resp.members[0].user.id).to.be.equal(user2);
 		});
 
-		it('$gte', async function() {
+		it('$gte', async function () {
 			const resp = await channel.queryMembers({
 				last_active: { $gte: user1LastActive },
 			});
@@ -355,14 +355,14 @@ describe('Query Members', function() {
 			expect(resp.members[1].user.id).to.be.equal(user2);
 		});
 
-		it('$lt', async function() {
+		it('$lt', async function () {
 			const resp = await channel.queryMembers({
 				last_active: { $lt: user1LastActive },
 			});
 			expect(resp.members).to.be.length(0);
 		});
 
-		it('$lte', async function() {
+		it('$lte', async function () {
 			const resp = await channel.queryMembers({
 				last_active: { $lte: user1LastActive },
 			});
@@ -370,14 +370,14 @@ describe('Query Members', function() {
 			expect(resp.members[0].user.id).to.be.equal(user1);
 		});
 
-		it('$ne null', async function() {
+		it('$ne null', async function () {
 			const resp = await channel.queryMembers({ last_active: { $ne: null } });
 			expect(resp.members).to.be.length(2);
 			expect(resp.members[0].user.id).to.be.equal(user1);
 			expect(resp.members[1].user.id).to.be.equal(user2);
 		});
 
-		it('$ne null reverse', async function() {
+		it('$ne null reverse', async function () {
 			const resp = await channel.queryMembers(
 				{ last_active: { $ne: null } },
 				{ created_at: -1 },
@@ -387,7 +387,7 @@ describe('Query Members', function() {
 			expect(resp.members[1].user.id).to.be.equal(user1);
 		});
 
-		it('unsupported operator', async function() {
+		it('unsupported operator', async function () {
 			const p = channel.queryMembers({
 				last_active: { $in: [user1LastActive] },
 			});
@@ -398,7 +398,7 @@ describe('Query Members', function() {
 		});
 	});
 
-	describe('query by member.user.name', function() {
+	describe('query by member.user.name', function () {
 		const zappa = { id: 'frank-' + uuidv4(), name: 'Frank Zappa' };
 		let zappaClient;
 		const nick = { id: 'nick-m-' + uuidv4(), name: 'Nick Cave' };
@@ -412,7 +412,7 @@ describe('Query Members', function() {
 		let nonameChannel;
 		let ssClient;
 		const identifier = uuidv4();
-		before(async function() {
+		before(async function () {
 			ssClient = await getServerTestClient();
 			await ssClient.upsertUsers([zappa, nick, peter, noname]);
 			channel = ssClient.channel('messaging', uuidv4(), {
@@ -433,7 +433,7 @@ describe('Query Members', function() {
 			nonameClient = await getTestClientForUser(noname.id);
 		});
 
-		it('search by last name', async function() {
+		it('search by last name', async function () {
 			const resp = await nickClient.queryChannels({
 				'member.user.name': { $autocomplete: 'Zappa' },
 			});
@@ -441,7 +441,7 @@ describe('Query Members', function() {
 			expect(resp[0].cid).to.be.equal(channel.cid);
 		});
 
-		it('search by similar member name should match', async function() {
+		it('search by similar member name should match', async function () {
 			let resp = await nickClient.queryChannels({
 				'member.user.name': { $autocomplete: 'Nick' },
 			});
@@ -459,7 +459,7 @@ describe('Query Members', function() {
 			expect(resp[0].cid).to.be.equal(channel.cid);
 		});
 
-		it('search by exact name', async function() {
+		it('search by exact name', async function () {
 			const resp = await nickClient.queryChannels({
 				'member.user.name': nickClient.name,
 				identifier,
@@ -468,7 +468,7 @@ describe('Query Members', function() {
 			expect(resp[0].cid).to.be.equal(channel.cid);
 		});
 
-		it('search by null match should return 2 entries for noname', async function() {
+		it('search by null match should return 2 entries for noname', async function () {
 			const resp = await nonameClient.queryChannels({
 				'member.user.name': null,
 				identifier,
@@ -478,7 +478,7 @@ describe('Query Members', function() {
 			expect(resp[1].cid).to.be.equal(channel.cid);
 		});
 
-		it('search by null match should return 1 entries for zappaClient', async function() {
+		it('search by null match should return 1 entries for zappaClient', async function () {
 			const resp = await zappaClient.queryChannels({
 				'member.user.name': null,
 				identifier,
@@ -487,7 +487,7 @@ describe('Query Members', function() {
 			expect(resp[0].cid).to.be.equal(channel.cid);
 		});
 
-		it('return all entries for server side', async function() {
+		it('return all entries for server side', async function () {
 			const resp = await ssClient.queryChannels({
 				'member.user.name': null,
 				identifier,

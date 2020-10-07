@@ -61,6 +61,12 @@ const executables = [
 		type:
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['create']>>",
 	},
+	{
+		f: rg.createBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['createBlockList']>>",
+	},
 	// createChannelType has a limit. So only run this when needed.
 	// {
 	// 	f: rg.createChannelType,
@@ -84,6 +90,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['deactivateUser']>>",
+	},
+	{
+		f: rg.deleteBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['deleteBlockList']>>",
 	},
 	{
 		f: rg.deleteChannel,
@@ -178,6 +190,12 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getAppSettings']>>",
 	},
 	{
+		f: rg.getBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getBlockList']>>",
+	},
+	{
 		f: rg.getChannelType,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -248,6 +266,12 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type:
 			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+	},
+	{
+		f: rg.listBlockLists,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['listBlockLists']>>",
 	},
 	{
 		f: rg.listChannelTypes,
@@ -467,6 +491,12 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unmuteUser']>>",
 	},
 	{
+		f: rg.updateBlockList,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description: string }, string & {}, {}, {}, {}, {}>['updateBlockList']>>",
+	},
+	{
 		f: rg.updateChannel,
 		imports: ['Channel', 'Unpacked'],
 		type:
@@ -544,7 +574,7 @@ const run = async () => {
 	let imports = '';
 	const types = [];
 
-	executables.forEach(i => {
+	executables.forEach((i) => {
 		if (i.imports) {
 			types.push(...i.imports);
 		} else {
@@ -558,7 +588,7 @@ const run = async () => {
 
 	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
 	tsFileName = `${__dirname}/data.ts`;
-	fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
+	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
 		if (err) {
 			return console.log(err);
 		}
@@ -580,7 +610,7 @@ const executeAndWrite = async (func, name, type) => {
 			`export const ${func.name}Response: ${type} = ${JSON.stringify(
 				response,
 			)}; \n`,
-			function(err) {
+			function (err) {
 				if (err) {
 					return console.log(err);
 				}
@@ -593,7 +623,8 @@ const executeAndWrite = async (func, name, type) => {
 
 		return;
 	} catch (error) {
-		console.log(`${func.name} failed with error: `, error);
+		console.log(`❌ ${func.name} failed with error: `, error);
+		process.exit(1);
 	}
 };
 

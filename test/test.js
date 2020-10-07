@@ -19,7 +19,7 @@ import {
 	createUsers,
 	sleep,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 chai.use(assertArrays);
@@ -104,8 +104,8 @@ describe('Chat', () => {
 			expect(response.users.length).to.equal(1);
 
 			// this update should trigger the user.updated event..
-			await new Promise(resolve => {
-				authClient.on('user.updated', event => {
+			await new Promise((resolve) => {
+				authClient.on('user.updated', (event) => {
 					expect(event.user.id).to.equal(userID);
 					resolve();
 				});
@@ -140,8 +140,8 @@ describe('Chat', () => {
 			expect(response.users.length).to.equal(1);
 
 			// this update should trigger the user.updated event..
-			await new Promise(resolve => {
-				authClient.on('user.updated', event => {
+			await new Promise((resolve) => {
+				authClient.on('user.updated', (event) => {
 					expect(event.user.id).to.equal(u1);
 					expect(event.user.name).to.equal('Not so awesome');
 					expect(authClient.user.name).equal('Not so awesome');
@@ -179,13 +179,13 @@ describe('Chat', () => {
 	});
 
 	describe('Roundtrip', () => {
-		it('Initialize, listen and send message', function(done) {
+		it('Initialize, listen and send message', function (done) {
 			async function runtest() {
 				// state includes messages, who's read the messages, channel name, info and the list of members
 				// initialize also subscribes to the channel so we receive WS events
 				await channel.watch();
 				// listen  to message.new
-				channel.on('message.new', event => {
+				channel.on('message.new', (event) => {
 					if (event.message.text === 'helloworld :world: rocks 123') {
 						done();
 					}
@@ -195,7 +195,7 @@ describe('Chat', () => {
 				const text = 'helloworld :world: rocks 123';
 				await channel.sendMessage({ text, customfield: '123' });
 			}
-			runtest().catch(exc => {
+			runtest().catch((exc) => {
 				done(exc);
 			});
 		});
@@ -334,7 +334,7 @@ describe('Chat', () => {
 					{},
 				);
 				let bannedUserFound = false;
-				bannedUsers.users.forEach(function(user) {
+				bannedUsers.users.forEach(function (user) {
 					expect(user.banned).to.be.true;
 					if (user.id === banned) {
 						bannedUserFound = true;
@@ -462,14 +462,14 @@ describe('Chat', () => {
 
 				it('removes device from old user', async () => {
 					const response = await client.getDevices();
-					expect(response.devices.map(d => d.id)).to.not.have.members([
+					expect(response.devices.map((d) => d.id)).to.not.have.members([
 						deviceID,
 					]);
 				});
 
 				it('adds device to new user', async () => {
 					const response = await newClient.getDevices();
-					expect(response.devices.map(d => d.id)).to.have.members([deviceID]);
+					expect(response.devices.map((d) => d.id)).to.have.members([deviceID]);
 				});
 			});
 		});
@@ -620,7 +620,7 @@ describe('Chat', () => {
 	});
 
 	describe('Server Side Integration', () => {
-		it('Create token with expiration', function(done) {
+		it('Create token with expiration', function (done) {
 			const token = serverAuthClient.createToken('user-id', 1538709600);
 			expect(token.split('.')[1]).to.eq(
 				'eyJ1c2VyX2lkIjoidXNlci1pZCIsImV4cCI6MTUzODcwOTYwMH0',
@@ -628,7 +628,7 @@ describe('Chat', () => {
 			done();
 		});
 
-		it('Create token without expiration', function(done) {
+		it('Create token without expiration', function (done) {
 			const token = serverAuthClient.createToken('user-id');
 			expect(token.split('.')[1]).to.eq('eyJ1c2VyX2lkIjoidXNlci1pZCJ9');
 			done();
@@ -701,7 +701,7 @@ describe('Chat', () => {
 				'Marcello!?',
 			];
 
-			testCases.forEach(name => {
+			testCases.forEach((name) => {
 				const b64str = encodeBase64(name);
 				const str = decodeBase64(b64str);
 				expect(str).to.equal(name);
@@ -859,7 +859,7 @@ describe('Chat', () => {
 
 			const response = await client.setUser(user, token);
 
-			const compareUser = userResponse => {
+			const compareUser = (userResponse) => {
 				const expectedData = { role: 'user', ...user };
 				expect(userResponse).to.contains(expectedData);
 				expect(userResponse.online).to.equal(true);
@@ -953,8 +953,8 @@ describe('Chat', () => {
 					{ presence: true },
 				);
 
-				await new Promise(resolve => {
-					authClient.on('user.updated', event => {
+				await new Promise((resolve) => {
+					authClient.on('user.updated', (event) => {
 						expect(event.user.id).to.equal(user.id);
 						resolve();
 					});
@@ -1052,7 +1052,7 @@ describe('Chat', () => {
 
 	describe('Messages', () => {
 		describe('Success', () => {
-			it('Subscribe to many channels', function(done) {
+			it('Subscribe to many channels', function (done) {
 				async function runtest() {
 					// A Messenger or Intercom type of application needs to query many channels at once and subscribe to all
 					// It requires basic filtering and sorting.
@@ -1069,7 +1069,7 @@ describe('Chat', () => {
 					}
 					done();
 				}
-				runtest().catch(exc => {
+				runtest().catch((exc) => {
 					done(exc);
 				});
 			});
@@ -1120,7 +1120,7 @@ describe('Chat', () => {
 				let channels = await authClient.queryChannels(filter, sort, options);
 				expect(channels.length).to.equal(5);
 				expect(channels.length).to.equal(5);
-				expect(channels.map(c => c.data.order)).to.eql([4, 3, 2, 1, 0]);
+				expect(channels.map((c) => c.data.order)).to.eql([4, 3, 2, 1, 0]);
 
 				channels = await authClient.queryChannels(
 					filter,
@@ -1128,7 +1128,7 @@ describe('Chat', () => {
 					options,
 				);
 				expect(channels.length).to.equal(5);
-				expect(channels.map(c => c.data.order)).to.eql([0, 1, 2, 3, 4]);
+				expect(channels.map((c) => c.data.order)).to.eql([0, 1, 2, 3, 4]);
 			});
 
 			it('Channel order by updated_at', async () => {
@@ -1149,7 +1149,7 @@ describe('Chat', () => {
 				let channels = await authClient.queryChannels(filter, sort, options);
 				expect(channels.length).to.equal(5);
 				expect(channels.length).to.equal(5);
-				expect(channels.map(c => c.data.order)).to.eql([4, 3, 2, 1, 0]);
+				expect(channels.map((c) => c.data.order)).to.eql([4, 3, 2, 1, 0]);
 
 				channels = await authClient.queryChannels(
 					filter,
@@ -1157,7 +1157,7 @@ describe('Chat', () => {
 					options,
 				);
 				expect(channels.length).to.equal(5);
-				expect(channels.map(c => c.data.order)).to.eql([0, 1, 2, 3, 4]);
+				expect(channels.map((c) => c.data.order)).to.eql([0, 1, 2, 3, 4]);
 			});
 
 			it('Channel pagination', async () => {
@@ -1490,13 +1490,13 @@ describe('Chat', () => {
 				expect(response.message.algo).to.equal('randomforest');
 			});
 
-			it('Delete a Chat message', function(done) {
+			it('Delete a Chat message', function (done) {
 				async function runTest() {
 					const text = 'testing the delete flow, does it work?';
 					const data = await channel.sendMessage({ text });
 					expect(data.message.text).to.equal(text);
 
-					channel.on('message.deleted', event => {
+					channel.on('message.deleted', (event) => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
 						done();
@@ -1506,7 +1506,7 @@ describe('Chat', () => {
 					);
 					expect(deleteResponse.message.deleted_at).to.not.be.null;
 				}
-				runTest().catch(exc => {
+				runTest().catch((exc) => {
 					done(exc);
 				});
 			});
@@ -1735,7 +1735,7 @@ describe('Chat', () => {
 		const userMap = {};
 		const users = [];
 		const unique = uuidv4();
-		const username = function(index) {
+		const username = function (index) {
 			return 'user-query-' + unique + '-' + index.toString();
 		};
 		before(async () => {
@@ -1772,7 +1772,7 @@ describe('Chat', () => {
 			expect(response.users.length).equal(1);
 			expect(response.users[0]).to.be.eql(users[0]);
 		});
-		it('get users $in query bad format', function(done) {
+		it('get users $in query bad format', function (done) {
 			authClient
 				.queryUsers({ id: { $in: username(0) } }, {}, { presence: false })
 				.then(() => done('should fail'))
@@ -1933,10 +1933,10 @@ describe('Chat', () => {
 			expect(state.channel.member_count).to.equal(2);
 		});
 
-		it('Change the name and set a custom color', done => {
+		it('Change the name and set a custom color', (done) => {
 			async function runTest() {
 				let eventCount = 0;
-				channel.on('channel.updated', event => {
+				channel.on('channel.updated', (event) => {
 					expect(event.channel.color).to.equal('green');
 					eventCount += 1;
 					if (eventCount === 2) {
@@ -1944,7 +1944,7 @@ describe('Chat', () => {
 						done();
 					}
 				});
-				channel.on('message.new', event => {
+				channel.on('message.new', (event) => {
 					expect(event.message.type).to.equal('system');
 
 					eventCount += 1;
@@ -1966,7 +1966,7 @@ describe('Chat', () => {
 				expect(response.channel.color).to.equal('green');
 				expect(response.channel.name).to.equal('myspecialchannel');
 			}
-			runTest().catch(exc => {
+			runTest().catch((exc) => {
 				done(exc);
 			});
 		});
@@ -1991,50 +1991,8 @@ describe('Chat', () => {
 	});
 
 	describe('Events', () => {
-		/*
-		 * Events enable the typing start, typing stop and mark read states
-		 */
-		it('Typing Start', async () => {
-			// run for 5 seconds or till typing.stop is received
-			await conversation.sendEvent({
-				type: 'typing.start',
-			});
-		});
-
-		it('Typing Stop', function(done) {
-			async function runTest() {
-				conversation.on('typing.stop', event => {
-					// start, stop
-					expect(conversation.state.typing.asMutable()).to.deep.equal({});
-					conversation.listeners = {};
-					done();
-				});
-				// run for 5 seconds or till typing.stop is received
-				await conversation.sendEvent({
-					type: 'typing.start',
-				});
-				await conversation.sendEvent({
-					type: 'typing.stop',
-				});
-			}
-			runTest().catch(exc => {
-				done(exc);
-			});
-		});
-
-		it('Typing Helpers', async () => {
-			let occurrences = 0;
-			conversation.on('typing.start', () => occurrences++);
-
-			await conversation.keystroke();
-			await conversation.keystroke();
-
-			if (occurrences === 0) throw Error('typing.start never called');
-			if (occurrences > 1) throw Error('too many typing.start events');
-		});
-
 		it('Message Read', async () => {
-			conversation.on('message.read', event => {
+			conversation.on('message.read', (event) => {
 				expect(event.user.id).to.equal('thierry2');
 				expect(conversation.state.read.thierry2).to.not.be.null;
 			});
@@ -2053,7 +2011,7 @@ describe('Chat', () => {
 				const text = `message-${i}`;
 				await conversation.sendMessage({ text });
 			}
-			await new Promise(resolve => setTimeout(resolve, 2000));
+			await new Promise((resolve) => setTimeout(resolve, 2000));
 			const lastMessage = conversation.lastMessage();
 			expect(lastMessage.text).to.equal('message-7');
 		});
@@ -2102,6 +2060,100 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('Typing Events', () => {
+		let eventChannel;
+		beforeEach(async () => {
+			eventChannel = authClient.channel('messaging', uuidv4(), {
+				members: ['thierry', 'tommaso'],
+			});
+			await eventChannel.watch();
+		});
+
+		/*
+		 * Events enable the typing start, typing stop and mark read states
+		 */
+		it('Typing Start', async () => {
+			// run for 5 seconds or till typing.stop is received
+			await eventChannel.sendEvent({ type: 'typing.start' });
+		});
+
+		it('Typing Stop', function (done) {
+			(async () => {
+				eventChannel.on('typing.stop', (event) => {
+					// start, stop
+					expect(event.parent_id).to.be.equal(undefined);
+					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					done();
+				});
+
+				eventChannel.on('typing.start', (event) => {
+					expect(event.parent_id).to.be.equal(undefined);
+				});
+
+				// run for 5 seconds or till typing.stop is received
+				await eventChannel.sendEvent({ type: 'typing.start' });
+				await eventChannel.sendEvent({ type: 'typing.stop' });
+			})().catch(done);
+		});
+
+		it('Typing events in Thread', function (done) {
+			(async () => {
+				const {
+					message: { id },
+				} = await eventChannel.sendMessage({ text: 'message' });
+
+				const timeout = setTimeout(() => {
+					throw new Error('Typing tests took too long');
+				}, 15000);
+
+				let started = false;
+				eventChannel.on('typing.stop', (event) => {
+					if (!started) throw new Error('typing.start event failed');
+
+					expect(event.parent_id).to.be.equal(id);
+					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					clearTimeout(timeout);
+					done();
+				});
+
+				eventChannel.on('typing.start', (event) => {
+					expect(event.parent_id).to.be.equal(id);
+					expect(eventChannel.state.typing.asMutable()).to.not.be.empty;
+					started = true;
+				});
+
+				await eventChannel.sendEvent({ type: 'typing.start', parent_id: id });
+				await eventChannel.sendEvent({ type: 'typing.stop', parent_id: id });
+			})().catch(done);
+		});
+
+		it('Keystroke in thread', (done) => {
+			(async () => {
+				const {
+					message: { id },
+				} = await eventChannel.sendMessage({ text: 'message' });
+
+				eventChannel.on('typing.start', (event) => {
+					expect(event.parent_id).to.be.equal(id);
+					done();
+				});
+
+				await eventChannel.keystroke(id);
+			})().catch(done);
+		});
+
+		it('Typing Helpers', async () => {
+			let occurrences = 0;
+			eventChannel.on('typing.start', () => occurrences++);
+
+			await eventChannel.keystroke();
+			await eventChannel.keystroke();
+
+			if (occurrences === 0) throw Error('typing.start never called');
+			if (occurrences > 1) throw Error('too many typing.start events');
+		});
+	});
+
 	describe('Channel State', () => {
 		it('Should include last_message_at', async () => {
 			const c = authClient.channel('messaging', uuidv4());
@@ -2137,7 +2189,7 @@ describe('Chat', () => {
 		});
 
 		// This is to make sure event is handled on client and channel level before listeners are executed on them.
-		it.skip('Should update before event listeners are executed', function(done) {
+		it.skip('Should update before event listeners are executed', function (done) {
 			async function runTest() {
 				const id = uuidv4();
 				const c = authClient.channel('messaging', id);
@@ -2160,7 +2212,7 @@ describe('Chat', () => {
 				await c.sendMessage({ text: messageTexts[2] });
 			}
 
-			runTest().catch(exc => {
+			runTest().catch((exc) => {
 				done(exc);
 			});
 		});
@@ -2333,8 +2385,8 @@ describe('Chat', () => {
 			expect(response.watchers[fk].role).to.eql('anonymous');
 		});
 
-		it('it should receive messages', function(done) {
-			channel.on('message.new', event => {
+		it('it should receive messages', function (done) {
+			channel.on('message.new', (event) => {
 				if (event.message.text === 'helloworld :world: rocks 123') {
 					done();
 				}
@@ -2342,7 +2394,7 @@ describe('Chat', () => {
 
 			serverChannel
 				.sendMessage({ text: 'helloworld :world: rocks 123', user: owner })
-				.catch(e => {
+				.catch((e) => {
 					done('failed to send a message!');
 				});
 		});
@@ -2480,7 +2532,7 @@ describe('Chat', () => {
 			await channel.create();
 		});
 
-		it('should validate that mentioned_users is a list of existing user IDs', done => {
+		it('should validate that mentioned_users is a list of existing user IDs', (done) => {
 			channel
 				.sendMessage({
 					text: '@thierry how are you doing?',
@@ -2668,8 +2720,8 @@ describe('Chat', () => {
 
 				await channel.sendMessage({ text: 'channel hide test' });
 
-				event = new Promise(resolve => {
-					channel.on('channel.hidden', event => {
+				event = new Promise((resolve) => {
+					channel.on('channel.hidden', (event) => {
 						if (event.clear_history) {
 							resolve();
 						}
@@ -2902,9 +2954,9 @@ describe('Chat', () => {
 				expect(data.file).to.be.not.empty;
 			});
 
-			it('Upload a stream', done => {
-				https.get('https://nodejs.org/static/legacy/images/logo.png', file => {
-					channel.sendFile(file).then(data => {
+			it('Upload a stream', (done) => {
+				https.get('https://nodejs.org/static/legacy/images/logo.png', (file) => {
+					channel.sendFile(file).then((data) => {
 						expect(data.file).to.be.not.empty;
 						done();
 					});
@@ -2941,7 +2993,7 @@ describe('Chat', () => {
 					),
 				];
 				const results = await Promise.all(promises);
-				const attachments = results.map(response => ({
+				const attachments = results.map((response) => ({
 					type: 'image',
 					thumb_url: response.file,
 					asset_url: response.file,

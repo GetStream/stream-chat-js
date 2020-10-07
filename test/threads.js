@@ -14,7 +14,7 @@ import {
 	sleep,
 	runAndLogPromise,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
@@ -37,7 +37,7 @@ async function getTestMessage(text, channel) {
 	return data.message;
 }
 
-describe('Threads and Replies', function() {
+describe('Threads and Replies', function () {
 	let replyClient;
 	let channel;
 
@@ -52,7 +52,7 @@ describe('Threads and Replies', function() {
 		channel.listeners = {};
 	});
 
-	it('Add Message with Parent should create a channel.state.threads entry', done => {
+	it('Add Message with Parent should create a channel.state.threads entry', (done) => {
 		async function runTest() {
 			const text = 'super interesting topic....';
 			const response = await channel.sendMessage({ text });
@@ -66,7 +66,7 @@ describe('Threads and Replies', function() {
 			});
 		}
 
-		channel.on('message.new', event => {
+		channel.on('message.new', (event) => {
 			const parentID = event.message.parent_id;
 			const replyID = event.message.id;
 			if (parentID) {
@@ -226,8 +226,8 @@ describe('Threads and Replies', function() {
 			id_gt: replies[3].id,
 			limit: 10,
 		});
-		let wantIds = replies.slice(4, 10).map(m => m.id);
-		let gotIds = response.messages.map(m => m.id);
+		let wantIds = replies.slice(4, 10).map((m) => m.id);
+		let gotIds = response.messages.map((m) => m.id);
 		expect(wantIds).to.eql(gotIds);
 
 		// query replies should return messages 3 to 9
@@ -235,24 +235,24 @@ describe('Threads and Replies', function() {
 			id_gte: replies[3].id,
 			limit: 10,
 		});
-		wantIds = replies.slice(3, 10).map(m => m.id);
-		gotIds = response.messages.map(m => m.id);
+		wantIds = replies.slice(3, 10).map((m) => m.id);
+		gotIds = response.messages.map((m) => m.id);
 		expect(wantIds).to.eql(gotIds);
 
 		response = await testChannel.getReplies(parentID, {
 			id_lt: replies[3].id,
 			limit: 10,
 		});
-		wantIds = replies.slice(0, 3).map(m => m.id);
-		gotIds = response.messages.map(m => m.id);
+		wantIds = replies.slice(0, 3).map((m) => m.id);
+		gotIds = response.messages.map((m) => m.id);
 		expect(wantIds).to.eql(gotIds);
 
 		response = await testChannel.getReplies(parentID, {
 			id_lte: replies[3].id,
 			limit: 10,
 		});
-		wantIds = replies.slice(0, 4).map(m => m.id);
-		gotIds = response.messages.map(m => m.id);
+		wantIds = replies.slice(0, 4).map((m) => m.id);
+		gotIds = response.messages.map((m) => m.id);
 		expect(wantIds).to.eql(gotIds);
 	});
 
@@ -320,7 +320,7 @@ describe('Threads and Replies', function() {
 		expect(lastMessage2.reply_count).to.equal(0);
 	});
 
-	it('Nesting level', async function() {
+	it('Nesting level', async function () {
 		const parent = await channel.sendMessage({ text: 'Check this out!!!' });
 		const reply = await channel.sendMessage({
 			text: 'No way!',
@@ -334,7 +334,7 @@ describe('Threads and Replies', function() {
 		await expect(p).to.be.rejected;
 	});
 
-	it('Parent not found', async function() {
+	it('Parent not found', async function () {
 		const msg = await channel.sendMessage({ text: 'HEEY' });
 		await replyClient.deleteMessage(msg.message.id);
 
@@ -342,7 +342,7 @@ describe('Threads and Replies', function() {
 		await expect(p).to.be.rejected;
 	});
 
-	it('Deleted reply should not be listed in channel', async function() {
+	it('Deleted reply should not be listed in channel', async function () {
 		await replyClient.channel('livestream', 'replies').query();
 		const parent = await channel.sendMessage({ text: 'Check this out!!!' });
 		const reply = await channel.sendMessage({
@@ -351,6 +351,6 @@ describe('Threads and Replies', function() {
 		});
 		await replyClient.deleteMessage(reply.message.id);
 		const response = await replyClient.channel('livestream', 'replies').query();
-		expect(response.messages.map(m => m.id)).to.not.contain(reply.message.id);
+		expect(response.messages.map((m) => m.id)).to.not.contain(reply.message.id);
 	});
 });

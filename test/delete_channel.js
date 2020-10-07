@@ -1,4 +1,4 @@
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import { getTestClientForUser, createUsers, getServerTestClient } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -33,8 +33,8 @@ async function setupDeletedChannel() {
 	return [client, channel, message, deleteResponse];
 }
 
-describe('Channels - Truncate', function() {
-	it('Truncated messages shouldnt show up', async function() {
+describe('Channels - Truncate', function () {
+	it('Truncated messages shouldnt show up', async function () {
 		const kerryID = `kerry-${uuidv4()}`;
 		const client = await getTestClientForUser(kerryID);
 		const c = client.channel('messaging', uuidv4());
@@ -48,13 +48,13 @@ describe('Channels - Truncate', function() {
 	});
 });
 
-describe('Channels - Delete', function() {
+describe('Channels - Delete', function () {
 	/*
 
 	- Channel Update, Query and Watch all revive the deleted channel
 
 	 */
-	it('Basic delete', async function() {
+	it('Basic delete', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		expect(deleteResponse.channel.cid).to.equal(channel.cid);
 		expect(deleteResponse.channel.color).to.be.undefined;
@@ -62,26 +62,26 @@ describe('Channels - Delete', function() {
 		expect(deleteResponse.channel.last_message_at).to.be.undefined;
 	});
 
-	it('Query channels should not return a deleted channel', async function() {
+	it('Query channels should not return a deleted channel', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		const channels = await client.queryChannels({ cid: channel.cid });
 		expect(channels.length).to.equal(0);
 	});
 
-	it('Updating a message should fail', async function() {
+	it('Updating a message should fail', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		message.text = 'updated';
 		const updatePromise = client.updateMessage(message);
 		await expect(updatePromise).to.be.rejectedWith('has been deleted');
 	});
 
-	it('Sending a reaction should fail', async function() {
+	it('Sending a reaction should fail', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		const addPromise = channel.sendReaction(message.id, { type: 'love' });
 		await expect(addPromise).to.be.rejectedWith('has been deleted');
 	});
 
-	it('Sending a reply should fail', async function() {
+	it('Sending a reply should fail', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		const replyPromise = channel.sendMessage({
 			text: 'test',
@@ -90,7 +90,7 @@ describe('Channels - Delete', function() {
 		await expect(replyPromise).to.be.rejectedWith('find channel');
 	});
 
-	it('Basic recovery - querying a channel', async function() {
+	it('Basic recovery - querying a channel', async function () {
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		const state = await channel.query();
 
@@ -101,7 +101,7 @@ describe('Channels - Delete', function() {
 		expect(state.channel.created_by.id).to.equal(client.user.id);
 	});
 
-	it('Update channel is not allowed to recover', async function() {
+	it('Update channel is not allowed to recover', async function () {
 		// TODO: not 100% sure about this behaviour...
 		const [client, channel, message, deleteResponse] = await setupDeletedChannel();
 		const serverClient = getServerTestClient();
@@ -117,7 +117,7 @@ describe('Channels - Delete', function() {
 		await expect(updatePromise).to.be.rejectedWith('find channel');
 	});
 
-	it('Recover a deleted channel', async function() {
+	it('Recover a deleted channel', async function () {
 		const [client, _, oldMessage, deleteResponse] = await setupDeletedChannel();
 		const channel = client.channel('messaging', uuidv4(), {
 			resource: 'spice',

@@ -3,7 +3,7 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'isomorphic-ws';
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -19,6 +19,8 @@ import {
   AppSettingsAPIResponse,
   AscDesc,
   BanUserOptions,
+  BlockList,
+  BlockListResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -75,7 +77,6 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  BlockList,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -338,11 +339,11 @@ export class StreamChat<
 
     this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
       .then(
-        result =>
+        (result) =>
           // We only return connection promise;
           result[1],
       )
-      .catch(e => {
+      .catch((e) => {
         throw e;
       });
 
@@ -605,7 +606,7 @@ export class StreamChat<
     this.listeners[key].push(callback);
     return {
       unsubscribe: () => {
-        this.listeners[key] = this.listeners[key].filter(el => el !== callback);
+        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
     };
   }
@@ -682,7 +683,7 @@ export class StreamChat<
     this.logger('info', `Removing listener for ${key} event`, {
       tags: ['event', 'client'],
     });
-    this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
   _logApiRequest(
@@ -913,7 +914,7 @@ export class StreamChat<
       if (event.user?.id === this.userID) {
         this.user = this.user && { ...this.user, ...event.user };
         // Updating only available properties in _user object.
-        Object.keys(event.user).forEach(function(key) {
+        Object.keys(event.user).forEach(function (key) {
           if (client._user && key in client._user) {
             // @ts-expect-error
             client._user[key] = event.user[key];
@@ -940,7 +941,7 @@ export class StreamChat<
 
   _muteStatus(cid: string) {
     let muteStatus;
-    this.mutedChannels.forEach(function(mute) {
+    this.mutedChannels.forEach(function (mute) {
       if (mute.channel?.cid === cid) {
         let muted = true;
         if (mute.expires) {
@@ -1864,7 +1865,7 @@ export class StreamChat<
       'user',
     ];
 
-    reservedMessageFields.forEach(function(item) {
+    reservedMessageFields.forEach(function (item) {
       if (clonedMessage[item] != null) {
         delete clonedMessage[item];
       }
@@ -2102,13 +2103,13 @@ export class StreamChat<
   }
 
   listBlockLists() {
-    return this.get<APIResponse & { blocklists: BlockList[] }>(
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
       `${this.baseURL}/blocklists`,
     );
   }
 
   getBlockList(name: string) {
-    return this.get<APIResponse & { blocklist: BlockList }>(
+    return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${name}`,
     );
   }
@@ -2118,8 +2119,6 @@ export class StreamChat<
   }
 
   deleteBlockList(name: string) {
-    return this.delete<APIResponse & { blocklist: BlockList }>(
-      `${this.baseURL}/blocklists/${name}`,
-    );
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 }

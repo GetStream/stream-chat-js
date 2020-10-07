@@ -96,6 +96,11 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type BlockListResponse = BlockList & {
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ChannelResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -828,6 +833,7 @@ export type Event<
     UserType
   >;
   online?: boolean;
+  parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
   unread_count?: number;
@@ -1190,6 +1196,11 @@ export type Attachment<T = UnknownType> = T & {
   type?: string;
 };
 
+export type BlockList = {
+  name: string;
+  words: string[];
+};
+
 export type ChannelConfig<
   CommandType extends string = LiteralStringForUnion
 > = ChannelConfigFields &
@@ -1473,8 +1484,3 @@ export type User<T = UnknownType> = T & {
 };
 
 export type TypingStartEvent = Event;
-
-export type BlockList = {
-  name: string;
-  words: string[];
-};

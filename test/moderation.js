@@ -1,4 +1,4 @@
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import {
 	getTestClientForUser,
 	createUsers,
@@ -364,16 +364,16 @@ describe('block list moderation CRUD', () => {
 	});
 });
 
-describe('Moderation', function() {
-	it('Mute', async function() {
+describe('Moderation', function () {
+	it('Mute', async function () {
 		const user1 = uuidv4();
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
 
-		const eventPromise = new Promise(resolve => {
+		const eventPromise = new Promise((resolve) => {
 			// verify that the notification is sent
-			client1.on('notification.mutes_updated', e => {
+			client1.on('notification.mutes_updated', (e) => {
 				expect(e.me.mutes.length).to.equal(1);
 				resolve();
 			});
@@ -394,15 +394,15 @@ describe('Moderation', function() {
 		await eventPromise;
 	});
 
-	it('Mute with expiration', async function() {
+	it('Mute with expiration', async function () {
 		const user1 = uuidv4();
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
 
-		const eventPromise = new Promise(resolve => {
+		const eventPromise = new Promise((resolve) => {
 			// verify that the notification is sent
-			client1.on('notification.mutes_updated', e => {
+			client1.on('notification.mutes_updated', (e) => {
 				expect(e.me.mutes.length).to.equal(1);
 				resolve();
 			});
@@ -424,7 +424,7 @@ describe('Moderation', function() {
 		await eventPromise;
 	});
 
-	it('Mute after sendMessage', async function() {
+	it('Mute after sendMessage', async function () {
 		const user1 = uuidv4();
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
@@ -448,16 +448,16 @@ describe('Moderation', function() {
 		expect(connectResponse.me.mutes[0].target.id).to.equal(user2);
 	});
 
-	it('Unmute', async function() {
+	it('Unmute', async function () {
 		const user1 = uuidv4();
 		const user2 = uuidv4();
 		await createUsers([user1, user2]);
 		const client1 = await getTestClientForUser(user1);
 		await client1.muteUser(user2);
 
-		const eventPromise = new Promise(resolve => {
+		const eventPromise = new Promise((resolve) => {
 			// verify that the notification is sent
-			client1.on('notification.mutes_updated', e => {
+			client1.on('notification.mutes_updated', (e) => {
 				if (e.me.mutes.length === 0) {
 					resolve();
 				}
@@ -479,17 +479,17 @@ describe('Moderation', function() {
 	});
 });
 
-describe('mute channels', function() {
+describe('mute channels', function () {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	let client1;
 	const mutedChannelId = uuidv4();
-	it('mute channel and expect notification)', async function() {
+	it('mute channel and expect notification)', async function () {
 		await createUsers([user1, user2]);
 		client1 = await getTestClientForUser(user1);
 
-		const eventPromise = new Promise(resolve => {
-			const onChannelMute = e => {
+		const eventPromise = new Promise((resolve) => {
+			const onChannelMute = (e) => {
 				expect(e.me.channel_mutes.length).to.equal(1);
 				const mute = e.me.channel_mutes[0];
 				expect(mute.created_at).to.not.be.undefined;
@@ -529,7 +529,7 @@ describe('mute channels', function() {
 		await eventPromise;
 	});
 
-	it('sending messages to muted channels dont increment unread counts', async function() {
+	it('sending messages to muted channels dont increment unread counts', async function () {
 		const client2 = await getTestClientForUser(user2);
 		await client2
 			.channel('messaging', mutedChannelId)
@@ -544,7 +544,7 @@ describe('mute channels', function() {
 		expect(connectResponse.me.unread_channels).to.be.equal(0);
 	});
 
-	it('query muted channels', async function() {
+	it('query muted channels', async function () {
 		const resp = await client1.queryChannels({
 			muted: true,
 			members: { $in: [user1] },
@@ -553,7 +553,7 @@ describe('mute channels', function() {
 		expect(resp[0].id).to.be.equal(mutedChannelId);
 	});
 
-	it('query muted channels with other filters', async function() {
+	it('query muted channels with other filters', async function () {
 		const resp = await client1.queryChannels({
 			members: { $in: [user1] },
 			muted: true,
@@ -562,7 +562,7 @@ describe('mute channels', function() {
 		expect(resp[0].id).to.be.equal(mutedChannelId);
 	});
 
-	it('exclude muted channels', async function() {
+	it('exclude muted channels', async function () {
 		const resp = await client1.queryChannels({
 			muted: false,
 			members: { $in: [user1] },
@@ -570,9 +570,9 @@ describe('mute channels', function() {
 		expect(resp.length).to.be.equal(0);
 	});
 
-	it('unmute channel ', async function() {
-		const eventPromise = new Promise(resolve => {
-			const onChannelMute = e => {
+	it('unmute channel ', async function () {
+		const eventPromise = new Promise((resolve) => {
+			const onChannelMute = (e) => {
 				expect(e.me.channel_mutes.length).to.equal(0);
 				resolve();
 				//cleanup
@@ -594,7 +594,7 @@ describe('mute channels', function() {
 		await eventPromise;
 	});
 
-	it('muted and mute_expires_at are reserved fields', async function() {
+	it('muted and mute_expires_at are reserved fields', async function () {
 		const channel = client1.channel('messaging', uuidv4(), {
 			muted: true,
 			mute_expires_at: new Date(),
@@ -606,7 +606,7 @@ describe('mute channels', function() {
 		);
 	});
 
-	it('mute non existing channel must fail', async function() {
+	it('mute non existing channel must fail', async function () {
 		const id = uuidv4();
 		await expectHTTPErrorCode(
 			400,
@@ -615,7 +615,7 @@ describe('mute channels', function() {
 		);
 	});
 
-	it('ummute non existing channel must fail', async function() {
+	it('ummute non existing channel must fail', async function () {
 		const id = uuidv4();
 		await expectHTTPErrorCode(
 			400,
@@ -624,7 +624,7 @@ describe('mute channels', function() {
 		);
 	});
 
-	it('mute server side require an user to be specified', async function() {
+	it('mute server side require an user to be specified', async function () {
 		const client = getTestClient(true);
 		const channel = client.channel('messaging', uuidv4(), {
 			created_by_id: user1,
@@ -639,7 +639,7 @@ describe('mute channels', function() {
 		);
 	});
 
-	it('unmute server side require an user to be specified', async function() {
+	it('unmute server side require an user to be specified', async function () {
 		const client = getTestClient(true);
 		const channel = client.channel('messaging', uuidv4(), {
 			created_by_id: user1,
@@ -654,7 +654,7 @@ describe('mute channels', function() {
 		);
 	});
 
-	it('mute channel with expiration', async function() {
+	it('mute channel with expiration', async function () {
 		const user = uuidv4();
 		await createUsers([user]);
 		client1 = await getTestClientForUser(user);
@@ -687,24 +687,24 @@ describe('mute channels', function() {
 	});
 });
 
-describe('channel muteStatus', function() {
+describe('channel muteStatus', function () {
 	let channel;
 	const userID = uuidv4();
 	let client;
 
-	before(async function() {
+	before(async function () {
 		client = await getTestClientForUser(userID);
 		channel = client.channel('messaging', uuidv4());
 		await channel.watch();
 	});
 
-	it('add mute update internal mute state', async function() {
+	it('add mute update internal mute state', async function () {
 		const muteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
 		);
 		await channel.mute();
-		await expect(muteUpdatedEvent).to.be.fulfilled.then(function(muteEvent) {
+		await expect(muteUpdatedEvent).to.be.fulfilled.then(function (muteEvent) {
 			expect(muteEvent.length).to.be.equal(1);
 			expect(muteEvent[0].me.channel_mutes.length).to.be.equal(1);
 			const muteStatus = channel.muteStatus();
@@ -716,20 +716,20 @@ describe('channel muteStatus', function() {
 		});
 	});
 
-	it('setUser populate internal mute state', async function() {
+	it('setUser populate internal mute state', async function () {
 		const c = await getTestClientForUser(userID);
 		expect(c.health.me.channel_mutes.length).to.be.equal(1);
 		expect(c.health.me.channel_mutes[0].channel.cid).to.be.equal(channel.cid);
 		await c.disconnect(5000);
 	});
 
-	it('remove mute update internal mute state', async function() {
+	it('remove mute update internal mute state', async function () {
 		const UnmuteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
 		);
 		await channel.unmute();
-		await expect(UnmuteUpdatedEvent).to.be.fulfilled.then(function(muteEvent) {
+		await expect(UnmuteUpdatedEvent).to.be.fulfilled.then(function (muteEvent) {
 			expect(muteEvent.length).to.be.equal(1);
 			const muteStatus = channel.muteStatus();
 			expect(muteStatus.muted).to.be.false;
@@ -737,7 +737,7 @@ describe('channel muteStatus', function() {
 		});
 	});
 
-	it('muteStatus properly detect expired mutes', async function() {
+	it('muteStatus properly detect expired mutes', async function () {
 		const MuteUpdatedEvent = createEventWaiter(
 			client,
 			'notification.channel_mutes_updated',
