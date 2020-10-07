@@ -146,6 +146,9 @@ export class StreamChat<
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
+  rateLimitResetTime: {
+    [key: string]: number;
+  };
 
   /**
    * Initialize a client
@@ -281,6 +284,7 @@ export class StreamChat<
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
+    this.rateLimitResetTime = {};
   }
 
   devToken(userID: string) {
@@ -731,6 +735,17 @@ export class StreamChat<
     } = {},
   ): Promise<T> => {
     await this.tokenManager.tokenReady();
+
+    const resetTime = this.rateLimitResetTime[url]
+      ? this.rateLimitResetTime[url] * 1000 - new Date().getTime()
+      : false;
+    if (resetTime) {
+      throw new Error(
+        `You have been rate limited on api ${url}. Please try again after ${resetTime} ms`,
+      );
+    }
+
+    delete this.rateLimitResetTime[url];
     const requestConfig = this._enrichAxiosOptions(options);
     try {
       let response: AxiosResponse<T>;
@@ -765,13 +780,18 @@ export class StreamChat<
       this._logApiError(type, url, e);
 
       if (e.response) {
-        if (
-          e.response.data.code === chatCodes.TOKEN_EXPIRED &&
-          !this.tokenManager.isStatic()
-        ) {
+        const code = e.response.data && e.response.data.code;
+        const headers = e.response.headers;
+
+        if (code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
           this.tokenManager.loadToken();
           return await this.doAxiosRequest<T>(type, url, data, options);
         }
+
+        if (code === chatCodes.RATE_LIMITED && headers && headers['x-ratelimit-reset']) {
+          this.rateLimitResetTime[url] = e.response.headers['x-ratelimit-reset'];
+        }
+
         return this.handleResponse(e.response);
       } else {
         throw e;
