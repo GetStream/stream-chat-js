@@ -6,7 +6,7 @@ import {
 	BuiltinPermissions,
 	Allow,
 } from '../src/permissions';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import chai from 'chai';
 
@@ -59,15 +59,15 @@ function setupUser(ctx, user, done, test) {
 		.then(() => {
 			test(client);
 		})
-		.catch(e => {
+		.catch((e) => {
 			console.log(e);
 			done('failed to setUser');
 		});
 }
 
 function createChannel(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, `${uuidv4()}`, {});
 			responseTest(channel.watch(), done);
 		});
@@ -75,8 +75,8 @@ function createChannel(ctx, user, responseTest) {
 }
 
 function readChannel(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.watch(), done);
 		});
@@ -84,8 +84,8 @@ function readChannel(ctx, user, responseTest) {
 }
 
 function addChannelMembers(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.addMembers([ctx.scapegoatUser.id]), done);
 		});
@@ -93,8 +93,8 @@ function addChannelMembers(ctx, user, responseTest) {
 }
 
 function removeChannelMembers(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.removeMembers([ctx.scapegoatUser.id]), done);
 		});
@@ -102,8 +102,8 @@ function removeChannelMembers(ctx, user, responseTest) {
 }
 
 function updateChannel(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(
 				channel.update({ color: 'blue' }, { text: 'got new color!' }),
@@ -114,8 +114,8 @@ function updateChannel(ctx, user, responseTest) {
 }
 
 function createMessage(ctx, user, message, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.sendMessage(message), done);
 		});
@@ -169,7 +169,7 @@ async function removeUseFrozenChannelPermissions(ctx) {
 	const { permissions } = await ctx.authClient.getChannelType(ctx.channelType);
 	await ctx.authClient.updateChannelType(ctx.channelType, {
 		permissions: permissions.filter(
-			v => v.name !== BuiltinPermissions.UseFrozenChannel,
+			(v) => v.name !== BuiltinPermissions.UseFrozenChannel,
 		),
 	});
 }
@@ -190,16 +190,16 @@ async function addUseFrozenChannelPermissions(ctx) {
 }
 
 function deleteMessage(ctx, user, responseTest) {
-	return function(done) {
+	return function (done) {
 		ctx.channel
 			.sendMessage({ text: 'server-side message!', user: ctx.messageOwner })
-			.then(data => {
+			.then((data) => {
 				const messageId = data.message.id;
-				setupUser(ctx, user, done, client => {
+				setupUser(ctx, user, done, (client) => {
 					responseTest(client.deleteMessage(messageId), done);
 				});
 			})
-			.catch(e => {
+			.catch((e) => {
 				console.log(e);
 				done('failed to post test message');
 			});
@@ -207,19 +207,19 @@ function deleteMessage(ctx, user, responseTest) {
 }
 
 function updateMessage(ctx, user, responseTest) {
-	return function(done) {
+	return function (done) {
 		ctx.channel
 			.sendMessage({ text: 'server-side message!', user: ctx.messageOwner })
-			.then(data => {
+			.then((data) => {
 				const messageId = data.message.id;
-				setupUser(ctx, user, done, client => {
+				setupUser(ctx, user, done, (client) => {
 					responseTest(
 						client.updateMessage({ id: messageId, text: 'updated message' }),
 						done,
 					);
 				});
 			})
-			.catch(e => {
+			.catch((e) => {
 				console.log(e);
 				done('failed to post test message');
 			});
@@ -227,16 +227,16 @@ function updateMessage(ctx, user, responseTest) {
 }
 
 function banUser(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			responseTest(client.banUser(ctx.scapegoatUser.id), done);
 		});
 	};
 }
 
 function changeRole(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const newUser = Object.assign({}, user, {
 				role: user.role !== 'user' ? 'user' : 'admin',
 			});
@@ -246,8 +246,8 @@ function changeRole(ctx, user, responseTest) {
 }
 
 function changeOwnUser(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const newUser = Object.assign({}, user, { changed: true });
 			responseTest(client.updateUser(newUser), done);
 		});
@@ -255,8 +255,8 @@ function changeOwnUser(ctx, user, responseTest) {
 }
 
 function changeOtherUser(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const newUser = Object.assign({}, ctx.scapegoatUser, {
 				name: 'new-name',
 			});
@@ -266,8 +266,8 @@ function changeOtherUser(ctx, user, responseTest) {
 }
 
 function upload(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			const file = fs.createReadStream('./helloworld.txt');
 			responseTest(channel.sendFile(file, 'hello_world.txt'), done);
@@ -276,17 +276,17 @@ function upload(ctx, user, responseTest) {
 }
 
 function deleteUpload(ctx, user, responseTest) {
-	return function(done) {
+	return function (done) {
 		const file = fs.createReadStream('./helloworld.txt');
 		ctx.channel
 			.sendFile(file, 'hello_world.txt', null, ctx.messageOwner)
-			.then(response => {
-				setupUser(ctx, user, done, client => {
+			.then((response) => {
+				setupUser(ctx, user, done, (client) => {
 					const channel = client.channel(ctx.channelType, ctx.channelId, {});
 					responseTest(channel.deleteFile(response.file), done);
 				});
 			})
-			.catch(e => {
+			.catch((e) => {
 				console.log(e);
 				done('upload failed');
 			});
@@ -294,8 +294,8 @@ function deleteUpload(ctx, user, responseTest) {
 }
 
 function addChannelModerator(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.addModerators([ctx.scapegoatUser.id]), done);
 		});
@@ -303,8 +303,8 @@ function addChannelModerator(ctx, user, responseTest) {
 }
 
 function demoteChannelModerator(ctx, user, responseTest) {
-	return function(done) {
-		setupUser(ctx, user, done, client => {
+	return function (done) {
+		setupUser(ctx, user, done, (client) => {
 			const channel = client.channel(ctx.channelType, ctx.channelId, {});
 			responseTest(channel.demoteModerators([ctx.scapegoatUser.id]), done);
 		});
@@ -312,41 +312,41 @@ function demoteChannelModerator(ctx, user, responseTest) {
 }
 
 function allowed(r, done) {
-	r.then(() => done()).catch(e => {
+	r.then(() => done()).catch((e) => {
 		console.log(e);
 		done('failed');
 	});
 }
 
 function notAllowed(r, done) {
-	r.then(() => done('should fail')).catch(e => {
+	r.then(() => done('should fail')).catch((e) => {
 		e.status === 403 ? done() : done(`status code is not 400 but ${e.status}`);
 	});
 }
 
 function roleAllowed(roleName, test) {
-	it(`${roleName} is allowed`, done => test(done));
+	it(`${roleName} is allowed`, (done) => test(done));
 }
 
 function roleNotAllowed(roleName, test) {
-	it(`${roleName} is not allowed`, done => test(done));
+	it(`${roleName} is not allowed`, (done) => test(done));
 }
 
-describe('Messaging permissions', function() {
+describe('Messaging permissions', function () {
 	const ctx = new Context('messaging');
 
 	before(async () => {
 		await ctx.setup();
 	});
 
-	describe('Create channel', function() {
+	describe('Create channel', function () {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, createChannel(ctx, ctx.user, allowed));
 		roleNotAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Read channel', function() {
+	describe('Read channel', function () {
 		roleAllowed(ctx.adminUser.role, readChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, readChannel(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', readChannel(ctx, ctx.channelMember, allowed));
@@ -355,7 +355,7 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, readChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Add channel members', function() {
+	describe('Add channel members', function () {
 		roleAllowed(ctx.adminUser.role, addChannelMembers(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, addChannelMembers(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -370,7 +370,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Remove channel members', function() {
+	describe('Remove channel members', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			removeChannelMembers(ctx, ctx.adminUser, allowed),
@@ -394,7 +394,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Update channel', function() {
+	describe('Update channel', function () {
 		roleAllowed(ctx.adminUser.role, updateChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateChannel(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -406,7 +406,7 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, updateChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Create message', function() {
+	describe('Create message', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, simpleMessage, allowed),
@@ -433,7 +433,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Use frozen channel', function() {
+	describe('Use frozen channel', function () {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -469,7 +469,7 @@ describe('Messaging permissions', function() {
 		});
 	});
 
-	describe('Delete message', function() {
+	describe('Delete message', function () {
 		roleAllowed(ctx.adminUser.role, deleteMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -481,7 +481,7 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Update message', function() {
+	describe('Update message', function () {
 		roleAllowed(ctx.adminUser.role, updateMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -493,7 +493,7 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, updateMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Ban user', function() {
+	describe('Ban user', function () {
 		roleAllowed(ctx.adminUser.role, banUser(ctx, ctx.adminUser, notAllowed));
 		roleAllowed(ctx.moderator.role, banUser(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed('Channel member', banUser(ctx, ctx.channelMember, notAllowed));
@@ -501,14 +501,14 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, banUser(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit user role', function() {
+	describe('Edit user role', function () {
 		roleNotAllowed(ctx.adminUser.role, changeRole(ctx, ctx.adminUser, notAllowed));
 		roleNotAllowed(ctx.moderator.role, changeRole(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, changeRole(ctx, ctx.user, notAllowed));
 		roleNotAllowed(ctx.guestUser.role, changeRole(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit channel member role', function() {
+	describe('Edit channel member role', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			addChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -528,7 +528,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Demote channel moderator', function() {
+	describe('Demote channel moderator', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			demoteChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -548,14 +548,14 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Edit own user', function() {
+	describe('Edit own user', function () {
 		roleAllowed(ctx.adminUser.role, changeOwnUser(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, changeOwnUser(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, changeOwnUser(ctx, ctx.user, allowed));
 		roleAllowed(ctx.guestUser.role, changeOwnUser(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Edit another user', function() {
+	describe('Edit another user', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			changeOtherUser(ctx, ctx.adminUser, notAllowed),
@@ -571,7 +571,7 @@ describe('Messaging permissions', function() {
 		);
 	});
 
-	describe('Upload attachment', function() {
+	describe('Upload attachment', function () {
 		roleAllowed(ctx.adminUser.role, upload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, upload(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', upload(ctx, ctx.channelMember, allowed));
@@ -579,7 +579,7 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, upload(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Delete attachment', function() {
+	describe('Delete attachment', function () {
 		roleAllowed(ctx.adminUser.role, deleteUpload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteUpload(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -591,9 +591,9 @@ describe('Messaging permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteUpload(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Use commands', function() {});
+	describe('Use commands', function () {});
 
-	describe('Add links', function() {
+	describe('Add links', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, messageWithLink, allowed),
@@ -621,21 +621,21 @@ describe('Messaging permissions', function() {
 	});
 });
 
-describe('Live stream', function() {
+describe('Live stream', function () {
 	const ctx = new Context('livestream');
 
 	before(async () => {
 		await ctx.setup();
 	});
 
-	describe('Create channel', function() {
+	describe('Create channel', function () {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, createChannel(ctx, ctx.user, allowed));
 		roleNotAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Read channel', function() {
+	describe('Read channel', function () {
 		roleAllowed(ctx.adminUser.role, readChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, readChannel(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', readChannel(ctx, ctx.channelMember, allowed));
@@ -644,7 +644,7 @@ describe('Live stream', function() {
 		roleAllowed(ctx.guestUser.role, readChannel(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Add channel members', function() {
+	describe('Add channel members', function () {
 		roleAllowed(ctx.adminUser.role, addChannelMembers(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(
 			ctx.moderator.role,
@@ -665,7 +665,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Remove channel members', function() {
+	describe('Remove channel members', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			removeChannelMembers(ctx, ctx.adminUser, allowed),
@@ -689,7 +689,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Update channel', function() {
+	describe('Update channel', function () {
 		roleAllowed(ctx.adminUser.role, updateChannel(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(ctx.moderator.role, updateChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(
@@ -701,7 +701,7 @@ describe('Live stream', function() {
 		roleNotAllowed(ctx.guestUser.role, updateChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Create message', function() {
+	describe('Create message', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, simpleMessage, allowed),
@@ -725,7 +725,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Use frozen channel', function() {
+	describe('Use frozen channel', function () {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -761,7 +761,7 @@ describe('Live stream', function() {
 		});
 	});
 
-	describe('Delete message', function() {
+	describe('Delete message', function () {
 		roleAllowed(ctx.adminUser.role, deleteMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -773,7 +773,7 @@ describe('Live stream', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Update message', function() {
+	describe('Update message', function () {
 		roleAllowed(ctx.adminUser.role, updateMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -785,7 +785,7 @@ describe('Live stream', function() {
 		roleNotAllowed(ctx.guestUser.role, updateMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Ban user', function() {
+	describe('Ban user', function () {
 		roleAllowed(ctx.adminUser.role, banUser(ctx, ctx.adminUser, notAllowed));
 		roleAllowed(ctx.moderator.role, banUser(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed('Channel member', banUser(ctx, ctx.channelMember, notAllowed));
@@ -793,14 +793,14 @@ describe('Live stream', function() {
 		roleNotAllowed(ctx.guestUser.role, banUser(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit user role', function() {
+	describe('Edit user role', function () {
 		roleNotAllowed(ctx.adminUser.role, changeRole(ctx, ctx.adminUser, notAllowed));
 		roleNotAllowed(ctx.moderator.role, changeRole(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, changeRole(ctx, ctx.user, notAllowed));
 		roleNotAllowed(ctx.guestUser.role, changeRole(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit channel member role', function() {
+	describe('Edit channel member role', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			addChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -820,7 +820,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Demote channel moderator', function() {
+	describe('Demote channel moderator', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			demoteChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -840,14 +840,14 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Edit own user', function() {
+	describe('Edit own user', function () {
 		roleAllowed(ctx.adminUser.role, changeOwnUser(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, changeOwnUser(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, changeOwnUser(ctx, ctx.user, allowed));
 		roleAllowed(ctx.guestUser.role, changeOwnUser(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Edit another user', function() {
+	describe('Edit another user', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			changeOtherUser(ctx, ctx.adminUser, notAllowed),
@@ -863,7 +863,7 @@ describe('Live stream', function() {
 		);
 	});
 
-	describe('Upload attachment', function() {
+	describe('Upload attachment', function () {
 		roleAllowed(ctx.adminUser.role, upload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, upload(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', upload(ctx, ctx.channelMember, allowed));
@@ -871,11 +871,11 @@ describe('Live stream', function() {
 		roleNotAllowed(ctx.guestUser.role, upload(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Delete attachment', function() {});
+	describe('Delete attachment', function () {});
 
-	describe('Use commands', function() {});
+	describe('Use commands', function () {});
 
-	describe('Add links', function() {
+	describe('Add links', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, messageWithLink, allowed),
@@ -903,21 +903,21 @@ describe('Live stream', function() {
 	});
 });
 
-describe('Gaming', function() {
+describe('Gaming', function () {
 	const ctx = new Context('gaming');
 
 	before(async () => {
 		await ctx.setup();
 	});
 
-	describe('Create channel', function() {
+	describe('Create channel', function () {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, createChannel(ctx, ctx.user, notAllowed));
 		roleNotAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Read channel', function() {
+	describe('Read channel', function () {
 		roleAllowed(ctx.adminUser.role, readChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, readChannel(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', readChannel(ctx, ctx.channelMember, allowed));
@@ -926,7 +926,7 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, readChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Add channel members', function() {
+	describe('Add channel members', function () {
 		roleAllowed(ctx.adminUser.role, addChannelMembers(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(
 			ctx.moderator.role,
@@ -947,7 +947,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Remove channel members', function() {
+	describe('Remove channel members', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			removeChannelMembers(ctx, ctx.adminUser, allowed),
@@ -971,7 +971,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Update channel', function() {
+	describe('Update channel', function () {
 		roleAllowed(ctx.adminUser.role, updateChannel(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(ctx.moderator.role, updateChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(
@@ -983,7 +983,7 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, updateChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Create message', function() {
+	describe('Create message', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, simpleMessage, allowed),
@@ -1010,7 +1010,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Use frozen channel', function() {
+	describe('Use frozen channel', function () {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -1046,7 +1046,7 @@ describe('Gaming', function() {
 		});
 	});
 
-	describe('Delete message', function() {
+	describe('Delete message', function () {
 		roleAllowed(ctx.adminUser.role, deleteMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1058,7 +1058,7 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Update message', function() {
+	describe('Update message', function () {
 		roleAllowed(ctx.adminUser.role, updateMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1070,7 +1070,7 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, updateMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Ban user', function() {
+	describe('Ban user', function () {
 		roleAllowed(ctx.adminUser.role, banUser(ctx, ctx.adminUser, notAllowed));
 		roleAllowed(ctx.moderator.role, banUser(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed('Channel member', banUser(ctx, ctx.channelMember, notAllowed));
@@ -1078,7 +1078,7 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, banUser(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit channel member role', function() {
+	describe('Edit channel member role', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			addChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -1098,7 +1098,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Demote channel moderator', function() {
+	describe('Demote channel moderator', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			demoteChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -1118,21 +1118,21 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Edit user role', function() {
+	describe('Edit user role', function () {
 		roleNotAllowed(ctx.adminUser.role, changeRole(ctx, ctx.adminUser, notAllowed));
 		roleNotAllowed(ctx.moderator.role, changeRole(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, changeRole(ctx, ctx.user, notAllowed));
 		roleNotAllowed(ctx.guestUser.role, changeRole(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit own user', function() {
+	describe('Edit own user', function () {
 		roleAllowed(ctx.adminUser.role, changeOwnUser(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, changeOwnUser(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, changeOwnUser(ctx, ctx.user, allowed));
 		roleAllowed(ctx.guestUser.role, changeOwnUser(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Edit another user', function() {
+	describe('Edit another user', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			changeOtherUser(ctx, ctx.adminUser, notAllowed),
@@ -1148,7 +1148,7 @@ describe('Gaming', function() {
 		);
 	});
 
-	describe('Upload attachment', function() {
+	describe('Upload attachment', function () {
 		roleAllowed(ctx.adminUser.role, upload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, upload(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', upload(ctx, ctx.channelMember, allowed));
@@ -1156,11 +1156,11 @@ describe('Gaming', function() {
 		roleNotAllowed(ctx.guestUser.role, upload(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Delete attachment', function() {});
+	describe('Delete attachment', function () {});
 
-	describe('Use commands', function() {});
+	describe('Use commands', function () {});
 
-	describe('Add links', function() {
+	describe('Add links', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, messageWithLink, allowed),
@@ -1188,21 +1188,21 @@ describe('Gaming', function() {
 	});
 });
 
-describe('Commerce permissions', function() {
+describe('Commerce permissions', function () {
 	const ctx = new Context('commerce');
 
 	before(async () => {
 		await ctx.setup();
 	});
 
-	describe('Create channel', function() {
+	describe('Create channel', function () {
 		roleAllowed(ctx.adminUser.role, createChannel(ctx, ctx.adminUser, allowed));
 		roleNotAllowed(ctx.moderator.role, createChannel(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, createChannel(ctx, ctx.user, notAllowed));
 		roleAllowed(ctx.guestUser.role, createChannel(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Read channel', function() {
+	describe('Read channel', function () {
 		roleAllowed(ctx.adminUser.role, readChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, readChannel(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', readChannel(ctx, ctx.channelMember, allowed));
@@ -1211,7 +1211,7 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, readChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Add channel members', function() {
+	describe('Add channel members', function () {
 		roleAllowed(ctx.adminUser.role, addChannelMembers(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, addChannelMembers(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1226,7 +1226,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Remove channel members', function() {
+	describe('Remove channel members', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			removeChannelMembers(ctx, ctx.adminUser, allowed),
@@ -1250,7 +1250,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Update channel', function() {
+	describe('Update channel', function () {
 		roleAllowed(ctx.adminUser.role, updateChannel(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateChannel(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1262,7 +1262,7 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, updateChannel(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Create message', function() {
+	describe('Create message', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, simpleMessage, allowed),
@@ -1289,7 +1289,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Use frozen channel', function() {
+	describe('Use frozen channel', function () {
 		before(async () => {
 			const channel = ctx.authClient.channel(ctx.channelType, ctx.channelId, {});
 			await channel.update({ frozen: true });
@@ -1325,7 +1325,7 @@ describe('Commerce permissions', function() {
 		});
 	});
 
-	describe('Delete message', function() {
+	describe('Delete message', function () {
 		roleAllowed(ctx.adminUser.role, deleteMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1337,7 +1337,7 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Update message', function() {
+	describe('Update message', function () {
 		roleAllowed(ctx.adminUser.role, updateMessage(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, updateMessage(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1349,7 +1349,7 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, updateMessage(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Ban user', function() {
+	describe('Ban user', function () {
 		roleAllowed(ctx.adminUser.role, banUser(ctx, ctx.adminUser, notAllowed));
 		roleAllowed(ctx.moderator.role, banUser(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed('Channel member', banUser(ctx, ctx.channelMember, notAllowed));
@@ -1357,14 +1357,14 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, banUser(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit user role', function() {
+	describe('Edit user role', function () {
 		roleNotAllowed(ctx.adminUser.role, changeRole(ctx, ctx.adminUser, notAllowed));
 		roleNotAllowed(ctx.moderator.role, changeRole(ctx, ctx.moderator, notAllowed));
 		roleNotAllowed(ctx.user.role, changeRole(ctx, ctx.user, notAllowed));
 		roleNotAllowed(ctx.guestUser.role, changeRole(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Edit channel member role', function() {
+	describe('Edit channel member role', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			addChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -1384,7 +1384,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Demote channel moderator', function() {
+	describe('Demote channel moderator', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			demoteChannelModerator(ctx, ctx.adminUser, notAllowed),
@@ -1404,14 +1404,14 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Edit own user', function() {
+	describe('Edit own user', function () {
 		roleAllowed(ctx.adminUser.role, changeOwnUser(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, changeOwnUser(ctx, ctx.moderator, allowed));
 		roleAllowed(ctx.user.role, changeOwnUser(ctx, ctx.user, allowed));
 		roleAllowed(ctx.guestUser.role, changeOwnUser(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Edit another user', function() {
+	describe('Edit another user', function () {
 		roleNotAllowed(
 			ctx.adminUser.role,
 			changeOtherUser(ctx, ctx.adminUser, notAllowed),
@@ -1427,7 +1427,7 @@ describe('Commerce permissions', function() {
 		);
 	});
 
-	describe('Upload attachment', function() {
+	describe('Upload attachment', function () {
 		roleAllowed(ctx.adminUser.role, upload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, upload(ctx, ctx.moderator, allowed));
 		roleAllowed('Channel member', upload(ctx, ctx.channelMember, allowed));
@@ -1435,7 +1435,7 @@ describe('Commerce permissions', function() {
 		roleAllowed(ctx.guestUser.role, upload(ctx, ctx.guestUser, allowed));
 	});
 
-	describe('Delete attachment', function() {
+	describe('Delete attachment', function () {
 		roleAllowed(ctx.adminUser.role, deleteUpload(ctx, ctx.adminUser, allowed));
 		roleAllowed(ctx.moderator.role, deleteUpload(ctx, ctx.moderator, allowed));
 		roleNotAllowed(
@@ -1447,9 +1447,9 @@ describe('Commerce permissions', function() {
 		roleNotAllowed(ctx.guestUser.role, deleteUpload(ctx, ctx.guestUser, notAllowed));
 	});
 
-	describe('Use commands', function() {});
+	describe('Use commands', function () {});
 
-	describe('Add links', function() {
+	describe('Add links', function () {
 		roleAllowed(
 			ctx.adminUser.role,
 			createMessage(ctx, ctx.adminUser, messageWithLink, allowed),
@@ -1477,4 +1477,4 @@ describe('Commerce permissions', function() {
 	});
 });
 
-describe('Team', function() {});
+describe('Team', function () {});

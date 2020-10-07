@@ -1,5 +1,5 @@
 import { getTestClient, createUserToken, getTestClientForUser } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { sleep } from '../src/utils';
@@ -65,7 +65,7 @@ describe('Sync endpoint', () => {
 
 		messages = await Promise.all(
 			[blueChannel, greenChannel]
-				.map(chan => [
+				.map((chan) => [
 					chan.sendMessage({ text: uuidv4(), user_id: otherUserID }),
 					chan.sendMessage({ text: uuidv4(), user_id: userID }),
 				])
@@ -139,7 +139,7 @@ describe('Sync endpoint', () => {
 
 	it('blue channel should be marked as updated', () => {
 		const evts = eventsByType['channel.updated'].filter(
-			e => e.cid === blueChannel.cid,
+			(e) => e.cid === blueChannel.cid,
 		);
 		expect(evts).to.have.length(1);
 		const evt = evts[0];
@@ -150,7 +150,7 @@ describe('Sync endpoint', () => {
 
 	it('should include deleted channels', () => {
 		const evts = eventsByType['message.deleted'];
-		const deletedMessageIds = evts.map(m => m.message.id).sort();
+		const deletedMessageIds = evts.map((m) => m.message.id).sort();
 		expect(deletedMessageIds).to.eql(deletedMessages);
 		expect(evts[0].user).to.not.be.undefined;
 		expect(evts[0].message.user).to.not.be.undefined;
@@ -158,7 +158,7 @@ describe('Sync endpoint', () => {
 
 	it('messages should include new reactions', () => {
 		const evts = eventsByType['message.updated'].filter(
-			e => e.message.id === messageWithReaction,
+			(e) => e.message.id === messageWithReaction,
 		);
 		expect(evts).to.have.length(1);
 		expect(evts[0].message.latest_reactions).to.have.length(1);

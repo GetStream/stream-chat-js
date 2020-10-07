@@ -12,7 +12,7 @@ import {
 	runAndLogPromise,
 	createEventWaiter,
 } from './utils';
-import uuidv4 from 'uuid/v4';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
@@ -30,7 +30,7 @@ Promise.config({
 	},
 });
 
-describe('Presence', function() {
+describe('Presence', function () {
 	let user1Client;
 	let sarahID;
 	let paulID;
@@ -61,7 +61,7 @@ describe('Presence', function() {
 	});
 
 	describe('Set User and Disconnect', () => {
-		it('calling setUser twice should trigger an error', async function() {
+		it('calling setUser twice should trigger an error', async function () {
 			const testClientP = await getTestClientForUser('jack');
 
 			const setUserAndThrow = () => {
@@ -73,7 +73,7 @@ describe('Presence', function() {
 			expect(setUserAndThrow).to.throw(/setUser was called twice/);
 		});
 
-		it('login as a different user', async function() {
+		it('login as a different user', async function () {
 			const testClientP = await getTestClientForUser('jones');
 
 			testClientP.disconnect(5000);
@@ -86,8 +86,8 @@ describe('Presence', function() {
 		});
 	});
 
-	describe('Channel online counts', function() {
-		it('stopWatching and watcher count', async function() {
+	describe('Channel online counts', function () {
+		it('stopWatching and watcher count', async function () {
 			// user1 is watching this channel
 			const id = 'christmas' + uuidv4();
 			const b = user1Client.channel('messaging', id, {
@@ -95,8 +95,8 @@ describe('Presence', function() {
 			});
 			await b.create();
 			const results = [];
-			const eventPromise = new Promise(resolve => {
-				const handler = e => {
+			const eventPromise = new Promise((resolve) => {
+				const handler = (e) => {
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					results.push([e.watcher_count, e.user.id]);
 					// expect to see thierry join, james join and james leave
@@ -125,7 +125,7 @@ describe('Presence', function() {
 			await eventPromise;
 		});
 
-		it('disconnect and watcher count', async function() {
+		it('disconnect and watcher count', async function () {
 			// user1 is watching this channel
 			const id = 'christmas' + uuidv4();
 			const b = user1Client.channel('messaging', id, {
@@ -133,8 +133,8 @@ describe('Presence', function() {
 			});
 			await b.create();
 			const results = [];
-			const eventPromise = new Promise(resolve => {
-				b.on('all', e => {
+			const eventPromise = new Promise((resolve) => {
+				b.on('all', (e) => {
 					results.push([e.watcher_count, e.user.id]);
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					// expect to see thierry join, james join and james leave
@@ -164,13 +164,13 @@ describe('Presence', function() {
 		});
 	});
 
-	describe('Presence - connections', function() {
-		it('connect should mark online and update status', async function() {
+	describe('Presence - connections', function () {
+		it('connect should mark online and update status', async function () {
 			const userID = `john-${uuidv4()}`;
 			const testClientP = getTestClientForUser2(userID, 'busy');
 
-			await new Promise(resolve => {
-				const subscription = testClientP.on('health.check', event => {
+			await new Promise((resolve) => {
+				const subscription = testClientP.on('health.check', (event) => {
 					expect(event.me.id).to.equal(userID);
 					expect(event.me.status).to.equal('busy');
 					expect(event.me.invisible).to.equal(false);
@@ -196,7 +196,7 @@ describe('Presence', function() {
 			expect(diffInMinutes).to.be.below(1);
 		});
 
-		it('should be offline after disconnect', async function() {
+		it('should be offline after disconnect', async function () {
 			const userID = `timmy-${uuidv4()}`;
 			const testClientP = await getTestClientForUser(userID, 'mystatus');
 			await testClientP.disconnect(5000);
@@ -207,7 +207,7 @@ describe('Presence', function() {
 			expect(timmy.online).to.equal(false);
 		});
 
-		it('Query Channel and Presence', async function() {
+		it('Query Channel and Presence', async function () {
 			const channel = uuidv4();
 			const userID = `sarah123-${channel}`;
 
@@ -229,8 +229,8 @@ describe('Presence', function() {
 			expect(user1Client.state.users[userID].online).to.equal(false);
 
 			// sandra goes online should trigger an event
-			const eventReceived = new Promise(resolve =>
-				user1Client.on('user.presence.changed', event => {
+			const eventReceived = new Promise((resolve) =>
+				user1Client.on('user.presence.changed', (event) => {
 					if (event.user.id === userID) {
 						expect(event.user.status).to.equal('going to watch a movie');
 						expect(event.user.online).to.equal(true);
@@ -245,9 +245,9 @@ describe('Presence', function() {
 			await eventReceived;
 		});
 
-		it('Query Users and Presence the other one', function(done) {
+		it('Query Users and Presence the other one', function (done) {
 			// Same as above but with the query users endpoint
-			user1Client.on('user.presence.changed', event => {
+			user1Client.on('user.presence.changed', (event) => {
 				if (event.user.id === 'jessica') {
 					expect(event.user.status).to.equal('sayhi');
 					expect(event.user.online).to.equal(true);
@@ -274,7 +274,7 @@ describe('Presence', function() {
 			runAndLogPromise(runTest);
 		});
 
-		it('State and Query Channels and Presence', function(done) {
+		it('State and Query Channels and Presence', function (done) {
 			const channelName = uuidv4();
 			const director = `Denis Villeneuve - ${uuidv4()}`;
 			const b = user1Client.channel('messaging', channelName, {
@@ -282,7 +282,7 @@ describe('Presence', function() {
 				director,
 			});
 			// same as above, but with the query channels endpoint
-			user1Client.on('user.presence.changed', event => {
+			user1Client.on('user.presence.changed', (event) => {
 				if (event.user.id === paulID) {
 					expect(event.user.status).to.equal('rallying fremen');
 					expect(event.user.online).to.equal(true);
@@ -307,9 +307,9 @@ describe('Presence', function() {
 			runAndLogPromise(runTest);
 		});
 
-		it('Delete user', function(done) {
+		it('Delete user', function (done) {
 			// same as above, but with the query channels endpoint
-			user1Client.on('user.deleted', event => {
+			user1Client.on('user.deleted', (event) => {
 				if (event.user.id === paulID) {
 					expect();
 					done();
@@ -328,8 +328,8 @@ describe('Presence', function() {
 		});
 
 		// Invisible user support
-		it.skip('Invisible', function(done) {
-			user1Client.on('user.presence.changed', event => {
+		it.skip('Invisible', function (done) {
+			user1Client.on('user.presence.changed', (event) => {
 				expect(event.user.id).to.equal('sandra');
 				expect(event.user.status).to.equal('going to be invisible');
 				expect(event.user.online).to.equal(false);
@@ -353,14 +353,14 @@ describe('Presence', function() {
 	});
 });
 
-describe('Watchers count', function() {
+describe('Watchers count', function () {
 	const client = getTestClient(false);
 
 	const users = ['tommaso' + uuidv4(), 'nick' + uuidv4(), 'thierry' + uuidv4()];
 	const channelID = uuidv4();
 	let channel;
 
-	before(async function() {
+	before(async function () {
 		await createUsers(users);
 		await client.setUser({ id: users[0] }, createUserToken(users[0]));
 		channel = client.channel('messaging', channelID, {
@@ -368,63 +368,63 @@ describe('Watchers count', function() {
 		});
 	});
 
-	context('When watch is called', function() {
+	context('When watch is called', function () {
 		const watchStartEvent = createEventWaiter(client, 'user.watching.start');
 
-		it('increase watcher count', async function() {
+		it('increase watcher count', async function () {
 			const resp = await channel.watch();
 			expect(resp.watcher_count).to.eq(1);
 		});
 
-		it('sends watch event', function() {
-			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+		it('sends watch event', function () {
+			return expect(watchStartEvent).to.be.fulfilled.then(function (events) {
 				expect(events[0].user.id).to.eq(users[0]);
 				expect(events[0].watcher_count).to.eq(1);
 			});
 		});
 	});
 
-	context('When new client is connected', function() {
+	context('When new client is connected', function () {
 		let newClient;
 		let newClientChannel;
 
 		let watchStartEvent;
 
-		before(async function() {
+		before(async function () {
 			newClient = await getTestClientForUser(users[1]);
 			newClientChannel = await newClient.channel('messaging', channelID);
 			watchStartEvent = createEventWaiter(client, 'user.watching.start');
 			await newClientChannel.watch();
 		});
 
-		it('sends user.watching.start event', function() {
-			return expect(watchStartEvent).to.be.fulfilled.then(function(events) {
+		it('sends user.watching.start event', function () {
+			return expect(watchStartEvent).to.be.fulfilled.then(function (events) {
 				expect(events[0].user.id).to.eq(users[1]);
 				expect(events[0].watcher_count).to.eq(2);
 			});
 		});
 
-		it('increase watcher count', async function() {
+		it('increase watcher count', async function () {
 			let resp = await channel.watch();
 			expect(resp.watcher_count).to.eq(2);
 			resp = await newClientChannel.watch();
 			expect(resp.watcher_count).to.eq(2);
 		});
 
-		context('When client calls stopWatching', function() {
+		context('When client calls stopWatching', function () {
 			const watchingStopEvent = createEventWaiter(client, 'user.watching.stop');
 
-			before(async function() {
+			before(async function () {
 				await newClientChannel.stopWatching();
 			});
 
-			it('decrease watcher count', async function() {
+			it('decrease watcher count', async function () {
 				const resp = await channel.watch();
 				expect(resp.watcher_count).to.eq(1);
 			});
 
-			it('sends user.watching.stop event', function() {
-				return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+			it('sends user.watching.stop event', function () {
+				return expect(watchingStopEvent).to.be.fulfilled.then(function (events) {
 					expect(events[0].user.id).to.eq(users[1]);
 					expect(events[0].watcher_count).to.eq(1);
 				});
@@ -432,10 +432,10 @@ describe('Watchers count', function() {
 		});
 	});
 
-	context('When new client is disconnected', function() {
+	context('When new client is disconnected', function () {
 		let newClient, newClientChannel, watchingStopEvent;
 
-		before(async function() {
+		before(async function () {
 			newClient = await getTestClientForUser(users[2]);
 			newClientChannel = newClient.channel('messaging', channelID);
 			watchingStopEvent = createEventWaiter(client, 'user.watching.stop');
@@ -446,13 +446,13 @@ describe('Watchers count', function() {
 			await newClient.disconnect(5000);
 		});
 
-		it('decrease watcher count', async function() {
+		it('decrease watcher count', async function () {
 			const resp = await channel.watch();
 			expect(resp.watcher_count).to.eq(1);
 		});
 
-		it('sends user.watching.stop event', function() {
-			return expect(watchingStopEvent).to.be.fulfilled.then(function(events) {
+		it('sends user.watching.stop event', function () {
+			return expect(watchingStopEvent).to.be.fulfilled.then(function (events) {
 				expect(events[0].user.id).to.eq(users[2]);
 				expect(events[0].watcher_count).to.eq(1);
 			});
@@ -460,7 +460,7 @@ describe('Watchers count', function() {
 	});
 });
 
-describe('Count Anonymous users', function() {
+describe('Count Anonymous users', function () {
 	const admin = 'tommaso' + uuidv4();
 	const channelID = uuidv4();
 	const clients = [];
@@ -481,7 +481,7 @@ describe('Count Anonymous users', function() {
 			clients[i] = { client: client1, channel: channel1 };
 		}
 	});
-	it('each anon client should count as a user', async function() {
+	it('each anon client should count as a user', async function () {
 		let lastWatcherInfo;
 		//connect all the clients
 		for (let i = 0; i < nClients; i++) {
@@ -515,7 +515,7 @@ describe('Count Anonymous users', function() {
 	});
 });
 
-describe('Count Guest users using state', function() {
+describe('Count Guest users using state', function () {
 	const admin = 'tommaso' + uuidv4();
 	const channelID = uuidv4();
 	const clients = [];
@@ -536,7 +536,7 @@ describe('Count Guest users using state', function() {
 			clients[i] = { client: client1, channel: channel1 };
 		}
 	});
-	it('validate watcher counts using state', async function() {
+	it('validate watcher counts using state', async function () {
 		let lastWatcherInfo;
 		//connect all the clients
 		for (let i = 0; i < nClients; i++) {

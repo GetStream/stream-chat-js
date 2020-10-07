@@ -252,7 +252,7 @@ export class StableWSConnection<
     // promise resolves.
     const { ws } = this;
     if (ws && ws.close && ws.readyState === ws.OPEN) {
-      isClosedPromise = new Promise(resolve => {
+      isClosedPromise = new Promise((resolve) => {
         const onclose = (event: WebSocket.CloseEvent) => {
           this.logger(
             'info',
@@ -712,11 +712,11 @@ export class StableWSConnection<
     const that = this;
     this.isResolved = false;
     /** a promise that is resolved once ws.open is called */
-    this.connectionOpen = new Promise<WebSocket.MessageEvent>(function(resolve, reject) {
+    this.connectionOpen = new Promise<WebSocket.MessageEvent>(function (resolve, reject) {
       that.resolvePromise = resolve;
       that.rejectPromise = reject;
     }).then(
-      e => {
+      (e) => {
         if (e.data && typeof e.data === 'string') {
           const data = JSON.parse(e.data) as ConnectionOpen<
             ChannelType,
@@ -733,7 +733,7 @@ export class StableWSConnection<
           return undefined;
         }
       },
-      error => {
+      (error) => {
         throw error;
       },
     );
