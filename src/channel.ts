@@ -499,7 +499,7 @@ export class Channel<
       'updated_at',
       'last_message_at',
     ];
-    reserved.forEach(key => {
+    reserved.forEach((key) => {
       delete channelData[key];
     });
 
@@ -1172,7 +1172,7 @@ export class Channel<
       }
       if (m.created_at > lastRead) {
         const userID = this.getClient().userID;
-        if (m.mentioned_users?.findIndex(u => u.id === userID) !== -1) {
+        if (m.mentioned_users?.findIndex((u) => u.id === userID) !== -1) {
           count++;
         }
       }
@@ -1443,7 +1443,7 @@ export class Channel<
       `Removing listener for ${key} event from channel ${this.cid}`,
       { tags: ['event', 'channel'], channel: this },
     );
-    this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
   // eslint-disable-next-line sonarjs/cognitive-complexity

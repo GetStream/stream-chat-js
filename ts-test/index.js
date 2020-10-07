@@ -574,7 +574,7 @@ const run = async () => {
 	let imports = '';
 	const types = [];
 
-	executables.forEach(i => {
+	executables.forEach((i) => {
 		if (i.imports) {
 			types.push(...i.imports);
 		} else {
@@ -588,7 +588,7 @@ const run = async () => {
 
 	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
 	tsFileName = `${__dirname}/data.ts`;
-	fs.writeFile(tsFileName, `${imports} \n\n`, function(err) {
+	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
 		if (err) {
 			return console.log(err);
 		}
@@ -610,7 +610,7 @@ const executeAndWrite = async (func, name, type) => {
 			`export const ${func.name}Response: ${type} = ${JSON.stringify(
 				response,
 			)}; \n`,
-			function(err) {
+			function (err) {
 				if (err) {
 					return console.log(err);
 				}
@@ -623,7 +623,8 @@ const executeAndWrite = async (func, name, type) => {
 
 		return;
 	} catch (error) {
-		console.log(`${func.name} failed with error: `, error);
+		console.log(`❌ ${func.name} failed with error: `, error);
+		process.exit(1);
 	}
 };
 
