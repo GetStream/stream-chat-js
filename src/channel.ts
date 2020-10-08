@@ -1509,6 +1509,12 @@ export class Channel<
           s.watchers = s.watchers.without(event.user.id);
         }
         break;
+      case 'message.deleted':
+        if (event.message) {
+          if (event.hard_delete) s.removeMessage(event.message);
+          else s.addMessageSorted(event.message);
+        }
+        break;
       case 'message.new':
         if (event.user?.id === this.getClient().user?.id) {
           s.unreadCount = 0;
@@ -1520,7 +1526,6 @@ export class Channel<
         }
         break;
       case 'message.updated':
-      case 'message.deleted':
         if (event.message) {
           s.addMessageSorted(event.message);
         }

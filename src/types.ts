@@ -1356,9 +1356,9 @@ export type MessageBase<
   MessageType = UnknownType,
   UserType = UnknownType
 > = MessageType & {
+  id: string;
   attachments?: Attachment<AttachmentType>[];
   html?: string;
-  id?: string;
   mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;

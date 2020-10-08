@@ -1812,7 +1812,7 @@ export class StreamChat<
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    const clonedMessage = Object.assign({}, message);
+    const clonedMessage: Partial<Message> = Object.assign({}, message);
     delete clonedMessage.id;
 
     const reservedMessageFields: Array<
