@@ -187,14 +187,12 @@ describe('shadow banning users from global app', function () {
 	it('should not show user as shadowed in queryUsers output to sender', async function () {
 		const userClient = await getTestClientForUser(bannedFromApp);
 		const response = await userClient.queryUsers({ id: bannedFromApp });
-		console.log(response.users[0]);
-		expect(response.users[0].shadow_banned).to.eq(false);
+		expect(response.users[0].shadow_banned).to.eq(undefined);
 	});
 
 	it('should show user as shadowed in queryUsers output to admins', async function () {
 		const userClient = await getTestClientForUser(admin);
 		const response = await userClient.queryUsers({ id: bannedFromApp });
-		console.log(response.users[0]);
 		expect(response.users[0].shadow_banned).to.eq(true);
 	});
 
