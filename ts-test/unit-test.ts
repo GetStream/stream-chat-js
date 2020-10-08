@@ -138,6 +138,7 @@ const event = {
   type,
   cid: 'channelid',
   message: {
+    id: 'id',
     text: 'Heloo',
     type: 'system',
     updated_at: '',
