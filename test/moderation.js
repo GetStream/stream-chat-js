@@ -28,7 +28,7 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
-describe.only('shadow banning users in a channel', function () {
+describe('shadow banning users in a channel', function () {
 	const client = getTestClient(true);
 
 	const admin = `admin-${uuidv4()}`;
@@ -156,7 +156,7 @@ describe.only('shadow banning users in a channel', function () {
 	});
 });
 
-describe.only('shadow banning users from global app', function () {
+describe('shadow banning users from global app', function () {
 	const client = getTestClient(true);
 
 	const admin = `admin-${uuidv4()}`;
