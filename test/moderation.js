@@ -28,26 +28,29 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
-describe('shadow banning users in a channel', function () {
+describe.only('shadow banning users in a channel', function () {
 	const client = getTestClient(true);
 
 	const admin = `admin-${uuidv4()}`;
 	const bannedFromChannel = `bannedFromChannel-${uuidv4()}`;
 	const someoneElse = `someoneElse-${uuidv4()}`;
 
-	const channelID = uuidv4();
+	const channelID = `channel-${uuidv4()}`;
 	let channel;
 
-	let shadowBannedMessageID;
+	let shadowBannedMessageID, notShadowBannedMessageID;
 
 	before(async function () {
 		await createUsers([admin, someoneElse, bannedFromChannel]);
+
+		await client.updateUser({ id: admin, role: 'admin' });
 
 		channel = client.channel('livestream', channelID, {
 			members: [bannedFromChannel, someoneElse],
 			created_by_id: admin,
 		});
 		await channel.create();
+		await channel.addModerators([admin]);
 	});
 
 	it('should shadow ban a user from a channel', async function () {
@@ -102,7 +105,36 @@ describe('shadow banning users in a channel', function () {
 		expect(response.message.shadowed).to.eq(true);
 	});
 
+	it('should not show user as shadowed in queryChannels output to sender', async function () {
+		const userClient = await getTestClientForUser(bannedFromChannel);
+		const response = await userClient.queryChannels({ id: channelID });
+		expect(response[0].state.members[bannedFromChannel].shadow_banned).to.eq(false);
+	});
+
+	it('should show user as shadowed in queryChannels output to moderators', async function () {
+		const userClient = await getTestClientForUser(admin);
+		const response = await userClient.queryChannels({ id: channelID });
+		expect(response[0].state.members[bannedFromChannel].shadow_banned).to.eq(true);
+	});
+
+	it('should not show user as shadowed in queryMembers output to sender', async function () {
+		const userClient = await getTestClientForUser(bannedFromChannel);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.queryMembers({ id: bannedFromChannel });
+		expect(response.members[0].shadow_banned).to.eq(false);
+	});
+
+	it('should show user as shadowed in queryMembers output to moderators', async function () {
+		const userClient = await getTestClientForUser(admin);
+		const chan = userClient.channel('livestream', channelID);
+		await chan.watch();
+		const response = await chan.queryMembers({ id: bannedFromChannel });
+		expect(response.members[0].shadow_banned).to.eq(true);
+	});
+
 	it('should remove a shadow ban from a channel', async function () {
+		console.log(channelID);
 		await channel.removeShadowBan(bannedFromChannel);
 	});
 
@@ -113,25 +145,25 @@ describe('shadow banning users in a channel', function () {
 		const response = await chan.sendMessage({
 			text: 'hi, this message is NOT shadow banned!',
 		});
-		shadowBannedMessageID = response.message.id;
+		notShadowBannedMessageID = response.message.id;
 		expect(response.message.shadowed).to.eq(false);
 	});
 
 	it('should not show messages as "shadowed" to others after removeShadowBan()', async function () {
 		const userClient = await getTestClientForUser(someoneElse);
-		const response = await userClient.getMessage(shadowBannedMessageID);
+		const response = await userClient.getMessage(notShadowBannedMessageID);
 		expect(response.message.shadowed).to.eq(false);
 	});
 });
 
-describe('shadow banning users from global app', function () {
+describe.only('shadow banning users from global app', function () {
 	const client = getTestClient(true);
 
 	const admin = `admin-${uuidv4()}`;
 	const bannedFromApp = `bannedFromApp-${uuidv4()}`;
 	const someoneElse = `someoneElse-${uuidv4()}`;
 
-	const channelID = uuidv4();
+	const channelID = `channel-${uuidv4()}`;
 	let channel;
 
 	let shadowBannedMessageID;
