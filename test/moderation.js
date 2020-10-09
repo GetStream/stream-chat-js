@@ -196,6 +196,28 @@ describe('shadow banning users from global app', function () {
 		expect(response.users[0].shadow_banned).to.eq(true);
 	});
 
+	it('should not return shadowed user in queryUsers filter output to sender', async function () {
+		const userClient = await getTestClientForUser(bannedFromApp);
+		const promise = userClient.queryUsers({ id: bannedFromApp, shadow_banned: true });
+		await expect(promise).to.be.rejectedWith(
+			'StreamChat error code 17: QueryUsers failed with error: "users with role "user" are not allowed to filter on shadow_banned"',
+		);
+	});
+
+	it('should return shadowed user in queryUsers filter output to admins', async function () {
+		const userClient = await getTestClientForUser(admin);
+		let response = await userClient.queryUsers({
+			id: bannedFromApp,
+			shadow_banned: true,
+		});
+		expect(response.users.length).to.eq(1);
+		response = await userClient.queryUsers({
+			id: bannedFromApp,
+			shadow_banned: false,
+		});
+		expect(response.users.length).to.eq(0);
+	});
+
 	it('should not show user as shadowed in queryMembers output to sender', async function () {
 		const userClient = await getTestClientForUser(bannedFromApp);
 		const chan = userClient.channel('livestream', channelID);
