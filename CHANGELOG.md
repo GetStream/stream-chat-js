@@ -1,3 +1,17 @@
+## October 12, 2020 - 2.6.0
+
+### Feature
+
+- Typing events for thread #445 [#445](https://github.com/GetStream/stream-chat-js/pull/445/)
+- Hard deleted messages are removed from `channel.state.messages` [#454](https://github.com/GetStream/stream-chat-js/pull/454/)
+- Simplify and document flag/unflag functions for server side usage [#462](https://github.com/GetStream/stream-chat-js/pull/462/)
+
+### Fix
+
+- BlockList types [#455](https://github.com/GetStream/stream-chat-js/pull/455/)
+- `Channel.countUnread()` returns correct unread [#452](https://github.com/GetStream/stream-chat-js/pull/452/)
+- `type` key-value pair added to image uploads to fix React Native Android image upload failures [#464](https://github.com/GetStream/stream-chat-js/pull/464/)
+
 ## October 1, 2020 - 2.5.0
 
 ### Feature
