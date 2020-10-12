@@ -28,6 +28,83 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
+describe('show ban status on member', function () {
+	const guyonID = `guyon-${uuidv4()}`;
+	const evilID = `evil-${uuidv4()}`;
+
+	const channelID = `channel-${uuidv4()}`;
+	let channel;
+
+	const client = getTestClient(true);
+
+	before(async function () {
+		await createUsers([guyonID, evilID]);
+		channel = client.channel('livestream', channelID, {
+			members: [guyonID, evilID],
+			created_by_id: guyonID,
+		});
+		await channel.create();
+	});
+
+	it('should show ban status on member on watch() after banUser', async function () {
+		await channel.banUser(evilID, { user_id: guyonID });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(true);
+	});
+
+	it('should not show ban status on member on watch() after unbanUser()', async function () {
+		await channel.unbanUser(evilID, { user_id: guyonID });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(false);
+	});
+
+	it('should not show ban status on member on watch() after expiration', async function () {
+		await channel.banUser(evilID, { user_id: guyonID, timeout: -10 });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(false);
+	});
+
+	it('should still show ban status on member on watch() after re-join', async function () {
+		await channel.banUser(evilID, { user_id: guyonID });
+		await channel.removeMembers([evilID]);
+		await channel.addMembers([evilID]);
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(true);
+	});
+});
+
 describe('shadow banning users in a channel', function () {
 	const client = getTestClient(true);
 
@@ -134,7 +211,6 @@ describe('shadow banning users in a channel', function () {
 	});
 
 	it('should remove a shadow ban from a channel', async function () {
-		console.log(channelID);
 		await channel.removeShadowBan(bannedFromChannel);
 	});
 
