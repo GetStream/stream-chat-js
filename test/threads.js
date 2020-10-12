@@ -2,19 +2,7 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
-import fs from 'fs';
-import {
-	createUserToken,
-	getTestClient,
-	getTestClientForUser,
-	getTestClientForUser2,
-	getServerTestClient,
-	sleep,
-	runAndLogPromise,
-} from './utils';
-import { v4 as uuidv4 } from 'uuid';
+import { getTestClientForUser, getServerTestClient, runAndLogPromise } from './utils';
 
 const expect = chai.expect;
 

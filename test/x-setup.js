@@ -1,6 +1,6 @@
 import { Permission, AnyResource, AnyRole, Allow } from '../src';
 import { getTestClient } from './utils';
-import { v4 as uuidv4 } from 'uuid';
+import uuidv4 from 'uuid/v4';
 
 async function setupEverythingDisabledChannel(serverAuthClient) {
 	try {

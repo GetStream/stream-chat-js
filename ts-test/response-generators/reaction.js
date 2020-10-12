@@ -1,10 +1,10 @@
-const { v4: uuid4 } = require('uuid');
+const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
 
-const johnID = `john-${uuid4()}`;
+const johnID = `john-${uuidv4()}`;
 
 async function deleteReaction() {
-	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
@@ -14,7 +14,7 @@ async function deleteReaction() {
 }
 
 async function getReactions() {
-	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	await channel.watch();
 	const text = 'testing reactions list';
 	const data = await channel.sendMessage({ text });
@@ -31,7 +31,7 @@ async function getReactions() {
 }
 
 async function sendReaction() {
-	const channel = await utils.createTestChannelForUser(uuid4(), johnID);
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 

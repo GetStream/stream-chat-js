@@ -3,7 +3,7 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import { v4 as uuidv4 } from 'uuid';
+import uuidv4 from 'uuid/v4';
 import WebSocket from 'isomorphic-ws';
 import { Channel } from './channel';
 import { ClientState } from './client_state';

@@ -8,7 +8,7 @@ import {
 	expectHTTPErrorCode,
 	sleep,
 } from './utils';
-import { v4 as uuidv4 } from 'uuid';
+import uuidv4 from 'uuid/v4';
 
 const expect = chai.expect;
 

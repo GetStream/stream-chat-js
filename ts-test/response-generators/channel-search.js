@@ -1,11 +1,11 @@
-const { v4: uuid4 } = require('uuid');
+const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
 
-const johnID = `john-${uuid4()}`;
+const johnID = `john-${uuidv4()}`;
 
 async function channelSearch() {
 	const authClient = await utils.getTestClientForUser(johnID);
-	const channel = await utils.createTestChannelForUser(`poppins-${uuid4()}`, johnID);
+	const channel = await utils.createTestChannelForUser(`poppins-${uuidv4()}`, johnID);
 	const keyword = 'supercalifragilisticexpialidocious';
 	await channel.sendMessage({ text: `words ${keyword} what?` });
 	await channel.sendMessage({ text: `great movie because of ${keyword}` });

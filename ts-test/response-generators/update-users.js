@@ -1,9 +1,9 @@
-const { v4: uuid4 } = require('uuid');
+const uuidv4 = require('uuid/v4');
 const utils = require('../utils');
 
 async function deactivateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
+	const userID = uuidv4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -14,7 +14,7 @@ async function deactivateUser() {
 
 async function deleteUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
+	const userID = uuidv4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -25,13 +25,13 @@ async function deleteUser() {
 
 async function exportUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
+	const userID = uuidv4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
 	});
 
-	const channel = await utils.createTestChannelForUser(uuid4(), userID);
+	const channel = await utils.createTestChannelForUser(uuidv4(), userID);
 	const { message } = await channel.sendMessage({
 		text: 'this is great',
 		user_id: userID,
@@ -43,8 +43,8 @@ async function exportUser() {
 
 async function partialUpdateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
-	const unique = uuid4();
+	const userID = uuidv4();
+	const unique = uuidv4();
 
 	await client.updateUsers([
 		{
@@ -67,10 +67,10 @@ async function partialUpdateUser() {
 
 async function partialUpdateUsers() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
-	const userID2 = uuid4();
-	const userID3 = uuid4();
-	const unique = uuid4();
+	const userID = uuidv4();
+	const userID2 = uuidv4();
+	const userID3 = uuidv4();
+	const unique = uuidv4();
 
 	await client.updateUsers([
 		{
@@ -124,7 +124,7 @@ async function partialUpdateUsers() {
 
 async function reactivateUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
+	const userID = uuidv4();
 	await client.upsertUser({
 		id: userID,
 		name: 'Vishal',
@@ -137,10 +137,10 @@ async function reactivateUser() {
 
 async function updateUsers() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
-	const userID2 = uuid4();
-	const userID3 = uuid4();
-	const unique = uuid4();
+	const userID = uuidv4();
+	const userID2 = uuidv4();
+	const userID3 = uuidv4();
+	const unique = uuidv4();
 
 	return await client.updateUsers([
 		{
@@ -163,7 +163,7 @@ async function updateUsers() {
 
 async function upsertUser() {
 	const client = utils.getServerTestClient();
-	const userID = uuid4();
+	const userID = uuidv4();
 	return await client.upsertUser({
 		id: userID,
 		name: 'Neil',
