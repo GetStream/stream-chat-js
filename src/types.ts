@@ -686,16 +686,6 @@ export type ChannelQueryOptions<
   watchers?: PaginationOptions;
 };
 
-export type FlagMessageOptions<UserType = UnknownType> = {
-  client_id?: string;
-  connection_id?: string;
-  created_by?: string;
-  target_message_id?: string;
-  target_user_id?: string;
-  user?: UserResponse<UserType>;
-  user_id?: string;
-};
-
 export type InviteOptions<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,

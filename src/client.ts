@@ -40,7 +40,6 @@ import {
   Device,
   Event,
   EventHandler,
-  FlagMessageOptions,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -338,11 +337,7 @@ export class StreamChat<
     this.anonymous = false;
 
     this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
-      .then(
-        (result) =>
-          // We only return connection promise;
-          result[1],
-      )
+      .then((result) => result[1]) // We only return connection promise;
       .catch((e) => {
         throw e;
       });
@@ -1663,7 +1658,13 @@ export class StreamChat<
     });
   }
 
-  async flagMessage(targetMessageID: string, options: FlagMessageOptions<UserType> = {}) {
+  /**
+   * flagMessage - flag a message
+   * @param {string} targetMessageID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async flagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagMessageResponse<UserType>>(
       this.baseURL + '/moderation/flag',
       {
@@ -1673,31 +1674,49 @@ export class StreamChat<
     );
   }
 
-  async flagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
+  /**
+   * flagUser - flag a user
+   * @param {string} targetID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async flagUser(targetID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagUserResponse<UserType>>(
       this.baseURL + '/moderation/flag',
       {
-        target_user_id: userID,
+        target_user_id: targetID,
         ...options,
       },
     );
   }
 
-  async unflagMessage(messageID: string, options: FlagMessageOptions<UserType> = {}) {
+  /**
+   * unflagMessage - unflag a message
+   * @param {string} targetMessageID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async unflagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagMessageResponse<UserType>>(
       this.baseURL + '/moderation/unflag',
       {
-        target_message_id: messageID,
+        target_message_id: targetMessageID,
         ...options,
       },
     );
   }
 
-  async unflagUser(userID: string, options: FlagMessageOptions<UserType> = {}) {
+  /**
+   * unflagUser - unflag a user
+   * @param {string} targetID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async unflagUser(targetID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagUserResponse<UserType>>(
       this.baseURL + '/moderation/unflag',
       {
-        target_user_id: userID,
+        target_user_id: targetID,
         ...options,
       },
     );
