@@ -1492,6 +1492,9 @@ describe('Chat', () => {
 
 			it('Delete a Chat message', function (done) {
 				async function runTest() {
+					const channel = authClient.channel('messaging', uuidv4());
+					await channel.watch();
+
 					const text = 'testing the delete flow, does it work?';
 					const data = await channel.sendMessage({ text });
 					expect(data.message.text).to.equal(text);
@@ -1499,6 +1502,10 @@ describe('Chat', () => {
 					channel.on('message.deleted', (event) => {
 						expect(event.message.deleted_at).to.not.be.null;
 						expect(event.message.type).to.be.equal('deleted');
+						expect(event.hard_delete).to.be.undefined;
+						expect(channel.state.messages).to.be.deep.equal([
+							channel.state.messageToImmutable(event.message),
+						]);
 						done();
 					});
 					const deleteResponse = await authClient.deleteMessage(
@@ -1509,6 +1516,24 @@ describe('Chat', () => {
 				runTest().catch((exc) => {
 					done(exc);
 				});
+			});
+
+			it('Hard Delete a Chat message', function (done) {
+				(async () => {
+					const channel = authClient.channel('messaging', uuidv4());
+					await channel.watch();
+
+					channel.on('message.deleted', (event) => {
+						expect(event.message.deleted_at).to.not.be.null;
+						expect(event.message.type).to.be.equal('deleted');
+						expect(event.hard_delete).to.be.true;
+						expect(channel.state.messages).to.be.deep.equal([]);
+						done();
+					});
+
+					const data = await channel.sendMessage({ text: 'hard delete event' });
+					await serverAuthClient.deleteMessage(data.message.id, true);
+				})().catch(done);
 			});
 
 			it('Add a Chat Message with an attachment', async () => {
@@ -2811,6 +2836,28 @@ describe('Chat', () => {
 				expect(e).not.to.be.null;
 			}
 		});
+
+		it('Flag and Unflag a message server side', async () => {
+			//flag the message
+			const text = 'Flag me, i dare you mods!';
+			const { message } = await channel.sendMessage({ text });
+			const data = await serverAuthClient.flagMessage(message.id, {
+				user_id: modUserID,
+			});
+
+			expect(data.flag.target_message_id.toString()).to.equal(
+				message.id.toString(),
+			);
+			expect(data.flag.user.id).to.equal(modUserID);
+
+			//unflag the message
+			const unflagData = await serverAuthClient.unflagMessage(message.id, {
+				user_id: modUserID,
+			});
+			expect(unflagData.flag.target_message_id).to.equal(message.id);
+			expect(unflagData.flag.user.id).to.equal(modUserID);
+		});
+
 		it('Flag and Unflag a user ', async () => {
 			//flag the user
 			const data = await authClient.flagUser('eviluser');
@@ -2833,6 +2880,23 @@ describe('Chat', () => {
 				expect(e).not.to.be.null;
 			}
 		});
+
+		it('Flag and Unflag a user server side ', async () => {
+			//flag the user
+			const data = await serverAuthClient.flagUser('eviluser', {
+				user_id: modUserID,
+			});
+			expect(data.flag.target_user.id).to.equal('eviluser');
+			expect(data.flag.user.id).to.equal(modUserID);
+
+			//unflag the user
+			const unflagData = await serverAuthClient.unflagUser('eviluser', {
+				user_id: modUserID,
+			});
+			expect(unflagData.flag.target_user.id).to.equal('eviluser');
+			expect(unflagData.flag.user.id).to.equal(modUserID);
+		});
+
 		it.skip('Automod Simple', async () => {
 			const text = 'MongoDB is such a fucking piece of shit';
 			const data = await channel.sendMessage({ text });

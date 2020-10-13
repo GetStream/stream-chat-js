@@ -687,16 +687,6 @@ export type ChannelQueryOptions<
   watchers?: PaginationOptions;
 };
 
-export type FlagMessageOptions<UserType = UnknownType> = {
-  client_id?: string;
-  connection_id?: string;
-  created_by?: string;
-  target_message_id?: string;
-  target_user_id?: string;
-  user?: UserResponse<UserType>;
-  user_id?: string;
-};
-
 export type InviteOptions<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
@@ -1358,9 +1348,9 @@ export type MessageBase<
   MessageType = UnknownType,
   UserType = UnknownType
 > = MessageType & {
+  id: string;
   attachments?: Attachment<AttachmentType>[];
   html?: string;
-  id?: string;
   mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;

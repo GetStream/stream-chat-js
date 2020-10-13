@@ -72,6 +72,7 @@ export function addFileToFormData(
       uri,
       name: name || (uri as string).split('/').reverse()[0],
       contentType: contentType || undefined,
+      type: contentType || undefined,
     });
   }
 
