@@ -280,18 +280,6 @@ describe('shadow banning users from global app', function () {
 		expect(response.message.shadowed).to.eq(false);
 	});
 
-	it('should not show user as shadowed in queryChannels output to sender', async function () {
-		const userClient = await getTestClientForUser(bannedFromApp);
-		const response = await userClient.queryChannels({ id: channelID });
-		expect(response[0].state.members[bannedFromApp].shadow_banned).to.eq(false);
-	});
-
-	it('should show user as shadowed in queryChannels output to moderators', async function () {
-		const userClient = await getTestClientForUser(admin);
-		const response = await userClient.queryChannels({ id: channelID });
-		expect(response[0].state.members[bannedFromApp].shadow_banned).to.eq(true);
-	});
-
 	it('should not show user as shadowed in queryUsers output to sender', async function () {
 		const userClient = await getTestClientForUser(bannedFromApp);
 		const response = await userClient.queryUsers({ id: bannedFromApp });
