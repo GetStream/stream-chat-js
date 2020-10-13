@@ -167,6 +167,13 @@ describe('Member style channel init', () => {
 		// accept the invite, very similar to a regular update channel...
 		const nickChannel = nickC.channel('messaging', c.id);
 		const thierryChannel = thierryC.channel('messaging', c.id);
+		const notificationReceived = new Promise((resolve) => {
+			nickC.on('notification.invite_rejected', (e) => {
+				expect(e.channel).to.be.an('object');
+				resolve();
+			});
+		});
+
 		const updateReceived = new Promise((resolve) => {
 			thierryC.on((e) => {
 				if (e.type === 'member.updated') {
@@ -180,6 +187,7 @@ describe('Member style channel init', () => {
 		const response = await nickChannel.rejectInvite();
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_rejected_at).to.not.equal(null);
+		await notificationReceived;
 		await updateReceived;
 		// second time should fail...
 		await expectHTTPErrorCode(400, nickChannel.rejectInvite());
