@@ -11,17 +11,6 @@ import {
   UserResponse,
 } from './types';
 
-const byDate = (
-  a: { created_at: Date | Immutable.ImmutableDate },
-  b: { created_at: Date | Immutable.ImmutableDate },
-) => {
-  if (!a.created_at) return -1;
-
-  if (!b.created_at) return 1;
-
-  return a.created_at.getTime() - b.created_at.getTime();
-};
-
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -227,19 +216,9 @@ export class ChannelState<
     >[],
     initializing = false,
   ) {
-    // parse all the new message dates and add __html for react
-    const parsedMessages: ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['messageToImmutable']
-    >[] = [];
-    for (const message of newMessages) {
+    for (let i = 0; i < newMessages.length; i += 1) {
+      const message = this.messageToImmutable(newMessages[i]);
+
       if (initializing && message.id && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
         // then in that case we remove thread related to this message from threads object.
@@ -247,50 +226,29 @@ export class ChannelState<
         // and consumer can refetch the replies.
         this.threads = this.threads.without(message.id);
       }
-      const parsedMsg = this.messageToImmutable(message);
-
-      parsedMessages.push(parsedMsg);
 
       if (!this.last_message_at) {
-        this.last_message_at = new Date(parsedMsg.created_at.getTime());
+        this.last_message_at = new Date(message.created_at.getTime());
       }
 
-      if (
-        this.last_message_at &&
-        parsedMsg.created_at.getTime() > this.last_message_at.getTime()
-      ) {
-        this.last_message_at = new Date(parsedMsg.created_at.getTime());
+      if (message.created_at.getTime() > this.last_message_at.getTime()) {
+        this.last_message_at = new Date(message.created_at.getTime());
       }
-    }
 
-    // update or append the messages...
-    const updatedThreads: string[] = [];
-    for (const message of parsedMessages) {
-      const isThreadReply = !!(message.parent_id && !message.show_in_channel);
+      // update or append the messages...
+      const parentID = message.parent_id;
+
       // add to the main message list
-      if (!isThreadReply) {
+      if (!parentID || message.show_in_channel) {
         this.messages = this._addToMessageList(this.messages, message);
       }
+
       // add to the thread if applicable..
-      const parentID: string | undefined = message.parent_id;
       if (parentID) {
         const thread = this.threads[parentID] || Immutable([]);
         const threadMessages = this._addToMessageList(thread, message);
         this.threads = this.threads.set(parentID, threadMessages);
-        updatedThreads.push(parentID);
       }
-    }
-
-    // Resort the main messages and the threads that changed...
-    const messages = Immutable.asMutable(this.messages);
-    messages.sort(byDate);
-    this.messages = Immutable(messages);
-    for (const parentID of updatedThreads) {
-      const threadMessages = this.threads[parentID]
-        ? Immutable.asMutable(this.threads[parentID])
-        : [];
-      threadMessages.sort(byDate);
-      this.threads = this.threads.set(parentID, threadMessages);
     }
   }
 
@@ -483,7 +441,7 @@ export class ChannelState<
         >['messageToImmutable']
       >
     >,
-    newMessage: ReturnType<
+    message: ReturnType<
       ChannelState<
         AttachmentType,
         ChannelType,
@@ -495,35 +453,50 @@ export class ChannelState<
       >['messageToImmutable']
     >,
   ) {
-    let updated = false;
-    let newMessages: Immutable.ImmutableArray<ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['messageToImmutable']
-    >> = Immutable([]);
+    // for empty list just concat and return
+    if (messages.length === 0) return messages.concat(message);
 
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
-      const idMatch = !!message.id && !!newMessage.id && message.id === newMessage.id;
+    // if message is newer than last item in the list just concat and return
+    if (messages[messages.length - 1].created_at.getTime() < message.created_at.getTime())
+      return messages.concat(message);
 
-      if (idMatch) {
+    // find the closest index to push the new message
+    let left = 0;
+    let middle = 0;
+    let right = messages.length - 1;
+    while (left <= right) {
+      middle = Math.floor((right + left) / 2);
+      if (messages[middle].created_at.getTime() <= message.created_at.getTime())
+        left = middle + 1;
+      else right = middle - 1;
+    }
+
+    // if message already exists, update and return
+    if (message.id) {
+      if (messages[left] && message.id === messages[left].id)
         // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        newMessages = messages.set(i, newMessage);
-        updated = true;
-      }
+        return messages.set(left, message);
+
+      if (messages[left - 1] && message.id === messages[left - 1].id)
+        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
+        return messages.set(left - 1, message);
     }
 
-    if (!updated) {
-      newMessages = messages.concat([newMessage]);
-    }
-
-    return newMessages;
+    const mutable = messages.asMutable() as Array<
+      ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['messageToImmutable']
+      >
+    >;
+    mutable.splice(left, 0, message);
+    return Immutable(mutable);
   }
 
   /**
