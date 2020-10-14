@@ -1,6 +1,6 @@
 import chai from 'chai';
 import { v4 as uuidv4 } from 'uuid';
-import { ChannelState } from '../src/channel_state';
+import { ChannelState } from '../../src/channel_state';
 
 const expect = chai.expect;
 

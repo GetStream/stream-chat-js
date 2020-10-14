@@ -37,6 +37,9 @@ jobs:
       - name: Run API type definition tests
         run: yarn && yarn test-types
 
+      - name: Unit tests
+        run: yarn run test-unit
+
       # not running this, but we should, tests are broken though
       # - name: Test
       #   env:
