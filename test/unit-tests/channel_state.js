@@ -1,3 +1,4 @@
+import Immutable from 'seamless-immutable';
 import chai from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 import { ChannelState } from '../../src/channel_state';
@@ -169,5 +170,49 @@ describe('ChannelState addMessagesSorted', function () {
 		for (let i = 0; i < 200; i++) {
 			expect(state.messages[i].id).to.be.equal(`${i + 100}`);
 		}
+	});
+
+	it('should return Immutable', async function () {
+		const state = new ChannelState();
+		expect(Immutable.isImmutable(state.messages)).to.be.true;
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+		]);
+		expect(Immutable.isImmutable(state.messages)).to.be.true;
+		expect(Immutable.isImmutable(state.messages[0])).to.be.true;
+
+		state.addMessagesSorted([
+			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z', parent_id: '0' }),
+		]);
+		expect(Immutable.isImmutable(state.messages)).to.be.true;
+		expect(state.messages).to.have.length(1);
+		expect(state.threads['0']).to.have.length(1);
+		expect(Immutable.isImmutable(state.threads)).to.be.true;
+		expect(Immutable.isImmutable(state.threads['0'])).to.be.true;
+		expect(Immutable.isImmutable(state.threads['0'][0])).to.be.true;
+	});
+
+	it('updates last_message_at correctly', async function () {
+		const state = new ChannelState();
+		expect(state.last_message_at).to.be.null;
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+		]);
+		expect(state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		);
+		state.addMessagesSorted([
+			generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }),
+		]);
+		expect(state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		);
+
+		state.addMessagesSorted([
+			generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }),
+		]);
+		expect(state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.001Z').getTime(),
+		);
 	});
 });
