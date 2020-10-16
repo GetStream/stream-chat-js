@@ -172,6 +172,67 @@ describe('ChannelState addMessagesSorted', function () {
 		}
 	});
 
+	it('should avoid duplicates if message.created_at changes', async function () {
+		const state = new ChannelState();
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+		]);
+		expect(state.messages).to.have.length(1);
+
+		state.addMessageSorted(
+			{
+				...state.messages[0].asMutable(),
+				created_at: '2020-01-01T00:00:00.044Z',
+				text: 'update 0',
+			},
+			true,
+		);
+		expect(state.messages).to.have.length(1);
+		expect(state.messages[0].text).to.be.equal('update 0');
+		expect(state.messages[0].created_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.044Z').getTime(),
+		);
+	});
+
+	it('should respect order and avoid duplicates if message.created_at changes', async function () {
+		const state = new ChannelState();
+		state.addMessagesSorted([
+			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+		]);
+		expect(state.messages).to.have.length(4);
+
+		state.addMessagesSorted(
+			[
+				{
+					...state.messages[3].asMutable(),
+					created_at: '2020-01-01T00:00:00.033Z',
+					text: 'update 3',
+				},
+			],
+			true,
+		);
+		expect(state.messages).to.have.length(4);
+		expect(state.messages[3].text).to.be.equal('update 3');
+
+		state.addMessageSorted(
+			{
+				...state.messages[0].asMutable(),
+				created_at: '2020-01-01T00:00:00.044Z',
+				text: 'update 0',
+			},
+			true,
+		);
+		expect(state.messages).to.have.length(4);
+		expect(state.messages[3].text).to.be.equal('update 0');
+		expect(state.messages[0].id).to.be.equal('1');
+		expect(state.messages[1].id).to.be.equal('2');
+		expect(state.messages[2].id).to.be.equal('3');
+		expect(state.messages[3].id).to.be.equal('0');
+	});
+
 	it('should return Immutable', async function () {
 		const state = new ChannelState();
 		expect(Immutable.isImmutable(state.messages)).to.be.true;

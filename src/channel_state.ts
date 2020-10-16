@@ -156,6 +156,7 @@ export class ChannelState<
    * addMessageSorted - Add a message to the state
    *
    * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage A new message
+   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    *
    */
   addMessageSorted(
@@ -167,8 +168,9 @@ export class ChannelState<
       ReactionType,
       UserType
     >,
+    timestampChanged = false,
   ) {
-    return this.addMessagesSorted([newMessage]);
+    return this.addMessagesSorted([newMessage], timestampChanged);
   }
 
   /**
@@ -202,7 +204,8 @@ export class ChannelState<
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
    * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
-   * @param {boolean} initializing Weather channel is being initialized.
+   * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
+   * @param {boolean} initializing Whether channel is being initialized.
    *
    */
   addMessagesSorted(
@@ -214,6 +217,7 @@ export class ChannelState<
       ReactionType,
       UserType
     >[],
+    timestampChanged = false,
     initializing = false,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
@@ -240,13 +244,13 @@ export class ChannelState<
 
       // add to the main message list
       if (!parentID || message.show_in_channel) {
-        this.messages = this._addToMessageList(this.messages, message);
+        this.messages = this._addToMessageList(this.messages, message, timestampChanged);
       }
 
       // add to the thread if applicable..
       if (parentID) {
         const thread = this.threads[parentID] || Immutable([]);
-        const threadMessages = this._addToMessageList(thread, message);
+        const threadMessages = this._addToMessageList(thread, message, timestampChanged);
         this.threads = this.threads.set(parentID, threadMessages);
       }
     }
@@ -425,6 +429,7 @@ export class ChannelState<
    *
    * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
    * @param {ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    *
    */
   _addToMessageList(
@@ -452,38 +457,47 @@ export class ChannelState<
         UserType
       >['messageToImmutable']
     >,
+    timestampChanged = false,
   ) {
+    let messageArr = messages;
+
+    // if created_at has changed, message should be filtered and re-inserted in correct order
+    // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
+    if (timestampChanged) {
+      messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
+    }
+
     // for empty list just concat and return
-    if (messages.length === 0) return messages.concat(message);
+    if (messageArr.length === 0) return messageArr.concat(message);
 
     const messageTime = message.created_at.getTime();
 
     // if message is newer than last item in the list concat and return
-    if (messages[messages.length - 1].created_at.getTime() < messageTime)
-      return messages.concat(message);
+    if (messageArr[messageArr.length - 1].created_at.getTime() < messageTime)
+      return messageArr.concat(message);
 
     // find the closest index to push the new message
     let left = 0;
     let middle = 0;
-    let right = messages.length - 1;
+    let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (messages[middle].created_at.getTime() <= messageTime) left = middle + 1;
+      if (messageArr[middle].created_at.getTime() <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
-    // if message already exists, update and return
-    if (message.id) {
-      if (messages[left] && message.id === messages[left].id)
+    // message already exists and not filtered due to timestampChanged, update and return
+    if (!timestampChanged && message.id) {
+      if (messageArr[left] && message.id === messageArr[left].id)
         // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        return messages.set(left, message);
+        return messageArr.set(left, message);
 
-      if (messages[left - 1] && message.id === messages[left - 1].id)
+      if (messageArr[left - 1] && message.id === messageArr[left - 1].id)
         // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        return messages.set(left - 1, message);
+        return messageArr.set(left - 1, message);
     }
 
-    const mutable = messages.asMutable() as Array<
+    const mutable = messageArr.asMutable() as Array<
       ReturnType<
         ChannelState<
           AttachmentType,
