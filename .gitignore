@@ -67,5 +67,4 @@ typings/
 /.vscode
 /.idea
 
-ts-test/data.js
-ts-test/data.ts
+test/typescript/data.*
