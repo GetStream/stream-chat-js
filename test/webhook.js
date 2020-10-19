@@ -170,6 +170,7 @@ describe('Webhooks', function () {
 	});
 
 	it('should receive new message event with members included', async function () {
+		await sleep(1000);
 		await Promise.all([chan.addMembers([thierryID]), chan.addMembers([tommasoID])]);
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.new'),
