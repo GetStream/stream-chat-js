@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getTestClient, getTestClientForUser } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { sleep } from '../src/utils';
+import { sleep } from '../../src/utils';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);

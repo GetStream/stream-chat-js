@@ -2,7 +2,7 @@ import { getTestClient, createUserToken, getTestClientForUser } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { BuiltinPermissions } from '../src';
+import { BuiltinPermissions } from '../../src';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);

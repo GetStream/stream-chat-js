@@ -5,7 +5,7 @@ import {
 	BuiltinRoles,
 	BuiltinPermissions,
 	Allow,
-} from '../src/permissions';
+} from '../../src/permissions';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import chai from 'chai';
