@@ -1,4 +1,4 @@
-import { Permission, AnyResource, AnyRole, Allow } from '../src';
+import { Permission, AnyResource, AnyRole, Allow } from '../../src';
 import { getTestClient } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 

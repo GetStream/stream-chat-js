@@ -1,12 +1,12 @@
-import { StableWSConnection } from '../src/connection';
-import { sleep } from '../src/utils';
+import { StableWSConnection } from '../../src/connection';
+import { sleep } from '../../src/utils';
 import { getTestClientForUser, getTestClient, createUserToken } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
 import chai from 'chai';
 const expect = chai.expect;
 import sinon from 'sinon';
-import { TokenManager } from '../src/token_manager';
+import { TokenManager } from '../../src/token_manager';
 
 const wsBaseURL = process.env.STREAM_LOCAL_TEST_RUN
 	? 'ws://localhost:3030'
