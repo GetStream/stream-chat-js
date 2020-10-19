@@ -13,7 +13,7 @@ import {
 	AnyRole,
 	DenyAll,
 	Permission,
-} from '../src/permissions';
+} from '../../src/permissions';
 import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import fs from 'fs';
@@ -747,7 +747,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'certificate',
 									p12_cert: fs.readFileSync(
-										'./test/push_test/stream-push-test-outdated.p12',
+										'./test/integration/push_test/stream-push-test-outdated.p12',
 									),
 								},
 							}),
@@ -762,7 +762,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'certificate',
 									p12_cert: fs.readFileSync(
-										'./test/push_test/stream-push-test.p12',
+										'./test/integration/push_test/stream-push-test.p12',
 									),
 									bundle_id: 'io.getstream.PushNotifTest',
 									development: true,
@@ -792,7 +792,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'certificate',
 									p12_cert: fs.readFileSync(
-										'./test/push_test/stream-push-test.p12',
+										'./test/integration/push_test/stream-push-test.p12',
 									),
 									bundle_id: 'io.getstream.PushNotifTest',
 									development: false,
@@ -844,7 +844,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'token',
 									auth_key: fs.readFileSync(
-										'./test/push_test/push-test-auth-key.p8',
+										'./test/integration/push_test/push-test-auth-key.p8',
 										'utf-8',
 									),
 									key_id: 'keykey',
@@ -864,7 +864,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'token',
 									auth_key: fs.readFileSync(
-										'./test/push_test/push-test-auth-key.p8',
+										'./test/integration/push_test/push-test-auth-key.p8',
 										'utf-8',
 									),
 									key_id: '',
@@ -884,7 +884,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'token',
 									auth_key: fs.readFileSync(
-										'./test/push_test/push-test-auth-key.p8',
+										'./test/integration/push_test/push-test-auth-key.p8',
 										'utf-8',
 									),
 									key_id: 'keykey',
@@ -903,7 +903,7 @@ describe('App configs', function () {
 							apn_config: {
 								auth_type: 'token',
 								auth_key: fs.readFileSync(
-									'./test/push_test/push-test-auth-key.p8',
+									'./test/integration/push_test/push-test-auth-key.p8',
 									'utf-8',
 								),
 								key_id: 'keykey',
@@ -939,7 +939,7 @@ describe('App configs', function () {
 							apn_config: {
 								auth_type: 'token',
 								auth_key: fs.readFileSync(
-									'./test/push_test/push-test-auth-key.p8',
+									'./test/integration/push_test/push-test-auth-key.p8',
 									'utf-8',
 								),
 								key_id: 'keykey',
@@ -976,7 +976,7 @@ describe('App configs', function () {
 							apn_config: {
 								auth_type: 'certificate',
 								p12_cert: fs.readFileSync(
-									'./test/push_test/stream-push-test.p12',
+									'./test/integration/push_test/stream-push-test.p12',
 								),
 								notification_template: '{ {{ } }',
 							},
@@ -992,7 +992,7 @@ describe('App configs', function () {
 								apn_config: {
 									auth_type: 'certificate',
 									p12_cert: fs.readFileSync(
-										'./test/push_test/stream-push-test.p12',
+										'./test/integration/push_test/stream-push-test.p12',
 									),
 									notification_template: '{{ message.id }}',
 								},
@@ -1119,7 +1119,10 @@ describe('App configs', function () {
 		const userID = uuidv4();
 		let user = {};
 		const apn_config = {
-			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
+			auth_key: fs.readFileSync(
+				'./test/integration/push_test/push-test-auth-key.p8',
+				'utf-8',
+			),
 			key_id: 'whatever',
 			team_id: 'stream',
 			bundle_id: 'bundle',
@@ -1629,7 +1632,10 @@ describe('Devices', function () {
 		let userID;
 		let deviceID;
 		const apn_config = {
-			auth_key: fs.readFileSync('./test/push_test/push-test-auth-key.p8', 'utf-8'),
+			auth_key: fs.readFileSync(
+				'./test/integration/push_test/push-test-auth-key.p8',
+				'utf-8',
+			),
 			key_id: 'whatever',
 			team_id: 'stream',
 			bundle_id: 'bundle',

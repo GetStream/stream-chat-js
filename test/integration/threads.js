@@ -3,7 +3,7 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import Immutable from 'seamless-immutable';
-import { StreamChat } from '../src';
+import { StreamChat } from '../../src';
 import fs from 'fs';
 import {
 	createUserToken,
