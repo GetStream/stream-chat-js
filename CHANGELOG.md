@@ -1,3 +1,9 @@
+## October 20, 2020 - 2.7.0
+
+### Fix
+
+- `channel.addMessageSorted` performance has been improved. It now accepts an extra parameter `timestampChanged: boolean` which needs to be set for updating a message in the state with the same `id` and different `created_at` [#470](https://github.com/GetStream/stream-chat-js/pull/470/)
+
 ## October 12, 2020 - 2.6.0
 
 ### Feature

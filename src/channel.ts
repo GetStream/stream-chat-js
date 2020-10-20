@@ -1688,7 +1688,7 @@ export class Channel<
     if (!this.state.messages) {
       this.state.messages = Immutable([]);
     }
-    this.state.addMessagesSorted(messages, true);
+    this.state.addMessagesSorted(messages, false, true);
     this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
