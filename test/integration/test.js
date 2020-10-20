@@ -2269,29 +2269,6 @@ describe('Chat', () => {
 			c.state.filterErrorMessages(message);
 			expect(c.state.messages.length).to.equal(2);
 		});
-
-		it('Update Message', () => {
-			const c = authClient.channel('twitch', 'state');
-			const message = { id: 1, text: 'my message' };
-			const message2 = { id: 2, text: 'my message 2' };
-			c.state.messages = Immutable([message, message2]);
-			message2.text = 'hello world';
-			c.state.addMessageSorted(message2);
-			expect(c.state.messages.length).to.equal(2);
-			expect(c.state.messages[1].text).to.equal('hello world');
-		});
-
-		it('Add A Message', () => {
-			const c = authClient.channel('twitch', 'state');
-			const message = { id: 1, text: 'my message' };
-			const message2 = { id: 2, text: 'my message 2' };
-			c.state.messages = Immutable([message]);
-			// this should append
-			c.state.addMessageSorted(message2, true);
-			expect(c.state.messages.length).to.equal(2);
-			expect(c.state.messages[0].text).to.equal('my message');
-			expect(c.state.messages[1].text).to.equal('my message 2');
-		});
 	});
 
 	describe('Channel moderators', () => {
