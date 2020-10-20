@@ -1631,7 +1631,7 @@ export class StreamChat<
    */
   async shadowBan(targetUserID: string, options?: BanUserOptions<UserType>) {
     return await this.banUser(targetUserID, {
-      shadow_ban: true,
+      shadow: true,
       ...options,
     });
   }
@@ -1644,7 +1644,7 @@ export class StreamChat<
    */
   async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
     return await this.unbanUser(targetUserID, {
-      shadow_ban: true,
+      shadow: true,
       ...options,
     });
   }

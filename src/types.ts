@@ -768,7 +768,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
-  shadow_ban?: boolean;
+  shadow?: boolean;
   target_user_id?: string;
   type?: string;
 };
