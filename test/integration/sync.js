@@ -168,7 +168,7 @@ describe('Sync endpoint', () => {
 	});
 
 	it('create and update a message', async () => {
-		const message = { id: uuidv4(), user_id: otherUserID };
+		const message = { id: uuidv4(), user_id: otherUserID, text: 'some text' };
 		const response = await blueChannel.sendMessage(message);
 		await sleep(100);
 		serverSideClient.updateMessage(message, otherUserID);

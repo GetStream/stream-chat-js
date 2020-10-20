@@ -2272,8 +2272,8 @@ describe('Chat', () => {
 
 		it('Update Message', () => {
 			const c = authClient.channel('twitch', 'state');
-			const message = { id: 1, text: 'my message' };
-			const message2 = { id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message', created_at: new Date() };
+			const message2 = { id: 2, text: 'my message 2', created_at: new Date() };
 			c.state.messages = Immutable([message, message2]);
 			message2.text = 'hello world';
 			c.state.addMessageSorted(message2);
@@ -2283,8 +2283,8 @@ describe('Chat', () => {
 
 		it('Add A Message', () => {
 			const c = authClient.channel('twitch', 'state');
-			const message = { id: 1, text: 'my message' };
-			const message2 = { id: 2, text: 'my message 2' };
+			const message = { id: 1, text: 'my message', created_at: new Date() };
+			const message2 = { id: 2, text: 'my message 2', created_at: new Date() };
 			c.state.messages = Immutable([message]);
 			// this should append
 			c.state.addMessageSorted(message2, true);
