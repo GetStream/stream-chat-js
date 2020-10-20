@@ -5,7 +5,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
-import { StreamChat, decodeBase64, encodeBase64 } from '../src';
+import { StreamChat, decodeBase64, encodeBase64 } from '../../src';
 import { expectHTTPErrorCode, getTestClientWithWarmUp } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';

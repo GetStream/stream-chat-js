@@ -567,7 +567,7 @@ export type UpdateUsersAPIResponse<UserType = UnknownType> = APIResponse & {
   users: { [key: string]: UserResponse<UserType> };
 };
 
-export type UserResponse<T = UnknownType> = User<T> & {
+export type UserResponse<UserType = UnknownType> = User<UserType> & {
   banned?: boolean;
   created_at?: string;
   deactivated_at?: string;
@@ -1464,7 +1464,7 @@ export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
 
-export type User<T = UnknownType> = T & {
+export type User<UserType = UnknownType> = UserType & {
   id: string;
   anon?: boolean;
   name?: string;

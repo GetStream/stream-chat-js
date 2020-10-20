@@ -7,7 +7,7 @@ import chaiLike from 'chai-like';
 import assertArrays from 'chai-arrays';
 
 import { v4 as uuidv4 } from 'uuid';
-import { TokenManager } from '../src/token_manager';
+import { TokenManager } from '../../src/token_manager';
 import sinon from 'sinon';
 
 const expect = chai.expect;

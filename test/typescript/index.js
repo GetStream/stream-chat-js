@@ -586,7 +586,7 @@ const run = async () => {
 	);
 	imports = uniqueTypes.join(', ');
 
-	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '..';`;
+	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '../..';`;
 	tsFileName = `${__dirname}/data.ts`;
 	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
 		if (err) {
