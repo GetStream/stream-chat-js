@@ -23,6 +23,9 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - name: Unit tests
+        run: yarn run test-unit
+
   test-types:
     runs-on: ubuntu-latest
     strategy:
