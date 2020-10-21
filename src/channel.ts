@@ -1003,7 +1003,6 @@ export class Channel<
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined);
     this.initialized = true;
-    this._initializeState(state);
     this.data = state.channel;
 
     this._client.logger(
