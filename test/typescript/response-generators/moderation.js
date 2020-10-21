@@ -14,6 +14,20 @@ async function banUsers() {
 	});
 }
 
+async function shadowBan() {
+	const client = utils.getTestClient(true);
+	const user = {
+		id: uuidv4(),
+	};
+
+	const evilUser = 'evil-shadow-user' + uuidv4();
+	await utils.createUsers([evilUser, user.id]);
+	return await client.banUser(evilUser, {
+		user_id: user.id,
+		shadow: true,
+	});
+}
+
 async function createBlockList() {
 	const name = 'FWord';
 	const client = utils.getTestClient(true);
@@ -204,6 +218,18 @@ async function unbanUsers() {
 	return await client.unbanUser(evilUser);
 }
 
+async function removeShadowBan() {
+	const client = utils.getTestClient(true);
+	const user = {
+		id: uuidv4(),
+	};
+
+	const evilUser = 'evil-shadow-user' + uuidv4();
+	await utils.createUsers([evilUser, user.id]);
+
+	return await client.unbanUser(evilUser);
+}
+
 async function unflagMessage() {
 	//flag the user
 	const authClient = utils.getTestClient(true);
@@ -337,4 +363,6 @@ module.exports = {
 	unmuteUser,
 	updateBlockList,
 	updatePermission,
+	shadowBan,
+	removeShadowBan,
 };

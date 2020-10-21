@@ -44,6 +44,12 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['banUser']>>",
 	},
 	{
+		f: rg.shadowBan,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['shadowBan']>>",
+	},
+	{
 		f: rg.channelSearch,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -465,6 +471,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unbanUser']>>",
+	},
+	{
+		f: rg.removeShadowBan,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['removeShadowBan']>>",
 	},
 	{
 		f: rg.unflagMessage,
