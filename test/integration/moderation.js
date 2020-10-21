@@ -11,6 +11,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+
 const expect = chai.expect;
 
 if (process.env.NODE_ENV !== 'production') {
@@ -26,6 +27,370 @@ Promise.config({
 });
 
 chai.use(chaiAsPromised);
+
+describe('A user with a global shadow ban', function () {
+	const client = getTestClient(true);
+
+	const normalUser = `normal-${uuidv4()}`;
+	const evilUser = `evil-${uuidv4()}`;
+
+	const channelID = `channel-${uuidv4()}`;
+	let shadowedMessageID;
+
+	before(async function () {
+		await createUsers([normalUser, evilUser]);
+
+		await client.shadowBan(evilUser, { user_id: normalUser });
+
+		const channel = client.channel('livestream', channelID, {
+			members: [normalUser, evilUser],
+			created_by_id: normalUser,
+		});
+		await channel.create();
+	});
+
+	it('should be able to sendMessage() without seeing message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+		const response = await channel.sendMessage({
+			text: 'hi, this message is shadow banned!',
+		});
+		shadowedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should be able to updateMessage() without seeing the message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.updateMessage({
+			id: shadowedMessageID,
+			text: 'hi, this message is still definitely shadow banned!',
+		});
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should be able to getMessage() without seeing the message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.getMessage(shadowedMessageID);
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should have its getMessage() message.shadowed to others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const response = await userClient.getMessage(shadowedMessageID);
+		expect(response.message.shadowed).to.eq(true);
+	});
+
+	it('should not show up in queryUsers({shadow_banned: true}) for itself', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.queryUsers({
+			id: evilUser,
+			shadow_banned: true,
+		});
+		expect(response.users.length).to.eq(0);
+	});
+
+	it('should not have its user.shadowed in queryUsers() for itself', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.queryUsers({
+			id: evilUser,
+		});
+		expect(response.users[0].shadow_banned).to.eq(false);
+	});
+
+	it('should show up in queryUsers({shadow_banned: true}) for others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const response = await userClient.queryUsers({
+			id: evilUser,
+			shadow_banned: true,
+		});
+		expect(response.users.length).to.eq(1);
+		expect(response.users[0].shadow_banned).to.eq(true);
+	});
+
+	it('should have its user.shadowed in queryUsers() for others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const response = await userClient.queryUsers({
+			id: evilUser,
+		});
+		expect(response.users[0].shadow_banned).to.eq(true);
+	});
+
+	it('should all be back to normal after removeShadowBan()', async function () {
+		await client.removeShadowBan(evilUser);
+
+		let userClient = await getTestClientForUser(evilUser);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+
+		const response = await channel.sendMessage({
+			text: 'hi, this message is NOT shadow banned!',
+		});
+		shadowedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+
+		expect(
+			(
+				await userClient.queryUsers({
+					id: evilUser,
+					shadow_banned: true,
+				})
+			).users.length,
+		).to.eq(0);
+
+		expect(
+			(
+				await userClient.queryUsers({
+					id: evilUser,
+				})
+			).users[0].shadow_banned,
+		).to.eq(false);
+
+		userClient = await getTestClientForUser(normalUser);
+
+		expect((await userClient.getMessage(shadowedMessageID)).message.shadowed).to.eq(
+			false,
+		);
+
+		expect(
+			(
+				await userClient.queryUsers({
+					id: evilUser,
+					shadow_banned: true,
+				})
+			).users.length,
+		).to.eq(0);
+
+		expect(
+			(
+				await userClient.queryUsers({
+					id: evilUser,
+				})
+			).users[0].shadow_banned,
+		).to.eq(false);
+	});
+});
+
+describe('A user with a channel shadow ban', function () {
+	const client = getTestClient(true);
+
+	const normalUser = `normal-${uuidv4()}`;
+	const evilUser = `evil-${uuidv4()}`;
+
+	const channelID = `channel-${uuidv4()}`;
+	let ch, shadowedMessageID;
+
+	before(async function () {
+		await createUsers([normalUser, evilUser]);
+
+		ch = client.channel('livestream', channelID, {
+			members: [normalUser, evilUser],
+			created_by_id: normalUser,
+		});
+		await ch.create();
+
+		await ch.shadowBan(evilUser, { user_id: normalUser });
+	});
+
+	it('should be able to sendMessage() without seeing message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+		const response = await channel.sendMessage({
+			text: 'hi, this message is shadow banned!',
+		});
+		shadowedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should be able to updateMessage() without seeing the message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.updateMessage({
+			id: shadowedMessageID,
+			text: 'hi, this message is still definitely shadow banned!',
+		});
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should be able to getMessage() without seeing the message.shadowed', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.getMessage(shadowedMessageID);
+		expect(response.message.shadowed).to.eq(false);
+	});
+
+	it('should have its getMessage() message.shadowed to others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const response = await userClient.getMessage(shadowedMessageID);
+		expect(response.message.shadowed).to.eq(true);
+	});
+
+	it('should not have its member.shadowed in queryMembers() for itself', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+		const response = await channel.queryMembers({
+			id: evilUser,
+		});
+		expect(response.members[0].shadow_banned).to.eq(false);
+	});
+
+	it('should have its member.shadowed in queryMembers() for others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+		const response = await channel.queryMembers({
+			id: evilUser,
+		});
+		expect(response.members[0].shadow_banned).to.eq(true);
+	});
+
+	it('should not have its member.shadowed in queryChannels() for itself', async function () {
+		const userClient = await getTestClientForUser(evilUser);
+		const response = await userClient.queryChannels({
+			id: channelID,
+		});
+		expect(response[0].state.members[evilUser].shadow_banned).to.eq(false);
+	});
+
+	it('should have its member.shadowed in queryChannels() for others', async function () {
+		const userClient = await getTestClientForUser(normalUser);
+		const response = await userClient.queryChannels({
+			id: channelID,
+		});
+		expect(response[0].state.members[evilUser].shadow_banned).to.eq(true);
+	});
+
+	it('should all be back to normal after removeShadowBan()', async function () {
+		await ch.removeShadowBan(evilUser);
+
+		let userClient = await getTestClientForUser(evilUser);
+		let channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+
+		const response = await channel.sendMessage({
+			text: 'hi, this message is NOT shadow banned!',
+		});
+		shadowedMessageID = response.message.id;
+		expect(response.message.shadowed).to.eq(false);
+
+		expect(
+			(
+				await channel.queryMembers({
+					id: evilUser,
+				})
+			).members[0].shadow_banned,
+		).to.eq(false);
+
+		expect(
+			(
+				await userClient.queryChannels({
+					id: channelID,
+				})
+			)[0].state.members[evilUser].shadow_banned,
+		).to.eq(false);
+
+		userClient = await getTestClientForUser(normalUser);
+		channel = userClient.channel('livestream', channelID);
+		await channel.watch();
+
+		expect((await userClient.getMessage(shadowedMessageID)).message.shadowed).to.eq(
+			false,
+		);
+
+		expect(
+			(
+				await channel.queryMembers({
+					id: evilUser,
+				})
+			).members[0].shadow_banned,
+		).to.eq(false);
+
+		expect(
+			(
+				await userClient.queryChannels({
+					id: channelID,
+				})
+			)[0].state.members[evilUser].shadow_banned,
+		).to.eq(false);
+	});
+});
+
+describe('show ban status on member', function () {
+	const guyonID = `guyon-${uuidv4()}`;
+	const evilID = `evil-${uuidv4()}`;
+
+	const channelID = `channel-${uuidv4()}`;
+	let channel;
+
+	const client = getTestClient(true);
+
+	before(async function () {
+		await createUsers([guyonID, evilID]);
+		channel = client.channel('livestream', channelID, {
+			members: [guyonID, evilID],
+			created_by_id: guyonID,
+		});
+		await channel.create();
+	});
+
+	it('should show ban status on member on watch() after banUser', async function () {
+		await channel.banUser(evilID, { user_id: guyonID });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(true);
+	});
+
+	it('should not show ban status on member on watch() after unbanUser()', async function () {
+		await channel.unbanUser(evilID, { user_id: guyonID });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(false);
+	});
+
+	it('should not show ban status on member on watch() after expiration', async function () {
+		await channel.banUser(evilID, { user_id: guyonID, timeout: -10 });
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(false);
+	});
+
+	it('should still show ban status on member on watch() after re-join', async function () {
+		await channel.banUser(evilID, { user_id: guyonID });
+		await channel.removeMembers([evilID]);
+		await channel.addMembers([evilID]);
+
+		const userClient = await getTestClientForUser(evilID);
+		const resp = await userClient.channel('livestream', channelID).watch();
+
+		let isBanned;
+		resp.members.forEach((member) => {
+			if (member.user.id === evilID) isBanned = member.banned;
+		});
+
+		expect(isBanned).to.eq(true);
+	});
+});
 
 describe('block list moderation CRUD', () => {
 	const client = getServerTestClient();

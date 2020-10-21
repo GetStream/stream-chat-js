@@ -574,6 +574,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   deleted_at?: string;
   last_active?: string;
   online?: boolean;
+  shadow_banned?: boolean;
   updated_at?: string;
 };
 
@@ -767,6 +768,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
+  shadow?: boolean;
   target_user_id?: string;
   type?: string;
 };

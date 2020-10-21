@@ -1773,6 +1773,7 @@ describe('Chat', () => {
 					status: 'busy',
 					image: 'myimageurl',
 					role: 'user',
+					shadow_banned: false,
 				};
 
 				users[i] = (await serverAuthClient.updateUser(user)).users[username(i)];

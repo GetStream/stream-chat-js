@@ -1623,6 +1623,32 @@ export class StreamChat<
     });
   }
 
+  /** shadowBan - shadow bans a user from all channels
+   *
+   * @param {string} targetUserID
+   * @param {BanUserOptions<UserType>} [options]
+   * @returns {Promise<APIResponse>}
+   */
+  async shadowBan(targetUserID: string, options?: BanUserOptions<UserType>) {
+    return await this.banUser(targetUserID, {
+      shadow: true,
+      ...options,
+    });
+  }
+
+  /** removeShadowBan - revoke global shadow ban for a user
+   *
+   * @param {string} targetUserID
+   * @param {UnBanUserOptions} [options]
+   * @returns {Promise<APIResponse>}
+   */
+  async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
+    return await this.unbanUser(targetUserID, {
+      shadow: true,
+      ...options,
+    });
+  }
+
   /** muteUser - mutes a user
    *
    * @param {string} targetID
