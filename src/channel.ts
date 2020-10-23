@@ -1554,7 +1554,7 @@ export class Channel<
         if (event.user?.id === this.getClient().user?.id) {
           s.unreadCount = 0;
         } else {
-          s.unreadCount = s.unreadCount + 1;
+          if (!event.message?.shadowed) s.unreadCount = s.unreadCount + 1;
         }
         if (event.message) {
           s.addMessageSorted(event.message);
