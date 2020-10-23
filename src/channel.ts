@@ -1171,6 +1171,9 @@ export class Channel<
       if (this.getClient().userID === message.user?.id) {
         continue;
       }
+      if (m.shadowed) {
+        continue;
+      }
       if (m.silent) {
         continue;
       }
