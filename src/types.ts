@@ -173,12 +173,14 @@ export type UpdateMessageAPIResponse<
 };
 
 export type ChannelMemberResponse<UserType = UnknownType> = {
+  banned?: boolean;
   created_at?: string;
   invite_accepted_at?: string;
   invite_rejected_at?: string;
   invited?: boolean;
   is_moderator?: boolean;
   role?: string;
+  shadow_banned?: boolean;
   updated_at?: string;
   user?: UserResponse<UserType>;
   user_id?: string;
@@ -403,6 +405,7 @@ export type MessageResponse<
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
+  shadowed?: boolean;
   silent?: boolean;
   status?: string;
   type?: string;
