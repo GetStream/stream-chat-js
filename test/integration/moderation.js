@@ -28,7 +28,7 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
-describe.skip('configure automod', () => {
+describe('configure automod', () => {
 	const client = getServerTestClient();
 
 	it('enable AI automod, with thresholds', async () => {
