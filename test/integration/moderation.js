@@ -28,6 +28,56 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
+describe.skip('configure automod', () => {
+	const client = getServerTestClient();
+
+	it('enable AI automod, with thresholds', async () => {
+		await client.updateChannelType('team', {
+			automod: 'AI',
+			automod_thresholds: {
+				explicit: { flag: 0.1, block: 0.3 },
+				spam: { flag: 0.2 },
+				toxic: { block: 0.3 },
+			},
+		});
+		const response = await client.getChannelType('team');
+		expect(response.automod).to.eql('AI');
+		expect(response.automod_thresholds.explicit).to.eql({ flag: 0.1, block: 0.3 });
+		expect(response.automod_thresholds.spam).to.eql({ flag: 0.2 });
+		expect(response.automod_thresholds.toxic).to.eql({ block: 0.3 });
+	});
+
+	it('sending AI automod just for fun', async () => {
+		await client.updateChannelType('team', {
+			automod: 'AI',
+		});
+		const response = await client.getChannelType('team');
+		expect(response.automod).to.eql('AI');
+		expect(response.automod_thresholds.explicit).to.eql({ flag: 0.1, block: 0.3 });
+		expect(response.automod_thresholds.spam).to.eql({ flag: 0.2 });
+		expect(response.automod_thresholds.toxic).to.eql({ block: 0.3 });
+	});
+
+	it('disable AI automod', async () => {
+		await client.updateChannelType('team', {
+			automod: 'disabled',
+			automod_thresholds: null,
+		});
+		const response = await client.getChannelType('team');
+		expect(response.automod).to.eql('disabled');
+		expect(response.automod_thresholds).to.be.undefined;
+	});
+
+	it('enable AI automod, no thresholds', async () => {
+		await client.updateChannelType('team', {
+			automod: 'AI',
+		});
+		const response = await client.getChannelType('team');
+		expect(response.automod).to.eql('AI');
+		expect(response.automod_thresholds).to.be.undefined;
+	});
+});
+
 describe('A user with a global shadow ban', function () {
 	const client = getTestClient(true);
 
