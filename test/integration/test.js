@@ -614,7 +614,7 @@ describe('Chat', () => {
 				{ limit: 2, offset: 0 },
 			);
 			expect(searchPromise).to.be.rejectedWith(
-				'Fulltext search is not enabled for message field "mycustomfield"',
+				'StreamChat error code 4: Search failed with error: "search is not enabled for field messages.mycustomfield."',
 			);
 		});
 	});
