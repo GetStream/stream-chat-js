@@ -1,3 +1,28 @@
+## October 26, 2020 - 2.7.1
+
+### Feature
+
+- New functions to shadow ban a user from one or all channels [#447](https://github.com/GetStream/stream-chat-js/pull/447)
+
+```js
+// global shadow ban on all channels
+client.shadowBan(target_user_id);
+client.removeShadowBan(target_user_id);
+
+// channel speceifc shadow ban
+channel.shadowBan(target_user_id);
+channel.removeShadowBan(target_user_id);
+```
+
+### Fix
+
+- Ignore shadowed messages in the unread count [#475](https://github.com/GetStream/stream-chat-js/pull/475)
+- Remove duplicated \_initializeState call [#473](https://github.com/GetStream/stream-chat-js/pull/473)
+
+### Chore
+
+- Upgrade dependencies [#477](https://github.com/GetStream/stream-chat-js/pull/477)
+
 ## October 20, 2020 - 2.7.0
 
 ### Fix
