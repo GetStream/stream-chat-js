@@ -1141,6 +1141,9 @@ export class Channel<
       if (this.getClient().userID === message.user?.id) {
         continue;
       }
+      if (m.shadowed) {
+        continue;
+      }
       if (m.silent) {
         continue;
       }
@@ -1166,6 +1169,9 @@ export class Channel<
     for (const m of this.state.messages.asMutable()) {
       const message = m.asMutable({ deep: true });
       if (this.getClient().userID === message.user?.id) {
+        continue;
+      }
+      if (m.shadowed) {
         continue;
       }
       if (m.silent) {
@@ -1548,7 +1554,7 @@ export class Channel<
         if (event.user?.id === this.getClient().user?.id) {
           s.unreadCount = 0;
         } else {
-          s.unreadCount = s.unreadCount + 1;
+          if (!event.message?.shadowed) s.unreadCount = s.unreadCount + 1;
         }
         if (event.message) {
           s.addMessageSorted(event.message);
