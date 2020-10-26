@@ -201,13 +201,13 @@ describe('Auto translation usage', function () {
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: SendMessage failed with error: "message.i18n is a reserved field',
 		);
-		englishClient.updateMessage({
+		const p2 = englishClient.updateMessage({
 			id: messageId,
 			text: 'Je parle français',
 			i18n: { hey: 123 },
 		});
-		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: SendMessage failed with error: "message.i18n is a reserved field',
+		await expect(p2).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateMessage failed with error: "message.i18n is a reserved field',
 		);
 	});
 });
