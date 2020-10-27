@@ -6,7 +6,7 @@ import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
 import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../../src';
-import { expectHTTPErrorCode, getTestClientWithWarmUp } from './utils';
+import { expectHTTPErrorCode, getTestClientWithWarmUp, createEventWaiter } from './utils';
 import fs from 'fs';
 import assertArrays from 'chai-arrays';
 const mockServer = require('mockttp').getLocal();
@@ -2169,14 +2169,14 @@ describe('Chat', () => {
 		});
 
 		it('Typing Helpers', async () => {
-			let occurrences = 0;
-			eventChannel.on('typing.start', () => occurrences++);
+			const waiter = createEventWaiter(eventChannel, 'typing.start');
 
 			await eventChannel.keystroke();
 			await eventChannel.keystroke();
 
-			if (occurrences === 0) throw Error('typing.start never called');
-			if (occurrences > 1) throw Error('too many typing.start events');
+			const events = await waiter;
+
+			expect(events).to.have.length(1);
 		});
 	});
 
