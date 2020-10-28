@@ -1338,6 +1338,12 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
+export type NewMessage<
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  UserType = UnknownType
+> = Partial<Message<AttachmentType, MessageType, UserType>>;
+
 export type Message<
   AttachmentType = UnknownType,
   MessageType = UnknownType,

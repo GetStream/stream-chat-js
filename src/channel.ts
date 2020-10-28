@@ -23,7 +23,7 @@ import {
   InviteOptions,
   LiteralStringForUnion,
   MarkReadOptions,
-  Message,
+  NewMessage,
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
@@ -190,11 +190,11 @@ export class Channel<
   /**
    * sendMessage - Send a message to this channel
    *
-   * @param {Message<AttachmentType, MessageType, UserType>} message The Message object
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} message The Message object
    *
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
+  async sendMessage(message: NewMessage<AttachmentType, MessageType, UserType>) {
     const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
         AttachmentType,
@@ -480,7 +480,7 @@ export class Channel<
    * update - Edit the channel's custom properties
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
-   * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
@@ -490,7 +490,7 @@ export class Channel<
       | Partial<
           Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
         > = {},
-    updateMessage?: Message<AttachmentType, MessageType, UserType>,
+    updateMessage?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     // Strip out reserved names that will result in API errors.
     const reserved = [
@@ -664,12 +664,12 @@ export class Channel<
    * addMembers - add members to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
     members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
+    message?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
@@ -692,12 +692,12 @@ export class Channel<
    * addModerators - add moderators to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addModerators(
     members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
+    message?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
@@ -720,12 +720,12 @@ export class Channel<
    * inviteMembers - invite members to the channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
     members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
+    message?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
@@ -748,12 +748,12 @@ export class Channel<
    * removeMembers - remove members from channel
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async removeMembers(
     members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
+    message?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
@@ -776,12 +776,12 @@ export class Channel<
    * demoteModerators - remove moderator role from channel members
    *
    * @param {string[]} members An array of member identifiers
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {NewMessage<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async demoteModerators(
     members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
+    message?: NewMessage<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
