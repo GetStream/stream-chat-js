@@ -228,7 +228,7 @@ voidReturn = channel.off(eventHandler);
 voidReturn = channel.on('message.new', eventHandler);
 voidReturn = channel.off('message.new', eventHandler);
 
-channel.sendMessage({ text: '' }); // send a msg without id
+channel.sendMessage({ text: 'text' }); // send a msg without id
 
 const permissions = [
   new Permission(
