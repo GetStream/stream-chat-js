@@ -910,7 +910,7 @@ export type ChannelFilters<
   UserType = UnknownType
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
-    members?: QueryFilter<string>;
+    members?: RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>;
   } & {
     name?:
       | RequireOnlyOne<
