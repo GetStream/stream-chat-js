@@ -59,6 +59,7 @@ export type AppSettingsAPIResponse<
       {
         automod?: ChannelConfigAutomod;
         automod_behavior?: ChannelConfigAutomodBehavior;
+        blocklist_behavior?: ChannelConfigAutomodBehavior;
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
@@ -196,7 +197,9 @@ export type CheckPushResponse = APIResponse & {
   rendered_firebase_template?: string;
 };
 
-export type CommandResponse<CommandType extends string = LiteralStringForUnion> = {
+export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
+  CreatedAtUpdatedAt
+> & {
   args?: string;
   description?: string;
   name?: CommandVariants<CommandType>;
@@ -648,6 +651,7 @@ export type ListCommandsResponse<
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
@@ -1208,6 +1212,7 @@ export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
