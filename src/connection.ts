@@ -39,6 +39,7 @@ type Constructor<
   userAgent: string;
   userID: string;
   wsBaseURL: string;
+  testIPOverride?: string;
 };
 
 /**
@@ -95,6 +96,7 @@ export class StableWSConnection<
     },
   ) => void;
   resolvePromise?: (value?: WebSocket.MessageEvent) => void;
+  testIPOverride?: string;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
@@ -107,6 +109,7 @@ export class StableWSConnection<
     logger,
     messageCallback,
     recoverCallback,
+    testIPOverride,
     tokenManager,
     user,
     userAgent,
@@ -120,6 +123,7 @@ export class StableWSConnection<
     this.authType = authType;
     this.userAgent = userAgent;
     this.apiKey = apiKey;
+    this.testIPOverride = testIPOverride;
     this.tokenManager = tokenManager;
     /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
@@ -211,7 +215,11 @@ export class StableWSConnection<
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
-    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
+    let url = `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
+    if (this.testIPOverride !== null && this.testIPOverride !== undefined) {
+      url += `&X-Forwarded-For=${this.testIPOverride}&X-Forwarded-Port=80`;
+    }
+    return url;
   };
 
   /**
