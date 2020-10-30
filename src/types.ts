@@ -914,7 +914,10 @@ export type ChannelFilters<
   UserType = UnknownType
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
-    members?: RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>;
+    members?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
+      | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+      | PrimitiveFilter<string[]>;
   } & {
     name?:
       | RequireOnlyOne<
