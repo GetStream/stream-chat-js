@@ -396,6 +396,13 @@ describe('Channels - members', function () {
 					initialMembers.concat(newMembers),
 				);
 			});
+
+			it('returns channels when searching for members', async function () {
+				const resp = await tommasoClient.queryChannels({
+					members: { $in: newMembers },
+				});
+				expect(resp.length).to.be.equal(1);
+			});
 		});
 
 		describe('When removing members', function () {
@@ -409,6 +416,13 @@ describe('Channels - members', function () {
 				expect(resp.members.map((m) => m.user.id)).to.have.members(
 					initialMembers,
 				);
+			});
+
+			it('returns no channels when searching for members', async function () {
+				const resp = await tommasoClient.queryChannels({
+					members: { $in: newMembers },
+				});
+				expect(resp.length).to.be.equal(0);
 			});
 		});
 	});
