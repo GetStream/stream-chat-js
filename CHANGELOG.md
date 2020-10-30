@@ -1,3 +1,9 @@
+## October 30, 2020 - 2.7.2
+
+### Fix
+
+- Improve types of `sendMessage()`, `updateMessage()`, `ChannelFilters` and `AppSettingsAPIResponse` [#480](https://github.com/GetStream/stream-chat-js/pull/480) [#483](https://github.com/GetStream/stream-chat-js/pull/483)
+
 ## October 26, 2020 - 2.7.1
 
 ### Feature
