@@ -1350,7 +1350,7 @@ export type Message<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
   UserType = UnknownType
-> = MessageBase<AttachmentType, MessageType, UserType> & {
+> = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
 
