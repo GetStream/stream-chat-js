@@ -1,3 +1,9 @@
+## November 03, 2020 - 2.7.3
+
+### Fix
+
+- Browser file upload incorrect file name [#487](https://github.com/GetStream/stream-js/pull/487)
+
 ## October 30, 2020 - 2.7.2
 
 ### Fix
