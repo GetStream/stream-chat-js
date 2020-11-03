@@ -2990,16 +2990,27 @@ describe('Chat', () => {
 				await channel.watch();
 			});
 
-			it('Upload a file', async () => {
+			it('Upload a file with specific name', async () => {
 				const file = fs.createReadStream('./helloworld.txt');
-				const data = await channel.sendFile(file, 'hello_world.txt');
+				const data = await channel.sendFile(file, 'XX.txt');
+
 				expect(data.file).to.be.not.empty;
+				expect(data.file.includes('XX.txt?')).to.be.ok;
+			});
+
+			it('Upload a file without name', async () => {
+				const file = fs.createReadStream('./helloworld.txt');
+				const data = await channel.sendFile(file);
+
+				expect(data.file).to.be.not.empty;
+				expect(data.file.includes('helloworld.txt?')).to.be.ok;
 			});
 
 			it('Upload a stream', (done) => {
 				https.get('https://nodejs.org/static/legacy/images/logo.png', (file) => {
 					channel.sendFile(file).then((data) => {
 						expect(data.file).to.be.not.empty;
+						expect(data.file.includes('logo.png?')).to.be.ok;
 						done();
 					});
 				});
@@ -3009,18 +3020,21 @@ describe('Chat', () => {
 				const file = Buffer.from('random string');
 				const data = await channel.sendFile(file, 'hello_world.txt');
 				expect(data.file).to.be.not.empty;
+				expect(data.file.includes('hello_world.txt?')).to.be.ok;
 			});
 
 			it('Upload an image', async () => {
 				const file = fs.createReadStream('./helloworld.jpg');
 				const data = await channel.sendImage(file, 'hello_world.jpg');
 				expect(data.file).to.be.not.empty;
+				expect(data.file.includes('hello_world.jpg?')).to.be.ok;
 			});
 
 			it('Upload a less common image format', async () => {
 				const file = fs.createReadStream('./helloworld.heic');
 				const data = await channel.sendImage(file, 'hello_world.heic');
 				expect(data.file).to.be.not.empty;
+				expect(data.file.includes('hello_world.heic?')).to.be.ok;
 			});
 
 			it('File upload entire flow', async () => {
