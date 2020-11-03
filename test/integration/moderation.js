@@ -28,6 +28,28 @@ Promise.config({
 
 chai.use(chaiAsPromised);
 
+describe('configure image moderation', () => {
+	const client = getServerTestClient();
+
+	it('should enable image moderation', async () => {
+		await client.updateAppSettings({
+			image_moderation_enabled: true,
+		});
+
+		const response = await client.getAppSettings();
+		expect(response.app.image_moderation_enabled).to.eql(true);
+	});
+
+	it('should disable image moderation', async () => {
+		await client.updateAppSettings({
+			image_moderation_enabled: false,
+		});
+
+		const response = await client.getAppSettings();
+		expect(response.app.image_moderation_enabled).to.eql(false);
+	});
+});
+
 describe('configure automod', () => {
 	const client = getServerTestClient();
 
