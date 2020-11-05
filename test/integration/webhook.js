@@ -189,14 +189,14 @@ describe('Webhooks', function () {
 		const tommaso = event.members.find((mem) => mem.user.id === tommasoID);
 		expect(thierry).to.not.be.undefined;
 		expect(tommaso).to.not.be.undefined;
-		expect(thierry.unread_count).to.eq(1);
-		expect(thierry.total_unread_count).to.eq(1);
-		expect(thierry.unread_channels).to.eq(1);
-		expect(thierry.online).to.eq(false);
+		expect(thierry.user.unread_count).to.eq(1);
+		expect(thierry.user.total_unread_count).to.eq(1);
+		expect(thierry.user.unread_channels).to.eq(1);
+		expect(thierry.user.online).to.eq(false);
 		// tommaso gets the same count since he created the msg
-		expect(tommaso.unread_count).to.eq(0);
-		expect(tommaso.total_unread_count).to.eq(0);
-		expect(tommaso.unread_channels).to.eq(0);
+		expect(tommaso.user.unread_count).to.eq(0);
+		expect(tommaso.user.total_unread_count).to.eq(0);
+		expect(tommaso.user.unread_channels).to.eq(0);
 		expect(tommaso.user.online).to.eq(false);
 	});
 
