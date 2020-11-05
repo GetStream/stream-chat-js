@@ -137,7 +137,6 @@ export class StreamChat<
   secret?: string;
   setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   state: ClientState<UserType>;
-  testIPOverride?: string;
   tokenManager: TokenManager<UserType>;
   user?: UserResponse<UserType>;
   userAgent?: string;
@@ -1078,11 +1077,10 @@ export class StreamChat<
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
       userID: client.userID,
-      testIPOverride: client.testIPOverride,
       tokenManager: client.tokenManager,
       user: this._user,
       authType: this.getAuthType(),
-      userAgent: this._userAgent(),
+      userAgent: this.getUserAgent(),
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,

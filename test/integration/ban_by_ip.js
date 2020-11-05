@@ -23,11 +23,22 @@ function randomIP() {
 	);
 }
 
+// mockIP appends X-Forwarded-For to the user agent string
+function mockIP(client, ip) {
+	client.setUserAgent(
+		client.getUserAgent() + `&X-Forwarded-For=${ip}&X-Forwarded-Port=80`,
+	);
+}
+
 describe('ban user by ip', () => {
 	const serverClient = getTestClient(true);
 	const adminUser = {
 		id: uuidv4(),
 	};
+
+	const ip1 = randomIP();
+	const ip2 = randomIP();
+	const ip3 = randomIP();
 
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
@@ -36,13 +47,13 @@ describe('ban user by ip', () => {
 	const tommasoToken = createUserToken(tommasoID);
 	const thierryToken = createUserToken(thierryID);
 	const tommasoClient1 = getTestClient();
-	tommasoClient1.testIPOverride = randomIP();
+	mockIP(tommasoClient1, ip1);
 	const tommasoClient2 = getTestClient();
-	tommasoClient2.testIPOverride = randomIP();
+	mockIP(tommasoClient2, ip2);
 	const thierryClient1 = getTestClient();
-	thierryClient1.testIPOverride = tommasoClient1.testIPOverride;
+	mockIP(thierryClient1, ip1);
 	const thierryClient2 = getTestClient();
-	thierryClient2.testIPOverride = randomIP();
+	mockIP(thierryClient2, ip3);
 
 	before(async () => {
 		await createUsers([adminUser.id]);
