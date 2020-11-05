@@ -7,7 +7,7 @@ const expect = chai.expect;
 
 chai.use(chaiAsPromised);
 
-describe.only('enforce unique usernames', function () {
+describe('enforce unique usernames', function () {
 	const serverAuth = getTestClient(true);
 	const dupeUserId = uuidv4();
 
@@ -72,24 +72,24 @@ describe.only('enforce unique usernames', function () {
 		);
 	});
 
-	// it('should fail partialUpdateUser with an existing username on app level', async () => {
-	//   const id = uuidv4();
-	//   await serverAuth.upsertUser({
-	//     id,
-	//     name: id,
-	//   });
-	//
-	//   const p = serverAuth.partialUpdateUser({
-	//     id,
-	//     set: {
-	//       name: 'dupes-of-hazard',
-	//     },
-	//   });
-	//
-	//   await expect(p).to.be.rejectedWith(
-	//     'StreamChat error code 4: UpdateUsers failed with error: "username \'dupes-of-hazard\' already exists"',
-	//   );
-	// });
+	it('should fail partialUpdateUser with an existing username on app level', async () => {
+		const id = uuidv4();
+		await serverAuth.upsertUser({
+			id,
+			name: id,
+		});
+
+		const p = serverAuth.partialUpdateUser({
+			id,
+			set: {
+				name: 'dupes-of-hazard',
+			},
+		});
+
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateUsersPartial failed with error: "username \'dupes-of-hazard\' already exists"',
+		);
+	});
 
 	it('should enable unique usernames on team level', async () => {
 		await serverAuth.updateAppSettings({
@@ -138,17 +138,57 @@ describe.only('enforce unique usernames', function () {
 		);
 	});
 
-	// it('should fail upsertUser when adding to team containing username', async () => {
+	it('should fail partialUpdateUser with an existing username on team level', async () => {
+		const id = uuidv4();
+		await serverAuth.upsertUser({
+			id,
+			name: id,
+			teams: ['red'],
+		});
+
+		const p = serverAuth.partialUpdateUser({
+			id,
+			set: {
+				name: 'dupes-of-hazard',
+			},
+		});
+
+		await expect(p).to.be.rejectedWith(
+			"StreamChat error code 4: UpdateUsersPartial failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+		);
+	});
+
+	it('should fail upsertUser when updating to team containing username', async () => {
+		const id = uuidv4();
+		await serverAuth.upsertUser({
+			id: id,
+			name: 'dupes-of-hazard',
+		});
+
+		const p = serverAuth.upsertUser({
+			id: id,
+			name: 'dupes-of-hazard',
+			teams: ['red'],
+		});
+
+		await expect(p).to.be.rejectedWith(
+			"StreamChat error code 4: UpdateUsers failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+		);
+	});
+
+	// THIS DOESN'T WORK :(
+	// it('should fail partialUpdateUser when updating to team containing username', async () => {
 	//   const id = uuidv4();
 	//   await serverAuth.upsertUser({
 	//     id: id,
 	//     name: 'dupes-of-hazard',
 	//   });
 	//
-	//   const p = serverAuth.upsertUser({
+	//   const p = serverAuth.partialUpdateUser({
 	//     id: id,
-	//     name: 'dupes-of-hazard',
-	//     teams: ['red'],
+	//     set: {
+	//       teams: ['red'],
+	//     },
 	//   });
 	//
 	//   await expect(p).to.be.rejectedWith(
@@ -164,41 +204,4 @@ describe.only('enforce unique usernames', function () {
 		const response = await serverAuth.getAppSettings();
 		expect(response.app.enforce_unique_usernames).to.eql('no');
 	});
-
-	// it('should fail to use an existing username', async () => {
-	//   const p = serverAuth.upsertUsers([
-	//     {
-	//       id: uuidv4(),
-	//       name: 'dupes-of-hazard',
-	//     },
-	//   ]);
-	//
-	//   await expect(p).to.be.rejectedWith(
-	//     'error: username "dupes-of-hazard" already exists',
-	//   );
-	// });
-	//
-	// it('should succeed with unique usernames within team', async () => {
-	//   await serverAuth.upsertUsers([
-	//     {
-	//       id: uuidv4(),
-	//       name: 'dupes-of-hazard',
-	//       teams: ["blue"],
-	//     },
-	//   ]);
-	// });
-	//
-	// it('should fail to use an existing username within team', async () => {
-	//   const p = serverAuth.upsertUsers([
-	//     {
-	//       id: uuidv4(),
-	//       name: 'dupes-of-hazard',
-	//       teams: ["blue"],
-	//     },
-	//   ]);
-	//
-	//   await expect(p).to.be.rejectedWith(
-	//     'error: username "dupes-of-hazard" already exists in team "blue"',
-	//   );
-	// });
 });
