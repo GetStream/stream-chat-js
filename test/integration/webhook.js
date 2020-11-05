@@ -185,8 +185,8 @@ describe('Webhooks', function () {
 		expect(event.members).to.be.an('array');
 		expect(event.members).to.have.length(2);
 
-		let thierry = event.members.find((mem) => mem.user.id === thierryID);
-		let tommaso = event.members.find((mem) => mem.user.id === tommasoID);
+		const thierry = event.members.find((mem) => mem.user.id === thierryID);
+		const tommaso = event.members.find((mem) => mem.user.id === tommasoID);
 		expect(thierry).to.not.be.undefined;
 		expect(tommaso).to.not.be.undefined;
 		expect(thierry.unread_count).to.eq(1);
