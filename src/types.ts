@@ -589,6 +589,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  */
 
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
+  ip_ban?: boolean;
   reason?: string;
   timeout?: number;
   user?: UserResponse<UserType>;

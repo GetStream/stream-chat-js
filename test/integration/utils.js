@@ -21,11 +21,10 @@ export function getTestClientForUser2(userID, status, options) {
 
 export async function getTestClientForUser(userID, status, options) {
 	const client = getTestClient(false);
-	const health = await client.setUser(
+	client.health = await client.setUser(
 		{ id: userID, status, ...options },
 		createUserToken(userID),
 	);
-	client.health = health;
 	return client;
 }
 
@@ -93,7 +92,7 @@ export async function createUsers(userIDs) {
 	for (const userID of userIDs) {
 		users.push({ id: userID });
 	}
-	return await serverClient.updateUsers(users);
+	return await serverClient.upsertUsers(users);
 }
 
 export function createEventWaiter(clientOrChannel, eventTypes) {

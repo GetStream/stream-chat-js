@@ -462,7 +462,10 @@ describe('Channels - members', function () {
 					{ state: true },
 				);
 				expect(channels.length).to.be.equal(2);
-				expect(channels[0].data.last_message_at).to.be.equal(last_message);
+				// parse date to avoid precision issues
+				expect(Date.parse(channels[0].data.last_message_at)).to.be.equal(
+					Date.parse(last_message),
+				);
 			}
 			channel1Messages.push(results[0].message);
 			channel2Messages.push(msg2.message);
