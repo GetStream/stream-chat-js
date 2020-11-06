@@ -10,6 +10,8 @@ chai.use(chaiAsPromised);
 describe('enforce unique usernames', function () {
 	const serverAuth = getTestClient(true);
 	const dupeUserId = uuidv4();
+	const dupeName = uuidv4();
+	const dupeTeam = uuidv4();
 
 	before(async () => {
 		await serverAuth.updateAppSettings({
@@ -18,8 +20,8 @@ describe('enforce unique usernames', function () {
 
 		await serverAuth.upsertUser({
 			id: uuidv4(),
-			name: 'dupes-of-hazard',
-			teams: ['red'],
+			name: dupeName,
+			teams: [dupeTeam],
 		});
 	});
 
@@ -51,11 +53,11 @@ describe('enforce unique usernames', function () {
 	it('should fail upsertUser(insert) with an existing username on app level', async () => {
 		const p = serverAuth.upsertUser({
 			id: uuidv4(),
-			name: 'dupes-of-hazard',
+			name: dupeName,
 		});
 
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateUsers failed with error: "username \'dupes-of-hazard\' already exists"',
+			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
@@ -68,11 +70,11 @@ describe('enforce unique usernames', function () {
 
 		const p = serverAuth.upsertUser({
 			id,
-			name: 'dupes-of-hazard',
+			name: dupeName,
 		});
 
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateUsers failed with error: "username \'dupes-of-hazard\' already exists"',
+			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
@@ -86,89 +88,62 @@ describe('enforce unique usernames', function () {
 		const p = serverAuth.partialUpdateUser({
 			id,
 			set: {
-				name: 'dupes-of-hazard',
+				name: dupeName,
 			},
 		});
 
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateUsersPartial failed with error: "username \'dupes-of-hazard\' already exists"',
+			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
 	it('should only succeed once in race upsertUser(insert) with an existing username on app level', async () => {
 		const name = uuidv4();
-		const result = await Promise.allSettled([
-			serverAuth.upsertUser({
-				id: uuidv4(),
-				name,
-			}),
-			serverAuth.upsertUser({
-				id: uuidv4(),
-				name,
-			}),
-			serverAuth.upsertUser({
-				id: uuidv4(),
-				name,
-			}),
-			serverAuth.upsertUser({
-				id: uuidv4(),
-				name,
-			}),
-		]);
+		const n = 5;
+		const p = [];
 
-		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
+		for (let i = 0; i < n; i++) {
+			p.push(
+				serverAuth.upsertUser({
+					id: uuidv4(),
+					name,
+				}),
+			);
+		}
+
+		const results = await Promise.allSettled(p);
+		expect(results.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
 	it('should only succeed once in race partialUpdateUser(insert) with an existing username on app level', async () => {
 		const id = uuidv4();
 		const name = uuidv4();
+		const n = 5;
+		let p = [];
 
-		await Promise.all([
-			serverAuth.upsertUser({
-				id: `${id}-1`,
-				name: `${uuidv4()}`,
-			}),
-			serverAuth.upsertUser({
-				id: `${id}-2`,
-				name: `${uuidv4()}`,
-			}),
-			serverAuth.upsertUser({
-				id: `${id}-3`,
-				name: `${uuidv4()}`,
-			}),
-			serverAuth.upsertUser({
-				id: `${id}-4`,
-				name: `${uuidv4()}`,
-			}),
-		]);
+		for (let i = 0; i < n; i++) {
+			p.push(
+				serverAuth.upsertUser({
+					id: `${id}-${i}`,
+					name: `${uuidv4()}`,
+				}),
+			);
+		}
 
-		const result = await Promise.allSettled([
-			serverAuth.partialUpdateUser({
-				id: `${id}-1`,
-				set: {
-					name,
-				},
-			}),
-			serverAuth.partialUpdateUser({
-				id: `${id}-2`,
-				set: {
-					name,
-				},
-			}),
-			serverAuth.partialUpdateUser({
-				id: `${id}-3`,
-				set: {
-					name,
-				},
-			}),
-			serverAuth.partialUpdateUser({
-				id: `${id}-4`,
-				set: {
-					name,
-				},
-			}),
-		]);
+		await Promise.all(p);
 
+		p = [];
+		for (let i = 0; i < n; i++) {
+			p.push(
+				serverAuth.partialUpdateUser({
+					id: `${id}-${i}`,
+					set: {
+						name,
+					},
+				}),
+			);
+		}
+		const result = await Promise.allSettled(p);
 		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
@@ -184,19 +159,19 @@ describe('enforce unique usernames', function () {
 	it('should still succeed upsertUser with an existing username on app level', async () => {
 		await serverAuth.upsertUser({
 			id: uuidv4(),
-			name: 'dupes-of-hazard',
+			name: dupeName,
 		});
 	});
 
 	it('should fail upsertUser(insert) with an existing username on team level', async () => {
 		const p = serverAuth.upsertUser({
 			id: uuidv4(),
-			name: 'dupes-of-hazard',
-			teams: ['red'],
+			name: dupeName,
+			teams: [dupeTeam],
 		});
 
 		await expect(p).to.be.rejectedWith(
-			"StreamChat error code 4: UpdateUsers failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -205,17 +180,17 @@ describe('enforce unique usernames', function () {
 		await serverAuth.upsertUser({
 			id,
 			name: id,
-			teams: ['red'],
+			teams: [dupeTeam],
 		});
 
 		const p = serverAuth.upsertUser({
 			id,
-			name: 'dupes-of-hazard',
-			teams: ['red'],
+			name: dupeName,
+			teams: [dupeTeam],
 		});
 
 		await expect(p).to.be.rejectedWith(
-			"StreamChat error code 4: UpdateUsers failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -224,18 +199,18 @@ describe('enforce unique usernames', function () {
 		await serverAuth.upsertUser({
 			id,
 			name: id,
-			teams: ['red'],
+			teams: [dupeTeam],
 		});
 
 		const p = serverAuth.partialUpdateUser({
 			id,
 			set: {
-				name: 'dupes-of-hazard',
+				name: dupeName,
 			},
 		});
 
 		await expect(p).to.be.rejectedWith(
-			"StreamChat error code 4: UpdateUsersPartial failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -243,17 +218,17 @@ describe('enforce unique usernames', function () {
 		const id = uuidv4();
 		await serverAuth.upsertUser({
 			id: id,
-			name: 'dupes-of-hazard',
+			name: dupeName,
 		});
 
 		const p = serverAuth.upsertUser({
 			id: id,
-			name: 'dupes-of-hazard',
-			teams: ['red'],
+			name: dupeName,
+			teams: [dupeTeam],
 		});
 
 		await expect(p).to.be.rejectedWith(
-			"StreamChat error code 4: UpdateUsers failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -261,18 +236,18 @@ describe('enforce unique usernames', function () {
 		const id = uuidv4();
 		await serverAuth.upsertUser({
 			id: id,
-			name: 'dupes-of-hazard',
+			name: dupeName,
 		});
 
 		const p = serverAuth.partialUpdateUser({
 			id: id,
 			set: {
-				teams: ['red'],
+				teams: [dupeTeam],
 			},
 		});
 
 		await expect(p).to.be.rejectedWith(
-			"StreamChat error code 4: UpdateUsersPartial failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
