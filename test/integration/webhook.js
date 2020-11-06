@@ -393,7 +393,7 @@ describe('Webhooks', function () {
 	it('user.updated', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.updated'),
-			client.updateUser({ id: thierryID, awesome: true }),
+			client.upsertUser({ id: thierryID, awesome: true }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
