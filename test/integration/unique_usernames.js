@@ -119,6 +119,59 @@ describe('enforce unique usernames', function () {
 		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
+	it('should only succeed once in race partialUpdateUser(insert) with an existing username on app level', async () => {
+		const id = uuidv4();
+		const name = uuidv4();
+
+		await Promise.all([
+			serverAuth.upsertUser({
+				id: `${id}-1`,
+				name: `${uuidv4()}`,
+			}),
+			serverAuth.upsertUser({
+				id: `${id}-2`,
+				name: `${uuidv4()}`,
+			}),
+			serverAuth.upsertUser({
+				id: `${id}-3`,
+				name: `${uuidv4()}`,
+			}),
+			serverAuth.upsertUser({
+				id: `${id}-4`,
+				name: `${uuidv4()}`,
+			}),
+		]);
+
+		const result = await Promise.allSettled([
+			serverAuth.partialUpdateUser({
+				id: `${id}-1`,
+				set: {
+					name,
+				},
+			}),
+			serverAuth.partialUpdateUser({
+				id: `${id}-2`,
+				set: {
+					name,
+				},
+			}),
+			serverAuth.partialUpdateUser({
+				id: `${id}-3`,
+				set: {
+					name,
+				},
+			}),
+			serverAuth.partialUpdateUser({
+				id: `${id}-4`,
+				set: {
+					name,
+				},
+			}),
+		]);
+
+		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
+	});
+
 	it('should enable unique usernames on team level', async () => {
 		await serverAuth.updateAppSettings({
 			enforce_unique_usernames: 'team',
