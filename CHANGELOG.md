@@ -1,3 +1,9 @@
+## November 03, 2020 - 2.7.4
+
+### Feature
+
+- Ban user by ip [#485](https://github.com/GetStream/stream-js/pull/485)
+
 ## November 03, 2020 - 2.7.3
 
 ### Fix
