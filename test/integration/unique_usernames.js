@@ -12,6 +12,10 @@ describe('enforce unique usernames', function () {
 	const dupeUserId = uuidv4();
 
 	before(async () => {
+		await serverAuth.updateAppSettings({
+			enforce_unique_usernames: 'no',
+		});
+
 		await serverAuth.upsertUser({
 			id: uuidv4(),
 			name: 'dupes-of-hazard',
@@ -85,6 +89,24 @@ describe('enforce unique usernames', function () {
 				name: 'dupes-of-hazard',
 			},
 		});
+
+		await expect(p).to.be.rejectedWith(
+			'StreamChat error code 4: UpdateUsersPartial failed with error: "username \'dupes-of-hazard\' already exists"',
+		);
+	});
+
+	it('should only succeed once in loop upsertUser(insert) with an existing username on app level', async () => {
+		const name = uuidv4();
+		const p = Promise.all([
+			serverAuth.upsertUser({
+				id: uuidv4(),
+				name,
+			}),
+			serverAuth.upsertUser({
+				id: uuidv4(),
+				name,
+			}),
+		]);
 
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 4: UpdateUsersPartial failed with error: "username \'dupes-of-hazard\' already exists"',
