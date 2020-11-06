@@ -97,7 +97,15 @@ describe('enforce unique usernames', function () {
 
 	it('should only succeed once in race upsertUser(insert) with an existing username on app level', async () => {
 		const name = uuidv4();
-		const p = Promise.all([
+		const result = await Promise.allSettled([
+			serverAuth.upsertUser({
+				id: uuidv4(),
+				name,
+			}),
+			serverAuth.upsertUser({
+				id: uuidv4(),
+				name,
+			}),
 			serverAuth.upsertUser({
 				id: uuidv4(),
 				name,
@@ -108,9 +116,7 @@ describe('enforce unique usernames', function () {
 			}),
 		]);
 
-		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${name}' already exists"`,
-		);
+		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
 	it('should enable unique usernames on team level', async () => {
