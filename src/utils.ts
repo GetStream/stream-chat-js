@@ -1,4 +1,4 @@
-import FormData, { AppendOptions } from 'form-data';
+import FormData from 'form-data';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -61,12 +61,9 @@ export function addFileToFormData(
 ) {
   const data = new FormData();
 
-  const appendOptions: AppendOptions = {};
-  if (name) appendOptions.filename = name;
-  if (contentType) appendOptions.contentType = contentType;
-
   if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri)) {
-    data.append('file', uri, appendOptions);
+    if (name) data.append('file', uri, name);
+    else data.append('file', uri);
   } else {
     data.append('file', {
       uri,

@@ -1844,20 +1844,30 @@ export class StreamChat<
   /**
    * updateMessage - Update the given message
    *
-   * @param {Message<AttachmentType, MessageType, UserType>} message object, id needs to be specified
+   * @param {Omit<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
    * @param {string | { id: string }} [userId]
    *
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
-    message: Message<AttachmentType, MessageType, UserType>,
+    message: Omit<
+      MessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >,
+      'mentioned_users'
+    > & { mentioned_users?: string[] },
     userId?: string | { id: string },
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    const clonedMessage: Partial<Message> = Object.assign({}, message);
+    const clonedMessage: Message = Object.assign({}, message);
     delete clonedMessage.id;
 
     const reservedMessageFields: Array<

@@ -914,7 +914,10 @@ export type ChannelFilters<
   UserType = UnknownType
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
-    members?: RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>;
+    members?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
+      | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+      | PrimitiveFilter<string[]>;
   } & {
     name?:
       | RequireOnlyOne<
@@ -1347,7 +1350,7 @@ export type Message<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
   UserType = UnknownType
-> = MessageBase<AttachmentType, MessageType, UserType> & {
+> = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
 

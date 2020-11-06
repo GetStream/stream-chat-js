@@ -184,21 +184,20 @@ describe('Webhooks', function () {
 		expect(event.members).to.not.be.null;
 		expect(event.members).to.be.an('array');
 		expect(event.members).to.have.length(2);
-		expect(event.members[0]).to.be.an('object');
-		expect(event.members[0].user).to.be.an('object');
-		expect(event.members[0].user.unread_count).to.eq(1);
-		expect(event.members[0].user.total_unread_count).to.eq(1);
-		expect(event.members[0].user.unread_channels).to.eq(1);
-		expect(event.members[0].user.id).to.eq(thierryID);
-		expect(event.members[0].user.online).to.eq(false);
+
+		const thierry = event.members.find((mem) => mem.user.id === thierryID);
+		const tommaso = event.members.find((mem) => mem.user.id === tommasoID);
+		expect(thierry).to.not.be.undefined;
+		expect(tommaso).to.not.be.undefined;
+		expect(thierry.user.unread_count).to.eq(1);
+		expect(thierry.user.total_unread_count).to.eq(1);
+		expect(thierry.user.unread_channels).to.eq(1);
+		expect(thierry.user.online).to.eq(false);
 		// tommaso gets the same count since he created the msg
-		expect(event.members[1]).to.be.an('object');
-		expect(event.members[1].user).to.be.an('object');
-		expect(event.members[1].user.unread_count).to.eq(0);
-		expect(event.members[1].user.total_unread_count).to.eq(0);
-		expect(event.members[1].user.unread_channels).to.eq(0);
-		expect(event.members[1].user.id).to.eq(tommasoID);
-		expect(event.members[1].user.online).to.eq(false);
+		expect(tommaso.user.unread_count).to.eq(0);
+		expect(tommaso.user.total_unread_count).to.eq(0);
+		expect(tommaso.user.unread_channels).to.eq(0);
+		expect(tommaso.user.online).to.eq(false);
 	});
 
 	it('should receive new message event with thread participants', async function () {
