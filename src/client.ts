@@ -1080,7 +1080,7 @@ export class StreamChat<
       tokenManager: client.tokenManager,
       user: this._user,
       authType: this.getAuthType(),
-      userAgent: this._userAgent(),
+      userAgent: this.getUserAgent(),
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,
