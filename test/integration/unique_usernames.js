@@ -204,25 +204,24 @@ describe('enforce unique usernames', function () {
 		);
 	});
 
-	// THIS DOESN'T WORK :(
-	// it('should fail partialUpdateUser when updating to team containing username', async () => {
-	//   const id = uuidv4();
-	//   await serverAuth.upsertUser({
-	//     id: id,
-	//     name: 'dupes-of-hazard',
-	//   });
-	//
-	//   const p = serverAuth.partialUpdateUser({
-	//     id: id,
-	//     set: {
-	//       teams: ['red'],
-	//     },
-	//   });
-	//
-	//   await expect(p).to.be.rejectedWith(
-	//     'StreamChat error code 4: UpdateUsers failed with error: "username \'dupes-of-hazard\' already exists in team \'red\'"',
-	//   );
-	// });
+	it('should fail partialUpdateUser when updating to team containing username', async () => {
+		const id = uuidv4();
+		await serverAuth.upsertUser({
+			id: id,
+			name: 'dupes-of-hazard',
+		});
+
+		const p = serverAuth.partialUpdateUser({
+			id: id,
+			set: {
+				teams: ['red'],
+			},
+		});
+
+		await expect(p).to.be.rejectedWith(
+			"StreamChat error code 4: UpdateUsersPartial failed with error: \"username 'dupes-of-hazard' already exists in team 'red'\"",
+		);
+	});
 
 	it('should disable unique usernames', async () => {
 		await serverAuth.updateAppSettings({
