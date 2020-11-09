@@ -604,7 +604,7 @@ describe('Managing users', function () {
 
 	it('ban user', async function () {
 		await client.banUser(evilUser, {
-			user_id: user.id,
+			banned_by_id: user.id,
 		});
 	});
 

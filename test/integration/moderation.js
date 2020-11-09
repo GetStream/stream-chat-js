@@ -390,14 +390,22 @@ describe('A user with a channel shadow ban', function () {
 describe('show ban status on member', function () {
 	const guyonID = `guyon-${uuidv4()}`;
 	const evilID = `evil-${uuidv4()}`;
+	const evilID2 = `evil-${uuidv4()}`;
+	const evilID3 = `evil-${uuidv4()}`;
+	const evilID4 = `evil-${uuidv4()}`;
 
 	const channelID = `channel-${uuidv4()}`;
 	let channel;
+	let guyon;
 
 	const client = getTestClient(true);
 
 	before(async function () {
-		await createUsers([guyonID, evilID]);
+		const response = await createUsers([guyonID, evilID, evilID2, evilID3, evilID4]);
+		guyon = response.users[guyonID];
+		// we have to remove reserved fields to use user in a request
+		delete guyon.created_at;
+		delete guyon.updated_at;
 		channel = client.channel('livestream', channelID, {
 			members: [guyonID, evilID],
 			created_by_id: guyonID,
@@ -405,8 +413,23 @@ describe('show ban status on member', function () {
 		await channel.create();
 	});
 
+	it('check user_id->banned_by_id backwards compatibility', async function () {
+		await channel.banUser(evilID2, { banned_by_id: guyonID });
+		await channel.banUser(evilID3, { user_id: guyonID });
+		await channel.banUser(evilID, { banned_by: guyon });
+		await channel.banUser(evilID, { user: guyon });
+		await client.post(client.baseURL + '/moderation/ban', {
+			target_user_id: evilID4,
+			user_id: guyonID,
+		});
+		await client.post(client.baseURL + '/moderation/ban', {
+			target_user_id: evilID4,
+			user: guyon,
+		});
+	});
+
 	it('should show ban status on member on watch() after banUser', async function () {
-		await channel.banUser(evilID, { user_id: guyonID });
+		await channel.banUser(evilID, { banned_by_id: guyonID });
 
 		const userClient = await getTestClientForUser(evilID);
 		const resp = await userClient.channel('livestream', channelID).watch();
@@ -420,7 +443,7 @@ describe('show ban status on member', function () {
 	});
 
 	it('should not show ban status on member on watch() after unbanUser()', async function () {
-		await channel.unbanUser(evilID, { user_id: guyonID });
+		await channel.unbanUser(evilID, { banned_by_id: guyonID });
 
 		const userClient = await getTestClientForUser(evilID);
 		const resp = await userClient.channel('livestream', channelID).watch();
@@ -434,7 +457,7 @@ describe('show ban status on member', function () {
 	});
 
 	it('should not show ban status on member on watch() after expiration', async function () {
-		await channel.banUser(evilID, { user_id: guyonID, timeout: -10 });
+		await channel.banUser(evilID, { banned_by_id: guyonID, timeout: -10 });
 
 		const userClient = await getTestClientForUser(evilID);
 		const resp = await userClient.channel('livestream', channelID).watch();
@@ -448,7 +471,7 @@ describe('show ban status on member', function () {
 	});
 
 	it('should still show ban status on member on watch() after re-join', async function () {
-		await channel.banUser(evilID, { user_id: guyonID });
+		await channel.banUser(evilID, { banned_by_id: guyonID });
 		await channel.removeMembers([evilID]);
 		await channel.addMembers([evilID]);
 
