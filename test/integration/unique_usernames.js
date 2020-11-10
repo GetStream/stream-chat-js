@@ -99,7 +99,7 @@ describe('enforce unique usernames', function () {
 
 	it('should only succeed once in race upsertUser(insert) with an existing username on app level', async () => {
 		const name = uuidv4();
-		const n = 5;
+		const n = 25;
 		const p = [];
 
 		for (let i = 0; i < n; i++) {
@@ -115,10 +115,10 @@ describe('enforce unique usernames', function () {
 		expect(results.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
-	it('should only succeed once in race partialUpdateUser(insert) with an existing username on app level', async () => {
+	it('should only succeed once in race partialUpdateUser(update) with an existing username on app level', async () => {
 		const id = uuidv4();
 		const name = uuidv4();
-		const n = 5;
+		const n = 25;
 		let p = [];
 
 		for (let i = 0; i < n; i++) {
