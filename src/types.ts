@@ -81,6 +81,7 @@ export type AppSettingsAPIResponse<
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
+    image_moderation_enabled?: boolean;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
