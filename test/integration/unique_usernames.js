@@ -57,7 +57,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
@@ -75,7 +75,7 @@ describe('enforce unique usernames', function () {
 		]);
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${name}' already exists"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${name}' already exists"`,
 		);
 	});
 
@@ -92,7 +92,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
@@ -111,7 +111,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists"`,
+			`StreamChat error code 6: UpdateUsersPartial failed with error: "username '${dupeName}' already exists"`,
 		);
 	});
 
@@ -144,7 +144,7 @@ describe('enforce unique usernames', function () {
 		]);
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${id}' already exists"`,
+			`StreamChat error code 6: UpdateUsersPartial failed with error: "username '${id}' already exists"`,
 		);
 	});
 
@@ -222,7 +222,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -241,7 +241,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -261,7 +261,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
+			`StreamChat error code 6: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -279,7 +279,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
+			`StreamChat error code 6: UpdateUsers failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
@@ -298,7 +298,7 @@ describe('enforce unique usernames', function () {
 		});
 
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
+			`StreamChat error code 6: UpdateUsersPartial failed with error: "username '${dupeName}' already exists in team '${dupeTeam}'"`,
 		);
 	});
 
