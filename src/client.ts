@@ -1353,10 +1353,10 @@ export class StreamChat<
   /**
    * channel - Returns a new channel with the given type, id and custom data
    *
-   * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter
-   * and only provide ID and the list of members
-   *
-   * ie. client.channel("messaging", {members: ["tommaso", "thierry"]})
+   * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter and provide the list of members.
+   * Make sure to await channel.create() or channel.watch() before accessing channel functions:
+   * ie. channel = client.channel("messaging", {members: ["tommaso", "thierry"]})
+   * await channel.create() to assign an ID to channel
    *
    * @param {string} channelType The channel type
    * @param {string | ChannelData<ChannelType> | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
