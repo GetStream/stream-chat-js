@@ -52,6 +52,7 @@ import {
   Message,
   MessageFilters,
   MessageResponse,
+  Mute,
   MuteUserOptions,
   MuteUserResponse,
   PartialUserUpdate,
@@ -132,6 +133,7 @@ export class StreamChat<
   };
   logger: Logger;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
+  mutedUsers: Mute<UserType>[];
   node: boolean;
   options: StreamChatOptions;
   secret?: string;
@@ -176,6 +178,7 @@ export class StreamChat<
     this.state = new ClientState<UserType>();
     // a list of channels to hide ws events from
     this.mutedChannels = [];
+    this.mutedUsers = [];
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
@@ -923,6 +926,7 @@ export class StreamChat<
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client.mutedUsers = event.me.mutes;
     }
 
     if (event.channel && event.type === 'notification.message_new') {
@@ -931,6 +935,10 @@ export class StreamChat<
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+    }
+
+    if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
+      this.mutedUsers = event.me.mutes;
     }
   }
 
@@ -1682,6 +1690,21 @@ export class StreamChat<
       target_id: targetID,
       ...(currentUserID ? { user_id: currentUserID } : {}),
     });
+  }
+
+  /** userMuteStatus - check if a user is muted or not, can be used after setUser() is called
+   *
+   * @param {string} targetID
+   * @returns {boolean}
+   */
+  userMuteStatus(targetID: string) {
+    if (!this.user || !this.wsPromise)
+      throw new Error('Make sure to await setUser() first.');
+
+    for (let i = 0; i < this.mutedUsers.length; i += 1) {
+      if (this.mutedUsers[i].target.id === targetID) return true;
+    }
+    return false;
   }
 
   /**
