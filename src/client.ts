@@ -1055,6 +1055,16 @@ export class StreamChat<
     }
   }
 
+  _buildSort(
+    sort: UserSort | ChannelSort,
+  ): Array<{ field: string; direction?: AscDesc }> {
+    const sortFields: Array<{ field: string; direction?: AscDesc }> = [];
+    for (const [field, direction] of Object.entries(sort)) {
+      sortFields.push({ field, direction });
+    }
+    return sortFields;
+  }
+
   async connect() {
     this.connecting = true;
     const client = this;
@@ -1119,11 +1129,6 @@ export class StreamChat<
     sort: UserSort<UserType> = {},
     options: UserOptions = {},
   ) {
-    const sortFields: Array<{ field: string; direction?: AscDesc }> = [];
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
-
     const defaultOptions = {
       presence: false,
     };
@@ -1143,7 +1148,7 @@ export class StreamChat<
     >(this.baseURL + '/users', {
       payload: {
         filter_conditions: filterConditions,
-        sort: sortFields,
+        sort: this._buildSort(sort),
         ...defaultOptions,
         ...options,
       },
@@ -1159,12 +1164,6 @@ export class StreamChat<
     sort: ChannelSort = {},
     options: ChannelOptions = {},
   ) {
-    const sortFields: { field: string; direction?: AscDesc }[] = [];
-
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
-
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1181,7 +1180,7 @@ export class StreamChat<
     // Return a list of channels
     const payload = {
       filter_conditions: filterConditions,
-      sort: sortFields,
+      sort: this._buildSort(sort),
       user_details: this._user,
       ...defaultOptions,
       ...options,
