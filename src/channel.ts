@@ -1540,13 +1540,14 @@ export class Channel<
         }
         break;
       case 'message.new':
-        if (event.user?.id === this.getClient().user?.id) {
-          s.unreadCount = 0;
-        } else {
-          if (!event.message?.shadowed) s.unreadCount = s.unreadCount + 1;
-        }
         if (event.message) {
           s.addMessageSorted(event.message);
+
+          if (event.user?.id === this.getClient().user?.id) {
+            s.unreadCount = 0;
+          } else if (this._countMessageAsUnread(event.message)) {
+            s.unreadCount = s.unreadCount + 1;
+          }
         }
         break;
       case 'message.updated':

@@ -96,3 +96,66 @@ describe('Channel count unread', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});
 });
+
+describe('Channel _handleChannelEvent', function () {
+	const user = { id: 'user' };
+	const channel = new Channel(
+		{
+			logger: () => null,
+			user,
+			userID: user.id,
+			userMuteStatus: (targetId) => targetId.startsWith('mute'),
+		},
+		'messaging',
+		'id',
+	);
+
+	it('message.new reset the unreadCount for current user messages', function () {
+		channel.state.unreadCount = 100;
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user,
+			message: generateMsg(),
+		});
+
+		expect(channel.state.unreadCount).to.be.equal(0);
+	});
+
+	it('message.new increment unreadCount properly', function () {
+		channel.state.unreadCount = 20;
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id' },
+			message: generateMsg({ user: { id: 'id' } }),
+		});
+		expect(channel.state.unreadCount).to.be.equal(21);
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id2' },
+			message: generateMsg({ user: { id: 'id2' } }),
+		});
+		expect(channel.state.unreadCount).to.be.equal(22);
+	});
+
+	it('message.new skip increment for silent/shadowed/muted messages', function () {
+		channel.state.unreadCount = 30;
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id' },
+			message: generateMsg({ silent: true }),
+		});
+		expect(channel.state.unreadCount).to.be.equal(30);
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id2' },
+			message: generateMsg({ shadowed: true }),
+		});
+		expect(channel.state.unreadCount).to.be.equal(30);
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'mute1' },
+			message: generateMsg({ user: { id: 'mute1' } }),
+		});
+		expect(channel.state.unreadCount).to.be.equal(30);
+	});
+});
