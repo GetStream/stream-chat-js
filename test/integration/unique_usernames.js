@@ -198,6 +198,20 @@ describe('enforce unique usernames', function () {
 		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
 	});
 
+	it('should only succeed once in race client.setUser(insert) with an existing username on app level', async () => {
+		const name = uuidv4();
+		const n = 25;
+		const p = [];
+
+		for (let i = 0; i < n; i++) {
+			const client = getTestClient(true);
+			p.push(client.setUser({ id: uuidv4(), name }));
+		}
+
+		const result = await Promise.allSettled(p);
+		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
+	});
+
 	it('should enable unique usernames on team level', async () => {
 		await serverAuth.updateAppSettings({
 			enforce_unique_usernames: 'team',
