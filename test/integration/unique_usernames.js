@@ -1,4 +1,4 @@
-import { getTestClient, sleep } from './utils';
+import { createUsers, getTestClient, sleep } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -9,9 +9,9 @@ chai.use(chaiAsPromised);
 
 describe('enforce unique usernames', function () {
 	const serverAuth = getTestClient(true);
-	const dupeUserId = uuidv4();
 	const dupeName = uuidv4();
 	const dupeTeam = uuidv4();
+	let channel;
 
 	before(async () => {
 		await serverAuth.updateAppSettings({
@@ -23,6 +23,15 @@ describe('enforce unique usernames', function () {
 			name: dupeName,
 			teams: [dupeTeam],
 		});
+
+		const normalUser = `normal-${uuidv4()}`;
+		await createUsers([normalUser]);
+
+		channel = serverAuth.channel('livestream', uuidv4(), {
+			members: [normalUser],
+			created_by_id: normalUser,
+		});
+		await channel.create();
 	});
 
 	after(async () => {
@@ -206,6 +215,49 @@ describe('enforce unique usernames', function () {
 		for (let i = 0; i < n; i++) {
 			const client = getTestClient(true);
 			p.push(client.setUser({ id: uuidv4(), name }));
+		}
+
+		const result = await Promise.allSettled(p);
+		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
+	});
+
+	it('should only succeed once in race channel.sendMessage(insert) with an existing username on app level', async () => {
+		const name = uuidv4();
+		const n = 25;
+		const p = [];
+
+		await channel.sendMessage({
+			text: 'what do you call a fake noodle? an impasta!',
+			user: { id: uuidv4(), name: uuidv4() },
+		});
+
+		for (let i = 0; i < n; i++) {
+			p.push(
+				channel.sendMessage({
+					text: 'what do you call a fake noodle? an impasta!',
+					user: { id: uuidv4(), name },
+				}),
+			);
+		}
+
+		const result = await Promise.allSettled(p);
+		expect(result.filter((p) => p.status === 'fulfilled').length).to.eql(1);
+	});
+
+	it('should only succeed once in race client.Channel(created_by) with an existing username on app level', async () => {
+		const name = uuidv4();
+		const n = 25;
+		const p = [];
+
+		for (let i = 0; i < n; i++) {
+			p.push(
+				serverAuth
+					.channel('livestream', uuidv4(), {
+						members: [],
+						created_by: { id: uuidv4(), name },
+					})
+					.create(),
+			);
 		}
 
 		const result = await Promise.allSettled(p);
