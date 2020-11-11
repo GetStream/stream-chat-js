@@ -88,6 +88,33 @@ describe('enforce unique usernames', function () {
 		);
 	});
 
+	it('should allow to rename deactivated user to solve uniqueness problem', async () => {
+		const id = uuidv4();
+		const name = uuidv4();
+		await serverAuth.upsertUsers([
+			{
+				id,
+				name,
+			},
+		]);
+
+		await serverAuth.deactivateUser(id);
+
+		await serverAuth.upsertUsers([
+			{
+				id: uuidv4(),
+				name,
+			},
+		]);
+
+		const p = serverAuth.reactivateUser(id);
+		await expect(p).to.be.rejectedWith(
+			`StreamChat error code 6: ReactivateUser failed with error: "username '${name}' already exists"`,
+		);
+
+		await serverAuth.reactivateUser(id, { name: uuidv4() });
+	});
+
 	it('should fail upsertUser(update) insert with an existing username on app level', async () => {
 		const id = uuidv4();
 		await serverAuth.upsertUser({
