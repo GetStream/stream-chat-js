@@ -1559,7 +1559,10 @@ export class StreamChat<
     >(this.baseURL + `/users/${userID}`, params);
   }
 
-  async reactivateUser(userID: string, options?: { restore_messages?: boolean }) {
+  async reactivateUser(
+    userID: string,
+    options?: { name?: string; restore_messages?: boolean },
+  ) {
     return await this.post<
       APIResponse & {
         user: UserResponse<UserType>;
