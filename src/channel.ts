@@ -363,7 +363,7 @@ export class Channel<
    */
   async queryMembers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> | UserSort<UserType>[] = {},
+    sort: UserSort<UserType> | UserSort<UserType>[] = [],
     options: { limit?: number; offset?: number } = {},
   ) {
     let id: string | undefined;
@@ -382,7 +382,7 @@ export class Channel<
           type,
           id,
           members,
-          sort: this.getClient()._buildSort(sort),
+          sort: this.getClient()._normalizeQuerySort(sort),
           filter_conditions: filterConditions,
           ...options,
         },

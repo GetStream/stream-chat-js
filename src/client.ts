@@ -1066,7 +1066,7 @@ export class StreamChat<
     }
   }
 
-  _buildSort(
+  _normalizeQuerySort(
     // todo: generalize type
     sort: UserSort | ChannelSort | ChannelSort[] | UserSort[],
   ): Array<{ field: string; direction?: AscDesc }> {
@@ -1148,7 +1148,7 @@ export class StreamChat<
    */
   async queryUsers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> | UserSort<UserType>[] = {},
+    sort: UserSort<UserType> | UserSort<UserType>[] = [],
     options: UserOptions = {},
   ) {
     const defaultOptions = {
@@ -1170,7 +1170,7 @@ export class StreamChat<
     >(this.baseURL + '/users', {
       payload: {
         filter_conditions: filterConditions,
-        sort: this._buildSort(sort),
+        sort: this._normalizeQuerySort(sort),
         ...defaultOptions,
         ...options,
       },
@@ -1212,7 +1212,7 @@ export class StreamChat<
     // Return a list of channels
     const payload = {
       filter_conditions: filterConditions,
-      sort: this._buildSort(sort),
+      sort: this._normalizeQuerySort(sort),
       user_details: this._user,
       ...defaultOptions,
       ...options,
