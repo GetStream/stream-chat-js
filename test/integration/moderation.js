@@ -413,6 +413,8 @@ describe('show ban status on member', function () {
 		await channel.create();
 	});
 
+	// this tests backwards-compatibility of the server
+	// so you can safely drop it after user and user_id fields removal
 	it('check user_id->banned_by_id backwards compatibility', async function () {
 		await channel.banUser(evilID2, { banned_by_id: guyonID });
 		await channel.banUser(evilID3, { user_id: guyonID });
