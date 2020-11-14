@@ -174,6 +174,11 @@ export type UpdateMessageAPIResponse<
   >;
 };
 
+export type ChannelMember = {
+  user_id: string;
+  // custom data
+};
+
 export type ChannelMemberResponse<UserType = UnknownType> = {
   banned?: boolean;
   created_at?: string;
