@@ -40,6 +40,9 @@ import {
   Device,
   Event,
   EventHandler,
+  ExportChannelRequest,
+  ExportChannelResponse,
+  ExportChannelStatusResponse,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -2150,4 +2153,31 @@ export class StreamChat<
   deleteBlockList(name: string) {
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
+
+  exportChannels(request: Array<ExportChannelRequest>) {
+    const payload = { channels: request.map((v) => makeExportPayload(v)) };
+    return this.post<APIResponse & ExportChannelResponse>(
+      `${this.baseURL}/export_channels`,
+      payload,
+    );
+  }
+
+  exportChannel(request: ExportChannelRequest) {
+    return this.exportChannels([request]);
+  }
+
+  getExportChannelStatus(id: string) {
+    return this.get<APIResponse & ExportChannelStatusResponse>(
+      `${this.baseURL}/export_channels/${id}`,
+    );
+  }
+}
+
+function makeExportPayload(v: ExportChannelRequest) {
+  return {
+    type: v.type,
+    id: v.id,
+    messages_since: v.messages_since != null ? v.messages_since.toISOString() : null,
+    messages_until: v.messages_until != null ? v.messages_until.toISOString() : null,
+  };
 }
