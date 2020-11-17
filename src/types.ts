@@ -103,6 +103,17 @@ export type BlockListResponse = BlockList & {
   updated_at?: string;
 };
 
+export type ExportChannelResponse = {
+  task_id: string;
+};
+
+export type ExportChannelStatusResponse = {
+  created_at?: string;
+  error?: {};
+  result?: {};
+  updated_at?: string;
+};
+
 export type ChannelResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -590,10 +601,18 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  */
 
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
+  banned_by?: UserResponse<UserType>;
+  banned_by_id?: string;
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
+  /**
+   * @deprecated please use banned_by
+   */
   user?: UserResponse<UserType>;
+  /**
+   * @deprecated please use banned_by_id
+   */
   user_id?: string;
 };
 
@@ -1202,6 +1221,13 @@ export type Attachment<T = UnknownType> = T & {
 export type BlockList = {
   name: string;
   words: string[];
+};
+
+export type ExportChannelRequest = {
+  id: string;
+  type: string;
+  messages_since?: Date;
+  messages_until?: Date;
 };
 
 export type ChannelConfig<

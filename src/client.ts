@@ -40,6 +40,9 @@ import {
   Device,
   Event,
   EventHandler,
+  ExportChannelRequest,
+  ExportChannelResponse,
+  ExportChannelStatusResponse,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -1604,6 +1607,20 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   async banUser(targetUserID: string, options?: BanUserOptions<UserType>) {
+    if (options?.user_id !== undefined) {
+      options.banned_by_id = options.user_id;
+      delete options.user_id;
+      console.warn(
+        "banUser: 'user_id' is deprecated, please consider switching to 'banned_by_id'",
+      );
+    }
+    if (options?.user !== undefined) {
+      options.banned_by = options.user;
+      delete options.user;
+      console.warn(
+        "banUser: 'user' is deprecated, please consider switching to 'banned_by'",
+      );
+    }
     return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
@@ -2149,5 +2166,25 @@ export class StreamChat<
 
   deleteBlockList(name: string) {
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
+  }
+
+  exportChannels(request: Array<ExportChannelRequest>) {
+    const payload = {
+      channels: request,
+    };
+    return this.post<APIResponse & ExportChannelResponse>(
+      `${this.baseURL}/export_channels`,
+      payload,
+    );
+  }
+
+  exportChannel(request: ExportChannelRequest) {
+    return this.exportChannels([request]);
+  }
+
+  getExportChannelStatus(id: string) {
+    return this.get<APIResponse & ExportChannelStatusResponse>(
+      `${this.baseURL}/export_channels/${id}`,
+    );
   }
 }
