@@ -1,5 +1,5 @@
 import FormData from 'form-data';
-import { AscDesc, QuerySort } from 'types';
+import { AscDesc, QuerySort } from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
