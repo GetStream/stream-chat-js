@@ -1127,6 +1127,20 @@ export class Channel<
     }
   }
 
+  _countMessageAsUnread(message: {
+    shadowed?: boolean;
+    silent?: boolean;
+    user?: { id?: string } | null;
+  }) {
+    if (message.shadowed) return false;
+    if (message.silent) return false;
+    if (message.user?.id === this.getClient().userID) return false;
+    if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
+      return false;
+
+    return true;
+  }
+
   /**
    * countUnread - Count of unread messages
    *
@@ -1135,27 +1149,12 @@ export class Channel<
    * @return {number} Unread count
    */
   countUnread(lastRead?: Date | Immutable.ImmutableDate | null) {
-    if (!lastRead) {
-      return this.state.unreadCount;
-    }
+    if (!lastRead) return this.state.unreadCount;
 
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.shadowed) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
-        count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
     }
@@ -1169,27 +1168,17 @@ export class Channel<
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
+    const userID = this.getClient().userID;
+
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.shadowed) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (
+        this._countMessageAsUnread(message) &&
+        (!lastRead || message.created_at > lastRead) &&
+        message.mentioned_users?.find((u) => u.id === userID)
+      ) {
         count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
-        const userID = this.getClient().userID;
-        if (m.mentioned_users?.findIndex((u) => u.id === userID) !== -1) {
-          count++;
-        }
       }
     }
     return count;
@@ -1555,13 +1544,14 @@ export class Channel<
         }
         break;
       case 'message.new':
-        if (event.user?.id === this.getClient().user?.id) {
-          s.unreadCount = 0;
-        } else {
-          if (!event.message?.shadowed) s.unreadCount = s.unreadCount + 1;
-        }
         if (event.message) {
           s.addMessageSorted(event.message);
+
+          if (event.user?.id === this.getClient().user?.id) {
+            s.unreadCount = 0;
+          } else if (this._countMessageAsUnread(event.message)) {
+            s.unreadCount = s.unreadCount + 1;
+          }
         }
         break;
       case 'message.updated':
