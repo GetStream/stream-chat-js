@@ -905,6 +905,7 @@ export type EventTypes =
   | 'notification.channel_mutes_updated'
   | 'notification.channel_truncated'
   | 'notification.invite_accepted'
+  | 'notification.invite_rejected'
   | 'notification.invited'
   | 'notification.mark_read'
   | 'notification.message_new'
