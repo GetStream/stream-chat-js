@@ -20,6 +20,7 @@ export const EVENT_MAP = {
   'notification.channel_mutes_updated': true,
   'notification.channel_truncated': true,
   'notification.invite_accepted': true,
+  'notification.invite_rejected': true,
   'notification.invited': true,
   'notification.mark_read': true,
   'notification.message_new': true,
