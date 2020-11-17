@@ -103,6 +103,17 @@ export type BlockListResponse = BlockList & {
   updated_at?: string;
 };
 
+export type ExportChannelResponse = {
+  task_id: string;
+};
+
+export type ExportChannelStatusResponse = {
+  created_at?: string;
+  error?: {};
+  result?: {};
+  updated_at?: string;
+};
+
 export type ChannelResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -1209,6 +1220,13 @@ export type Attachment<T = UnknownType> = T & {
 export type BlockList = {
   name: string;
   words: string[];
+};
+
+export type ExportChannelRequest = {
+  id: string;
+  type: string;
+  messages_since?: Date;
+  messages_until?: Date;
 };
 
 export type ChannelConfig<
