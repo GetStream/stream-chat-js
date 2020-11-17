@@ -1,4 +1,18 @@
-## November 03, 2020 - 2.7.4
+## November 17, 2020 - 2.8.0
+
+### Feature
+
+- Channel Export [#504](https://github.com/GetStream/stream-js/pull/504)
+- New event `notification.invite_rejected` [#467](https://github.com/GetStream/stream-js/pull/467)
+- Channel stopTyping accepts optional `parent_id` for typing in threads `notification.invite_rejected` [#505](https://github.com/GetStream/stream-js/pull/505)
+
+### Fix
+
+- Mute users no longer counted in channel unread [#498](https://github.com/GetStream/stream-js/pull/498)
+- `AppSettingsAPIResponse` type includes `image_moderation_enabled` [#497](https://github.com/GetStream/stream-js/pull/497)
+- User ban function signature updated [#502](https://github.com/GetStream/stream-js/pull/502): `client.banUser('user1', {user_id: 'user2'})` is replaced with `client.banUser('user1', {banned_by_id: 'user2'})`
+
+## November 06, 2020 - 2.7.4
 
 ### Feature
 
