@@ -74,7 +74,7 @@ describe('ban user by ip', () => {
 
 	it('ban tommaso by IP', async () => {
 		await serverClient.banUser(tommasoID, {
-			user_id: adminUser.id,
+			banned_by_id: adminUser.id,
 			ip_ban: true,
 		});
 	});
