@@ -1154,7 +1154,7 @@ export class Channel<
     let count = 0;
     for (let i = 0; i < this.state.messages.length; i += 1) {
       const message = this.state.messages[i];
-      if (this._countMessageAsUnread(message) && message.created_at > lastRead) {
+      if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
     }
