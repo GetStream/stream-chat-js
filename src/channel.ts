@@ -877,7 +877,8 @@ export class Channel<
   /**
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
    * Call this on every keystroke
-   * @param {string} parent_id optional, in a thread use message.id to limit the scope of typing event
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async keystroke(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
@@ -891,16 +892,18 @@ export class Channel<
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
-        parent_id,
         type: 'typing.start',
+        parent_id,
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }
   }
 
   /**
    * stopTyping - Sets last typing to null and sends the typing.stop event
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping() {
+  async stopTyping(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -908,6 +911,7 @@ export class Channel<
     this.isTyping = false;
     await this.sendEvent({
       type: 'typing.stop',
+      parent_id,
     } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
   }
 
