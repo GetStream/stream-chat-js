@@ -1,4 +1,5 @@
 import FormData from 'form-data';
+import { AscDesc, QuerySort } from 'types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -74,4 +75,24 @@ export function addFileToFormData(
   }
 
   return data;
+}
+
+export function normalizeQuerySort<T extends QuerySort>(sort: T) {
+  const sortFields = [];
+  const sortArr = Array.isArray(sort) ? sort : [sort];
+  for (const item of sortArr) {
+    const entries = (Object.entries(item) as unknown) as [
+      T extends (infer K)[] ? keyof K : keyof T,
+      AscDesc,
+    ][];
+    if (entries.length > 1) {
+      console.warn(
+        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
+      );
+    }
+    for (const [field, direction] of entries) {
+      sortFields.push({ field, direction });
+    }
+  }
+  return sortFields;
 }

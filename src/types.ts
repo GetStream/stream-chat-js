@@ -1114,7 +1114,11 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
-export type ChannelSort<ChannelType = UnknownType> = Sort<ChannelType> & {
+export type ChannelSort<ChannelType = UnknownType> =
+  | ChannelSortBase<ChannelType>
+  | Array<ChannelSortBase<ChannelType>>;
+
+export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1128,7 +1132,13 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type UserSort<UserType = UnknownType> = Sort<UserResponse<UserType>>;
+export type UserSort<UserType = UnknownType> =
+  | Sort<UserResponse<UserType>>
+  | Array<Sort<UserResponse<UserType>>>;
+
+export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | ChannelSort<ChannelType>
+  | UserSort<UserType>;
 
 /**
  * Base Types
