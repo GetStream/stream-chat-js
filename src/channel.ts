@@ -355,7 +355,7 @@ export class Channel<
    * queryMembers - Query Members
    *
    * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
-   * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}.
+   * @param {UserSort<UserType>} [sort] Sort options, for instance [{created_at: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *

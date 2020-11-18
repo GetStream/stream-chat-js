@@ -1119,7 +1119,7 @@ export class StreamChat<
    * queryUsers - Query users and watch user presence
    *
    * @param {UserFilters<UserType>} filterConditions MongoDB style filter conditions
-   * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}.
+   * @param {UserSort<UserType>} sort Sort options, for instance [{last_active: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {UserOptions} options Option object, {presence: true}
    *
