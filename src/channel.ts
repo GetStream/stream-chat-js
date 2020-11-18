@@ -1,7 +1,7 @@
 import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
-import { logChatPromiseExecution } from './utils';
+import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -352,23 +352,20 @@ export class Channel<
   }
 
   /**
-   * search - Query Members
+   * queryMembers - Query Members
    *
    * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
-   * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
+   * @param {UserSort<UserType>} [sort] Sort options, for instance [{created_at: -1}].
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *
-   * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
+   * @return {Promise<ChannelMemberAPIResponse<UserType>>} Query Members response
    */
   async queryMembers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> = {},
+    sort: UserSort<UserType> = [],
     options: { limit?: number; offset?: number } = {},
   ) {
-    const sortFields = [];
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
     let id: string | undefined;
     const type = this.type;
     let members: string[] | ChannelMemberResponse<UserType>[] | undefined;
@@ -385,7 +382,7 @@ export class Channel<
           type,
           id,
           members,
-          sort: sortFields,
+          sort: normalizeQuerySort(sort),
           filter_conditions: filterConditions,
           ...options,
         },
@@ -877,7 +874,8 @@ export class Channel<
   /**
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
    * Call this on every keystroke
-   * @param {string} parent_id optional, in a thread use message.id to limit the scope of typing event
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async keystroke(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
@@ -891,16 +889,18 @@ export class Channel<
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
-        parent_id,
         type: 'typing.start',
+        parent_id,
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }
   }
 
   /**
    * stopTyping - Sets last typing to null and sends the typing.stop event
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping() {
+  async stopTyping(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -908,6 +908,7 @@ export class Channel<
     this.isTyping = false;
     await this.sendEvent({
       type: 'typing.stop',
+      parent_id,
     } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
   }
 
@@ -1123,6 +1124,20 @@ export class Channel<
     }
   }
 
+  _countMessageAsUnread(message: {
+    shadowed?: boolean;
+    silent?: boolean;
+    user?: { id?: string } | null;
+  }) {
+    if (message.shadowed) return false;
+    if (message.silent) return false;
+    if (message.user?.id === this.getClient().userID) return false;
+    if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
+      return false;
+
+    return true;
+  }
+
   /**
    * countUnread - Count of unread messages
    *
@@ -1131,27 +1146,12 @@ export class Channel<
    * @return {number} Unread count
    */
   countUnread(lastRead?: Date | Immutable.ImmutableDate | null) {
-    if (!lastRead) {
-      return this.state.unreadCount;
-    }
+    if (!lastRead) return this.state.unreadCount;
 
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.shadowed) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
-        count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
     }
@@ -1165,27 +1165,17 @@ export class Channel<
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
+    const userID = this.getClient().userID;
+
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.shadowed) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (
+        this._countMessageAsUnread(message) &&
+        (!lastRead || message.created_at > lastRead) &&
+        message.mentioned_users?.find((u) => u.id === userID)
+      ) {
         count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
-        const userID = this.getClient().userID;
-        if (m.mentioned_users?.findIndex((u) => u.id === userID) !== -1) {
-          count++;
-        }
       }
     }
     return count;
@@ -1551,13 +1541,14 @@ export class Channel<
         }
         break;
       case 'message.new':
-        if (event.user?.id === this.getClient().user?.id) {
-          s.unreadCount = 0;
-        } else {
-          if (!event.message?.shadowed) s.unreadCount = s.unreadCount + 1;
-        }
         if (event.message) {
           s.addMessageSorted(event.message);
+
+          if (event.user?.id === this.getClient().user?.id) {
+            s.unreadCount = 0;
+          } else if (this._countMessageAsUnread(event.message)) {
+            s.unreadCount = s.unreadCount + 1;
+          }
         }
         break;
       case 'message.updated':

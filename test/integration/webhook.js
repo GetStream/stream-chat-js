@@ -712,7 +712,7 @@ describe('Webhooks', function () {
 			promises.waitForEvents('user.banned'),
 			client.banUser(newUserID, {
 				reason: 'testy mctestify',
-				user_id: thierryID,
+				banned_by_id: thierryID,
 				timeout: 120,
 			}),
 		]);
@@ -738,7 +738,10 @@ describe('Webhooks', function () {
 		// Ban the user
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.banned'),
-			chan.banUser(newUserID, { reason: 'testy mctestify', user_id: thierryID }),
+			chan.banUser(newUserID, {
+				reason: 'testy mctestify',
+				banned_by_id: thierryID,
+			}),
 		]);
 
 		const event = events[0];
@@ -758,7 +761,7 @@ describe('Webhooks', function () {
 		await client.upsertUser({ id: newUserID });
 		await client.banUser(newUserID, {
 			reason: 'testy mctestify',
-			user_id: thierryID,
+			banned_by_id: thierryID,
 		});
 
 		// Unban the user

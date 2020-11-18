@@ -103,6 +103,17 @@ export type BlockListResponse = BlockList & {
   updated_at?: string;
 };
 
+export type ExportChannelResponse = {
+  task_id: string;
+};
+
+export type ExportChannelStatusResponse = {
+  created_at?: string;
+  error?: {};
+  result?: {};
+  updated_at?: string;
+};
+
 export type ChannelResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -590,10 +601,18 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  */
 
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
+  banned_by?: UserResponse<UserType>;
+  banned_by_id?: string;
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
+  /**
+   * @deprecated please use banned_by
+   */
   user?: UserResponse<UserType>;
+  /**
+   * @deprecated please use banned_by_id
+   */
   user_id?: string;
 };
 
@@ -886,6 +905,7 @@ export type EventTypes =
   | 'notification.channel_mutes_updated'
   | 'notification.channel_truncated'
   | 'notification.invite_accepted'
+  | 'notification.invite_rejected'
   | 'notification.invited'
   | 'notification.mark_read'
   | 'notification.message_new'
@@ -1114,7 +1134,11 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
-export type ChannelSort<ChannelType = UnknownType> = Sort<ChannelType> & {
+export type ChannelSort<ChannelType = UnknownType> =
+  | ChannelSortBase<ChannelType>
+  | Array<ChannelSortBase<ChannelType>>;
+
+export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1128,7 +1152,13 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type UserSort<UserType = UnknownType> = Sort<UserResponse<UserType>>;
+export type UserSort<UserType = UnknownType> =
+  | Sort<UserResponse<UserType>>
+  | Array<Sort<UserResponse<UserType>>>;
+
+export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | ChannelSort<ChannelType>
+  | UserSort<UserType>;
 
 /**
  * Base Types
@@ -1201,6 +1231,13 @@ export type Attachment<T = UnknownType> = T & {
 export type BlockList = {
   name: string;
   words: string[];
+};
+
+export type ExportChannelRequest = {
+  id: string;
+  type: string;
+  messages_since?: Date;
+  messages_until?: Date;
 };
 
 export type ChannelConfig<
