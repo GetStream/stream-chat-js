@@ -1,12 +1,11 @@
 import chai from 'chai';
-import { StreamChat } from '../../src';
+import { normalizeQuerySort } from '../../src/utils';
 
 const expect = chai.expect;
 
 describe('test if sort is deterministic', () => {
-	const client = new StreamChat('');
 	it('test sort object', () => {
-		let sort = client._normalizeQuerySort({
+		let sort = normalizeQuerySort({
 			created_at: 1,
 			has_unread: -1,
 		});
@@ -15,7 +14,7 @@ describe('test if sort is deterministic', () => {
 		expect(sort[0].direction).to.be.equal(1);
 		expect(sort[1].field).to.be.equal('has_unread');
 		expect(sort[1].direction).to.be.equal(-1);
-		sort = client._normalizeQuerySort({
+		sort = normalizeQuerySort({
 			has_unread: -1,
 			created_at: 1,
 		});
@@ -25,20 +24,20 @@ describe('test if sort is deterministic', () => {
 		expect(sort[1].direction).to.be.equal(1);
 	});
 	it('test sort array', () => {
-		let sort = client._normalizeQuerySort([{ created_at: 1 }, { has_unread: -1 }]);
+		let sort = normalizeQuerySort([{ created_at: 1 }, { has_unread: -1 }]);
 		expect(sort).to.have.length(2);
 		expect(sort[0].field).to.be.equal('created_at');
 		expect(sort[0].direction).to.be.equal(1);
 		expect(sort[1].field).to.be.equal('has_unread');
 		expect(sort[1].direction).to.be.equal(-1);
-		sort = client._normalizeQuerySort([{ has_unread: -1 }, { created_at: 1 }]);
+		sort = normalizeQuerySort([{ has_unread: -1 }, { created_at: 1 }]);
 		expect(sort[0].field).to.be.equal('has_unread');
 		expect(sort[0].direction).to.be.equal(-1);
 		expect(sort[1].field).to.be.equal('created_at');
 		expect(sort[1].direction).to.be.equal(1);
 	});
 	it('test sort array with multi-field objects', () => {
-		let sort = client._normalizeQuerySort([
+		let sort = normalizeQuerySort([
 			{ created_at: 1, has_unread: -1 },
 			{ last_active: 1, deleted_at: -1 },
 		]);
