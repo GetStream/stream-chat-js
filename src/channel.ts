@@ -1,7 +1,7 @@
 import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
-import { logChatPromiseExecution } from './utils';
+import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -352,23 +352,20 @@ export class Channel<
   }
 
   /**
-   * search - Query Members
+   * queryMembers - Query Members
    *
    * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
-   * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
+   * @param {UserSort<UserType>} [sort] Sort options, for instance [{created_at: -1}].
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *
-   * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
+   * @return {Promise<ChannelMemberAPIResponse<UserType>>} Query Members response
    */
   async queryMembers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> = {},
+    sort: UserSort<UserType> = [],
     options: { limit?: number; offset?: number } = {},
   ) {
-    const sortFields = [];
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
     let id: string | undefined;
     const type = this.type;
     let members: string[] | ChannelMemberResponse<UserType>[] | undefined;
@@ -385,7 +382,7 @@ export class Channel<
           type,
           id,
           members,
-          sort: sortFields,
+          sort: normalizeQuerySort(sort),
           filter_conditions: filterConditions,
           ...options,
         },

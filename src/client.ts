@@ -11,13 +11,12 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, addFileToFormData, chatCodes } from './utils';
+import { isFunction, addFileToFormData, chatCodes, normalizeQuerySort } from './utils';
 
 import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
-  AscDesc,
   BanUserOptions,
   BlockList,
   BlockListResponse,
@@ -1120,21 +1119,17 @@ export class StreamChat<
    * queryUsers - Query users and watch user presence
    *
    * @param {UserFilters<UserType>} filterConditions MongoDB style filter conditions
-   * @param {UserSort<UserType>} sort Sort options, for instance {last_active: -1}
+   * @param {UserSort<UserType>} sort Sort options, for instance [{last_active: -1}].
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {UserOptions} options Option object, {presence: true}
    *
    * @return {Promise<APIResponse & { users: Array<UserResponse<UserType>> }>} User Query Response
    */
   async queryUsers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> = {},
+    sort: UserSort<UserType> = [],
     options: UserOptions = {},
   ) {
-    const sortFields: Array<{ field: string; direction?: AscDesc }> = [];
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
-
     const defaultOptions = {
       presence: false,
     };
@@ -1154,7 +1149,7 @@ export class StreamChat<
     >(this.baseURL + '/users', {
       payload: {
         filter_conditions: filterConditions,
-        sort: sortFields,
+        sort: normalizeQuerySort(sort),
         ...defaultOptions,
         ...options,
       },
@@ -1165,17 +1160,21 @@ export class StreamChat<
     return data;
   }
 
+  /**
+   * queryChannels - Query channels
+   *
+   * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions object MongoDB style filters
+   * @param {ChannelSort<ChannelType>} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object
+   *
+   * @return {Promise<APIResponse & { channels: Array<ChannelAPIResponse<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>>}> } search channels response
+   */
   async queryChannels(
     filterConditions: ChannelFilters<ChannelType, CommandType, UserType>,
-    sort: ChannelSort = {},
+    sort: ChannelSort<ChannelType> = [],
     options: ChannelOptions = {},
   ) {
-    const sortFields: { field: string; direction?: AscDesc }[] = [];
-
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
-
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1192,7 +1191,7 @@ export class StreamChat<
     // Return a list of channels
     const payload = {
       filter_conditions: filterConditions,
-      sort: sortFields,
+      sort: normalizeQuerySort(sort),
       user_details: this._user,
       ...defaultOptions,
       ...options,
