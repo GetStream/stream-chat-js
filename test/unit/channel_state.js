@@ -1,7 +1,7 @@
 import Immutable from 'seamless-immutable';
 import chai from 'chai';
 import { ChannelState } from '../../src/channel_state';
-import { generateMsg } from './utils';
+import { generateMsg } from './test-utils';
 
 const expect = chai.expect;
 

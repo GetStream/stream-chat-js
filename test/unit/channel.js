@@ -1,6 +1,6 @@
 import chai from 'chai';
 import { Channel } from '../../src/channel';
-import { generateMsg } from './utils';
+import { generateMsg } from './test-utils';
 
 const expect = chai.expect;
 
