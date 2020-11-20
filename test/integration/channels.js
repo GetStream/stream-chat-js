@@ -189,6 +189,7 @@ describe('Channels - members', function () {
 
 	const tommasoClient = getTestClient();
 	const thierryClient = getTestClient();
+	const serverClient = getTestClient(true);
 
 	let tommasoChannel, thierryChannel;
 	const message = { text: 'nice little chat API' };
@@ -325,7 +326,7 @@ describe('Channels - members', function () {
 	});
 
 	it('thierry gets promoted', async function () {
-		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+		await getTestClient(true).upsertUser({ id: thierryID, role: 'admin' });
 	});
 
 	it('correct member count', async function () {
@@ -424,6 +425,89 @@ describe('Channels - members', function () {
 					members: { $in: newMembers },
 				});
 				expect(resp.length).to.be.equal(0);
+			});
+
+			it('returns error if adding and removing same member in a single request', async () => {
+				const resp = await tommasoClient
+					.channel('messaging', { members: [tommasoID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					400,
+					thierryClient.post(
+						`${thierryClient.baseURL}/channels/messaging/${resp.channel.id}`,
+						{
+							remove_members: [thierryID],
+							add_members: [thierryID],
+						},
+					),
+				);
+			});
+		});
+
+		describe('When leaving the channel', () => {
+			it('successfully joins back if the channel is distinct', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await thierryClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				const { members } = await thierryClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+				expect(members.length).to.be.eq(2);
+			});
+
+			it('fails to join back if the channel is not distinct', async () => {
+				const chanID = uuidv4();
+				const chan = await thierryClient.channel('messaging', chanID);
+				await chan.create();
+				await chan.addMembers([tommasoID, thierryID]);
+				// after self-remove, user is not able to join regular channel by himself
+				await tommasoClient
+					.channel('messaging', chanID)
+					.removeMembers([tommasoID]);
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient.channel('messaging', chanID).addMembers([tommasoID]),
+				);
+			});
+
+			it('fails to join foreign distinct channel', async () => {
+				const resp = await thierryClient
+					.channel('messaging', { members: [thierryID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient
+						.channel('messaging', resp.channel.id)
+						.addMembers([tommasoID]),
+				);
+			});
+		});
+
+		describe('when managing distinct channel members from server-side', () => {
+			it('successfully removes and adds back member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await serverClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				await serverClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+			});
+			it('fails to add foreign member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					serverClient
+						.channel('messaging', channel.id)
+						.addMembers([newMembers[0]]),
+				);
 			});
 		});
 	});
@@ -701,17 +785,9 @@ describe('Channels - Distinct channels', function () {
 
 	it('adding members to distinct channel should fail', async function () {
 		await expectHTTPErrorCode(
-			400,
+			403,
 			distinctChannel.addMembers([newMember]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
-		);
-	});
-
-	it('removing members from a distinct channel should fail', async function () {
-		await expectHTTPErrorCode(
-			400,
-			distinctChannel.removeMembers([tommasoID]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
+			'StreamChat error code 17: UpdateChannel failed with error: "cannot add members to the distinct channel they don\'t belong to, please create a new distinct channel with the desired members"',
 		);
 	});
 });
