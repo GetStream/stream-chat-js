@@ -1,3 +1,11 @@
+## November 20, 2020 - 2.8.1
+
+### Fix
+
+- Duplicate message from current user [#509](https://github.com/GetStream/stream-js/pull/509)
+- Sort direction array for queries [#501](https://github.com/GetStream/stream-js/pull/501)
+- Add `enforce_unique_usernames` to `AppSettingsAPIResponse` type [#511](https://github.com/GetStream/stream-js/pull/511)
+
 ## November 17, 2020 - 2.8.0
 
 ### Feature
