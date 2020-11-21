@@ -405,7 +405,7 @@ describe('Query Members', function () {
 		let nickClient;
 		const peter = { id: 'peter-' + uuidv4(), name: 'Peter Murphy' };
 		let peterClient;
-		const noname = { id: 'Arya-' + uuidv4() };
+		const noname = { id: 'Arya-' + uuidv4(), name: null };
 		let nonameClient;
 
 		let channel;

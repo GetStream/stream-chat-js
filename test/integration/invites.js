@@ -245,7 +245,7 @@ describe('Query invites', function () {
 				invite: { $gt: 'pending' },
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "invalid invite operator, expecting {invite:"pending"} or {invite:{$eq:"pending"}}"',
+				'StreamChat error code 4: QueryChannels failed with error: "operator "$gt" is not allowed for field "invite"',
 			);
 		});
 		it('Invalid invite operator II', async function () {
@@ -253,7 +253,7 @@ describe('Query invites', function () {
 				invite: [null],
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "cannot match array value on field `invite`."',
+				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type array. expecting string"',
 			);
 		});
 	});

@@ -1196,15 +1196,18 @@ describe('query channels by field $exists', function () {
 		await expect(
 			client.queryChannels({ testid: testID, even: { $exists: [] } }),
 		).to.be.rejectedWith(
-			'QueryChannels failed with error: "$exists operator only support boolean values"',
+			'StreamChat error code 4: QueryChannels failed with error: "$exist operator only support boolean values"',
 		);
 	});
 
 	it('query $exists true on a custom field should work', async function () {
-		const resp = await client.queryChannels({
-			testid: testID,
-			even: { $exists: true },
-		});
+		const resp = await client.queryChannels(
+			{
+				testid: testID,
+				even: { $exists: true },
+			},
+			{ cid: -1 },
+		);
 		expect(resp.length).to.be.equal(5);
 		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(8),
@@ -1216,10 +1219,13 @@ describe('query channels by field $exists', function () {
 	});
 
 	it('query $exists false on a custom field should work', async function () {
-		const resp = await client.queryChannels({
-			testid: testID,
-			even: { $exists: false },
-		});
+		const resp = await client.queryChannels(
+			{
+				testid: testID,
+				even: { $exists: false },
+			},
+			{ cid: -1 },
+		);
 		expect(resp.length).to.be.equal(5);
 		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
@@ -1231,10 +1237,13 @@ describe('query channels by field $exists', function () {
 	});
 
 	it('query $exists true on reserved field', async function () {
-		const resp = await client.queryChannels({
-			testid: testID,
-			cid: { $exists: true },
-		});
+		const resp = await client.queryChannels(
+			{
+				testid: testID,
+				cid: { $exists: true },
+			},
+			{ cid: -1 },
+		);
 		expect(resp.length).to.be.equal(10);
 		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
@@ -1259,10 +1268,13 @@ describe('query channels by field $exists', function () {
 	});
 
 	it('combine multiple $exists should work', async function () {
-		const resp = await client.queryChannels({
-			testid: testID,
-			$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
-		});
+		const resp = await client.queryChannels(
+			{
+				testid: testID,
+				$or: [{ even: { $exists: true } }, { odd: { $exists: true } }],
+			},
+			{ cid: -1 },
+		);
 		expect(resp.length).to.be.equal(10);
 		expect(resp.map((c) => c.cid)).to.be.eql([
 			channelCID(9),
@@ -1415,7 +1427,7 @@ describe('Query channels using last_updated', function () {
 	});
 });
 
-describe('Channels op $in with custom fields', function () {
+describe.skip('Channels op $in with custom fields', function () {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	const channelId = uuidv4();
@@ -1572,7 +1584,7 @@ describe('$ne operator', function () {
 		await expectHTTPErrorCode(
 			400,
 			client.queryChannels({ unique, id: { $ne: 1 } }),
-			'StreamChat error code 4: QueryChannels failed with error: "field `id` contains type number. expecting string"',
+			'StreamChat error code 4: QueryChannels failed with error: "field "id" expects type string"',
 		);
 	});
 
