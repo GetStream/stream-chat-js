@@ -2361,6 +2361,94 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('Custom events', () => {
+		let channel;
+		let client;
+		let serverChannel;
+		const channelID = uuidv4();
+		let client2;
+		let otherUserChannel;
+		const userID = uuidv4();
+		const otherUserID = uuidv4();
+
+		it('enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to a livestream channel', async () => {
+			client = await getTestClientForUser(userID);
+			client2 = await getTestClientForUser(otherUserID);
+
+			serverChannel = serverAuthClient.channel('livestream', channelID, {
+				created_by: { id: uuidv4() },
+			});
+
+			channel = client.channel('livestream', channelID);
+			await channel.watch();
+
+			otherUserChannel = client2.channel('livestream', channelID);
+			await otherUserChannel.watch();
+
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event');
+			await channel.sendEvent({ type: 'custom-event' });
+
+			const eventsReceived = await waiter;
+
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event');
+			expect(eventsReceived[0].user).to.not.be.undefined;
+			expect(eventsReceived[0].user.id).to.not.be.undefined;
+		});
+
+		it('send a custom event with custom data', async () => {
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event-with-data');
+			await channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+
+			const eventsReceived = await waiter;
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event-with-data');
+			expect(eventsReceived[0].color).to.eql('red');
+		});
+
+		it('disable custom events for livestream', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: false,
+			});
+			const p = channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+			await expect(p).to.be.rejectedWith(
+				'Channel type livestream does not support custom events',
+			);
+		});
+
+		it('re-enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to messaging channel - permission checks', async () => {
+			let chan = serverAuthClient.channel('messaging', channelID, {
+				created_by: { id: uuidv4() },
+				members: [userID],
+			});
+			await chan.create();
+
+			chan = client.channel('messaging', channelID);
+			await chan.watch();
+			await chan.sendEvent({ type: 'custom-event' });
+
+			chan = client2.channel('messaging', channelID);
+			chan.initialized = true; // force event sending by changing internal state
+			const p = chan.sendEvent({ type: 'custom-event' });
+
+			await expect(p).to.be.rejectedWith(
+				`User '${otherUserID}' with role user is not allowed to access Resource SendCustomEvent on channel type messaging`,
+			);
+		});
+	});
+
 	describe('Anonymous users', () => {
 		let client;
 		let channel;
