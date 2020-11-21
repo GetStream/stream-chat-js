@@ -235,7 +235,7 @@ describe('Query Members', function () {
 		);
 	});
 
-	it('invalid fields return an error', async function () {
+	it.skip('invalid fields return an error', async function () {
 		const results = channel.queryMembers({ invalid: channel.cid });
 		await expectHTTPErrorCode(
 			400,
