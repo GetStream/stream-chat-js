@@ -82,7 +82,7 @@ describe('Query Members', function () {
 				{
 					// invited
 					$and: [
-						{ name: { $q: 'Mar' } },
+						{ name: { $autocomplete: 'Mar' } },
 						{ invite: 'accepted' },
 						{
 							$or: [
@@ -156,7 +156,9 @@ describe('Query Members', function () {
 	});
 
 	it('member with name containing Robert', async function () {
-		const { members } = await channel.queryMembers({ name: { $q: 'Rob' } });
+		const { members } = await channel.queryMembers({
+			name: { $autocomplete: 'rob' },
+		});
 		expect(members.length).to.be.equal(2);
 		expect(members[0].user.id).to.be.equal(rob);
 		expect(members[1].user.id).to.be.equal(rob2);
