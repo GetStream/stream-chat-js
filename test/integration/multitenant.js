@@ -665,11 +665,11 @@ describe('Full test', function () {
 	it('wrong values type raise an error', async function () {
 		let p = team1Client.queryChannels({ team: { $eq: 1 } });
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: QueryChannels failed with error: "field "team" expect string values',
+			'StreamChat error code 4: QueryChannels failed with error: "field "team" expects string values',
 		);
 		p = team1Client.queryChannels({ team: { $in: [1] } });
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: QueryChannels failed with error: "field "team" expect string values',
+			'StreamChat error code 4: QueryChannels failed with error: "field "team" expects string values',
 		);
 	});
 
