@@ -229,7 +229,7 @@ describe('Query invites', function () {
 				invite: 1,
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type number. expecting string"',
+				'StreamChat error code 4: QueryChannels failed with error: "field \'invite\' contains type number. expecting string"',
 			);
 		});
 		it('Invalid invite value type bool', async function () {
@@ -237,7 +237,7 @@ describe('Query invites', function () {
 				invite: true,
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type bool. expecting string"',
+				'StreamChat error code 4: QueryChannels failed with error: "field \'invite\' contains type bool. expecting string"',
 			);
 		});
 		it('Invalid invite query', async function () {
@@ -245,7 +245,7 @@ describe('Query invites', function () {
 				invite: { $gt: 'pending' },
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "operator "$gt" is not allowed for field "invite"',
+				"StreamChat error code 4: QueryChannels failed with error: \"operator $gt is not allowed for field 'invite'",
 			);
 		});
 		it('Invalid invite operator II', async function () {
@@ -253,7 +253,7 @@ describe('Query invites', function () {
 				invite: [null],
 			});
 			await expect(channels).to.be.rejectedWith(
-				'StreamChat error code 4: QueryChannels failed with error: "field `invite` contains type array. expecting string"',
+				'StreamChat error code 4: QueryChannels failed with error: "field \'invite\' contains type array. expecting string"',
 			);
 		});
 	});

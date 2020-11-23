@@ -251,7 +251,7 @@ describe('Query Members', function () {
 		await expectHTTPErrorCode(
 			400,
 			results,
-			'StreamChat error code 4: QueryMembers failed with error: "operator "$q" is not allowed for field "id""',
+			'StreamChat error code 4: QueryMembers failed with error: "operator $q is not allowed for field \'id\'"',
 		);
 	});
 
@@ -395,7 +395,7 @@ describe('Query Members', function () {
 			});
 
 			await expect(p).to.be.rejectedWith(
-				'StreamChat error code 4: QueryMembers failed with error: "operator "$in" is not allowed for field "last_active"',
+				"StreamChat error code 4: QueryMembers failed with error: \"operator $in is not allowed for field 'last_active'",
 			);
 		});
 	});

@@ -1584,7 +1584,7 @@ describe('$ne operator', function () {
 		await expectHTTPErrorCode(
 			400,
 			client.queryChannels({ unique, id: { $ne: 1 } }),
-			'StreamChat error code 4: QueryChannels failed with error: "field "id" expects type string"',
+			'StreamChat error code 4: QueryChannels failed with error: "field \'id\' contains type number. expecting string"',
 		);
 	});
 
