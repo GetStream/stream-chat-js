@@ -2023,3 +2023,27 @@ describe('update channel with reserved fields', function () {
 		await channel.update(channel._data);
 	});
 });
+
+describe('notification.channel_deleted', () => {
+	let channel;
+	const member = 'member' + uuidv4();
+
+	before(async () => {
+		const creator = 'creator' + uuidv4();
+		await createUsers([member, creator]);
+		const c = await getTestClient(true);
+
+		channel = c.channel('messaging', uuidv4(), {
+			created_by_id: creator,
+			members: [creator, member],
+		});
+		await channel.create();
+	});
+
+	it('member should receive channel delete notification, when not watching the channel', async () => {
+		const memberClient = await getTestClientForUser(member);
+		const waiter = createEventWaiter(memberClient, 'notification.channel_deleted');
+		await channel.delete();
+		await waiter;
+	});
+});
