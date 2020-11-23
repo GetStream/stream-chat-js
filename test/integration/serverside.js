@@ -801,9 +801,9 @@ describe('App configs', function () {
 							const response = await client.getAppSettings();
 							expect(response.app).to.be.an('object');
 							expect(response.app.push_notifications).to.be.an('object');
-							expect(
-								response.app.push_notifications.general.version,
-							).to.be.eq('v1');
+							expect(response.app.push_notifications.version).to.be.eq(
+								'v1',
+							);
 							delete response.app.push_notifications.apn
 								.notification_template;
 							expect(response.app.push_notifications.apn).to.eql({
@@ -834,9 +834,9 @@ describe('App configs', function () {
 							const response = await client.getAppSettings();
 							expect(response.app).to.be.an('object');
 							expect(response.app.push_notifications).to.be.an('object');
-							expect(
-								response.app.push_notifications.general.version,
-							).to.be.eq('v1');
+							expect(response.app.push_notifications.version).to.be.eq(
+								'v1',
+							);
 							delete response.app.push_notifications.apn
 								.notification_template;
 							expect(response.app.push_notifications.apn).to.eql({
@@ -953,7 +953,7 @@ describe('App configs', function () {
 
 					it('returns correct app settings', function () {
 						expect(app.push_notifications).to.be.an('object');
-						expect(app.push_notifications.general.version).to.be.eq('v1');
+						expect(app.push_notifications.version).to.be.eq('v1');
 						delete app.push_notifications.apn.notification_template;
 						expect(app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -988,9 +988,7 @@ describe('App configs', function () {
 						const response = await client.getAppSettings();
 						expect(response.app).to.be.an('object');
 						expect(response.app.push_notifications).to.be.an('object');
-						expect(response.app.push_notifications.general.version).to.be.eq(
-							'v1',
-						);
+						expect(response.app.push_notifications.version).to.be.eq('v1');
 						delete response.app.push_notifications.apn.notification_template;
 						expect(response.app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -1052,9 +1050,7 @@ describe('App configs', function () {
 					const response = await client.getAppSettings();
 					expect(response.app).to.be.an('object');
 					expect(response.app.push_notifications).to.be.an('object');
-					expect(response.app.push_notifications.general.version).to.be.eq(
-						'v1',
-					);
+					expect(response.app.push_notifications.version).to.be.eq('v1');
 					delete response.app.push_notifications.apn.notification_template;
 					expect(response.app.push_notifications.apn.enabled).to.be.false;
 				});
@@ -1187,7 +1183,7 @@ describe('App configs', function () {
 
 					it('returns correct app settings', function () {
 						expect(app.push_notifications).to.be.an('object');
-						expect(app.push_notifications.general.version).to.be.eq('v2');
+						expect(app.push_notifications.version).to.be.eq('v2');
 						delete app.push_notifications.apn.notification_template;
 						expect(app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -1222,9 +1218,7 @@ describe('App configs', function () {
 						const response = await client.getAppSettings();
 						expect(response.app).to.be.an('object');
 						expect(response.app.push_notifications).to.be.an('object');
-						expect(response.app.push_notifications.general.version).to.be.eq(
-							'v2',
-						);
+						expect(response.app.push_notifications.version).to.be.eq('v2');
 						delete response.app.push_notifications.apn.notification_template;
 						expect(response.app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -1310,7 +1304,7 @@ describe('App configs', function () {
 				const response = await client.getAppSettings();
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
-				expect(response.app.push_notifications.general.version).to.be.eq('v1');
+				expect(response.app.push_notifications.version).to.be.eq('v1');
 				delete response.app.push_notifications.firebase.notification_template;
 				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
@@ -1328,7 +1322,7 @@ describe('App configs', function () {
 				const response = await client.getAppSettings();
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
-				expect(response.app.push_notifications.general.version).to.be.eq('v1');
+				expect(response.app.push_notifications.version).to.be.eq('v1');
 				delete response.app.push_notifications.firebase.notification_template;
 				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
@@ -1350,7 +1344,7 @@ describe('App configs', function () {
 								server_key:
 									'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 								notification_template: '{ }',
-								credentials: '',
+								credentials_json: '',
 							},
 						}),
 					);
@@ -1363,7 +1357,7 @@ describe('App configs', function () {
 						400,
 						client.updateAppSettings({
 							firebase_config: {
-								credentials: 'bogus',
+								credentials_json: 'bogus',
 							},
 						}),
 					);
@@ -1372,7 +1366,7 @@ describe('App configs', function () {
 				it('Adding good credentials', async () => {
 					await client.updateAppSettings({
 						firebase_config: {
-							credentials: fs.readFileSync(
+							credentials_json: fs.readFileSync(
 								'./test/integration/push_test/push-test-credentials.json',
 								'utf-8',
 							),
@@ -1384,9 +1378,7 @@ describe('App configs', function () {
 					const response = await client.getAppSettings();
 					expect(response.app).to.be.an('object');
 					expect(response.app.push_notifications).to.be.an('object');
-					expect(response.app.push_notifications.general.version).to.be.eq(
-						'v2',
-					);
+					expect(response.app.push_notifications.version).to.be.eq('v2');
 					delete response.app.push_notifications.firebase.notification_template;
 					delete response.app.push_notifications.firebase.data_template;
 					expect(response.app.push_notifications.firebase).to.eql({
@@ -1406,9 +1398,7 @@ describe('App configs', function () {
 					const response = await client.getAppSettings();
 					expect(response.app).to.be.an('object');
 					expect(response.app.push_notifications).to.be.an('object');
-					expect(response.app.push_notifications.general.version).to.be.eq(
-						'v2',
-					);
+					expect(response.app.push_notifications.version).to.be.eq('v2');
 					delete response.app.push_notifications.firebase.notification_template;
 					delete response.app.push_notifications.firebase.data_template;
 					expect(response.app.push_notifications.firebase).to.eql({
@@ -1748,7 +1738,7 @@ describe('App configs', function () {
 			auth_type: 'token',
 		};
 		const firebase_config = {
-			credentials: fs.readFileSync(
+			credentials_json: fs.readFileSync(
 				'./test/integration/push_test/push-test-credentials.json',
 				'utf-8',
 			),
@@ -2385,7 +2375,7 @@ describe('Devices', function () {
 			await client.updateAppSettings({
 				push_config: { version: 'v2' },
 				firebase_config: {
-					credentials: fs.readFileSync(
+					credentials_json: fs.readFileSync(
 						'./test/integration/push_test/push-test-credentials.json',
 						'utf-8',
 					),
