@@ -132,7 +132,7 @@ describe('member custom data', () => {
 	});
 });
 
-describe.only('query channels by member and user custom data', () => {
+describe('query channels by member and user custom data', () => {
 	const creator = 'creator' + uuidv4();
 	const user1 = { id: '1' + uuidv4(), name: 'user1', rank: 1 };
 	const user2 = { id: '2' + uuidv4(), name: 'user2', rank: 1 };
@@ -147,7 +147,9 @@ describe.only('query channels by member and user custom data', () => {
 
 		await ss
 			.channel('messaging', channel1, {
-				members: [{ user_id: user1.id, data: user1.id }],
+				members: [
+					{ user_id: user1.id, data: user1.id, ref: channel1 + user1.id },
+				],
 				created_by_id: creator,
 			})
 			.create();
@@ -155,8 +157,8 @@ describe.only('query channels by member and user custom data', () => {
 		await ss
 			.channel('messaging', channel2, {
 				members: [
-					{ user_id: user1.id, data: user1.id },
-					{ user_id: user2.id, data: user2.id },
+					{ user_id: user1.id, data: user1.id, ref: channel2 + user1.id },
+					{ user_id: user2.id, data: user2.id, ref: channel2 + user2.id },
 				],
 				created_by_id: creator,
 			})
@@ -165,9 +167,9 @@ describe.only('query channels by member and user custom data', () => {
 		await ss
 			.channel('messaging', channel3, {
 				members: [
-					{ user_id: user1.id, data: user1.id },
-					{ user_id: user2.id, data: user2.id },
-					{ user_id: user3.id, data: user3.id },
+					{ user_id: user1.id, data: user1.id, ref: channel3 + user1.id },
+					{ user_id: user2.id, data: user2.id, ref: channel3 + user2.id },
+					{ user_id: user3.id, data: user3.id, ref: channel3 + user3.id },
 				],
 				created_by_id: creator,
 			})
@@ -203,9 +205,15 @@ describe.only('query channels by member and user custom data', () => {
 	});
 
 	it('disjunctions work fine', async () => {
-		const client = await getTestClientForUser(user2.id);
+		const client = await getTestClientForUser(user1.id);
 		const resp = await client.queryChannels(
-			{ $or: [{ 'member.user.name': 'user2' }, { 'member.user.name': 'user1' }] },
+			{
+				$or: [
+					{ 'member.ref': channel2 + user1.id },
+					{ 'member.ref': channel3 + user1.id },
+				],
+			},
+
 			{ cid: 1 },
 		);
 		expect(resp.length).to.be.equal(2);
