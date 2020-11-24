@@ -8,6 +8,7 @@ import {
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
+  ChannelMember,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
@@ -660,12 +661,12 @@ export class Channel<
   /**
    * addMembers - add members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param { string[]| ChannelMember[]} members An array of member identifiers or an array of ChannelMember objects
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
-    members: string[],
+    members: string[] | ChannelMember[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
@@ -688,12 +689,12 @@ export class Channel<
   /**
    * addModerators - add moderators to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param { string[]| ChannelMember[]} members An array of member identifiers or an array of ChannelMember objects
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addModerators(
-    members: string[],
+    members: string[] | ChannelMember[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
@@ -716,12 +717,12 @@ export class Channel<
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param { string[]| ChannelMember[]} members An array of member identifiers or an array of ChannelMember objects
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
-    members: string[],
+    members: string[] | ChannelMember[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
@@ -772,12 +773,12 @@ export class Channel<
   /**
    * demoteModerators - remove moderator role from channel members
    *
-   * @param {string[]} members An array of member identifiers
+   * @param { string[]| ChannelMember[]} members An array of member identifiers or an array of ChannelMember objects
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async demoteModerators(
-    members: string[],
+    members: string[] | ChannelMember[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     const data = await this.getClient().post<
