@@ -3,8 +3,10 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'isomorphic-ws';
+/** safe to use non-secure to support ReactNative */
+import { nanoid } from 'nanoid/non-secure';
+
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
@@ -145,7 +147,6 @@ export class StreamChat<
   user?: UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
-  UUID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
@@ -301,8 +302,7 @@ export class StreamChat<
   }
 
   _setupConnection = () => {
-    this.UUID = uuidv4();
-    this.clientID = `${this.userID}--${this.UUID}`;
+    this.clientID = `${this.userID}--${nanoid()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
@@ -466,7 +466,7 @@ export class StreamChat<
 
   setAnonymousUser = () => {
     this.anonymous = true;
-    this.userID = uuidv4();
+    this.userID = nanoid();
     const anonymousUser = {
       id: this.userID,
       anon: true,
