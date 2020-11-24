@@ -60,7 +60,7 @@ describe('Query Members', function () {
 		await channel.inviteMembers([invited, pending, rejected]);
 
 		// mod bans user banned
-		await channel.banUser(banned, { user_id: mod });
+		await channel.banUser(banned, { banned_by_id: mod });
 
 		// accept the invite
 		const clientA = await getTestClientForUser(invited);

@@ -1,6 +1,14 @@
 const { v4: uuidv4 } = require('uuid');
 const utils = require('../utils');
 
+async function cleanupBucketList(client, name) {
+	try {
+		await client.deleteBlockList(name); // cleanup for previous failed tests
+	} catch (err) {
+		// do nothing
+	}
+}
+
 async function banUsers() {
 	const client = utils.getTestClient(true);
 	const user = {
@@ -31,6 +39,7 @@ async function shadowBan() {
 async function createBlockList() {
 	const name = 'FWord';
 	const client = utils.getTestClient(true);
+	await cleanupBucketList(client, name);
 
 	const returnValue = await client.createBlockList({ name, words: ['F*!k'] });
 	await client.deleteBlockList(name);
@@ -54,6 +63,9 @@ async function deleteBlockList() {
 	const name = 'FWord';
 	const name2 = 'SWord';
 	const client = await utils.getTestClient(true);
+	await cleanupBucketList(client, name);
+	await cleanupBucketList(client, name2);
+
 	await client.createBlockList({ name, words: ['F*!k'] });
 	await client.createBlockList({ name: name2, words: ['S!*t'] });
 
@@ -156,6 +168,8 @@ async function flagUser() {
 async function getBlockList() {
 	const name = 'FWord';
 	const client = await utils.getTestClient(true);
+	await cleanupBucketList(client, name);
+
 	await client.createBlockList({ name, words: ['F*!k'] });
 
 	const returnValue = await client.getBlockList(name);
@@ -321,6 +335,8 @@ async function unmuteUser() {
 async function updateBlockList() {
 	const name = 'FWord';
 	const client = await utils.getTestClient(true);
+	await cleanupBucketList(client, name);
+
 	await client.createBlockList({ name, words: ['F*!k'] });
 
 	const returnValue = await client.updateBlockList(name, {

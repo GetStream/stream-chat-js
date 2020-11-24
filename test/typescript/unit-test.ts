@@ -28,8 +28,8 @@ const apiKey = 'apiKey';
 
 type UserType = {
   id: string;
-  name?: string;
   example?: number;
+  name?: string;
   phone?: number;
 };
 
