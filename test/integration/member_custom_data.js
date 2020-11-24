@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
-describe.only('member custom data', () => {
+describe('member custom data', () => {
 	let ssClient;
 	let channel;
 	const bob = `bob-${uuidv4()}`;
@@ -129,5 +129,139 @@ describe.only('member custom data', () => {
 			expect(resp.membership.invited).to.be.true;
 			expect(resp.membership.color).to.be.equal('red');
 		});
+	});
+});
+
+describe.only('query channels by member and user custom data', () => {
+	const creator = 'creator' + uuidv4();
+	const user1 = { id: '1' + uuidv4(), name: 'user1', rank: 1 };
+	const user2 = { id: '2' + uuidv4(), name: 'user2', rank: 1 };
+	const user3 = { id: '3' + uuidv4(), name: 'user3', rank: 1 };
+	const channel1 = 'ch1' + uuidv4();
+	const channel2 = 'ch2' + uuidv4();
+	const channel3 = 'ch3' + uuidv4();
+
+	before(async () => {
+		const ss = await getTestClient(true);
+		await ss.upsertUsers([user1, user2, user3]);
+
+		await ss
+			.channel('messaging', channel1, {
+				members: [{ user_id: user1.id, data: user1.id }],
+				created_by_id: creator,
+			})
+			.create();
+
+		await ss
+			.channel('messaging', channel2, {
+				members: [
+					{ user_id: user1.id, data: user1.id },
+					{ user_id: user2.id, data: user2.id },
+				],
+				created_by_id: creator,
+			})
+			.create();
+
+		await ss
+			.channel('messaging', channel3, {
+				members: [
+					{ user_id: user1.id, data: user1.id },
+					{ user_id: user2.id, data: user2.id },
+					{ user_id: user3.id, data: user3.id },
+				],
+				created_by_id: creator,
+			})
+			.create();
+	});
+
+	it('user 1 query channels by member custom data', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels({ 'member.data': user1.id }, { cid: 1 });
+		expect(resp.length).to.be.equal(3);
+		expect(resp[0].id).to.be.equal(channel1);
+		expect(resp[1].id).to.be.equal(channel2);
+		expect(resp[2].id).to.be.equal(channel3);
+	});
+
+	it('user 1 query channels by user name', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.user.name': 'user1' },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(3);
+		expect(resp[0].id).to.be.equal(channel1);
+		expect(resp[1].id).to.be.equal(channel2);
+		expect(resp[2].id).to.be.equal(channel3);
+	});
+
+	it('query by member data should only match channels with common memberships', async () => {
+		const client = await getTestClientForUser(user3.id);
+		const resp = await client.queryChannels({ 'member.data': user1.id }, { cid: 1 });
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].id).to.be.equal(channel3);
+	});
+
+	it('disjunctions work fine', async () => {
+		const client = await getTestClientForUser(user2.id);
+		const resp = await client.queryChannels(
+			{ $or: [{ 'member.user.name': 'user2' }, { 'member.user.name': 'user1' }] },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(2);
+		expect(resp[0].id).to.be.equal(channel2);
+		expect(resp[1].id).to.be.equal(channel3);
+	});
+
+	it('combine member and user filters', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.user.name': 'user3', 'member.data': user3.id },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(1);
+		expect(resp[0].id).to.be.equal(channel3);
+	});
+
+	it('member.user.id is equivalent to members', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.user.id': { $in: [user1.id] } },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(3);
+		expect(resp[0].id).to.be.equal(channel1);
+		expect(resp[1].id).to.be.equal(channel2);
+		expect(resp[2].id).to.be.equal(channel3);
+	});
+
+	it('get channels where members doesnt contain the data property', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.data': { $exists: false } },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(0);
+	});
+
+	it('get channels that doesnt contain any of the following user ids', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.user.id': { $nin: [user1.id, user2.id, user3.id] } },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(0);
+	});
+
+	it('get channels by member.user.name prefix', async () => {
+		const client = await getTestClientForUser(user1.id);
+		const resp = await client.queryChannels(
+			{ 'member.user.name': { $autocomplete: 'user' } },
+			{ cid: 1 },
+		);
+		expect(resp.length).to.be.equal(3);
+		expect(resp[0].id).to.be.equal(channel1);
+		expect(resp[1].id).to.be.equal(channel2);
+		expect(resp[2].id).to.be.equal(channel3);
 	});
 });
