@@ -52,6 +52,7 @@ import {
   Message,
   MessageFilters,
   MessageResponse,
+  Mute,
   MuteUserOptions,
   MuteUserResponse,
   PartialUserUpdate,
@@ -132,6 +133,7 @@ export class StreamChat<
   };
   logger: Logger;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
+  mutes: Mute<UserType>[];
   node: boolean;
   options: StreamChatOptions;
   secret?: string;
@@ -176,6 +178,7 @@ export class StreamChat<
     this.state = new ClientState<UserType>();
     // a list of channels to hide ws events from
     this.mutedChannels = [];
+    this.mutes = [];
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
@@ -923,6 +926,7 @@ export class StreamChat<
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client.mutes = event.me.mutes;
     }
 
     if (event.channel && event.type === 'notification.message_new') {
@@ -931,6 +935,9 @@ export class StreamChat<
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+    }
+    if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
+      this.mutes = event.me.mutes;
     }
   }
 
