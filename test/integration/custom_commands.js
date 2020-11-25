@@ -83,6 +83,8 @@ const excuseCmd = (request) => {
 };
 
 describe('custom command hook', () => {
+	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
+	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
 	const serverAuth = getTestClient(true);
 	const userAuth = getTestClient(false);
 	const guyon = { id: `guyon-${uuidv4()}` };
@@ -125,11 +127,11 @@ describe('custom command hook', () => {
 			});
 		});
 
-		await server.listen(4324, '127.0.0.1');
+		await server.listen(4324, localHost);
 		await sleep(100);
 
 		await serverAuth.updateAppSettings({
-			custom_action_handler_url: 'http://127.0.0.1:4324',
+			custom_action_handler_url: 'http://' + hookHost + ':4324',
 		});
 
 		await serverAuth.createChannelType({

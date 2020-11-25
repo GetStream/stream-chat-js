@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 const expect = chai.expect;
 
 describe('Webhooks', function () {
+	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
+	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
+
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 	const horatiuID = `horatiu-${uuidv4()}`;
@@ -71,8 +74,8 @@ describe('Webhooks', function () {
 			client.upsertUser({ id: tommasoID }),
 			client.upsertUser({ id: horatiuID }),
 			client.upsertUser({ id: jaapID }),
-			client.updateAppSettings({ webhook_url: 'http://127.0.0.1:4322' }),
-			server.listen(4322, '127.0.0.1'),
+			client.updateAppSettings({ webhook_url: 'http://' + hookHost + ':4322' }),
+			server.listen(4322, localHost),
 			chan.create(),
 		]);
 	});

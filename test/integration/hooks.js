@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 const expect = chai.expect;
 
 describe('before message send hook', () => {
+	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
+	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
+
 	const client = getTestClient(true);
 	let server;
 	let handler = (data) => JSON.stringify(data.message);
@@ -43,7 +46,7 @@ describe('before message send hook', () => {
 			});
 		});
 
-		await server.listen(4323, '127.0.0.1');
+		await server.listen(4323, localHost);
 		await sleep(100);
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
 		await chan.create();
@@ -71,10 +74,12 @@ describe('before message send hook', () => {
 
 	it('enable hook', async () => {
 		await client.updateAppSettings({
-			before_message_send_hook_url: 'http://127.0.0.1:4323',
+			before_message_send_hook_url: 'http://' + hookHost + ':4323',
 		});
 		const response = await client.getAppSettings();
-		expect(response.app.before_message_send_hook_url).to.eql('http://127.0.0.1:4323');
+		expect(response.app.before_message_send_hook_url).to.eql(
+			'http://' + hookHost + ':4323',
+		);
 	});
 
 	it('return nothing should be OK', async () => {
