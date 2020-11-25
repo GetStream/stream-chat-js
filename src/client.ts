@@ -4,8 +4,6 @@
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
-/** safe to use non-secure to support ReactNative */
-import { nanoid } from 'nanoid/non-secure';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -13,7 +11,13 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, addFileToFormData, chatCodes, normalizeQuerySort } from './utils';
+import {
+  isFunction,
+  addFileToFormData,
+  chatCodes,
+  normalizeQuerySort,
+  randomId,
+} from './utils';
 
 import {
   APIResponse,
@@ -302,7 +306,7 @@ export class StreamChat<
   }
 
   _setupConnection = () => {
-    this.clientID = `${this.userID}--${nanoid()}`;
+    this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
@@ -466,7 +470,7 @@ export class StreamChat<
 
   setAnonymousUser = () => {
     this.anonymous = true;
-    this.userID = nanoid();
+    this.userID = randomId();
     const anonymousUser = {
       id: this.userID,
       anon: true,
