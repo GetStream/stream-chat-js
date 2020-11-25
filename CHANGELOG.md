@@ -1,3 +1,9 @@
+## November 25, 2020 - 2.8.2
+
+### Fix
+
+- Replace uuid with simple random generator [#518](https://github.com/GetStream/stream-js/pull/518)
+
 ## November 20, 2020 - 2.8.1
 
 ### Fix
