@@ -1,3 +1,9 @@
+## November 25, 2020 - 2.8.3
+
+### Fix
+
+- add `custom_event` to channel types [#520](https://github.com/GetStream/stream-js/pull/520)
+
 ## November 25, 2020 - 2.8.2
 
 ### Fix
