@@ -63,6 +63,7 @@ export type AppSettingsAPIResponse<
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
+        custom_events?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -678,6 +679,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
   connection_id?: string;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1257,6 +1259,7 @@ export type ChannelConfigFields = {
   automod_behavior?: ChannelConfigAutomodBehavior;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;

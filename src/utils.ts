@@ -96,3 +96,13 @@ export function normalizeQuerySort<T extends QuerySort>(sort: T) {
   }
   return sortFields;
 }
+
+/** adopted from https://github.com/ai/nanoid/blob/master/non-secure/index.js */
+const alphabet = 'ModuleSymbhasOwnPr0123456789ABCDEFGHNRVfgctiUvzKqYTJkLxpZXIjQW';
+export function randomId() {
+  let id = '';
+  for (let i = 0; i < 21; i++) {
+    id += alphabet[(Math.random() * 64) | 0];
+  }
+  return id;
+}

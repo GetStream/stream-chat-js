@@ -1542,9 +1542,11 @@ export class Channel<
         break;
       case 'message.new':
         if (event.message) {
-          s.addMessageSorted(event.message);
+          /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
+          const ownMessage = event.user?.id === this.getClient().user?.id;
+          s.addMessageSorted(event.message, ownMessage);
 
-          if (event.user?.id === this.getClient().user?.id) {
+          if (ownMessage) {
             s.unreadCount = 0;
           } else if (this._countMessageAsUnread(event.message)) {
             s.unreadCount = s.unreadCount + 1;
@@ -1558,6 +1560,7 @@ export class Channel<
         break;
       case 'channel.truncated':
         s.clearMessages();
+        s.unreadCount = 0;
         break;
       case 'member.added':
       case 'member.updated':
