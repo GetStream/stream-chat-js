@@ -1544,7 +1544,20 @@ export class Channel<
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          s.addMessageSorted(event.message, ownMessage);
+          const shouldAppendOnStateMessages =
+            this.state.messages.length === 0 ||
+            (this.state.last_message_at &&
+              this.state.last_message_at <=
+                this.state.messages[
+                  this.state.messages.length - 1
+                ].created_at.asMutable());
+
+          // Make sure latest message in list is in sync with last_message_at timestamp.
+          // If user has queried messages which are not the most recent ones, the we shouldn't
+          // append new message to list.
+          if (shouldAppendOnStateMessages) {
+            s.addMessageSorted(event.message, ownMessage);
+          }
 
           if (ownMessage) {
             s.unreadCount = 0;
