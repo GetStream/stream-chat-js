@@ -9,4 +9,4 @@ export * from './permissions';
 export * from './signing';
 export * from './token_manager';
 export * from './types';
-export { chatCodes, logChatPromiseExecution } from './utils';
+export { chatCodes, logChatPromiseExecution, randomId } from './utils';
