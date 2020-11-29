@@ -1318,7 +1318,7 @@ export class StreamChat<
   /**
    * getDevices - Returns the devices associated with a current user
    *
-   * @param {string} [userID] User ID. Only works on serversidex
+   * @param {string} [userID] User ID. Only works on serverside
    *
    * @return {APIResponse & Device<UserType>[]} Array of devices
    */
@@ -1540,7 +1540,7 @@ export class StreamChat<
   }
 
   /**
-   * updateUsers - Batch partial update of users
+   * partialUpdateUsers - Batch partial update of users
    *
    * @param {PartialUserUpdate<UserType>[]} users list of partial update requests
    *
