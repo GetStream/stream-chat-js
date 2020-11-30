@@ -90,6 +90,7 @@ export type AppSettingsAPIResponse<
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
@@ -1203,9 +1204,13 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   firebase_config?: {
+    credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
+  };
+  push_config?: {
+    version?: string;
   };
   webhook_url?: string;
 };
@@ -1376,6 +1381,7 @@ export type Field = {
 };
 
 export type FirebaseConfig = {
+  credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
