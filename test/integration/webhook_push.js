@@ -1,11 +1,15 @@
 import chai from 'chai';
-import http from 'http';
-import { createUserToken, getTestClient, getTestClientForUser, sleep } from './utils';
+import {
+	createUserToken,
+	getTestClient,
+	getTestClientForUser,
+	setupWebhook,
+} from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
-describe('Webhooks', function () {
+describe('Push Webhook', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 	const horatiuID = `horatiu-${uuidv4()}`;
@@ -13,7 +17,7 @@ describe('Webhooks', function () {
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 
-	let chan, server, messageResponse;
+	let chan, tearDownWebhook, messageResponse;
 
 	const promises = {
 		events: {},
@@ -45,43 +49,30 @@ describe('Webhooks', function () {
 
 	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
-
-		server = http.createServer(function (req, res) {
-			let body = '';
-			let signature = '';
-
-			req.on('data', (chunk) => {
-				body += chunk.toString(); // convert Buffer to string
-			});
-
-			req.on('end', () => {
-				const event = JSON.parse(body);
-				res.end('ok');
-				signature = req.headers['x-signature'];
+		tearDownWebhook = await setupWebhook(
+			client,
+			'webhook_url',
+			(request, body, response) => {
 				// make sure the request signature is correct
-				expect(client.verifyWebhook(body, signature)).to.eq(true);
-				promises.eventReceived(event);
-			});
-
-			res.writeHead(200, { 'Content-Type': 'text/plain' });
-		});
+				expect(client.verifyWebhook(body, request.headers['x-signature'])).to.eq(
+					true,
+				);
+				promises.eventReceived(JSON.parse(body));
+				response.writeHead(201);
+			},
+		);
 
 		await Promise.all([
 			client.upsertUser({ id: thierryID }),
 			client.upsertUser({ id: tommasoID }),
 			client.upsertUser({ id: horatiuID }),
 			client.upsertUser({ id: jaapID }),
-			client.updateAppSettings({ webhook_url: 'http://127.0.0.1:4322' }),
-			server.listen(4322, '127.0.0.1'),
 			chan.create(),
 		]);
 	});
 
 	after(async () => {
-		await Promise.all([
-			client.updateAppSettings({ webhook_url: '' }),
-			server.close(),
-		]);
+		await tearDownWebhook();
 	});
 
 	it('should receive new message event', async function () {

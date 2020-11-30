@@ -1,5 +1,6 @@
 import { StreamChat } from '../../src';
 import chai from 'chai';
+import http from 'http';
 const expect = chai.expect;
 require('dotenv').config();
 const apiKey = process.env.STREAM_API_KEY;
@@ -117,4 +118,34 @@ export function createEventWaiter(clientOrChannel, eventTypes) {
 		};
 		clientOrChannel.on(handler);
 	});
+}
+
+export async function setupWebhook(client, appWebhookOptionName, onRequest) {
+	const port = (Math.random() * 65535) | 60000;
+	const server = http.createServer(function (req, res) {
+		let body = '';
+
+		req.on('data', (chunk) => {
+			body += chunk.toString(); // convert Buffer to string
+		});
+
+		req.on('end', () => {
+			onRequest(req, body, res);
+		});
+	});
+
+	await Promise.all([
+		client.updateAppSettings({
+			[appWebhookOptionName]: `http://127.0.0.1:${port}`,
+		}),
+		server.listen(port, '127.0.0.1'),
+	]);
+	return async () => {
+		await Promise.all([
+			client.updateAppSettings({
+				[appWebhookOptionName]: '',
+			}),
+			server.close(),
+		]);
+	};
 }
