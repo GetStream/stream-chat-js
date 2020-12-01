@@ -1,5 +1,5 @@
 import chai from 'chai';
-import { getTestClient, setupWebhook } from './utils';
+import { getTestClient, setupWebhook, sleep } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
@@ -9,52 +9,16 @@ describe('Before Message Send Webhook', function () {
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 
-	let chan, tearDownWebhook;
-
-	const webhook = {
-		requested: false,
-		fail: false,
-		request: {},
-		response: null,
-		reset() {
-			this.requested = false;
-			this.message = null;
-			this.fail = false;
-			this.response = null;
-		},
-		onRequest(request, body, res) {
-			this.requested = true;
-			this.request = JSON.parse(body);
-			if (this.fail) {
-				res.writeHead(500);
-				res.end();
-				return;
-			}
-			let response;
-			if (this.response != null) {
-				response = this.response(this.request);
-			} else {
-				response = this.request;
-			}
-			res.writeHead(200, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify(response));
-		},
-	};
+	let chan, webhook;
 
 	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
-		tearDownWebhook = await setupWebhook(
-			client,
-			'before_message_send_hook_url',
-			(req, body, resp) => {
-				webhook.onRequest(req, body, resp);
-			},
-		);
+		webhook = await setupWebhook(client, 'before_message_send_hook_url');
 		await Promise.all([client.upsertUser({ id: tommasoID }), chan.create()]);
 	});
 
 	after(async () => {
-		await tearDownWebhook();
+		await webhook.tearDown();
 	});
 
 	afterEach(() => {
@@ -98,5 +62,128 @@ describe('Before Message Send Webhook', function () {
 			},
 		});
 		expect(results[0].message.id).to.eq(resp.message.id);
+	});
+
+	it("Webhook doesn't get called when it's disabled", async () => {
+		await webhook.tearDown();
+		const { message } = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		expect(webhook.requested).to.eql(false);
+		expect(message.webhook_id).to.be.empty;
+		expect(message.webhook_failed).to.eql(false);
+		webhook = await setupWebhook(client, 'before_message_send_hook_url');
+	});
+
+	it('It is OK to return the original message as a response', async () => {
+		const { message } = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		expect(message.user.id).to.eql(tommasoID);
+		expect(webhook.requested).to.eql(true);
+		expect(message.webhook_failed).to.eql(false);
+	});
+
+	it('Returning empty body should fail the webhook', async () => {
+		webhook.response = () => '';
+		const { message } = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		expect(message.user.id).to.eql(tommasoID);
+		expect(webhook.requested).to.eql(true);
+		expect(message.webhook_failed).to.eql(true);
+	});
+
+	it('Webhook gets a call when updating a message too', async () => {
+		const created = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		webhook.reset();
+		webhook.response = (data) => {
+			data.message.text = 'bad bad bad';
+			return data;
+		};
+		const { message } = await client.updateMessage(
+			{ id: created.message.id, text: uuidv4() },
+			tommasoID,
+		);
+		expect(message.user.id).to.eql(tommasoID);
+		expect(message.text).to.eql('bad bad bad');
+		expect(webhook.requested).to.eql(true);
+		expect(message.webhook_failed).to.eql(false);
+	});
+
+	it('Webhook changes type to ERROR on update', async () => {
+		const created = await chan.sendMessage({
+			text: uuidv4(),
+			user: { id: tommasoID },
+		});
+		webhook.reset();
+		webhook.response = (data) => {
+			data.message.type = 'error';
+			return data;
+		};
+		const { message } = await client.updateMessage(
+			{ id: created.message.id, text: uuidv4() },
+			tommasoID,
+		);
+		expect(message.user.id).to.eql(tommasoID);
+		expect(message.type).to.eql('error');
+		expect(webhook.requested).to.eql(true);
+		expect(message.webhook_failed).to.eql(false);
+	});
+
+	it('Webhooks adds custom field', async () => {
+		webhook.response = (data) => {
+			data.message.myCustomThingie = 42;
+			return data;
+		};
+		const { message } = await chan.sendMessage({
+			text: "hello, here's my CC information 1234 1234 1234 1234",
+			user: { id: tommasoID },
+		});
+		expect(message.user.id).to.eql(tommasoID);
+		expect(message.myCustomThingie).to.eql(42);
+		expect(message.webhook_failed).to.eql(false);
+	});
+
+	it('Webhook changes type to error on create', async () => {
+		webhook.response = (data) => {
+			data.message.type = 'error';
+			return data;
+		};
+		const { message } = await chan.sendMessage({
+			text: 'super bad!',
+			user: { id: tommasoID },
+		});
+		expect(message.user.id).to.eql(tommasoID);
+		expect(message.type).to.eql('error');
+		expect(message.webhook_failed).to.eql(false);
+	});
+
+	it('Errored messages do not exist', async () => {
+		const response = await chan.query();
+		expect(response.messages[response.messages.length - 1].text).to.not.eql(
+			'super bad!',
+		);
+	});
+
+	it('Webhook fails with a timeout', async () => {
+		webhook.response = async (data) => {
+			await sleep(1501);
+			data.message.type = 'error';
+			return data;
+		};
+		const { message } = await chan.sendMessage({
+			text: 'super duper bad!',
+			user: { id: tommasoID },
+		});
+		expect(message.user.id).to.eql(tommasoID);
+		expect(message.type).to.eql('regular');
+		expect(message.webhook_failed).to.eql(true);
 	});
 });

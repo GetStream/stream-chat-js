@@ -17,7 +17,7 @@ describe('Push Webhook', function () {
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 
-	let chan, tearDownWebhook, messageResponse;
+	let chan, webhook, messageResponse;
 
 	const promises = {
 		events: {},
@@ -49,18 +49,14 @@ describe('Push Webhook', function () {
 
 	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
-		tearDownWebhook = await setupWebhook(
-			client,
-			'webhook_url',
-			(request, body, response) => {
-				// make sure the request signature is correct
-				expect(client.verifyWebhook(body, request.headers['x-signature'])).to.eq(
-					true,
-				);
-				promises.eventReceived(JSON.parse(body));
-				response.writeHead(201);
-			},
-		);
+		webhook = await setupWebhook(client, 'webhook_url', (request, body, response) => {
+			// make sure the request signature is correct
+			expect(client.verifyWebhook(body, request.headers['x-signature'])).to.eq(
+				true,
+			);
+			promises.eventReceived(JSON.parse(body));
+			response.writeHead(201);
+		});
 
 		await Promise.all([
 			client.upsertUser({ id: thierryID }),
@@ -71,8 +67,12 @@ describe('Push Webhook', function () {
 		]);
 	});
 
+	afterEach(() => {
+		webhook.reset();
+	});
+
 	after(async () => {
-		await tearDownWebhook();
+		await webhook.tearDown();
 	});
 
 	it('should receive new message event', async function () {

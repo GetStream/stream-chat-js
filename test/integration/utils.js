@@ -121,6 +121,47 @@ export function createEventWaiter(clientOrChannel, eventTypes) {
 }
 
 export async function setupWebhook(client, appWebhookOptionName, onRequest) {
+	const webhook = {
+		requested: false,
+		fail: false,
+		request: {},
+		response: null,
+		reset() {
+			this.requested = false;
+			this.message = null;
+			this.fail = false;
+			this.response = null;
+		},
+		async tearDown() {
+			await Promise.all([
+				client.updateAppSettings({
+					[appWebhookOptionName]: '',
+				}),
+				server.close(),
+			]);
+		},
+		async onRequest(request, body, res) {
+			if (onRequest !== undefined) {
+				onRequest(request, body, res);
+				return;
+			}
+			this.requested = true;
+			this.request = JSON.parse(body);
+			if (this.fail) {
+				res.writeHead(500);
+				res.end();
+				return;
+			}
+			let response;
+			if (this.response != null) {
+				response = await this.response(this.request);
+			} else {
+				response = this.request;
+			}
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify(response));
+		},
+	};
 	const port = (Math.random() * 65535) | 60000;
 	const server = http.createServer(function (req, res) {
 		let body = '';
@@ -130,7 +171,7 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 		});
 
 		req.on('end', () => {
-			onRequest(req, body, res);
+			webhook.onRequest(req, body, res);
 		});
 	});
 
@@ -140,12 +181,5 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 		}),
 		server.listen(port, '127.0.0.1'),
 	]);
-	return async () => {
-		await Promise.all([
-			client.updateAppSettings({
-				[appWebhookOptionName]: '',
-			}),
-			server.close(),
-		]);
-	};
+	return webhook;
 }
