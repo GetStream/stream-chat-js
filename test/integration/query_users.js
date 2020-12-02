@@ -14,6 +14,7 @@ import {
 	createUsers,
 	runAndLogPromise,
 	sleep,
+	expectHTTPErrorCode,
 } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -40,6 +41,25 @@ describe('Query Users', function () {
 		const response = await client.queryUsers({ id: { $in: [userID] } });
 		expect(response.users.length).to.equal(1);
 		expect(response.users[0].id).to.equal(userID);
+	});
+
+	describe('query users by teams', async () => {
+		const userID = uuidv4();
+		let client;
+
+		before(async () => {
+			client = await getTestClientForUser(userID);
+		});
+
+		it('with null for missing ones', async () => {
+			const response = await client.queryUsers({ teams: null, id: userID });
+			expect(response.users.length).to.equal(1);
+			expect(response.users[0].id).to.equal(userID);
+		});
+
+		it('not null expects error', async () => {
+			await expectHTTPErrorCode(400, client.queryUsers({ teams: '', id: userID }));
+		});
 	});
 
 	it('autocomplete users by name or username', async function () {
