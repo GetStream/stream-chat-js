@@ -1,3 +1,21 @@
+## November 27, 2020 - 2.8.4
+
+### Fix
+
+- Reset `unreadCount` when channel gets truncated [#521](https://github.com/GetStream/stream-js/pull/521)
+
+## November 25, 2020 - 2.8.3
+
+### Fix
+
+- add `custom_event` to channel types [#520](https://github.com/GetStream/stream-js/pull/520)
+
+## November 25, 2020 - 2.8.2
+
+### Fix
+
+- Replace uuid with simple random generator [#518](https://github.com/GetStream/stream-js/pull/518)
+
 ## November 20, 2020 - 2.8.1
 
 ### Fix

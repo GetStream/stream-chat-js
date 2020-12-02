@@ -3,15 +3,21 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'isomorphic-ws';
+
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, addFileToFormData, chatCodes, normalizeQuerySort } from './utils';
+import {
+  isFunction,
+  addFileToFormData,
+  chatCodes,
+  normalizeQuerySort,
+  randomId,
+} from './utils';
 
 import {
   APIResponse,
@@ -145,7 +151,6 @@ export class StreamChat<
   user?: UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
-  UUID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
@@ -301,8 +306,7 @@ export class StreamChat<
   }
 
   _setupConnection = () => {
-    this.UUID = uuidv4();
-    this.clientID = `${this.userID}--${this.UUID}`;
+    this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
@@ -466,7 +470,7 @@ export class StreamChat<
 
   setAnonymousUser = () => {
     this.anonymous = true;
-    this.userID = uuidv4();
+    this.userID = randomId();
     const anonymousUser = {
       id: this.userID,
       anon: true,
@@ -1314,7 +1318,7 @@ export class StreamChat<
   /**
    * getDevices - Returns the devices associated with a current user
    *
-   * @param {string} [userID] User ID. Only works on serversidex
+   * @param {string} [userID] User ID. Only works on serverside
    *
    * @return {APIResponse & Device<UserType>[]} Array of devices
    */
@@ -1536,7 +1540,7 @@ export class StreamChat<
   }
 
   /**
-   * updateUsers - Batch partial update of users
+   * partialUpdateUsers - Batch partial update of users
    *
    * @param {PartialUserUpdate<UserType>[]} users list of partial update requests
    *

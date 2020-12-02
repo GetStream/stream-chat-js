@@ -1560,6 +1560,7 @@ export class Channel<
         break;
       case 'channel.truncated':
         s.clearMessages();
+        s.unreadCount = 0;
         break;
       case 'member.added':
       case 'member.updated':

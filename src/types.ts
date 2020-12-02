@@ -63,6 +63,7 @@ export type AppSettingsAPIResponse<
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
+        custom_events?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -89,6 +90,7 @@ export type AppSettingsAPIResponse<
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
@@ -678,6 +680,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
   connection_id?: string;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1201,9 +1204,13 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   firebase_config?: {
+    credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
+  };
+  push_config?: {
+    version?: string;
   };
   webhook_url?: string;
 };
@@ -1257,6 +1264,7 @@ export type ChannelConfigFields = {
   automod_behavior?: ChannelConfigAutomodBehavior;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1373,6 +1381,7 @@ export type Field = {
 };
 
 export type FirebaseConfig = {
+  credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
