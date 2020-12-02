@@ -12,6 +12,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { get } from 'https';
 
 const expect = chai.expect;
 
@@ -1738,8 +1739,24 @@ describe('unread counts on hard delete messages', function () {
 
 describe('channel message search', function () {
 	let authClient;
+	const userID = uuidv4();
 	before(async () => {
-		authClient = await getTestClientForUser(uuidv4());
+		authClient = await getTestClientForUser(userID);
+	});
+
+	it('No searchable fails', async () => {
+		const channelID = uuidv4();
+		// search is disabled for gaming
+		const channel = getServerTestClient().channel('gaming', channelID, {
+			created_by_id: userID,
+			members: [userID],
+		});
+		await channel.create();
+		await expectHTTPErrorCode(400, channel.search('missing'));
+		await expectHTTPErrorCode(
+			400,
+			authClient.channel('gaming', channelID).search('missing'),
+		);
 	});
 
 	it('Basic Query (old format)', async function () {
