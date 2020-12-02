@@ -244,7 +244,7 @@ describe('Query Users', function () {
 				expect(e.response.data.code).to.equal(4);
 				expect(e.response.data.StatusCode).to.equal(400);
 				expect(e.response.data.message).to.equal(
-					'QueryUsers failed with error: "$autocomplete field empty. Please provide a string to autocomplete"',
+					'QueryUsers failed with error: "$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete"',
 				);
 			}
 			expect(error).to.be.true;
@@ -259,6 +259,45 @@ describe('Query Users', function () {
 			});
 			expect(response.users).to.not.be.undefined;
 			expect(response.users[0].id).to.equal(user.id);
+		});
+
+		it('$autocomplete query with special characters', async () => {
+			let error = false;
+
+			try {
+				await client.queryUsers({
+					id: {
+						$autocomplete: `+$#@`,
+					},
+				});
+			} catch (e) {
+				error = true;
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+				expect(e.response.data.message).to.equal(
+					'QueryUsers failed with error: "$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete"',
+				);
+			}
+			expect(error).to.be.true;
+		});
+
+		it('$autocomplete query with special characters, but with valid results', async () => {
+			let error = false;
+
+			try {
+				const result = await client.queryUsers({
+					id: {
+						$autocomplete: `Ru+$#@`,
+					},
+				});
+				console.log(result);
+			} catch (e) {
+				error = true;
+			}
+
+			expect(error).to.be.false;
 		});
 	});
 });
