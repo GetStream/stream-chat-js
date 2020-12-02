@@ -479,6 +479,23 @@ describe('Chat', () => {
 	});
 
 	describe('Search', () => {
+		it('No searchable fails', async () => {
+			const userID = uuidv4();
+			const channelID = uuidv4();
+			// search is disabled for gaming
+			const channel = getServerTestClient().channel('gaming', channelID, {
+				created_by_id: userID,
+				members: [userID],
+			});
+			await channel.create();
+			await authClient.channel('gaming', channelID).sendMessage({ text: 'mine' });
+
+			await expectHTTPErrorCode(
+				400,
+				authClient.search({ type: 'gaming' }, 'mine', { limit: 2 }),
+			);
+		});
+
 		it('Basic Query (old format)', async () => {
 			const channelId = uuidv4();
 			// add a very special message
