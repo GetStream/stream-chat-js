@@ -152,9 +152,12 @@ describe('Member style channel init', () => {
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
 		await notificationReceived;
 		// second time should be a noop
-		response = nickChannel.acceptInvite();
+		response = await nickChannel.acceptInvite({
+			message: { text: 'Nick accepted the chat invite.' },
+		});
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
+		expect(response.message).to.be.undefined;
 	});
 
 	it('Reject an invite', async () => {
