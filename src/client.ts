@@ -315,22 +315,29 @@ export class StreamChat<
   _hasConnectionID = () => Boolean(this.connectionID);
 
   /**
-   * setUser - Set the current user, this triggers a connection to the API
+   * connectUser - Set the current user, this triggers a connection to the API
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (
+  connectUser = (
     user: UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
       throw new Error(
-        'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
+        'Use client.disconnect() before trying to connect as a different user. connectUser or setUser was called twice.',
       );
     }
+
+    if (this.secret && !this.options.serverConnectUser) {
+      throw new Error(
+        'Do not use connectUser or setUser server side. If you have a valid use-case, you can add "serverConnectUser: true" to the client options',
+      );
+    }
+
     // we generate the client id client side
     this.userID = user.id;
 
@@ -353,6 +360,20 @@ export class StreamChat<
 
     return this.setUserPromise;
   };
+
+  /**
+   * setUser - Set the current user, this triggers a connection to the API
+   *
+   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {TokenOrProvider} userTokenOrProvider Token or provider
+   *
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
+   */
+  setUser = (
+    user: UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
+    this.connectUser(user, userTokenOrProvider);
 
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
