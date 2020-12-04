@@ -334,7 +334,7 @@ export class StreamChat<
 
     if (this._isUsingServerAuth() && !this.options.serverConnectUser) {
       throw new Error(
-        'Do not use connectUser or setUser server side. If you have a valid use-case, add "serverConnectUser: true" to the client options to ignore this warning.',
+        'Do not use connectUser or setUser server side. If you have a valid use-case, add "serverConnectUser: true" to the client options to disable this error.',
       );
     }
 
