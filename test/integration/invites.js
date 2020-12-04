@@ -151,10 +151,10 @@ describe('Member style channel init', () => {
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
 		await notificationReceived;
-		// second time be a noop
+		// second time should be a noop
 		response = nickChannel.acceptInvite();
-		expect(response.message.text).to.equal('Nick accepted the chat invite.');
 		expect(response.members[1].user.id).to.equal('nick');
+		expect(response.members[1].invite_accepted_at).to.not.equal(null);
 	});
 
 	it('Reject an invite', async () => {
