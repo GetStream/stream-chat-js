@@ -3216,3 +3216,16 @@ describe('warm up', () => {
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
 	});
 });
+
+describe('null string is a valid user_id ', () => {
+	it('should work fine', async () => {
+		const c = getServerTestClient();
+		await c.setUser({ id: 'null' }, c.createToken('null'));
+
+		const channel = c.channel('messaging', uuidv4(), {
+			members: ['null'],
+		});
+		await channel.create();
+		await channel.markRead();
+	});
+});
