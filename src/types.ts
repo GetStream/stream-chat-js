@@ -800,11 +800,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
    * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
    *
-   * `managedStateRecovery` parameter can be used in such cases, to disable state recovery within js client.
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
    * When false, user/consumer of this client will need to make sure all the channels present on UI by
    * manually calling queryChannels endpoint.
    */
-  managedStateRecovery?: boolean;
+  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
 };
 
@@ -1414,6 +1414,25 @@ export type Message<
 > = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
+
+export type UpdatedMessage<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  MessageType,
+  ReactionType,
+  UserType
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'mentioned_users'
+> & { mentioned_users?: string[] };
 
 export type MessageBase<
   AttachmentType = UnknownType,
