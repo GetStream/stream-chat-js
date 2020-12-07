@@ -1,3 +1,8 @@
+## December 7, 2020 - 2.9.0
+
+- Adding `recoverStateOnReconnect` option - [#534](https://github.com/GetStream/stream-chat-js/pull/534)
+- Adding `UpdatedMessage` typescript type
+
 ## November 27, 2020 - 2.8.4
 
 ### Fix
