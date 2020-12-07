@@ -80,6 +80,7 @@ import {
   UpdateChannelResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
+  UpdatedMessage,
   UpdateMessageAPIResponse,
   UserFilters,
   UserOptions,
@@ -1912,17 +1913,14 @@ export class StreamChat<
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
-    message: Omit<
-      MessageResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >,
-      'mentioned_users'
-    > & { mentioned_users?: string[] },
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
     userId?: string | { id: string },
   ) {
     if (!message.id) {

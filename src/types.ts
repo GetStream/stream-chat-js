@@ -1416,12 +1416,12 @@ export type Message<
 };
 
 export type UpdatedMessage<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
 > = Omit<
   MessageResponse<
     AttachmentType,
