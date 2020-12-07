@@ -140,6 +140,16 @@ export class StreamChat<
     >;
   };
   logger: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `managedStateRecovery` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  managedStateRecovery?: boolean;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
   mutedUsers: Mute<UserType>[];
   node: boolean;
@@ -209,6 +219,7 @@ export class StreamChat<
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
+      managedStateRecovery: true,
       ...inputOptions,
     };
 
@@ -290,6 +301,7 @@ export class StreamChat<
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
+    this.managedStateRecovery = this.options.managedStateRecovery;
   }
 
   devToken(userID: string) {
@@ -1022,7 +1034,7 @@ export class StreamChat<
     );
     this.connectionID = this.wsConnection?.connectionID;
     const cids = Object.keys(this.activeChannels);
-    if (cids.length) {
+    if (cids.length && this.managedStateRecovery) {
       this.logger(
         'info',
         `client:recoverState() - Start the querying of ${cids.length} channels`,
@@ -1039,6 +1051,10 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
+      this.dispatchEvent({
+        type: 'connection.recovered',
+      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+    } else {
       this.dispatchEvent({
         type: 'connection.recovered',
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
