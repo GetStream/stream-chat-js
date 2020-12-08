@@ -609,7 +609,7 @@ describe('Chat', () => {
 			});
 
 			const channelFilters = { cid: { $in: [channel.cid] } };
-			const messageFilters = { attachment_type: { $in: ['image'] } };
+			const messageFilters = { 'attachments.type': { $in: ['image'] } };
 			const response = await authClientTommaso.search(
 				channelFilters,
 				messageFilters,
