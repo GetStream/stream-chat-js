@@ -328,7 +328,7 @@ export class StreamChat<
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
       throw new Error(
-        'Use client.disconnect() before trying to connect as a different user. connectUser or setUser was called twice.',
+        'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
     }
 
@@ -365,7 +365,7 @@ export class StreamChat<
   };
 
   /**
-   * @deprecated Please use connectUser() function instead, for sake of naming conventions
+   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
    *
    * setUser - Set the current user, this triggers a connection to the API
    *
@@ -494,7 +494,16 @@ export class StreamChat<
     return Promise.resolve();
   }
 
-  setAnonymousUser = () => {
+  connectAnonymousUser = () => {
+    if (
+      (this._isUsingServerAuth() || this._isRunningNode()) &&
+      !this.options.allowServerSideConnect
+    ) {
+      console.warn(
+        'Please do not use connectAnonymousUser server side. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+      );
+    }
+
     this.anonymous = true;
     this.userID = randomId();
     const anonymousUser = {
@@ -507,6 +516,11 @@ export class StreamChat<
 
     return this._setupConnection();
   };
+
+  /**
+   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
+   */
+  setAnonymousUser = () => this.connectAnonymousUser();
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -529,7 +543,10 @@ export class StreamChat<
     this.anonymous = false;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
-    return await this.setUser(guestUser as UserResponse<UserType>, response.access_token);
+    return await this.connectUser(
+      guestUser as UserResponse<UserType>,
+      response.access_token,
+    );
   }
 
   /**
@@ -1101,7 +1118,7 @@ export class StreamChat<
     this.failures = 0;
 
     if (client.userID == null || this._user == null) {
-      throw Error('Call setUser or setAnonymousUser before starting the connection');
+      throw Error('Call connectUser or setAnonymousUser before starting the connection');
     }
 
     if (client.wsBaseURL == null) {

@@ -68,4 +68,42 @@ describe('Detect node environment', () => {
 	it('_isRunningNode should be true', () => {
 		expect(client._isRunningNode()).to.be.true;
 	});
+
+	it('should warn when using connectUser on a node environment', async () => {
+		const _warn = console.warn;
+		let warning = '';
+		console.warn = (msg) => {
+			warning = msg;
+		};
+
+		try {
+			await client.connectUser({ id: 'user' }, 'fake token');
+		} catch (e) {}
+
+		await client.disconnect();
+		expect(warning).to.equal(
+			'Please do not use connectUser server side. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+		);
+
+		console.warn = _warn;
+	});
+
+	it('should not warn when adding the allowServerSideConnect flag', async () => {
+		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
+
+		const _warn = console.warn;
+		let warning = '';
+		console.warn = (msg) => {
+			warning = msg;
+		};
+
+		try {
+			await client2.connectUser({ id: 'user' }, 'fake token');
+		} catch (e) {}
+
+		await client2.disconnect();
+		expect(warning).to.equal('');
+
+		console.warn = _warn;
+	});
 });
