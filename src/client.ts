@@ -332,7 +332,10 @@ export class StreamChat<
       );
     }
 
-    if (this._isUsingServerAuth() && !this.options.allowServerSideConnect) {
+    if (
+      (this._isUsingServerAuth() || this._isRunningNode()) &&
+      !this.options.allowServerSideConnect
+    ) {
       console.warn(
         'Please do not use connectUser server side. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
       );
@@ -362,6 +365,8 @@ export class StreamChat<
   };
 
   /**
+   * @deprecated Please use connectUser() function instead, for sake of naming conventions
+   *
    * setUser - Set the current user, this triggers a connection to the API
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
@@ -2046,6 +2051,16 @@ export class StreamChat<
    * _isUsingServerAuth - Returns true if we're using server side auth
    */
   _isUsingServerAuth = () => !!this.secret;
+
+  _isRunningNode = () => {
+    let isNode;
+    try {
+      isNode = Object.prototype.toString.call(global.process) === '[object process]';
+    } catch (e) {
+      isNode = false;
+    }
+    return isNode;
+  };
 
   _enrichAxiosOptions(
     options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {

@@ -62,3 +62,10 @@ describe('Client userMuteStatus', function () {
 		expect(client.userMuteStatus('missingUser')).not.to.be.ok;
 	});
 });
+
+describe('Detect node environment', () => {
+	const client = new StreamChat('', '');
+	it('_isRunningNode should be true', () => {
+		expect(client._isRunningNode()).to.be.true;
+	});
+});

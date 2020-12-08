@@ -793,9 +793,9 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
-  allowServerSideConnect?: boolean;
   warmUp?: boolean;
 };
 
