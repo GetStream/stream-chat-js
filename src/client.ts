@@ -1135,7 +1135,9 @@ export class StreamChat<
     this.failures = 0;
 
     if (client.userID == null || this._user == null) {
-      throw Error('Call connectUser or connectAnonymousUser before starting the connection');
+      throw Error(
+        'Call connectUser or connectAnonymousUser before starting the connection',
+      );
     }
 
     if (client.wsBaseURL == null) {
