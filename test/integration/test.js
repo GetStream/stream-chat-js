@@ -584,6 +584,41 @@ describe('Chat', () => {
 			expect(response.results[0].message.unique).to.be.undefined;
 		});
 
+		it('query messages by attachment type', async () => {
+			const authClientTommaso = getTestClient(true);
+			const userTommaso = { id: uuidv4(), name: 'Tommaso Barbugli' };
+
+			await serverAuthClient.upsertUser(userTommaso);
+			await authClientTommaso.setUser(userTommaso);
+
+			const attachments = [
+				{
+					type: 'image',
+					image_url: 'https://some_url_for_image',
+				},
+			];
+
+			const channel = authClientTommaso.channel('messaging', uuidv4(), {
+				members: [userTommaso.id],
+			});
+			await channel.create();
+
+			const { message } = await channel.sendMessage({
+				text: 'Check my images',
+				attachments,
+			});
+
+			const channelFilters = { cid: { $in: [channel.cid] } };
+			const messageFilters = { 'attachments.type': { $in: ['image'] } };
+			const response = await authClientTommaso.search(
+				channelFilters,
+				messageFilters,
+			);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(message.id);
+			expect(response.results[0].message.channel.id).to.be.equal(channel.id);
+		});
+
 		it('query messages with empty text', async () => {
 			const unique = uuidv4();
 			const channel = authClient.channel('messaging', uuidv4(), {
