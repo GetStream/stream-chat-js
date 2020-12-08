@@ -332,9 +332,9 @@ export class StreamChat<
       );
     }
 
-    if (this._isUsingServerAuth() && !this.options.serverConnectUser) {
-      throw new Error(
-        'Do not use connectUser or setUser server side. If you have a valid use-case, add "serverConnectUser: true" to the client options to disable this error.',
+    if (this._isUsingServerAuth() && !this.options.allowServerSideConnect) {
+      console.warn(
+        'Please do not use connectUser server side. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
       );
     }
 
