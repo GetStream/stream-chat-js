@@ -1135,7 +1135,7 @@ export class StreamChat<
     this.failures = 0;
 
     if (client.userID == null || this._user == null) {
-      throw Error('Call connectUser or setAnonymousUser before starting the connection');
+      throw Error('Call connectUser or connectAnonymousUser before starting the connection');
     }
 
     if (client.wsBaseURL == null) {
@@ -1461,7 +1461,7 @@ export class StreamChat<
     custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
-      throw Error('Call setUser or setAnonymousUser before creating a channel');
+      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
     if (~channelType.indexOf(':')) {
