@@ -346,7 +346,7 @@ export class StreamChat<
     }
 
     if (
-      (this._isUsingServerAuth() || this._isRunningNode()) &&
+      (this._isUsingServerAuth() || this._isRunningInNode()) &&
       !this.options.allowServerSideConnect
     ) {
       console.warn(
@@ -509,7 +509,7 @@ export class StreamChat<
 
   connectAnonymousUser = () => {
     if (
-      (this._isUsingServerAuth() || this._isRunningNode()) &&
+      (this._isUsingServerAuth() || this._isRunningInNode()) &&
       !this.options.allowServerSideConnect
     ) {
       console.warn(
@@ -2085,7 +2085,7 @@ export class StreamChat<
    */
   _isUsingServerAuth = () => !!this.secret;
 
-  _isRunningNode = () => {
+  _isRunningInNode = () => {
     let isNode;
     try {
       isNode = Object.prototype.toString.call(global.process) === '[object process]';

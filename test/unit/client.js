@@ -65,8 +65,8 @@ describe('Client userMuteStatus', function () {
 
 describe('Detect node environment', () => {
 	const client = new StreamChat('', '');
-	it('_isRunningNode should be true', () => {
-		expect(client._isRunningNode()).to.be.true;
+	it('_isRunningInNode should be true', () => {
+		expect(client._isRunningInNode()).to.be.true;
 	});
 
 	it('should warn when using connectUser on a node environment', async () => {
