@@ -40,7 +40,7 @@ module.exports = {
 	getTestClient: function getTestClient(serverSide) {
 		return new StreamChat(apiKey, serverSide ? apiSecret : null, {
 			timeout: 8000,
-			serverConnectUser: serverSide,
+			allowServerSideConnect: serverSide,
 		});
 	},
 	getTestClientForUser: async function getTestClientForUser(userID, options = {}) {

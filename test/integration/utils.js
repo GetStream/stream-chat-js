@@ -9,7 +9,7 @@ const apiSecret = process.env.STREAM_API_SECRET;
 export function getTestClient(serverSide) {
 	return new StreamChat(apiKey, serverSide ? apiSecret : null, {
 		timeout: 15000,
-		serverConnectUser: serverSide,
+		allowServerSideConnect: serverSide,
 	});
 }
 
