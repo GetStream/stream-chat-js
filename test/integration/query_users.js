@@ -312,13 +312,13 @@ describe('Query Users', function () {
 		});
 
 		it('$autocomplete query with special characters, but with valid results', async () => {
-				const result = await client.queryUsers({
-					id: {
-						$autocomplete: `Ru+$#@!`,
-					}
-				});
-				expect(result.users).to.not.be.undefined;
-				expect(result.users.length).to.be.gt(0);
+			const result = await client.queryUsers({
+				id: {
+					$autocomplete: `Ru+$#@!`,
+				},
+			});
+			expect(result.users).to.not.be.undefined;
+			expect(result.users.length).to.be.gt(0);
 		});
 	});
 });
