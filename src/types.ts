@@ -212,6 +212,12 @@ export type CheckPushResponse = APIResponse & {
   rendered_firebase_template?: string;
 };
 
+export type CheckSQSResponse = APIResponse & {
+  status: string;
+  data?: {};
+  error?: string;
+};
+
 export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
   CreatedAtUpdatedAt
 > & {
@@ -1549,6 +1555,12 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+};
+
+export type TestSQSDataInput = {
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;

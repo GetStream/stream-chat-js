@@ -7,6 +7,128 @@ import crypto from 'crypto';
 
 const expect = chai.expect;
 
+const promises = {
+	events: {},
+	resolvers: {},
+	counters: {},
+	eventReceived(newEvent) {
+		const type = newEvent.type;
+		const events = this.events[type];
+
+		if (events === undefined) {
+			return;
+		}
+
+		events.push(newEvent);
+
+		if (events.length >= this.counters[type]) {
+			this.resolvers[type](events);
+		}
+	},
+	waitForEvents(type, count = 1) {
+		this.events[type] = [];
+		this.counters[type] = count;
+		this.resolvers[type] = () => {};
+		return new Promise((resolve) => {
+			this.resolvers[type] = resolve;
+		});
+	},
+};
+
+const sqsHandler = function (req, res) {
+	let body = '';
+
+	req.on('data', (chunk) => {
+		body += chunk.toString(); // convert Buffer to string
+	});
+
+	req.on('end', () => {
+		const message = querystring.decode(body);
+		const event = JSON.parse(message.MessageBody);
+		const hash = crypto.createHash('md5').update(message.MessageBody).digest('hex');
+		res.end(`
+          <SendMessageResponse>
+              <SendMessageResult>
+                  <MD5OfMessageBody>${hash}</MD5OfMessageBody>
+                  <MD5OfMessageAttributes>3ae8f24a165a8cedc005670c81a27295</MD5OfMessageAttributes>
+                  <MessageId>5fea7756-0ea4-451a-a703-a558b933e274</MessageId>
+              </SendMessageResult>
+              <ResponseMetadata>
+                  <RequestId>27daac76-34dd-47df-bd01-1f6e873584a0</RequestId>
+              </ResponseMetadata>
+          </SendMessageResponse>
+        `);
+		promises.eventReceived(event);
+	});
+
+	res.writeHead(200, { 'Content-Type': 'text/plain' });
+};
+
+describe('SQS check endpoint', function () {
+	const client = getTestClient(true);
+	let server;
+
+	before(async () => {
+		server = http.createServer(sqsHandler);
+
+		await server.listen(4566, '127.0.0.1');
+	});
+
+	after(async () => {
+		await server.close();
+	});
+
+	it('should check the given valid sqs configuration parameters', async function () {
+		const sqs_url = 'https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue',
+			sqs_key = 'abc',
+			sqs_secret = 'xyz';
+		const response = await client.testSQSSettings({ sqs_url, sqs_key, sqs_secret });
+		expect(response.status).to.eq('ok');
+		expect(response.error).to.eq(undefined);
+		expect(response.data).to.eq(undefined);
+	});
+
+	it('should check the given invalid sqs configuration parameters', async function () {
+		const sqs_url = 'https://foobar.com/123456789012/MyQueue',
+			sqs_key = 'abc',
+			sqs_secret = 'xyz';
+		const response = await client.testSQSSettings({ sqs_url, sqs_key, sqs_secret });
+		expect(response.status).to.eq('error');
+		expect(response.error).to.contain(
+			'invalid SQS url https://foobar.com/123456789012/MyQueue',
+		);
+		expect(response.data).to.eq(undefined);
+	});
+
+	it('should check the valid sqs settings', async function () {
+		await client.updateAppSettings({
+			sqs_url: 'https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue',
+			sqs_key: 'abc',
+			sqs_secret: 'xyz',
+		});
+
+		const response = await client.testSQSSettings();
+		expect(response.status).to.eq('ok');
+		expect(response.error).to.eq(undefined);
+		expect(response.data).to.eq(undefined);
+	});
+
+	it('should check the invalid sqs settings', async function () {
+		await client.updateAppSettings({
+			sqs_url: 'https://foobar.com/123456789012/MyQueue',
+			sqs_key: 'abc',
+			sqs_secret: 'xyz',
+		});
+
+		const response = await client.testSQSSettings();
+		expect(response.status).to.eq('error');
+		expect(response.error).to.contain(
+			'invalid SQS url https://foobar.com/123456789012/MyQueue',
+		);
+		expect(response.data).to.eq(undefined);
+	});
+});
+
 describe('SQS event endpoint', function () {
 	const paulID = `paul-${uuidv4()}`;
 	const johnID = `john-${uuidv4()}`;
@@ -17,67 +139,10 @@ describe('SQS event endpoint', function () {
 
 	let chan, server, messageResponse;
 
-	const promises = {
-		events: {},
-		resolvers: {},
-		counters: {},
-		eventReceived(newEvent) {
-			const type = newEvent.type;
-			const events = this.events[type];
-
-			if (events === undefined) {
-				return;
-			}
-
-			events.push(newEvent);
-
-			if (events.length >= this.counters[type]) {
-				this.resolvers[type](events);
-			}
-		},
-		waitForEvents(type, count = 1) {
-			this.events[type] = [];
-			this.counters[type] = count;
-			this.resolvers[type] = () => {};
-			return new Promise((resolve) => {
-				this.resolvers[type] = resolve;
-			});
-		},
-	};
-
 	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: paulID } });
 
-		server = http.createServer(function (req, res) {
-			let body = '';
-
-			req.on('data', (chunk) => {
-				body += chunk.toString(); // convert Buffer to string
-			});
-
-			req.on('end', () => {
-				const message = querystring.decode(body);
-				const event = JSON.parse(message.MessageBody);
-				res.end(`
-          <SendMessageResponse>
-              <SendMessageResult>
-                  <MD5OfMessageBody>${crypto
-						.createHash('md5')
-						.update(message.MessageBody)
-						.digest('hex')}</MD5OfMessageBody>
-                  <MD5OfMessageAttributes>3ae8f24a165a8cedc005670c81a27295</MD5OfMessageAttributes>
-                  <MessageId>5fea7756-0ea4-451a-a703-a558b933e274</MessageId>
-              </SendMessageResult>
-              <ResponseMetadata>
-                  <RequestId>27daac76-34dd-47df-bd01-1f6e873584a0</RequestId>
-              </ResponseMetadata>
-          </SendMessageResponse>
-        `);
-				promises.eventReceived(event);
-			});
-
-			res.writeHead(200, { 'Content-Type': 'text/plain' });
-		});
+		server = http.createServer(sqsHandler);
 
 		await Promise.all([
 			client.upsertUser({ id: johnID }),

@@ -33,6 +33,7 @@ import {
   ChannelOptions,
   ChannelSort,
   CheckPushResponse,
+  CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
   ConnectionChangeEvent,
@@ -73,6 +74,7 @@ import {
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
+  TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
   UnknownType,
@@ -440,6 +442,22 @@ export class StreamChat<
         ? { firebase_data_template: data.firebaseDataTemplate }
         : {}),
     });
+  }
+
+  /**
+   * testSQSSettings - Tests that the given or configured SQS configuration is valid
+   *
+   * @param {string} userID User ID. If user has no devices, it will error
+   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   * 		IE: {
+				  messageID: 'id-of-message',//will error if message does not exist
+				  apnTemplate: '{}', //if app doesn't have apn configured it will error
+				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+			}
+   */
+  async testSQSSettings(data: TestSQSDataInput = {}) {
+    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
   }
 
   /**
