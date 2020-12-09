@@ -239,6 +239,10 @@ export class StreamChat<
       this.setBaseURL('http://localhost:3030');
     }
 
+    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_HOST) {
+      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
+    }
+
     // WS connection is initialized when setUser is called
     this.wsConnection = null;
     this.wsPromise = null;
