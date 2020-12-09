@@ -1544,7 +1544,10 @@ export class Channel<
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          s.addMessageSorted(event.message, ownMessage);
+
+          if (this.state.isUpToDate || event.message.parent_id) {
+            s.addMessageSorted(event.message, ownMessage);
+          }
 
           if (ownMessage && event.user?.id) {
             s.unreadCount = 0;
