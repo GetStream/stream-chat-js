@@ -332,7 +332,7 @@ export class StreamChat<
   _hasConnectionID = () => Boolean(this.connectionID);
 
   /**
-   * connectUser - Set the current user, this triggers a connection to the API
+   * connectUser - Set the current user and open a WebSocket connection
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
@@ -350,7 +350,7 @@ export class StreamChat<
     }
 
     if (
-      (this._isUsingServerAuth() || this._isRunningInNode()) &&
+      (this._isUsingServerAuth() || this.node) &&
       !this.options.allowServerSideConnect
     ) {
       console.warn(
@@ -384,7 +384,7 @@ export class StreamChat<
   /**
    * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
    *
-   * setUser - Set the current user, this triggers a connection to the API
+   * setUser - Set the current user and open a WebSocket connection
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
@@ -511,9 +511,12 @@ export class StreamChat<
     return Promise.resolve();
   }
 
+  /**
+   * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
+   */
   connectAnonymousUser = () => {
     if (
-      (this._isUsingServerAuth() || this._isRunningInNode()) &&
+      (this._isUsingServerAuth() || this.node) &&
       !this.options.allowServerSideConnect
     ) {
       console.warn(
@@ -2088,16 +2091,6 @@ export class StreamChat<
    * _isUsingServerAuth - Returns true if we're using server side auth
    */
   _isUsingServerAuth = () => !!this.secret;
-
-  _isRunningInNode = () => {
-    let isNode;
-    try {
-      isNode = Object.prototype.toString.call(global.process) === '[object process]';
-    } catch (e) {
-      isNode = false;
-    }
-    return isNode;
-  };
 
   _enrichAxiosOptions(
     options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {
