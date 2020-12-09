@@ -143,7 +143,7 @@ describe('Member style channel init', () => {
 			});
 		});
 
-		const response = await nickChannel.acceptInvite({
+		let response = await nickChannel.acceptInvite({
 			message: { text: 'Nick accepted the chat invite.' },
 		});
 		await nickChannel.watch();
@@ -151,13 +151,13 @@ describe('Member style channel init', () => {
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
 		await notificationReceived;
-		// second time should fail...
-		await expectHTTPErrorCode(
-			400,
-			nickChannel.acceptInvite({
-				message: { text: 'Nick accepted the chat invite.' },
-			}),
-		);
+		// second time should be a noop
+		response = await nickChannel.acceptInvite({
+			message: { text: 'Nick accepted the chat invite.' },
+		});
+		expect(response.members[1].user.id).to.equal('nick');
+		expect(response.members[1].invite_accepted_at).to.not.equal(null);
+		expect(response.message).to.be.undefined;
 	});
 
 	it('Reject an invite', async () => {
@@ -184,13 +184,15 @@ describe('Member style channel init', () => {
 		});
 		await thierryChannel.watch();
 		await nickChannel.watch();
-		const response = await nickChannel.rejectInvite();
+		let response = await nickChannel.rejectInvite();
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_rejected_at).to.not.equal(null);
 		await inviteRejected;
 		await updateReceived;
-		// second time should fail...
-		await expectHTTPErrorCode(400, nickChannel.rejectInvite());
+		// second time should be a noop
+		response = await nickChannel.rejectInvite();
+		expect(response.members[1].user.id).to.equal('nick');
+		expect(response.members[1].invite_rejected_at).to.not.equal(null);
 	});
 });
 

@@ -428,6 +428,8 @@ export type MessageResponse<
   status?: string;
   type?: string;
   updated_at?: string;
+  webhook_failed?: boolean;
+  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -793,6 +795,16 @@ export type SearchOptions = {
 export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
   logger?: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
 };
 
@@ -1402,6 +1414,25 @@ export type Message<
 > = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
+
+export type UpdatedMessage<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'mentioned_users'
+> & { mentioned_users?: string[] };
 
 export type MessageBase<
   AttachmentType = UnknownType,
