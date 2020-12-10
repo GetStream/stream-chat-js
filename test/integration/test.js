@@ -3252,7 +3252,7 @@ describe('warm up', () => {
 	});
 });
 
-describe('paginate order with {before,after}_date', () => {
+describe.only('paginate order with {before,after}_date', () => {
 	let channel;
 	let client;
 	const user = uuidv4();
@@ -3277,6 +3277,16 @@ describe('paginate order with {before,after}_date', () => {
 		}
 	});
 
+	it('invalid date should return an error', async () => {
+		await expect(
+			channel.query({
+				messages: { limit: 2, after_date: 'invalid' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.after_date" but got "invalid"',
+		);
+	});
+
 	it('after_date (message 5) should return message 6 to 7', async () => {
 		const result = await channel.query({
 			messages: { limit: 2, after_date: messages[4].created_at },
@@ -3293,5 +3303,17 @@ describe('paginate order with {before,after}_date', () => {
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
 		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('before_date (message_5) and after_date (message_3) should return message 4', async () => {
+		const result = await channel.query({
+			messages: {
+				limit: 2,
+				before_date: messages[4].created_at,
+				after_date: messages[2].created_at,
+			},
+		});
+		expect(result.messages.length).to.be.equal(1);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
 	});
 });
