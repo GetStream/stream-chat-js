@@ -3251,3 +3251,47 @@ describe('warm up', () => {
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
 	});
 });
+
+describe('paginate order with {before,after}_date', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	const messages = [];
+	const messageID = (user, i) => {
+		return i.toString() + '-' + user;
+	};
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			messages.push(
+				(
+					await channel.sendMessage({
+						text: user + i.toString(),
+						id: messageID(user, i),
+					})
+				).message,
+			);
+			await sleep(5);
+		}
+	});
+
+	it('after_date (message 5) should return message 6 to 7', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, after_date: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
+	});
+
+	it('before_date (message_5) should return message 3 to 4', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, before_date: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+});
