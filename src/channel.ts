@@ -1556,7 +1556,10 @@ export class Channel<
             s.unreadCount = 0;
             s.read = s.read.set(
               event.user.id,
-              Immutable({ user: { ...event.user }, last_read: event.created_at }),
+              Immutable({
+                user: { ...event.user },
+                last_read: new Date(event.created_at as string),
+              }),
             );
           } else if (this._countMessageAsUnread(event.message)) {
             s.unreadCount = s.unreadCount + 1;
