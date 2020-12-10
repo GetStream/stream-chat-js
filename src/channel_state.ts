@@ -437,6 +437,14 @@ export class ChannelState<
     }
   }
 
+  /**
+   * Setter for isUpToDate.
+   *
+   * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
+   *                    This flag should be managed by UI sdks using a setter - setIsUpToDate.
+   *                    When false, any new message (received by websocket event - message.new) will not
+   *                    be pushed on to message list.
+   */
   setIsUptoDate = (isUpToDate: boolean) => {
     this.isUpToDate = isUpToDate;
   };
