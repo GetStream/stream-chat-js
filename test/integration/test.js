@@ -3252,7 +3252,7 @@ describe('warm up', () => {
 	});
 });
 
-describe.only('paginate order with {before,after}_date', () => {
+describe('paginate with {before,after}_date', () => {
 	let channel;
 	let client;
 	const user = uuidv4();
