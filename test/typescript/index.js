@@ -376,6 +376,12 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['removeMembers']>>",
 	},
 	{
+		f: rg.removeShadowBan,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['removeShadowBan']>>",
+	},
+	{
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
@@ -473,12 +479,6 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unbanUser']>>",
 	},
 	{
-		f: rg.removeShadowBan,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['removeShadowBan']>>",
-	},
-	{
 		f: rg.unflagMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -501,6 +501,12 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unmuteUser']>>",
+	},
+	{
+		f: rg.updateAppSettings,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateAppSettings']>>",
 	},
 	{
 		f: rg.updateBlockList,

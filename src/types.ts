@@ -1216,7 +1216,7 @@ export type AppSettings = {
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
-  enforce_unique_usernames?: string;
+  enforce_unique_usernames?: 'no' | 'app' | 'team';
   firebase_config?: {
     credentials_json: string;
     data_template?: string;
