@@ -1549,8 +1549,12 @@ export class Channel<
           const ownMessage = event.user?.id === this.getClient().user?.id;
           s.addMessageSorted(event.message, ownMessage);
 
-          if (ownMessage) {
+          if (ownMessage && event.user?.id) {
             s.unreadCount = 0;
+            s.read = s.read.set(
+              event.user.id,
+              Immutable({ user: { ...event.user }, last_read: event.created_at }),
+            );
           } else if (this._countMessageAsUnread(event.message)) {
             s.unreadCount = s.unreadCount + 1;
           }
