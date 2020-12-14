@@ -3280,37 +3280,37 @@ describe('paginate with {before,after}_date', () => {
 	it('invalid date should return an error', async () => {
 		await expect(
 			channel.query({
-				messages: { limit: 2, after_date: 'invalid' },
+				messages: { limit: 2, created_at_after: 'invalid' },
 			}),
 		).to.be.rejectedWith(
-			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.after_date" but got "invalid"',
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.created_at_after" but got "invalid"',
 		);
 	});
 
-	it('after_date (message 5) should return message 6 to 7', async () => {
+	it('created_at_after (message 5) should return message 6 to 7', async () => {
 		const result = await channel.query({
-			messages: { limit: 2, after_date: messages[4].created_at },
+			messages: { limit: 2, created_at_after: messages[4].created_at },
 		});
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
 		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
 	});
 
-	it('before_date (message_5) should return message 3 to 4', async () => {
+	it('created_at_before (message_5) should return message 3 to 4', async () => {
 		const result = await channel.query({
-			messages: { limit: 2, before_date: messages[4].created_at },
+			messages: { limit: 2, created_at_before: messages[4].created_at },
 		});
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
 		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
 	});
 
-	it('before_date (message_5) and after_date (message_3) should return message 4', async () => {
+	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
 		const result = await channel.query({
 			messages: {
 				limit: 2,
-				before_date: messages[4].created_at,
-				after_date: messages[2].created_at,
+				created_at_before: messages[4].created_at,
+				created_at_after: messages[2].created_at,
 			},
 		});
 		expect(result.messages.length).to.be.equal(1);
