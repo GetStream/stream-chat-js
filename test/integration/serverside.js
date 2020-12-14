@@ -2,6 +2,7 @@ import {
 	createUsers,
 	createUserToken,
 	expectHTTPErrorCode,
+	getServerTestClient,
 	getTestClient,
 	getTestClientForUser,
 	sleep,
@@ -2110,7 +2111,7 @@ describe('App configs', function () {
 });
 
 describe('Devices', function () {
-	const client = getTestClient(true);
+	const client = getServerTestClient();
 	const deviceId = uuidv4();
 
 	describe('No user id provided', function () {
@@ -2222,6 +2223,27 @@ describe('Devices', function () {
 			expect(result.devices).to.have.length(maxDevices);
 			newDeviceIDS = result.devices.map((x) => x.id);
 			expect(newDeviceIDS).to.deep.equal(deviceIDS);
+		});
+	});
+
+	describe('Device caching', () => {
+		it('Updating user on connect does not clear user devices', async () => {
+			const userID = uuidv4();
+			await client.upsertUser({ id: userID });
+			const deviceID = uuidv4();
+
+			const deviceLength = 2;
+			for (let i = 0; i < deviceLength; i += 1) {
+				await client.addDevice(`${deviceID}-${i}`, 'apn', userID);
+			}
+
+			let response = await client.getDevices(userID);
+			expect(response.devices).to.have.length(deviceLength);
+
+			await getTestClientForUser(userID);
+
+			response = await client.getDevices(userID);
+			expect(response.devices).to.have.length(deviceLength);
 		});
 	});
 
