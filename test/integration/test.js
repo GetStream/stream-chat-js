@@ -3298,7 +3298,7 @@ describe('paginate by message created_at', () => {
 
 	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
 		const result = await channel.query({
-			messages: { limit: 2, created_at_after: messages[4].created_at },
+			messages: { limit: 2, created_at_after_or_equal: messages[4].created_at },
 		});
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
@@ -3316,7 +3316,7 @@ describe('paginate by message created_at', () => {
 
 	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
 		const result = await channel.query({
-			messages: { limit: 2, created_at_before: messages[4].created_at },
+			messages: { limit: 2, created_at_before_or_equal: messages[4].created_at },
 		});
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
