@@ -1213,7 +1213,6 @@ export class StreamChat<
     const payload = {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
-      user_details: this._user,
       ...defaultOptions,
       ...options,
     };
