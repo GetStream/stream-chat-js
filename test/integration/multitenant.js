@@ -247,7 +247,7 @@ describe('Custom permissions and roles', function () {
 			same_team: true,
 		});
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: CreateCreateCustomPermission failed with error: "permission "Create Channel" already exists"',
+			'StreamChat error code 4: CreateCustomPermission failed with error: "permission "Create Channel" already exists"',
 		);
 	});
 
@@ -264,7 +264,7 @@ describe('Custom permissions and roles', function () {
 			resource: 'yadayada',
 		});
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: CreateCreateCustomPermission failed with error: "resource "yadayada" is not a valid resource"',
+			'StreamChat error code 4: CreateCustomPermission failed with error: "resource "yadayada" is not a valid resource"',
 		);
 	});
 
@@ -281,7 +281,7 @@ describe('Custom permissions and roles', function () {
 	it('create a built-in role should fail', async function () {
 		const p = client.createRole('admin');
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: CreateCreateCustomRole failed with error: "role "admin" already exists"',
+			'StreamChat error code 4: CreateCustomRole failed with error: "role "admin" already exists"',
 		);
 	});
 
