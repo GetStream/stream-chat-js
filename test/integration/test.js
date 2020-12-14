@@ -3252,7 +3252,7 @@ describe('warm up', () => {
 	});
 });
 
-describe('paginate with {before,after}_date', () => {
+describe('paginate by message created_at', () => {
 	let channel;
 	let client;
 	const user = uuidv4();
@@ -3296,6 +3296,15 @@ describe('paginate with {before,after}_date', () => {
 		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
 	});
 
+	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 6));
+	});
+
 	it('created_at_before (message_5) should return message 3 to 4', async () => {
 		const result = await channel.query({
 			messages: { limit: 2, created_at_before: messages[4].created_at },
@@ -3303,6 +3312,15 @@ describe('paginate with {before,after}_date', () => {
 		expect(result.messages.length).to.be.equal(2);
 		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
 		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 5));
 	});
 
 	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
