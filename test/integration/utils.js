@@ -184,6 +184,6 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 		}),
 		server.listen(port, localHost),
 	]);
-	
+
 	return webhook;
 }
