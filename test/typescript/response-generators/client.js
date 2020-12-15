@@ -152,6 +152,15 @@ async function sync() {
 	);
 }
 
+async function updateAppSettings() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.updateAppSettings({
+		custom_action_handler_url:
+			'https://example.com/webhooks/stream/custom-commands?type={type}',
+		enforce_unique_usernames: 'no',
+	});
+}
+
 async function updateCommand() {
 	const authClient = await utils.getTestClient(true);
 	try {
@@ -187,5 +196,6 @@ module.exports = {
 	setGuestUser,
 	setUser,
 	sync,
+	updateAppSettings,
 	updateCommand,
 };

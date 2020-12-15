@@ -479,6 +479,23 @@ describe('Chat', () => {
 	});
 
 	describe('Search', () => {
+		it('No searchable fails', async () => {
+			const userID = uuidv4();
+			const channelID = uuidv4();
+			// search is disabled for gaming
+			const channel = getServerTestClient().channel('gaming', channelID, {
+				created_by_id: userID,
+				members: [userID],
+			});
+			await channel.create();
+			await authClient.channel('gaming', channelID).sendMessage({ text: 'mine' });
+
+			await expectHTTPErrorCode(
+				400,
+				authClient.search({ type: 'gaming' }, 'mine', { limit: 2 }),
+			);
+		});
+
 		it('Basic Query (old format)', async () => {
 			const channelId = uuidv4();
 			// add a very special message
@@ -565,6 +582,41 @@ describe('Chat', () => {
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.be.undefined;
+		});
+
+		it('query messages by attachment type', async () => {
+			const authClientTommaso = getTestClient(true);
+			const userTommaso = { id: uuidv4(), name: 'Tommaso Barbugli' };
+
+			await serverAuthClient.upsertUser(userTommaso);
+			await authClientTommaso.setUser(userTommaso);
+
+			const attachments = [
+				{
+					type: 'image',
+					image_url: 'https://some_url_for_image',
+				},
+			];
+
+			const channel = authClientTommaso.channel('messaging', uuidv4(), {
+				members: [userTommaso.id],
+			});
+			await channel.create();
+
+			const { message } = await channel.sendMessage({
+				text: 'Check my images',
+				attachments,
+			});
+
+			const channelFilters = { cid: { $in: [channel.cid] } };
+			const messageFilters = { 'attachments.type': { $in: ['image'] } };
+			const response = await authClientTommaso.search(
+				channelFilters,
+				messageFilters,
+			);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(message.id);
+			expect(response.results[0].message.channel.id).to.be.equal(channel.id);
 		});
 
 		it('query messages with empty text', async () => {

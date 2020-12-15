@@ -1,14 +1,15 @@
 import chai from 'chai';
-import http from 'http';
-import { createUserToken, getTestClient, getTestClientForUser, sleep } from './utils';
+import {
+	createUserToken,
+	getTestClient,
+	getTestClientForUser,
+	setupWebhook,
+} from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
-describe('Webhooks', function () {
-	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
-	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
-
+describe('Push Webhook', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const thierryID = `thierry-${uuidv4()}`;
 	const horatiuID = `horatiu-${uuidv4()}`;
@@ -16,7 +17,7 @@ describe('Webhooks', function () {
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 
-	let chan, server, messageResponse;
+	let chan, webhook, messageResponse;
 
 	const promises = {
 		events: {},
@@ -48,25 +49,13 @@ describe('Webhooks', function () {
 
 	before(async () => {
 		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
-
-		server = http.createServer(function (req, res) {
-			let body = '';
-			let signature = '';
-
-			req.on('data', (chunk) => {
-				body += chunk.toString(); // convert Buffer to string
-			});
-
-			req.on('end', () => {
-				const event = JSON.parse(body);
-				res.end('ok');
-				signature = req.headers['x-signature'];
-				// make sure the request signature is correct
-				expect(client.verifyWebhook(body, signature)).to.eq(true);
-				promises.eventReceived(event);
-			});
-
-			res.writeHead(200, { 'Content-Type': 'text/plain' });
+		webhook = await setupWebhook(client, 'webhook_url', (request, body, response) => {
+			// make sure the request signature is correct
+			expect(client.verifyWebhook(body, request.headers['x-signature'])).to.eq(
+				true,
+			);
+			promises.eventReceived(JSON.parse(body));
+			response.writeHead(201);
 		});
 
 		await Promise.all([
@@ -74,17 +63,16 @@ describe('Webhooks', function () {
 			client.upsertUser({ id: tommasoID }),
 			client.upsertUser({ id: horatiuID }),
 			client.upsertUser({ id: jaapID }),
-			client.updateAppSettings({ webhook_url: 'http://' + hookHost + ':4322' }),
-			server.listen(4322, localHost),
 			chan.create(),
 		]);
 	});
 
+	afterEach(() => {
+		webhook.reset();
+	});
+
 	after(async () => {
-		await Promise.all([
-			client.updateAppSettings({ webhook_url: '' }),
-			server.close(),
-		]);
+		await webhook.tearDown();
 	});
 
 	it('should receive new message event', async function () {

@@ -3,15 +3,21 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'isomorphic-ws';
+
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, addFileToFormData, chatCodes, normalizeQuerySort } from './utils';
+import {
+  isFunction,
+  addFileToFormData,
+  chatCodes,
+  normalizeQuerySort,
+  randomId,
+} from './utils';
 
 import {
   APIResponse,
@@ -74,6 +80,7 @@ import {
   UpdateChannelResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
+  UpdatedMessage,
   UpdateMessageAPIResponse,
   UserFilters,
   UserOptions,
@@ -134,6 +141,16 @@ export class StreamChat<
     >;
   };
   logger: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
   mutedUsers: Mute<UserType>[];
   node: boolean;
@@ -145,7 +162,6 @@ export class StreamChat<
   user?: UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
-  UUID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
@@ -204,6 +220,7 @@ export class StreamChat<
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
+      recoverStateOnReconnect: true,
       ...inputOptions,
     };
 
@@ -222,7 +239,7 @@ export class StreamChat<
       this.setBaseURL('http://localhost:3030');
     }
 
-    if (process.env.STREAM_LOCAL_TEST_HOST) {
+    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_HOST) {
       this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
     }
 
@@ -289,6 +306,7 @@ export class StreamChat<
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
+    this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
   }
 
   devToken(userID: string) {
@@ -305,8 +323,7 @@ export class StreamChat<
   }
 
   _setupConnection = () => {
-    this.UUID = uuidv4();
-    this.clientID = `${this.userID}--${this.UUID}`;
+    this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
@@ -470,7 +487,7 @@ export class StreamChat<
 
   setAnonymousUser = () => {
     this.anonymous = true;
-    this.userID = uuidv4();
+    this.userID = randomId();
     const anonymousUser = {
       id: this.userID,
       anon: true,
@@ -1022,7 +1039,7 @@ export class StreamChat<
     );
     this.connectionID = this.wsConnection?.connectionID;
     const cids = Object.keys(this.activeChannels);
-    if (cids.length) {
+    if (cids.length && this.recoverStateOnReconnect) {
       this.logger(
         'info',
         `client:recoverState() - Start the querying of ${cids.length} channels`,
@@ -1039,6 +1056,10 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
+      this.dispatchEvent({
+        type: 'connection.recovered',
+      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+    } else {
       this.dispatchEvent({
         type: 'connection.recovered',
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
@@ -1196,7 +1217,6 @@ export class StreamChat<
     const payload = {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
-      user_details: this._user,
       ...defaultOptions,
       ...options,
     };
@@ -1318,7 +1338,7 @@ export class StreamChat<
   /**
    * getDevices - Returns the devices associated with a current user
    *
-   * @param {string} [userID] User ID. Only works on serversidex
+   * @param {string} [userID] User ID. Only works on serverside
    *
    * @return {APIResponse & Device<UserType>[]} Array of devices
    */
@@ -1540,7 +1560,7 @@ export class StreamChat<
   }
 
   /**
-   * updateUsers - Batch partial update of users
+   * partialUpdateUsers - Batch partial update of users
    *
    * @param {PartialUserUpdate<UserType>[]} users list of partial update requests
    *
@@ -1896,17 +1916,14 @@ export class StreamChat<
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
-    message: Omit<
-      MessageResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >,
-      'mentioned_users'
-    > & { mentioned_users?: string[] },
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
     userId?: string | { id: string },
   ) {
     if (!message.id) {

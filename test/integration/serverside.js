@@ -2,6 +2,7 @@ import {
 	createUsers,
 	createUserToken,
 	expectHTTPErrorCode,
+	getServerTestClient,
 	getTestClient,
 	getTestClientForUser,
 	sleep,
@@ -38,21 +39,21 @@ describe('Query Channels', function () {
 		}
 	});
 
-	it('watch should error', async function () {
+	it('watch should error', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.queryChannels({}, {}, { watch: true, presence: false }),
 		);
 	});
 
-	it('presence should error', async function () {
+	it('presence should error', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.queryChannels({}, {}, { watch: false, presence: true }),
 		);
 	});
 
-	it('state should work fine', async function () {
+	it('state should work fine', async () => {
 		const response = await client.queryChannels(
 			{},
 			{},
@@ -70,7 +71,7 @@ describe('Channels server side - Create', function () {
 	};
 	const client = getTestClient(true);
 
-	it('creating server side channels require created_by or created_by_id', async function () {
+	it('creating server side channels require created_by or created_by_id', async () => {
 		const channelId = uuidv4();
 		try {
 			await client
@@ -86,7 +87,7 @@ describe('Channels server side - Create', function () {
 		}
 	});
 
-	it('specify both user created_by and created_by_id should fail', async function () {
+	it('specify both user created_by and created_by_id should fail', async () => {
 		const channelId = uuidv4();
 
 		try {
@@ -105,7 +106,7 @@ describe('Channels server side - Create', function () {
 		}
 	});
 
-	it('create server side channel with created_by', async function () {
+	it('create server side channel with created_by', async () => {
 		const channelId = uuidv4();
 
 		const resp = await client
@@ -117,7 +118,7 @@ describe('Channels server side - Create', function () {
 		expect(resp.channel.created_by.id).to.be.equal(channelCreator.id);
 	});
 
-	it('create server side channel with created_by_id', async function () {
+	it('create server side channel with created_by_id', async () => {
 		const channelId = uuidv4();
 
 		const resp = await client
@@ -154,7 +155,7 @@ describe('Channels server side - Send Message', function () {
 		await channel.create();
 	});
 
-	it('creating server side message require user or user_id', async function () {
+	it('creating server side message require user or user_id', async () => {
 		try {
 			await channel.sendMessage({ text: 'hi' });
 			expect().fail('should fail user ou user_id');
@@ -165,7 +166,7 @@ describe('Channels server side - Send Message', function () {
 		}
 	});
 
-	it('specify both user user and user_id should fail', async function () {
+	it('specify both user user and user_id should fail', async () => {
 		try {
 			await channel.sendMessage({
 				text: 'hi',
@@ -180,12 +181,12 @@ describe('Channels server side - Send Message', function () {
 		}
 	});
 
-	it('create server side message with user', async function () {
+	it('create server side message with user', async () => {
 		const resp = await channel.sendMessage({ text: 'hi', user: messageOwner });
 		expect(resp.message.user.id).to.be.equal(messageOwner.id);
 	});
 
-	it('create server side channel with user_id', async function () {
+	it('create server side channel with user_id', async () => {
 		const resp = await channel.sendMessage({ text: 'hi', user_id: messageOwner.id });
 		expect(resp.message.user.id).to.be.equal(messageOwner.id);
 	});
@@ -216,7 +217,7 @@ describe('Mark Read Server Side', function () {
 		await channel.create();
 		await channel.sendMessage({ text: 'hi', user: channelCreator });
 	});
-	it('mark read in server side auth require user or user_id', async function () {
+	it('mark read in server side auth require user or user_id', async () => {
 		try {
 			await channel.markRead();
 			expect().fail('should fail missing user ou user_id');
@@ -226,7 +227,7 @@ describe('Mark Read Server Side', function () {
 			);
 		}
 	});
-	it('specify both user user and user_id should fail', async function () {
+	it('specify both user user and user_id should fail', async () => {
 		try {
 			await channel.markRead({
 				user: channelCreator,
@@ -239,11 +240,11 @@ describe('Mark Read Server Side', function () {
 			);
 		}
 	});
-	it('create server side event with user', async function () {
+	it('create server side event with user', async () => {
 		const resp = await channel.markRead({ user: markReadUser });
 		expect(resp.event.user.id).to.be.equal(markReadUser.id);
 	});
-	it('create server side event with user_id', async function () {
+	it('create server side event with user_id', async () => {
 		const resp = await channel.markRead({ user_id: markReadUser.id });
 		expect(resp.event.user.id).to.be.equal(markReadUser.id);
 	});
@@ -275,7 +276,7 @@ describe('Mark Read All Server Side', function () {
 		await channel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
-	it('mark read in server side auth require user or user_id', async function () {
+	it('mark read in server side auth require user or user_id', async () => {
 		try {
 			await client.markAllRead();
 			expect().fail('should fail missing user ou user_id');
@@ -286,7 +287,7 @@ describe('Mark Read All Server Side', function () {
 		}
 	});
 
-	it('specify both user user and user_id should fail', async function () {
+	it('specify both user user and user_id should fail', async () => {
 		try {
 			await client.markAllRead({
 				user: channelCreator,
@@ -300,11 +301,11 @@ describe('Mark Read All Server Side', function () {
 		}
 	});
 
-	it('create server side event with user', async function () {
+	it('create server side event with user', async () => {
 		await client.markAllRead({ user: markReadUser });
 	});
 
-	it('create server side event with user_id', async function () {
+	it('create server side event with user_id', async () => {
 		await client.markAllRead({ user_id: markReadUser.id });
 	});
 });
@@ -335,7 +336,7 @@ describe('Send Event Server Side', function () {
 		await eventChannel.sendMessage({ text: 'hi', user: channelCreator });
 	});
 
-	it('creating server side event require user or user_id', async function () {
+	it('creating server side event require user or user_id', async () => {
 		const event = {
 			type: 'message.read',
 		};
@@ -349,7 +350,7 @@ describe('Send Event Server Side', function () {
 		}
 	});
 
-	it('specify both user user and user_id should fail', async function () {
+	it('specify both user user and user_id should fail', async () => {
 		const event = {
 			type: 'message.read',
 			user: eventUser,
@@ -365,7 +366,7 @@ describe('Send Event Server Side', function () {
 		}
 	});
 
-	it('update server side event using user_id', async function () {
+	it('update server side event using user_id', async () => {
 		const event = {
 			type: 'message.read',
 			user_id: eventUser.id,
@@ -374,7 +375,7 @@ describe('Send Event Server Side', function () {
 		expect(resp.event.user.id).to.be.equal(eventUser.id);
 	});
 
-	it('update server side event using user object', async function () {
+	it('update server side event using user object', async () => {
 		const event = {
 			type: 'message.read',
 			user: eventUser,
@@ -411,7 +412,7 @@ describe('Update Message Server Side', function () {
 		message = resp.message;
 	});
 
-	it('creating server side message require user or user_id', async function () {
+	it('creating server side message require user or user_id', async () => {
 		try {
 			await client.updateMessage(message, null);
 			expect().fail('should fail user ou user_id');
@@ -422,12 +423,12 @@ describe('Update Message Server Side', function () {
 		}
 	});
 
-	it('update server side message using user_id', async function () {
+	it('update server side message using user_id', async () => {
 		const resp = await client.updateMessage(message, messageOwner.id);
 		expect(resp.message.user.id).to.be.equal(messageOwner.id);
 	});
 
-	it('update server side message using user object', async function () {
+	it('update server side message using user object', async () => {
 		const resp = await client.updateMessage(message, messageOwner);
 		expect(resp.message.user.id).to.be.equal(messageOwner.id);
 	});
@@ -444,8 +445,8 @@ describe('Managing users', function () {
 		await createUsers([evilUser, user.id]);
 	});
 
-	it('edit user inserts if missing', async function () {
-		await client.updateUser(user);
+	it('edit user inserts if missing', async () => {
+		await client.upsertUser(user);
 		const response = await client.queryUsers(
 			{ id: user.id },
 			{},
@@ -455,9 +456,9 @@ describe('Managing users', function () {
 		expect(response.users[0].role).to.eql('user');
 	});
 
-	it('change user data', async function () {
+	it('change user data', async () => {
 		user.os = 'gnu/linux';
-		await client.updateUser(user);
+		await client.upsertUser(user);
 		const response = await client.queryUsers(
 			{ id: user.id },
 			{},
@@ -469,7 +470,7 @@ describe('Managing users', function () {
 	});
 
 	describe('partial update', function () {
-		it('change user role', async function () {
+		it('change user role', async () => {
 			const res = await client.partialUpdateUser({
 				id: user.id,
 				set: {
@@ -480,7 +481,7 @@ describe('Managing users', function () {
 			expect(res.users[user.id].role).to.eql('admin');
 		});
 
-		it('change custom field', async function () {
+		it('change custom field', async () => {
 			const res = await client.partialUpdateUser({
 				id: user.id,
 				set: {
@@ -497,7 +498,7 @@ describe('Managing users', function () {
 			});
 		});
 
-		it('removes custom fields', async function () {
+		it('removes custom fields', async () => {
 			const res = await client.partialUpdateUser({
 				id: user.id,
 				unset: ['fields.subfield1'],
@@ -508,7 +509,7 @@ describe('Managing users', function () {
 			});
 		});
 
-		it("doesn't allow .. in key names", async function () {
+		it("doesn't allow .. in key names", async () => {
 			await expectHTTPErrorCode(
 				400,
 				client.partialUpdateUser({
@@ -526,7 +527,7 @@ describe('Managing users', function () {
 			);
 		});
 
-		it("doesn't allow spaces in key names", async function () {
+		it("doesn't allow spaces in key names", async () => {
 			await expectHTTPErrorCode(
 				400,
 				client.partialUpdateUser({
@@ -572,7 +573,7 @@ describe('Managing users', function () {
 			);
 		});
 
-		it("doesn't allow start or end with dot in key names", async function () {
+		it("doesn't allow start or end with dot in key names", async () => {
 			await expectHTTPErrorCode(
 				400,
 				client.partialUpdateUser({
@@ -590,9 +591,9 @@ describe('Managing users', function () {
 		});
 	});
 
-	it('change user role', async function () {
+	it('change user role', async () => {
 		user.role = 'admin';
-		await client.updateUser(user);
+		await client.upsertUser(user);
 		const response = await client.queryUsers(
 			{ id: user.id },
 			{},
@@ -602,13 +603,13 @@ describe('Managing users', function () {
 		expect(response.users[0].role).to.eql('admin');
 	});
 
-	it('ban user', async function () {
+	it('ban user', async () => {
 		await client.banUser(evilUser, {
 			banned_by_id: user.id,
 		});
 	});
 
-	it('remove ban', async function () {
+	it('remove ban', async () => {
 		await client.unbanUser(evilUser);
 	});
 });
@@ -641,18 +642,18 @@ describe('App configs', function () {
 
 	let channel;
 
-	before(async function () {
+	before(async () => {
 		channel = client.channel('messaging', 'secret-place', {
 			created_by: { id: `${createdById}` },
 		});
 		await channel.create();
 	});
 
-	it('Empty request should not break', async function () {
+	it('Empty request should not break', async () => {
 		await client.updateAppSettings({});
 	});
 
-	it('Using a tampered token fails because of auth enabled', async function () {
+	it('Using a tampered token fails because of auth enabled', async () => {
 		await client.updateAppSettings({
 			disable_auth_checks: false,
 		});
@@ -660,49 +661,49 @@ describe('App configs', function () {
 		client2.disconnect(5000);
 	});
 
-	it('Using dev token fails because of auth enabled', async function () {
+	it('Using dev token fails because of auth enabled', async () => {
 		await expectHTTPErrorCode(401, client2.setUser(user, client2.devToken(user.id)));
 		client2.disconnect(5000);
 	});
 
-	it('Disable auth checks', async function () {
+	it('Disable auth checks', async () => {
 		await client.updateAppSettings({
 			disable_auth_checks: true,
 		});
 		await sleep(1000);
 	});
 
-	it('Using a tampered token does not fail because auth is disabled', async function () {
+	it('Using a tampered token does not fail because auth is disabled', async () => {
 		await client2.setUser(user, userToken);
 		client2.disconnect(5000);
 	});
 
-	it('Using dev token does not fail because auth is disabled', async function () {
+	it('Using dev token does not fail because auth is disabled', async () => {
 		await client2.setUser(user, client2.devToken(user.id));
 		client2.disconnect(5000);
 	});
 
-	it('Disable permission checks', async function () {
+	it('Disable permission checks', async () => {
 		await client.updateAppSettings({
 			disable_permissions_checks: true,
 		});
 		await sleep(1000);
 	});
 
-	it('A user can do super stuff because permission checks are off', async function () {
+	it('A user can do super stuff because permission checks are off', async () => {
 		await client2.setUser(user, userToken);
 		await client2.channel('messaging', 'secret-place').watch();
 		client2.disconnect(5000);
 	});
 
-	it('Re-enable permission checks', async function () {
+	it('Re-enable permission checks', async () => {
 		await client.updateAppSettings({
 			disable_permissions_checks: false,
 		});
 		await sleep(1000);
 	});
 
-	it('A user cannot do super stuff because permission checks are back on', async function () {
+	it('A user cannot do super stuff because permission checks are back on', async () => {
 		const client = await getTestClientForUser(uuidv4());
 		await expectHTTPErrorCode(
 			403,
@@ -710,20 +711,47 @@ describe('App configs', function () {
 		);
 	});
 
-	it('Re-enable auth checks', async function () {
+	it('Re-enable auth checks', async () => {
 		await client.updateAppSettings({
 			disable_auth_checks: false,
 		});
 		await sleep(1000);
 	});
 
-	it('Using a tampered token fails because auth is back on', async function () {
+	it('Using a tampered token fails because auth is back on', async () => {
 		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
 		client2.disconnect(5000);
 	});
 
-	describe('Push notifications', function () {
-		describe('APN', function () {
+	describe('Push notifications configuration', function () {
+		const disableProviders = {
+			apn_config: { disabled: true },
+			firebase_config: { disabled: true },
+		};
+
+		const v1 = { push_config: { version: 'v1' }, ...disableProviders };
+		const v2 = { push_config: { version: 'v2' }, ...disableProviders };
+		const vWrong = { push_config: { version: 'vWrong' }, ...disableProviders };
+
+		describe('Version set', () => {
+			context('When setting push version', () => {
+				it('success for v1', async () => {
+					await client.updateAppSettings(v1);
+				});
+				it('success for v2', async () => {
+					await client.updateAppSettings(v2);
+				});
+				it('400 for wrong version', async () => {
+					await expectHTTPErrorCode(400, client.updateAppSettings(vWrong));
+				});
+			});
+		});
+
+		describe('APN v1', () => {
+			before(async () => {
+				await client.updateAppSettings(v1);
+			});
+
 			context('When using certificate', function () {
 				context('When adding bad certificate', function () {
 					it('returns 400 error code', function () {
@@ -757,7 +785,7 @@ describe('App configs', function () {
 
 				context('When adding good apn certificate', function () {
 					context('When development is true', function () {
-						before(async function () {
+						before(async () => {
 							await client.updateAppSettings({
 								apn_config: {
 									auth_type: 'certificate',
@@ -770,12 +798,15 @@ describe('App configs', function () {
 							});
 						});
 
-						it('App contains valid details', async function () {
+						it('App contains valid details', async () => {
 							const response = await client.getAppSettings();
 							expect(response.app).to.be.an('object');
 							expect(response.app.push_notifications).to.be.an('object');
-							delete response
-								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.version).to.be.eq(
+								'v1',
+							);
+							delete response.app.push_notifications.apn
+								.notification_template;
 							expect(response.app.push_notifications.apn).to.eql({
 								enabled: true,
 								development: true,
@@ -787,7 +818,7 @@ describe('App configs', function () {
 					});
 
 					context('When development is false', function () {
-						before(async function () {
+						before(async () => {
 							await client.updateAppSettings({
 								apn_config: {
 									auth_type: 'certificate',
@@ -800,12 +831,15 @@ describe('App configs', function () {
 							});
 						});
 
-						it('App contains valid details', async function () {
+						it('App contains valid details', async () => {
 							const response = await client.getAppSettings();
 							expect(response.app).to.be.an('object');
 							expect(response.app.push_notifications).to.be.an('object');
-							delete response
-								.app.push_notifications.apn.notification_template;
+							expect(response.app.push_notifications.version).to.be.eq(
+								'v1',
+							);
+							delete response.app.push_notifications.apn
+								.notification_template;
 							expect(response.app.push_notifications.apn).to.eql({
 								enabled: true,
 								development: false,
@@ -877,7 +911,7 @@ describe('App configs', function () {
 				});
 
 				context('When token without team', function () {
-					it('return 400 error code', async function () {
+					it('return 400 error code', async () => {
 						await expectHTTPErrorCode(
 							400,
 							client.updateAppSettings({
@@ -898,7 +932,7 @@ describe('App configs', function () {
 
 				context('When good production apn token', function () {
 					let app;
-					before(async function () {
+					before(async () => {
 						await client.updateAppSettings({
 							apn_config: {
 								auth_type: 'token',
@@ -920,6 +954,7 @@ describe('App configs', function () {
 
 					it('returns correct app settings', function () {
 						expect(app.push_notifications).to.be.an('object');
+						expect(app.push_notifications.version).to.be.eq('v1');
 						delete app.push_notifications.apn.notification_template;
 						expect(app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -934,7 +969,7 @@ describe('App configs', function () {
 				});
 
 				context('When good development apn token', function () {
-					before(async function () {
+					before(async () => {
 						await client.updateAppSettings({
 							apn_config: {
 								auth_type: 'token',
@@ -950,10 +985,11 @@ describe('App configs', function () {
 						});
 					});
 
-					it('returns correct app settings', async function () {
+					it('returns correct app settings', async () => {
 						const response = await client.getAppSettings();
 						expect(response.app).to.be.an('object');
 						expect(response.app.push_notifications).to.be.an('object');
+						expect(response.app.push_notifications.version).to.be.eq('v1');
 						delete response.app.push_notifications.apn.notification_template;
 						expect(response.app.push_notifications.apn).to.eql({
 							enabled: true,
@@ -1003,7 +1039,7 @@ describe('App configs', function () {
 			});
 
 			context('When APN is disabled', function () {
-				before(async function () {
+				before(async () => {
 					await client.updateAppSettings({
 						apn_config: {
 							disabled: true,
@@ -1011,18 +1047,199 @@ describe('App configs', function () {
 					});
 				});
 
-				it('Returns app settings with disabled mode', async function () {
+				it('Returns app settings with disabled mode', async () => {
 					const response = await client.getAppSettings();
 					expect(response.app).to.be.an('object');
 					expect(response.app.push_notifications).to.be.an('object');
+					expect(response.app.push_notifications.version).to.be.eq('v1');
 					delete response.app.push_notifications.apn.notification_template;
 					expect(response.app.push_notifications.apn.enabled).to.be.false;
 				});
 			});
 		});
+		describe('APN v2', () => {
+			before(async () => {
+				await client.updateAppSettings(v2);
+			});
 
-		describe('Firebase', function () {
-			it('Adding bad template', async function () {
+			context('When using certificate', () => {
+				context('When using good certificate', () => {
+					it('returns 400 error code', async () => {
+						await expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'certificate',
+									p12_cert: fs.readFileSync(
+										'./test/integration/push_test/stream-push-test.p12',
+									),
+									bundle_id: 'io.getstream.PushNotifTest',
+									development: true,
+								},
+							}),
+						);
+					});
+				});
+			});
+
+			context('When using token', () => {
+				context('When token is bad', () => {
+					it('returns 400 error code', function () {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									bundle_id: 'com.apple.test',
+									auth_key: 'supersecret',
+									key_id: 'keykey',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without bundle_id', () => {
+					it('return 400 error code', function () {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/integration/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									team_id: 'sfd',
+									bundle_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without key_id', function () {
+					it('return 400 error code', function () {
+						return expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/integration/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: '',
+									bundle_id: 'bundly',
+									team_id: 'sfd',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When token without team', function () {
+					it('return 400 error code', async () => {
+						await expectHTTPErrorCode(
+							400,
+							client.updateAppSettings({
+								apn_config: {
+									auth_type: 'token',
+									auth_key: fs.readFileSync(
+										'./test/integration/push_test/push-test-auth-key.p8',
+										'utf-8',
+									),
+									key_id: 'keykey',
+									bundle_id: 'sfd',
+									team_id: '',
+								},
+							}),
+						);
+					});
+				});
+
+				context('When good production apn token', function () {
+					let app;
+					before(async () => {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/integration/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								development: false,
+								team_id: 'sfd',
+							},
+						});
+
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						app = response.app;
+					});
+
+					it('returns correct app settings', function () {
+						expect(app.push_notifications).to.be.an('object');
+						expect(app.push_notifications.version).to.be.eq('v2');
+						delete app.push_notifications.apn.notification_template;
+						expect(app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: false,
+							auth_type: 'token',
+							bundle_id: 'com.apple.test',
+							host: 'https://api.push.apple.com',
+							team_id: 'sfd',
+							key_id: 'keykey',
+						});
+					});
+				});
+
+				context('When good development apn token', () => {
+					before(async () => {
+						await client.updateAppSettings({
+							apn_config: {
+								auth_type: 'token',
+								auth_key: fs.readFileSync(
+									'./test/integration/push_test/push-test-auth-key.p8',
+									'utf-8',
+								),
+								key_id: 'keykey',
+								bundle_id: 'com.apple.test',
+								team_id: 'sfd',
+								development: true,
+							},
+						});
+					});
+
+					it('returns correct app settings', async () => {
+						const response = await client.getAppSettings();
+						expect(response.app).to.be.an('object');
+						expect(response.app.push_notifications).to.be.an('object');
+						expect(response.app.push_notifications.version).to.be.eq('v2');
+						delete response.app.push_notifications.apn.notification_template;
+						expect(response.app.push_notifications.apn).to.eql({
+							enabled: true,
+							development: true,
+							auth_type: 'token',
+							bundle_id: 'com.apple.test',
+							team_id: 'sfd',
+							key_id: 'keykey',
+							host: 'https://api.development.push.apple.com',
+						});
+					});
+				});
+			});
+		});
+		describe('Firebase v1', () => {
+			before(async () => {
+				await client.updateAppSettings(v1);
+			});
+
+			it('Adding bad template', async () => {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
@@ -1033,7 +1250,7 @@ describe('App configs', function () {
 				);
 			});
 
-			it('Adding invalid json template', async function () {
+			it('Adding invalid json template', async () => {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
@@ -1043,7 +1260,7 @@ describe('App configs', function () {
 					}),
 				);
 			});
-			it('Adding bad data template', async function () {
+			it('Adding bad data template', async () => {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
@@ -1054,7 +1271,7 @@ describe('App configs', function () {
 				);
 			});
 
-			it('Adding invalid json data template', async function () {
+			it('Adding invalid json data template', async () => {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
@@ -1064,7 +1281,7 @@ describe('App configs', function () {
 					}),
 				);
 			});
-			it('Adding invalid server key', async function () {
+			it('Adding invalid server key', async () => {
 				await expectHTTPErrorCode(
 					400,
 					client.updateAppSettings({
@@ -1075,7 +1292,7 @@ describe('App configs', function () {
 					}),
 				);
 			});
-			it('Adding good server key', async function () {
+			it('Adding good server key', async () => {
 				await client.updateAppSettings({
 					firebase_config: {
 						server_key:
@@ -1084,27 +1301,29 @@ describe('App configs', function () {
 					},
 				});
 			});
-			it('Describe app settings', async function () {
+			it('Describe app settings', async () => {
 				const response = await client.getAppSettings();
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
+				expect(response.app.push_notifications.version).to.be.eq('v1');
 				delete response.app.push_notifications.firebase.notification_template;
 				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
 					enabled: true,
 				});
 			});
-			it('Disable firebase', async function () {
+			it('Disable firebase', async () => {
 				await client.updateAppSettings({
 					firebase_config: {
 						disabled: true,
 					},
 				});
 			});
-			it('Describe app settings', async function () {
+			it('Describe app settings', async () => {
 				const response = await client.getAppSettings();
 				expect(response.app).to.be.an('object');
 				expect(response.app.push_notifications).to.be.an('object');
+				expect(response.app.push_notifications.version).to.be.eq('v1');
 				delete response.app.push_notifications.firebase.notification_template;
 				delete response.app.push_notifications.firebase.data_template;
 				expect(response.app.push_notifications.firebase).to.eql({
@@ -1112,10 +1331,88 @@ describe('App configs', function () {
 				});
 			});
 		});
+		describe('Firebase v2', () => {
+			before(async () => {
+				await client.updateAppSettings(v2);
+			});
+
+			context('When using server key', () => {
+				it('Adding good server key fails', async () => {
+					await expectHTTPErrorCode(
+						400,
+						client.updateAppSettings({
+							firebase_config: {
+								server_key:
+									'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
+								notification_template: '{ }',
+								credentials_json: '',
+							},
+						}),
+					);
+				});
+			});
+
+			context('When using service account', () => {
+				it('Adding bad credentials', async () => {
+					await expectHTTPErrorCode(
+						400,
+						client.updateAppSettings({
+							firebase_config: {
+								credentials_json: 'bogus',
+							},
+						}),
+					);
+				});
+
+				it('Adding good credentials', async () => {
+					await client.updateAppSettings({
+						firebase_config: {
+							credentials_json: fs.readFileSync(
+								'./test/integration/push_test/push-test-credentials.json',
+								'utf-8',
+							),
+						},
+					});
+				});
+
+				it('Describe app settings', async () => {
+					const response = await client.getAppSettings();
+					expect(response.app).to.be.an('object');
+					expect(response.app.push_notifications).to.be.an('object');
+					expect(response.app.push_notifications.version).to.be.eq('v2');
+					delete response.app.push_notifications.firebase.notification_template;
+					delete response.app.push_notifications.firebase.data_template;
+					expect(response.app.push_notifications.firebase).to.eql({
+						enabled: true,
+					});
+				});
+			});
+			context('When disabled', () => {
+				it('Disable firebase', async () => {
+					await client.updateAppSettings({
+						firebase_config: {
+							disabled: true,
+						},
+					});
+				});
+				it('Describe app settings', async () => {
+					const response = await client.getAppSettings();
+					expect(response.app).to.be.an('object');
+					expect(response.app.push_notifications).to.be.an('object');
+					expect(response.app.push_notifications.version).to.be.eq('v2');
+					delete response.app.push_notifications.firebase.notification_template;
+					delete response.app.push_notifications.firebase.data_template;
+					expect(response.app.push_notifications.firebase).to.eql({
+						enabled: false,
+					});
+				});
+			});
+		});
 	});
 
-	describe('Push notifications test endpoint', function () {
-		const deviceID = uuidv4();
+	describe('Push notifications test endpoint v1', function () {
+		const apnDevice = uuidv4();
+		const firebaseDevice = uuidv4();
 		const userID = uuidv4();
 		let user = {};
 		const apn_config = {
@@ -1133,18 +1430,23 @@ describe('App configs', function () {
 				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 		};
 
-		before(async function () {
-			await client.addDevice(deviceID, 'apn', userID);
-			const resp = await client.updateUser({ id: userID, name: uuidv4() });
+		before(async () => {
+			await client.addDevice(apnDevice, 'apn', userID);
+			await client.addDevice(firebaseDevice, 'firebase', userID);
+			const resp = await client.upsertUser({ id: userID, name: uuidv4() });
 			user = resp.users[userID];
 		});
 
-		after(async function () {
-			await client.removeDevice(deviceID, userID);
+		after(async () => {
+			await client.removeDevice(apnDevice, userID);
+			await client.removeDevice(firebaseDevice, userID);
 		});
 
-		beforeEach(async function () {
+		beforeEach(async () => {
 			await client.updateAppSettings({
+				push_config: {
+					version: 'v1',
+				},
 				apn_config: {
 					disabled: true,
 				},
@@ -1155,27 +1457,23 @@ describe('App configs', function () {
 			await sleep(200);
 		});
 
-		it('User has no devices', async function () {
-			await client.removeDevice(deviceID, userID);
-			await client.updateAppSettings({
-				firebase_config,
-			});
+		it('User has no devices', async () => {
+			await client.removeDevice(apnDevice, userID);
+			await client.updateAppSettings({ apn_config });
 			const p = client.testPushSettings(userID);
-			await expect(p).to.be.rejectedWith(`User has no devices associated`);
+			await expect(p).to.be.rejectedWith(`User has no enabled devices associated`);
 		});
 
-		it('App has push disabled', async function () {
+		it('App has push disabled', async () => {
 			const p = client.testPushSettings(userID);
 			await expect(p).to.be.rejectedWith(
 				`Your app doesn't have push notifications enabled`,
 			);
 		});
 
-		it('No APN + APN template', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('No APN + APN template', async () => {
+			await client.updateAppSettings({ firebase_config });
+			await client.addDevice(apnDevice, 'apn', userID);
 
 			const p = client.testPushSettings(userID, { apnTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
@@ -1183,11 +1481,8 @@ describe('App configs', function () {
 			);
 		});
 
-		it('No Firebase + firebase template', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('No Firebase + firebase template', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const p = client.testPushSettings(userID, { firebaseTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
@@ -1195,11 +1490,8 @@ describe('App configs', function () {
 			);
 		});
 
-		it('No Firebase + firebase data template', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('No Firebase + firebase data template', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const p = client.testPushSettings(userID, { firebaseDataTemplate: '{}' });
 			await expect(p).to.be.rejectedWith(
@@ -1207,21 +1499,15 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Bad message id', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Bad message id', async () => {
+			await client.updateAppSettings({ apn_config });
 			const msgID = uuidv4();
 			const p = client.testPushSettings(userID, { messageID: msgID });
 			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
 		});
 
-		it('Random message', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Random message', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1240,11 +1526,8 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Specific message', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Specific message', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1267,11 +1550,8 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Bad apn template error gets returned in response', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Bad apn template error gets returned in response', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const response = await client.testPushSettings(userID, {
 				apnTemplate: '{{}',
@@ -1283,11 +1563,8 @@ describe('App configs', function () {
 			]);
 		});
 
-		it('Bad firebase template error gets returned in response', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Bad firebase notification template error gets returned in response', async () => {
+			await client.updateAppSettings({ firebase_config });
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{{}',
@@ -1299,11 +1576,8 @@ describe('App configs', function () {
 			]);
 		});
 
-		it('Bad firebase data template error gets returned in response', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Bad firebase data template error gets returned in response', async () => {
+			await client.updateAppSettings({ firebase_config });
 
 			const response = await client.testPushSettings(userID, {
 				firebaseDataTemplate: '{{}',
@@ -1315,11 +1589,8 @@ describe('App configs', function () {
 			]);
 		});
 
-		it('Good notification template', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Good notification template', async () => {
+			await client.updateAppSettings({ firebase_config });
 
 			const response = await client.testPushSettings(userID, {
 				messageID: 'very-fake-message',
@@ -1329,11 +1600,8 @@ describe('App configs', function () {
 			expect(firebaseMsg.notification.id).to.be.equal('very-fake-message');
 		});
 
-		it('Good data template', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Good data template', async () => {
+			await client.updateAppSettings({ firebase_config });
 
 			const response = await client.testPushSettings(userID, {
 				messageID: 'very-fake-message',
@@ -1344,11 +1612,8 @@ describe('App configs', function () {
 			expect(firebaseMsg.data.id).to.be.equal('very-fake-message');
 		});
 
-		it('All good', async function () {
-			await client.updateAppSettings({
-				firebase_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('All good', async () => {
+			await client.updateAppSettings({ firebase_config });
 
 			const response = await client.testPushSettings(userID, {
 				firebaseTemplate: '{}',
@@ -1358,11 +1623,8 @@ describe('App configs', function () {
 			expect(firebaseMsg.notification).to.be.empty;
 		});
 
-		it('Members in the template using helper', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Members in the template using helper', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const members = [
 				{
@@ -1378,7 +1640,7 @@ describe('App configs', function () {
 					name: uuidv4(),
 				},
 			];
-			await client.updateUsers(members);
+			await client.upsertUsers(members);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1407,11 +1669,8 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Members in the template using handlebars', async function () {
-			await client.updateAppSettings({
-				apn_config,
-			});
-			await client.addDevice(deviceID, 'apn', userID);
+		it('Members in the template using handlebars', async () => {
+			await client.updateAppSettings({ apn_config });
 
 			const members = [
 				{
@@ -1427,7 +1686,7 @@ describe('App configs', function () {
 					name: uuidv4(),
 				},
 			];
-			await client.updateUsers(members);
+			await client.upsertUsers(members);
 
 			const chan = client.channel('messaging', uuidv4(), {
 				members: [userID],
@@ -1464,22 +1723,359 @@ describe('App configs', function () {
 		});
 	});
 
+	describe('Push notifications test endpoint v2', function () {
+		const apnDevice = uuidv4();
+		const firebaseDevice = uuidv4();
+		const userID = uuidv4();
+		let user = {};
+		const apn_config = {
+			auth_key: fs.readFileSync(
+				'./test/integration/push_test/push-test-auth-key.p8',
+				'utf-8',
+			),
+			key_id: 'whatever',
+			team_id: 'stream',
+			bundle_id: 'bundle',
+			auth_type: 'token',
+		};
+		const firebase_config = {
+			credentials_json: fs.readFileSync(
+				'./test/integration/push_test/push-test-credentials.json',
+				'utf-8',
+			),
+		};
+
+		before(async () => {
+			await client.addDevice(apnDevice, 'apn', userID);
+			await client.addDevice(firebaseDevice, 'firebase', userID);
+			const resp = await client.upsertUser({ id: userID, name: uuidv4() });
+			user = resp.users[userID];
+		});
+
+		after(async () => {
+			await client.removeDevice(apnDevice, userID);
+			await client.removeDevice(firebaseDevice, userID);
+		});
+
+		beforeEach(async () => {
+			await client.updateAppSettings({
+				push_config: {
+					version: 'v2',
+				},
+				apn_config: {
+					disabled: true,
+				},
+				firebase_config: {
+					disabled: true,
+				},
+			});
+			await sleep(200);
+		});
+
+		it('User has no devices', async () => {
+			await client.removeDevice(apnDevice, userID);
+			await client.updateAppSettings({ apn_config });
+			const p = client.testPushSettings(userID);
+			await expect(p).to.be.rejectedWith(`User has no enabled devices associated`);
+		});
+
+		it('App has push disabled', async () => {
+			const p = client.testPushSettings(userID);
+			await expect(p).to.be.rejectedWith(
+				`Your app doesn't have push notifications enabled`,
+			);
+		});
+
+		it('No APN even if apn device', async () => {
+			await client.updateAppSettings({ firebase_config });
+			await client.addDevice(apnDevice, 'apn', userID);
+
+			const response = await client.testPushSettings(userID, { apnTemplate: '{}' });
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+		});
+
+		it('No Firebase even if firebase device when requested with notification template', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+		});
+
+		it('No Firebase even if firebase device when requested with data template', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+		});
+
+		it('Bad message id', async () => {
+			await client.updateAppSettings({ apn_config });
+			const msgID = uuidv4();
+			const p = client.testPushSettings(userID, { messageID: msgID });
+			await expect(p).to.be.rejectedWith(`Message with id ${msgID} not found`);
+		});
+
+		it('Random message', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID);
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq(msg.message.id);
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+		});
+
+		it('Specific message', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				messageID: msg.message.id,
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq(msg.message.id);
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+		});
+
+		it('Bad apn template error is ignored', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: '{{}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Bad firebase template error is ignored', async () => {
+			await client.updateAppSettings({ firebase_config });
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{{}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Bad firebase data template error is ignored', async () => {
+			await client.updateAppSettings({ firebase_config });
+
+			const response = await client.testPushSettings(userID, {
+				firebaseDataTemplate: '{{}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Good notification template', async () => {
+			await client.updateAppSettings({ firebase_config });
+
+			const response = await client.testPushSettings(userID, {
+				messageID: 'very-fake-message',
+				firebaseTemplate: '{"id": "{{message.id}}"}',
+			});
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq('very-fake-message');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Good data template', async () => {
+			await client.updateAppSettings({ firebase_config });
+
+			const response = await client.testPushSettings(userID, {
+				messageID: 'very-fake-message',
+				firebaseDataTemplate: '{"id": "{{message.id}}"}',
+			});
+
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq('very-fake-message');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('All good', async () => {
+			await client.updateAppSettings({ firebase_config });
+
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: '{}',
+				firebaseDataTemplate: '{}',
+			});
+
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Members in the template using helper', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.upsertUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate:
+					'{"stuff": "{{implodeMembers otherMembers limit=2 suffixFmt="en %d anderen"}}: {{ message.text }}"}',
+				messageID: msg.message.id,
+			});
+
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq(msg.message.id);
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+
+		it('Members in the template using handlebars', async () => {
+			await client.updateAppSettings({ apn_config });
+
+			const members = [
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+				{
+					id: uuidv4(),
+					name: uuidv4(),
+				},
+			];
+			await client.upsertUsers(members);
+
+			const chan = client.channel('messaging', uuidv4(), {
+				members: [userID],
+				created_by: { id: userID },
+			});
+			await chan.create();
+
+			for (const m of members) {
+				await chan.addMembers([m.id]);
+			}
+
+			const msg = await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+			await chan.sendMessage({ text: uuidv4(), user_id: userID });
+
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: `{"stuff": "
+					{{~#each otherMembers}}
+						{{#ifLte @index 0}}
+							{{~this.name}}{{#ifLt @index 0 }}, {{/ifLt~}}
+						{{~else if @last~}}
+								{{{ " " }}} en {{remainder otherMembers 1}} anderen: {{message.text}}
+						{{~/ifLte~}}
+					{{/each~}}
+					"}`,
+				messageID: msg.message.id,
+			});
+
+			expect(response.rendered_message).to.be.an('object');
+			expect(response.rendered_message.type).to.be.eq('message.new');
+			expect(response.rendered_message.id).to.be.eq(msg.message.id);
+			expect(response).to.not.have.property('rendered_apn_template');
+			expect(response).to.not.have.property('rendered_firebase_template');
+			expect(response).to.not.have.property('general_errors');
+		});
+	});
+
 	describe('Set custom_action_handler_url', function () {
 		let originalUrl;
 
-		before(async function () {
+		before(async () => {
 			const response = await client.getAppSettings();
 			originalUrl = response.app.custom_action_handler_url;
 		});
 
-		after(async function () {
+		after(async () => {
 			// Reset custom command endpoint url to original
 			await client.updateAppSettings({
 				custom_action_handler_url: originalUrl,
 			});
 		});
 
-		it('Sets valid URL', async function () {
+		it('Sets valid URL', async () => {
 			// Set custom command endpoint url
 			const custom_action_handler_url = 'http://example.com';
 			await client.updateAppSettings({
@@ -1492,7 +2088,7 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Rejects invalid URL', async function () {
+		it('Rejects invalid URL', async () => {
 			// reject invalid url
 			await expectHTTPErrorCode(
 				400,
@@ -1502,7 +2098,7 @@ describe('App configs', function () {
 			);
 		});
 
-		it('Accepts empty URL', async function () {
+		it('Accepts empty URL', async () => {
 			// reset custom endpoint url
 			await client.updateAppSettings({
 				custom_action_handler_url: '',
@@ -1515,14 +2111,14 @@ describe('App configs', function () {
 });
 
 describe('Devices', function () {
-	const client = getTestClient(true);
+	const client = getServerTestClient();
 	const deviceId = uuidv4();
 
 	describe('No user id provided', function () {
-		it(`can't add devices`, async function () {
+		it(`can't add devices`, async () => {
 			await expectHTTPErrorCode(400, client.addDevice(deviceId, 'apn'));
 		});
-		it(`cant't list devices`, async function () {
+		it(`can't list devices`, async () => {
 			await expectHTTPErrorCode(400, client.getDevices());
 		});
 	});
@@ -1531,32 +2127,34 @@ describe('Devices', function () {
 		const users = [uuidv4(), uuidv4()];
 		const devices = [uuidv4(), uuidv4()];
 
-		it('can add devices to any user', async function () {
-			for (const i of Array(2).keys()) {
+		it('can add devices to any user', async () => {
+			for (let i = 0; i < users.length; i += 1) {
 				await client.addDevice(devices[i], 'apn', users[i]);
 			}
 		});
-		it('can fetch devices from any user', async function () {
-			for (const i of Array(2).keys()) {
+		it('can fetch devices from any user', async () => {
+			for (let i = 0; i < users.length; i += 1) {
 				const result = await client.getDevices(users[i]);
 				expect(result.devices.length).to.equal(1);
 				expect(result.devices[0].id).to.equal(devices[i]);
 			}
 		});
-		it('can delete any device', async function () {
-			await client.removeDevice(devices[1], users[1]);
-			const result = await client.getDevices(devices[1], users[1]);
-			expect(result.devices).to.have.length(0);
+		it('can delete any device', async () => {
+			for (let i = 0; i < users.length; i += 1) {
+				await client.removeDevice(devices[i], users[i]);
+				const result = await client.getDevices(users[i]);
+				expect(result.devices.length).to.equal(0);
+			}
 		});
 	});
 
-	it('user has custom data', async function () {
+	it('user has custom data', async () => {
 		const user = {
 			id: uuidv4(),
 			name: 'bob',
 			hobby: 'painting',
 		};
-		await client.updateUser(user);
+		await client.upsertUser(user);
 
 		await client.addDevice(uuidv4(), 'apn', user.id);
 
@@ -1568,16 +2166,16 @@ describe('Devices', function () {
 		const maxDevices = 25;
 		let user;
 
-		beforeEach(async function () {
+		beforeEach(async () => {
 			user = {
 				id: uuidv4(),
 				name: 'bob',
 				hobby: 'painting',
 			};
-			await client.updateUser(user);
+			await client.upsertUser(user);
 		});
 
-		it('oldest device gets scrapped', async function () {
+		it('oldest device gets scrapped', async () => {
 			for (const _ of Array(maxDevices).keys()) {
 				await client.addDevice(uuidv4(), 'apn', user.id);
 				await sleep(100);
@@ -1604,7 +2202,7 @@ describe('Devices', function () {
 			expect(newDeviceIDS).to.deep.equal(deviceIDS);
 		});
 
-		it('adding same device does not do anything', async function () {
+		it('adding same device does not do anything', async () => {
 			for (const _ of Array(maxDevices).keys()) {
 				await client.addDevice(uuidv4(), 'apn', user.id);
 				await sleep(100);
@@ -1628,9 +2226,31 @@ describe('Devices', function () {
 		});
 	});
 
+	describe('Device caching', () => {
+		it('Updating user on connect does not clear user devices', async () => {
+			const userID = uuidv4();
+			await client.upsertUser({ id: userID });
+			const deviceID = uuidv4();
+
+			const deviceLength = 2;
+			for (let i = 0; i < deviceLength; i += 1) {
+				await client.addDevice(`${deviceID}-${i}`, 'apn', userID);
+			}
+
+			let response = await client.getDevices(userID);
+			expect(response.devices).to.have.length(deviceLength);
+
+			await getTestClientForUser(userID);
+
+			response = await client.getDevices(userID);
+			expect(response.devices).to.have.length(deviceLength);
+		});
+	});
+
 	describe('Device invalidation', function () {
 		let userID;
 		let deviceID;
+		const push_config = { version: 'v1' };
 		const apn_config = {
 			auth_key: fs.readFileSync(
 				'./test/integration/push_test/push-test-auth-key.p8',
@@ -1646,19 +2266,20 @@ describe('Devices', function () {
 				'AAAAyMwm738:APA91bEpRfUKal8ZeVMbpe8eLyo6T1LK7IhMCETwEOrXoPXFTHHsu7JGQVDElTgVyboNhNmoPoAjQxfRWOR6NOQm5eo7cLA5Uf-PB5qRIGDdl62dIrDkTxMv7UjoGvNDYzr4EFFfoE2u',
 		};
 
-		beforeEach(async function () {
+		beforeEach(async () => {
 			userID = uuidv4();
-			await client.updateUser({ id: userID });
+			await client.upsertUser({ id: userID });
 
 			deviceID = uuidv4();
 			await client.updateAppSettings({
+				push_config,
 				apn_config,
 				firebase_config,
 			});
 			await sleep(100);
 		});
 
-		it('changing apn notification template does not invalidate device', async function () {
+		it('changing apn notification template does not invalidate device', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1669,7 +2290,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing firebase notification template does not invalidate device', async function () {
+		it('changing firebase notification template does not invalidate device', async () => {
 			await client.addDevice(deviceID, 'firebase', userID);
 			await client.updateAppSettings({
 				firebase_config: {
@@ -1680,7 +2301,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing firebase notification data does not invalidate device', async function () {
+		it('changing firebase data template does not invalidate device', async () => {
 			await client.addDevice(deviceID, 'firebase', userID);
 			await client.updateAppSettings({
 				firebase_config: {
@@ -1691,7 +2312,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing apn config does not invalidates device', async function () {
+		it('changing apn config does not invalidates device', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1702,7 +2323,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('disabling apn config doesnt skips apn devices', async function () {
+		it('disabling apn config doesnt skip apn devices', async () => {
 			await client.updateAppSettings({
 				apn_config: {
 					disabled: true,
@@ -1713,7 +2334,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('no-op update does not invalidate device', async function () {
+		it('no-op update does not invalidate device', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1724,7 +2345,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('changing apn config and notification template doesnt invalidate device', async function () {
+		it('changing apn config and notification template doesnt invalidate device', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1736,7 +2357,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('re-adding device after config change does not error', async function () {
+		it('re-adding device after config change does not error', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1748,7 +2369,7 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it('adding same device twice does not error', async function () {
+		it('adding same device twice does not error', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
@@ -1761,17 +2382,28 @@ describe('Devices', function () {
 			expect(devices).to.have.length(1);
 		});
 
-		it.skip('cannot delete invalidated device', async function () {
+		it('changing apn config doesnt invalidate device', async () => {
 			await client.addDevice(deviceID, 'apn', userID);
 			await client.updateAppSettings({
 				apn_config: {
 					team_id: 'A TEAM',
 				},
 			});
-			const p = client.removeDevice(deviceID, userID);
-			await expect(p).to.be.rejectedWith(
-				`user ${userID} does not have device with id ${deviceID}`,
-			);
+			await client.removeDevice(deviceID, userID);
+		});
+
+		it('changing push version doesnt invalidate device', async () => {
+			await client.addDevice(deviceID, 'firebase', userID);
+			await client.updateAppSettings({
+				push_config: { version: 'v2' },
+				firebase_config: {
+					credentials_json: fs.readFileSync(
+						'./test/integration/push_test/push-test-credentials.json',
+						'utf-8',
+					),
+				},
+			});
+			await client.removeDevice(deviceID, userID);
 		});
 	});
 });
@@ -1780,15 +2412,15 @@ describe('Moderation', function () {
 	const srvClient = getTestClient(true);
 	const [srcUser, targetUser] = [uuidv4(), uuidv4()];
 
-	before(async function () {
+	before(async () => {
 		await createUsers([srcUser, targetUser]);
 	});
 
 	describe('Mutes', function () {
-		it('source user not set', async function () {
+		it('source user not set', async () => {
 			await expectHTTPErrorCode(400, srvClient.muteUser(targetUser));
 		});
-		it('source user set', async function () {
+		it('source user set', async () => {
 			const data = await srvClient.muteUser(targetUser, srcUser);
 			expect(data.mute.user.id).to.equal(srcUser);
 			expect(data.mute.target.id).to.equal(targetUser);
@@ -1804,10 +2436,10 @@ describe('Moderation', function () {
 	});
 
 	describe('Unmutes', function () {
-		it('source user not set', async function () {
+		it('source user not set', async () => {
 			await expectHTTPErrorCode(400, srvClient.unmuteUser(targetUser));
 		});
-		it('source user set', async function () {
+		it('source user set', async () => {
 			await srvClient.unmuteUser(targetUser, srcUser);
 
 			const client = getTestClient(false);
@@ -1828,11 +2460,11 @@ describe('Import via Webhook compat', function () {
 	let userClient;
 	const channelID = uuidv4();
 	const created_by = { id: uuidv4() };
-	before(async function () {
+	before(async () => {
 		userClient = await getTestClientForUser(userID);
 	});
 
-	it('Created At shouldnt work', async function () {
+	it('Created At shouldnt work', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const response = channel.sendMessage({
@@ -1845,7 +2477,7 @@ describe('Import via Webhook compat', function () {
 		);
 	});
 
-	it('Updated At shouldnt work', async function () {
+	it('Updated At shouldnt work', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const response = channel.sendMessage({
@@ -1858,7 +2490,7 @@ describe('Import via Webhook compat', function () {
 		);
 	});
 
-	it('HTML should work', async function () {
+	it('HTML should work', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const html = 'search with <a href="https://google.com/">google</a>';
@@ -1869,7 +2501,7 @@ describe('Import via Webhook compat', function () {
 		expect(response.message.html).to.equal(html);
 	});
 
-	it('clientside HTML should raise an error', async function () {
+	it('clientside HTML should raise an error', async () => {
 		const userID = uuidv4();
 		const userClient = await getTestClientForUser(userID);
 		const channel = userClient.channel('livestream', channelID);
@@ -1882,7 +2514,7 @@ describe('Import via Webhook compat', function () {
 		expect(sendPromise).to.be.rejectedWith('message.html');
 	});
 
-	it('Client side should also raise an error', async function () {
+	it('Client side should also raise an error', async () => {
 		const channel = userClient.channel('livestream', channelID);
 		await channel.create();
 		const responsePromise = channel.sendMessage({
@@ -1894,7 +2526,7 @@ describe('Import via Webhook compat', function () {
 		);
 	});
 
-	it('Mark Read should fail without a user', async function () {
+	it('Mark Read should fail without a user', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const responsePromise = channel.markRead();
@@ -1903,13 +2535,13 @@ describe('Import via Webhook compat', function () {
 		);
 	});
 
-	it('Mark Read should work server side', async function () {
+	it('Mark Read should work server side', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		await channel.markRead({ user: { id: userID } });
 	});
 
-	it('Mark Read should should fail server side if the provided user doesnt exists', async function () {
+	it('Mark Read should should fail server side if the provided user doesnt exists', async () => {
 		const channel = srvClient.channel('messaging', channelID, { created_by });
 		await channel.create();
 		const nonExistingUser = uuidv4();
@@ -1919,7 +2551,7 @@ describe('Import via Webhook compat', function () {
 		);
 	});
 
-	it('Mark Read server side specific message', async function () {
+	it('Mark Read server side specific message', async () => {
 		const userID = `a-${uuidv4()}`;
 		const userID2 = `b-${uuidv4()}`;
 		await createUsers([userID, userID2]);
@@ -1965,7 +2597,7 @@ describe('Import via Webhook compat', function () {
 describe('User management', function () {
 	const srvClient = getTestClient(true);
 	const userClient = getTestClient(false);
-	it('Admin with extra fields', async function () {
+	it('Admin with extra fields', async () => {
 		// verify we correctly store user information
 		const userID = uuidv4();
 		const user = {
@@ -1973,7 +2605,7 @@ describe('User management', function () {
 			name: 'jelte',
 			role: 'admin',
 		};
-		const response = await srvClient.updateUser(user);
+		const response = await srvClient.upsertUser(user);
 		const compareUser = (userResponse, online) => {
 			const expectedData = { role: 'user', ...user };
 			expect(userResponse).to.contains(expectedData);
@@ -2012,7 +2644,7 @@ describe('Custom Commands', function () {
 
 	let updatedCommand;
 
-	it('Should fail on empty name', async function () {
+	it('Should fail on empty name', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2024,7 +2656,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should fail on invalid name with spaces', async function () {
+	it('Should fail on invalid name with spaces', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2036,7 +2668,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should fail on empty args', async function () {
+	it('Should fail on empty args', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2048,7 +2680,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should fail on empty description', async function () {
+	it('Should fail on empty description', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2060,7 +2692,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should fail on empty set', async function () {
+	it('Should fail on empty set', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2072,7 +2704,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should fail on reserved name', async function () {
+	it('Should fail on reserved name', async () => {
 		await expectHTTPErrorCode(
 			400,
 			client.createCommand({
@@ -2084,7 +2716,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should create a new command', async function () {
+	it('Should create a new command', async () => {
 		let response = await client.createCommand({
 			name: newName,
 			description: newDesc,
@@ -2100,7 +2732,7 @@ describe('Custom Commands', function () {
 		await sleep(1000);
 	});
 
-	it('Should retrieve command', async function () {
+	it('Should retrieve command', async () => {
 		let response = await client.getCommand(newName);
 		expect(response.name).to.equal(newName);
 		expect(response.description).to.equal(newDesc);
@@ -2111,11 +2743,11 @@ describe('Custom Commands', function () {
 		await sleep(1000);
 	});
 
-	it('Should fail non-existing get command', async function () {
+	it('Should fail non-existing get command', async () => {
 		await expectHTTPErrorCode(404, client.getCommand('non-existent'));
 	});
 
-	it('Should update command', async function () {
+	it('Should update command', async () => {
 		let response = await client.updateCommand(newName, {
 			name: newName,
 			description: 'updated description',
@@ -2130,7 +2762,7 @@ describe('Custom Commands', function () {
 		await sleep(1000);
 	});
 
-	it('Should ignore AppPK on update command', async function () {
+	it('Should ignore AppPK on update command', async () => {
 		let response = await client.updateCommand(newName, {
 			name: newName,
 			description: 'updated description',
@@ -2147,7 +2779,7 @@ describe('Custom Commands', function () {
 		await sleep(1000);
 	});
 
-	it('Should fail non-existing update command', async function () {
+	it('Should fail non-existing update command', async () => {
 		await expectHTTPErrorCode(
 			404,
 			client.updateCommand('non-existent', {
@@ -2159,7 +2791,7 @@ describe('Custom Commands', function () {
 		);
 	});
 
-	it('Should ignore name on update command', async function () {
+	it('Should ignore name on update command', async () => {
 		let response = await client.updateCommand(newName, {
 			name: 'giphy',
 			description: 'updated description',
@@ -2174,23 +2806,23 @@ describe('Custom Commands', function () {
 		await sleep(1000);
 	});
 
-	it('Should list commands', async function () {
+	it('Should list commands', async () => {
 		let response = await client.listCommands();
 		expect(response.commands).to.not.be.empty;
 		await sleep(1000);
 	});
 
-	it('Should delete command', async function () {
+	it('Should delete command', async () => {
 		let response = await client.deleteCommand(newName);
 		expect(response.name).to.equal(newName);
 		await sleep(1000);
 	});
 
-	it('Should fail non-existing delete command', async function () {
+	it('Should fail non-existing delete command', async () => {
 		await expectHTTPErrorCode(404, client.deleteCommand('non-existent'));
 	});
 
-	it('Should fail delete command if command is in use', async function () {
+	it('Should fail delete command if command is in use', async () => {
 		await client.createCommand({
 			name: newName,
 			description: newDesc,
@@ -2217,7 +2849,7 @@ describe('Channel types', function () {
 	describe('Creating channel types', function () {
 		let newChannelType;
 
-		it('should work fine', async function () {
+		it('should work fine', async () => {
 			newChannelType = await client.createChannelType({
 				name: newType,
 				commands: ['all'],
@@ -2252,11 +2884,11 @@ describe('Channel types', function () {
 			});
 		});
 
-		it('should fail to create an already existing type', async function () {
+		it('should fail to create an already existing type', async () => {
 			await expectHTTPErrorCode(400, client.createChannelType({ name: newType }));
 		});
 
-		it('permissions should be created', async function () {
+		it('permissions should be created', async () => {
 			const name = uuidv4();
 			const permissions = [
 				new Permission(uuidv4(), 20, AnyResource, AnyRole, false, Allow),
@@ -2295,7 +2927,7 @@ describe('Channel types', function () {
 			});
 		});
 
-		it('missing role should be handled correctly', async function () {
+		it('missing role should be handled correctly', async () => {
 			const name = uuidv4();
 			const permissions = [
 				new Permission(uuidv4(), 20, AnyResource, null, false, Allow),
@@ -2339,7 +2971,7 @@ describe('Channel types', function () {
 	});
 
 	describe('Creating channel types with custom command', function () {
-		it('should work fine', async function () {
+		it('should work fine', async () => {
 			newChannelTypeCustomCmd = await client.createChannelType({
 				name: uuidv4(),
 				commands: ['excuse', 'fun_set', 'ban'],
@@ -2351,7 +2983,7 @@ describe('Channel types', function () {
 			expect(newChannelTypeCustomCmd.commands).like(['excuse', 'giphy', 'ban']);
 		});
 
-		it('Should fail non-existing command', async function () {
+		it('Should fail non-existing command', async () => {
 			await expectHTTPErrorCode(
 				400,
 				client.createChannelType({
@@ -2366,7 +2998,7 @@ describe('Channel types', function () {
 		let channelType, channelTypeName;
 		let channelPermissions;
 
-		it('default is fine', async function () {
+		it('default is fine', async () => {
 			const response = await client.updateChannelType('messaging', {
 				mutes: false,
 				reactions: false,
@@ -2393,11 +3025,11 @@ describe('Channel types', function () {
 			expect(reverted.replies).to.have.true;
 		});
 
-		it('updating a not existing one should fail', async function () {
+		it('updating a not existing one should fail', async () => {
 			await expectHTTPErrorCode(404, client.updateChannelType(`${uuidv4()}`, {}));
 		});
 
-		it('create a new one with defaults', async function () {
+		it('create a new one with defaults', async () => {
 			channelTypeName = uuidv4();
 			channelType = await client.createChannelType({
 				name: channelTypeName,
@@ -2414,7 +3046,7 @@ describe('Channel types', function () {
 			await sleep(1000);
 		});
 
-		it('defaults should be there via channel.watch', async function () {
+		it('defaults should be there via channel.watch', async () => {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
@@ -2443,7 +3075,7 @@ describe('Channel types', function () {
 			expect(data.channel.config).like(expectedData);
 		});
 
-		it('flip replies config to false', async function () {
+		it('flip replies config to false', async () => {
 			const response = await client.updateChannelType(channelTypeName, {
 				replies: false,
 			});
@@ -2451,7 +3083,7 @@ describe('Channel types', function () {
 			await sleep(1000);
 		});
 
-		it('flip url_enrichment config to false', async function () {
+		it('flip url_enrichment config to false', async () => {
 			const response = await client.updateChannelType(channelTypeName, {
 				url_enrichment: false,
 			});
@@ -2459,7 +3091,7 @@ describe('Channel types', function () {
 			await sleep(1000);
 		});
 
-		it('new configs should be returned from channel.query', async function () {
+		it('new configs should be returned from channel.query', async () => {
 			const client = await getTestClientForUser('tommaso');
 			const data = await client.channel(channelTypeName, 'test').watch();
 			const expectedData = {
@@ -2488,7 +3120,7 @@ describe('Channel types', function () {
 			expect(data.channel.config).like(expectedData);
 		});
 
-		it('changing permissions', async function () {
+		it('changing permissions', async () => {
 			const response = await client.updateChannelType(channelTypeName, {
 				permissions: [
 					AllowAll,
@@ -2504,35 +3136,35 @@ describe('Channel types', function () {
 			});
 		});
 
-		it('changing commands to a bad one', async function () {
+		it('changing commands to a bad one', async () => {
 			const p = client.updateChannelType(channelTypeName, {
 				commands: ['bogus'],
 			});
 			await expectHTTPErrorCode(400, p);
 		});
 
-		it('changing commands to all', async function () {
+		it('changing commands to all', async () => {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['all'],
 			});
 			expect(response.commands).to.have.length(7);
 		});
 
-		it('changing commands to fun_set', async function () {
+		it('changing commands to fun_set', async () => {
 			const response = await client.updateChannelType(channelTypeName, {
 				commands: ['fun_set'],
 			});
 			expect(response.commands).to.have.length(1);
 		});
 
-		it('changing the name should fail', async function () {
+		it('changing the name should fail', async () => {
 			const p = client.updateChannelType(channelTypeName, {
 				name: 'something-else',
 			});
 			await expectHTTPErrorCode(400, p);
 		});
 
-		it('changing the updated_at field should fail', async function () {
+		it('changing the updated_at field should fail', async () => {
 			const p = client.updateChannelType(channelTypeName, {
 				updated_at: 'something-else',
 			});
@@ -2541,7 +3173,7 @@ describe('Channel types', function () {
 	});
 
 	describe('Updating channel types with custom command', function () {
-		it('default is fine', async function () {
+		it('default is fine', async () => {
 			const response = await client.updateChannelType(
 				newChannelTypeCustomCmd.name,
 				{
@@ -2552,7 +3184,7 @@ describe('Channel types', function () {
 			expect(response.commands).like(['excuse', 'giphy', 'ban']);
 		});
 
-		it('updating to a non existing command should fail', async function () {
+		it('updating to a non existing command should fail', async () => {
 			await expectHTTPErrorCode(
 				400,
 				client.updateChannelType(newChannelTypeCustomCmd.name, {
@@ -2565,25 +3197,25 @@ describe('Channel types', function () {
 	describe('Deleting channel types', function () {
 		const name = uuidv4();
 
-		it('should fail to delete a missing type', async function () {
+		it('should fail to delete a missing type', async () => {
 			await expectHTTPErrorCode(404, client.deleteChannelType(uuidv4()));
 		});
 
-		it('should work fine', async function () {
+		it('should work fine', async () => {
 			await client.createChannelType({ name });
 			await sleep(1000);
 			await client.deleteChannelType(name);
 			await sleep(1000);
 		});
 
-		it('should fail to delete a deleted type', async function () {
+		it('should fail to delete a deleted type', async () => {
 			await expectHTTPErrorCode(404, client.deleteChannelType(name));
 		});
 
 		describe('deleting a channel type with active channels should fail', function () {
 			const typeName = uuidv4();
 
-			it('create a new type', async function () {
+			it('create a new type', async () => {
 				await client.createChannelType({
 					name: typeName,
 					roles: {
@@ -2593,12 +3225,12 @@ describe('Channel types', function () {
 				await sleep(1000);
 			});
 
-			it('create a channel of the new type', async function () {
+			it('create a channel of the new type', async () => {
 				const tClient = await getTestClientForUser('tommaso');
 				await tClient.channel(typeName, 'general').watch();
 			});
 
-			it('create a channel of the new type', async function () {
+			it('create a channel of the new type', async () => {
 				await expectHTTPErrorCode(400, client.deleteChannelType(typeName));
 			});
 		});
@@ -2607,11 +3239,11 @@ describe('Channel types', function () {
 	describe('Get channel type', function () {
 		let channelData;
 
-		it('should fail to get a missing type', async function () {
+		it('should fail to get a missing type', async () => {
 			await expectHTTPErrorCode(404, client.getChannelType(uuidv4()));
 		});
 
-		it('should return messaging type correctly', async function () {
+		it('should return messaging type correctly', async () => {
 			channelData = await client.getChannelType('messaging');
 		});
 
@@ -2668,7 +3300,7 @@ describe('Channel types', function () {
 	describe('List channel types', function () {
 		let channelTypes;
 
-		it('should return at least the defaults channel types', async function () {
+		it('should return at least the defaults channel types', async () => {
 			channelTypes = await client.listChannelTypes();
 			expect(Object.keys(channelTypes.channel_types).length).to.gte(10);
 		});
@@ -2730,15 +3362,15 @@ describe('Channel types', function () {
 			client2 = await getTestClientForUser('tommaso');
 		});
 
-		it('should fail to create', async function () {
+		it('should fail to create', async () => {
 			await expectHTTPErrorCode(403, client2.createChannelType({ name: uuidv4() }));
 		});
 
-		it('should fail to delete', async function () {
+		it('should fail to delete', async () => {
 			await expectHTTPErrorCode(403, client2.deleteChannelType('messaging'));
 		});
 
-		it('should fail to update', async function () {
+		it('should fail to update', async () => {
 			await expectHTTPErrorCode(403, client2.updateChannelType('messaging', {}));
 		});
 	});
@@ -2751,20 +3383,20 @@ describe('Unread counts are properly initialised', function () {
 	let serverSideClient;
 	const channelID = `group-${uuidv4()}`;
 
-	before(async function () {
+	before(async () => {
 		//create 3 user in 3 different ways
 		//it is possible to create users by
 		//   * client.setUser
 		//   * client.updateUser
 		//   * client.sendMessage/channel.create
-		serverSideClient = await getTestClient(true);
-		await serverSideClient.updateUser({ id: userCreatedByUpdateUsers });
+		serverSideClient = getTestClient(true);
+		await serverSideClient.upsertUser({ id: userCreatedByUpdateUsers });
 		let channel = serverSideClient.channel('messaging', channelID, {
 			created_by_id: userCreatedByCreateChannel,
 		});
 		await channel.create();
 		await serverSideClient.setUser({ id: userCreatedByConnect });
-		serverSideClient = await getTestClient(true);
+		serverSideClient = getTestClient(true);
 		channel = serverSideClient.channel('messaging', channelID);
 		await channel.addMembers([
 			userCreatedByConnect,
@@ -2773,7 +3405,7 @@ describe('Unread counts are properly initialised', function () {
 		]);
 	});
 
-	it('validate unread counts', async function () {
+	it('validate unread counts', async () => {
 		//send a message with user created  by ws connect
 		let client = await getTestClientForUser(userCreatedByConnect);
 		const channel = client.channel('messaging', channelID);

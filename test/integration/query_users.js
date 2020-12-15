@@ -14,6 +14,7 @@ import {
 	createUsers,
 	runAndLogPromise,
 	sleep,
+	expectHTTPErrorCode,
 } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,6 +33,25 @@ describe('Query Users', function () {
 		const response = await client.queryUsers({ id: { $in: [userID] } });
 		expect(response.users.length).to.equal(1);
 		expect(response.users[0].id).to.equal(userID);
+	});
+
+	describe('query users by teams', async () => {
+		const userID = uuidv4();
+		let client;
+
+		before(async () => {
+			client = await getTestClientForUser(userID);
+		});
+
+		it('with null for missing ones', async () => {
+			const response = await client.queryUsers({ teams: null, id: userID });
+			expect(response.users.length).to.equal(1);
+			expect(response.users[0].id).to.equal(userID);
+		});
+
+		it('not null expects error', async () => {
+			await expectHTTPErrorCode(400, client.queryUsers({ teams: '', id: userID }));
+		});
 	});
 
 	it('autocomplete users by name or username', async function () {
@@ -202,5 +222,95 @@ describe('Query Users', function () {
 		expect(mute2.user.id).eq(userID);
 		expect(mute2.expires).to.not.be.undefined;
 		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
+	});
+
+	describe('$autocompete queries should be sanitized properly', () => {
+		let user, numericalUserID, numericalUser, client;
+
+		before(async () => {
+			const userID = 'ruud-qu';
+			const unique = uuidv4();
+			numericalUserID = '7658904326';
+			user = {
+				id: userID,
+				unique,
+				name: 'Ruud QU',
+			};
+
+			numericalUser = {
+				id: numericalUserID,
+				name: '',
+			};
+
+			client = await getTestClientForUser(userID, 'all good', user);
+			await getTestClientForUser(
+				numericalUserID,
+				'all good numerical',
+				numericalUser,
+			);
+		});
+
+		it('empty $autocomplete query should lead to a status 400 error', async () => {
+			let error = false;
+			try {
+				await client.queryUsers({
+					id: { $autocomplete: '' },
+					name: { $autocomplete: 'Ru' },
+				});
+			} catch (e) {
+				error = true;
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+				expect(e.response.data.message).to.equal(
+					'QueryUsers failed with error: "$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete"',
+				);
+			}
+			expect(error).to.be.true;
+		});
+
+		it('$autocomplete query with linebreak', async () => {
+			const response = await client.queryUsers({
+				id: {
+					$autocomplete: `Ru  
+						`,
+				},
+			});
+			expect(response.users).to.not.be.undefined;
+			expect(response.users[0].id).to.equal(user.id);
+		});
+
+		it('$autocomplete query with special characters', async () => {
+			let error = false;
+
+			try {
+				await client.queryUsers({
+					id: {
+						$autocomplete: `+$#@`,
+					},
+				});
+			} catch (e) {
+				error = true;
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+				expect(e.response.data.message).to.equal(
+					'QueryUsers failed with error: "$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete"',
+				);
+			}
+			expect(error).to.be.true;
+		});
+
+		it('$autocomplete query with special characters, but with valid results', async () => {
+			const result = await client.queryUsers({
+				id: {
+					$autocomplete: `Ru+$#@!`,
+				},
+			});
+			expect(result.users).to.not.be.undefined;
+			expect(result.users.length).to.be.gt(0);
+		});
 	});
 });

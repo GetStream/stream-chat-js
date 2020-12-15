@@ -63,6 +63,7 @@ export type AppSettingsAPIResponse<
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
+        custom_events?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -89,6 +90,7 @@ export type AppSettingsAPIResponse<
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
@@ -678,6 +680,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
   connection_id?: string;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -790,6 +793,16 @@ export type SearchOptions = {
 export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
   logger?: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
 };
 
@@ -1198,12 +1211,18 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
+  enforce_unique_usernames?: 'no' | 'app' | 'team';
   firebase_config?: {
+    credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
+  };
+  push_config?: {
+    version?: string;
   };
   webhook_url?: string;
 };
@@ -1257,6 +1276,7 @@ export type ChannelConfigFields = {
   automod_behavior?: ChannelConfigAutomodBehavior;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1373,6 +1393,7 @@ export type Field = {
 };
 
 export type FirebaseConfig = {
+  credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
@@ -1393,6 +1414,25 @@ export type Message<
 > = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
+
+export type UpdatedMessage<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'mentioned_users'
+> & { mentioned_users?: string[] };
 
 export type MessageBase<
   AttachmentType = UnknownType,

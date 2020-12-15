@@ -12,6 +12,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { get } from 'https';
 
 const expect = chai.expect;
 
@@ -1738,8 +1739,24 @@ describe('unread counts on hard delete messages', function () {
 
 describe('channel message search', function () {
 	let authClient;
+	const userID = uuidv4();
 	before(async () => {
-		authClient = await getTestClientForUser(uuidv4());
+		authClient = await getTestClientForUser(userID);
+	});
+
+	it('No searchable fails', async () => {
+		const channelID = uuidv4();
+		// search is disabled for gaming
+		const channel = getServerTestClient().channel('gaming', channelID, {
+			created_by_id: userID,
+			members: [userID],
+		});
+		await channel.create();
+		await expectHTTPErrorCode(400, channel.search('missing'));
+		await expectHTTPErrorCode(
+			400,
+			authClient.channel('gaming', channelID).search('missing'),
+		);
 	});
 
 	it('Basic Query (old format)', async function () {
@@ -2021,5 +2038,29 @@ describe('update channel with reserved fields', function () {
 
 	it('should not fail when re-using channel._data', async function () {
 		await channel.update(channel._data);
+	});
+});
+
+describe('notification.channel_deleted', () => {
+	let channel;
+	const member = 'member' + uuidv4();
+
+	before(async () => {
+		const creator = 'creator' + uuidv4();
+		await createUsers([member, creator]);
+		const c = await getTestClient(true);
+
+		channel = c.channel('messaging', uuidv4(), {
+			created_by_id: creator,
+			members: [creator, member],
+		});
+		await channel.create();
+	});
+
+	it('member should receive channel delete notification, when not watching the channel', async () => {
+		const memberClient = await getTestClientForUser(member);
+		const waiter = createEventWaiter(memberClient, 'notification.channel_deleted');
+		await channel.delete();
+		await waiter;
 	});
 });
