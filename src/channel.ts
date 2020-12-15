@@ -396,6 +396,7 @@ export class Channel<
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
    * @param {string} [user_id] the id of the user (used only for server side request) default null
+   * @param {boolean} [enforce_unique] set true to overwrite existing reactions if any
    *
    * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
@@ -403,6 +404,7 @@ export class Channel<
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
     user_id?: string,
+    enforce_unique?: boolean,
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -412,6 +414,7 @@ export class Channel<
     }
     const body = {
       reaction,
+      enforce_unique,
     };
     if (user_id != null) {
       body.reaction = { ...reaction, user: { id: user_id } as UserResponse<UserType> };
@@ -1546,8 +1549,12 @@ export class Channel<
           const ownMessage = event.user?.id === this.getClient().user?.id;
           s.addMessageSorted(event.message, ownMessage);
 
-          if (ownMessage) {
+          if (ownMessage && event.user?.id) {
             s.unreadCount = 0;
+            s.read = s.read.set(
+              event.user.id,
+              Immutable({ user: { ...event.user }, last_read: event.created_at }),
+            );
           } else if (this._countMessageAsUnread(event.message)) {
             s.unreadCount = s.unreadCount + 1;
           }
