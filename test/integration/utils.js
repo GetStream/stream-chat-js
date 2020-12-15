@@ -165,7 +165,7 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 			res.end(JSON.stringify(response));
 		},
 	};
-	const port = (Math.random() * 65535) | 60000;
+	const port = Math.floor(Math.random() * 1000) + 60000;
 	const server = http.createServer(function (req, res) {
 		let body = '';
 
@@ -184,5 +184,6 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 		}),
 		server.listen(port, localHost),
 	]);
+	
 	return webhook;
 }
