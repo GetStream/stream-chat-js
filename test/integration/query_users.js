@@ -40,7 +40,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 		const serverClient = getServerTestClient();
-		await serverClient.upsertUsers([
+		await serverClient.setUsers([
 			{
 				id: userID,
 				unique,
@@ -123,7 +123,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 
-		await client.upsertUsers([
+		await client.setUsers([
 			{
 				id: userID,
 				unique,
@@ -166,7 +166,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 
-		await client.upsertUsers([
+		await client.setUsers([
 			{
 				id: userID,
 				unique,
@@ -202,73 +202,5 @@ describe('Query Users', function () {
 		expect(mute2.user.id).eq(userID);
 		expect(mute2.expires).to.not.be.undefined;
 		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
-	});
-
-	describe('$autocompete queries should be sanitized properly', () => {
-		let user, numericalUserID, numericalUser, client;
-
-		before(async () => {
-			const userID = 'ruud-qu';
-			const unique = uuidv4();
-			numericalUserID = '7658904326';
-			user = {
-				id: userID,
-				unique,
-				name: 'Ruud QU',
-			};
-
-			numericalUser = {
-				id: numericalUserID,
-				name: '',
-			};
-
-			client = await getTestClientForUser(userID, 'all good', user);
-			await getTestClientForUser(
-				numericalUserID,
-				'all good numerical',
-				numericalUser,
-			);
-		});
-
-		it('empty $autocomplete query should lead to a status 400 error', async () => {
-			let error = false;
-			try {
-				await client.queryUsers({
-					id: { $autocomplete: '' },
-					name: { $autocomplete: 'Ru' },
-				});
-			} catch (e) {
-				error = true;
-				expect(e.response).to.not.be.undefined;
-				expect(e.response.data).to.not.be.undefined;
-				expect(e.response.data.code).to.equal(4);
-				expect(e.response.data.StatusCode).to.equal(400);
-				expect(e.response.data.message).to.equal(
-					'QueryUsers failed with error: "$autocomplete field empty. Please provide a string to autocomplete"',
-				);
-			}
-			expect(error).to.be.true;
-		});
-
-		it('$autocomplete query with linebreak', async () => {
-			const response = await client.queryUsers({
-				id: {
-					$autocomplete: `Ru  
-						`,
-				},
-			});
-			expect(response.users).to.not.be.undefined;
-			expect(response.users[0].id).to.equal(user.id);
-		});
-
-		it('$autocomplete query with numerical id', async () => {
-			const response = await client.queryUsers({
-				id: {
-					$autocomplete: numericalUserID,
-				},
-			});
-			expect(response.users).to.not.be.undefined;
-			expect(response.users[0].id).to.equal(numericalUser.id);
-		});
 	});
 });
