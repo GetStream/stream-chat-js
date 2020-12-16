@@ -5,9 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 const expect = chai.expect;
 
 describe('Before Message Send Webhook', function () {
-	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
-	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
-
 	const tommasoID = `tommaso-${uuidv4()}`;
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);

@@ -122,7 +122,7 @@ export function createEventWaiter(clientOrChannel, eventTypes) {
 
 export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 	const localHost = process.env.STREAM_LOCAL_TEST_HOST ? '0.0.0.0' : '127.0.0.1';
-	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa' : '127.0.0.1';
+	const hookHost = process.env.STREAM_LOCAL_TEST_HOST ? 'chat-qa-dev' : '127.0.0.1';
 
 	const webhook = {
 		requested: false,
