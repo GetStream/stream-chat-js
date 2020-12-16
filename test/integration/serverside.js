@@ -1464,6 +1464,15 @@ describe('App configs', function () {
 			await expect(p).to.be.rejectedWith(`User has no enabled devices associated`);
 		});
 
+		it('User has no devices but skips devices', async () => {
+			const response = await client.testPushSettings(userID, {
+				apnTemplate: `{"text": "some"}`,
+				skipDevices: true,
+			});
+			expect(response.skip_devices).to.eq(true);
+			expect(response.rendered_apn_template).to.eq(`{"text": "some"}`);
+		});
+
 		it('App has push disabled', async () => {
 			const p = client.testPushSettings(userID);
 			await expect(p).to.be.rejectedWith(
@@ -1777,6 +1786,15 @@ describe('App configs', function () {
 			await client.updateAppSettings({ apn_config });
 			const p = client.testPushSettings(userID);
 			await expect(p).to.be.rejectedWith(`User has no enabled devices associated`);
+		});
+
+		it('User has no devices but skips devices', async () => {
+			const response = await client.testPushSettings(userID, {
+				firebaseTemplate: `{"text": "some"}`, // ignored due to v2
+				skipDevices: true,
+			});
+			expect(response.skip_devices).to.eq(true);
+			expect(response.rendered_message).to.not.eq(undefined);
 		});
 
 		it('App has push disabled', async () => {
