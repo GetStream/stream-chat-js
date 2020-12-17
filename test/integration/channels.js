@@ -2064,3 +2064,48 @@ describe('notification.channel_deleted', () => {
 		await waiter;
 	});
 });
+
+describe.only('partial update channel', () => {
+	let channel;
+	let ssClient;
+	let ownerClient;
+	let modClient;
+	let memberClient;
+	const moderator = uuidv4();
+	const member = uuidv4();
+	const owner = uuidv4();
+
+	before(async () => {
+		ssClient = await getServerTestClient();
+		ownerClient = await getTestClientForUser(owner);
+		modClient = await getTestClientForUser(moderator);
+		memberClient = await getTestClientForUser(member);
+		channel = ownerClient.channel('messaging', uuidv4(), {
+			members: [owner, moderator, member],
+			source: 'user',
+			source_detail: { user_id: 123 },
+			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+		});
+		await channel.create();
+	});
+
+	it('change the source property', async () => {
+		const resp = await channel.updatePartial({ set: { source: 'system' } });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.eql({ user_id: 123 });
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('unset the source_detail', async () => {
+		const resp = await channel.updatePartial({ unset: ['source_detail'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+});
