@@ -433,7 +433,8 @@ export class StreamChat<
 				  messageID: 'id-of-message',//will error if message does not exist
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+          firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+          skipDevices: true, // skip config/device checks and sending to real devices
 			}
 	 */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
@@ -445,6 +446,7 @@ export class StreamChat<
       ...(data.firebaseDataTemplate
         ? { firebase_data_template: data.firebaseDataTemplate }
         : {}),
+      ...(data.skipDevices ? { skip_devices: true } : {}),
     });
   }
 
@@ -1235,7 +1237,6 @@ export class StreamChat<
     const payload = {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
-      user_details: this._user,
       ...defaultOptions,
       ...options,
     };
