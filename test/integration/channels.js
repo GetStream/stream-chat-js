@@ -444,7 +444,7 @@ describe('Channels - members', function () {
 			});
 		});
 
-		describe('When leaving the channel', () => {
+		describe('Distinct channel manipulations', () => {
 			it('successfully joins back if the channel is distinct', async () => {
 				const { channel } = await tommasoClient
 					.channel('messaging', { members: initialMembers })
@@ -482,6 +482,78 @@ describe('Channels - members', function () {
 					tommasoClient
 						.channel('messaging', resp.channel.id)
 						.addMembers([tommasoID]),
+				);
+			});
+			it('X leaves [X,Y] and creates the channel again', async () => {
+				// Case 1
+				// 1. X creates distinct channel [X,Y]
+				// 2. X sends a message
+				// 3. X leaves the channel
+				// 4. X creates distinct channel [X,Y]
+				// 5. X sends a message
+				// Expected behavior: X should be added back as a channel member and see all the messages
+				const userX = 'x-' + uuidv4();
+				const userY = 'y-' + uuidv4();
+				await createUsers([userX, userY]);
+				const clientX = getTestClient();
+				await clientX.setUser({ id: userX }, createUserToken(userX));
+				const clientY = getTestClient();
+				await clientY.setUser({ id: userY }, createUserToken(userY));
+
+				let channelX = clientX.channel('messaging', { members: [userX, userY] });
+				await channelX.create();
+				const channelCID = channelX.cid;
+				await channelX.sendMessage({ text: 'msg1' });
+				await channelX.removeMembers([userX]);
+				channelX = clientX.channel('messaging', { members: [userX, userY] });
+				const { members: membersX } = await channelX.create();
+				await channelX.sendMessage({ text: 'msg2' });
+				const { messages: messagesX } = await channelX.query({
+					messages: { limit: 2 },
+				});
+
+				expect(channelCID).to.be.equal(channelX.cid);
+				expect(membersX.length).to.be.equal(2);
+				expect(messagesX.length).to.be.equal(2);
+				expect(messagesX[0].text).to.be.equal('msg1');
+				expect(messagesX[1].text).to.be.equal('msg2');
+
+				// The same thing the other way around. When Y creates distinct channel, X should not be added back
+				// Case 2 (continuation from case 1)
+				// 1. Y creates distinct channel [X,Y] (receives existing channel)
+				// 2. Y sends a message
+				// 3. X leaves the channel
+				// 4. Y creates distinct channel [X,Y] (receives existing channel)
+				// 5. Y sends a message
+				// Expected behavior: Y should be able to interact with channel freely, but X will not be added back when Y recreates the channel
+				await channelX.removeMembers([userX]);
+				const channelY = clientY.channel('messaging', {
+					members: [userX, userY],
+				});
+				const { members: membersY } = await channelY.create();
+				await channelY.sendMessage({ text: 'msg3' });
+				const { messages: messagesY } = await channelY.query({
+					messages: { limit: 3 },
+				});
+
+				expect(channelY.cid).to.be.equal(channelX.cid);
+				expect(membersY.length).to.be.equal(1);
+				expect(messagesY.length).to.be.equal(3);
+				expect(messagesY[0].text).to.be.equal('msg1');
+				expect(messagesY[1].text).to.be.equal('msg2');
+				expect(messagesY[2].text).to.be.equal('msg3');
+			});
+			it('X cannot create distinct channel [Y,Z]', async () => {
+				const userX = uuidv4();
+				const userY = uuidv4();
+				const userZ = uuidv4();
+				await createUsers([userX, userY, userZ]);
+				const clientX = getTestClient();
+				await clientX.setUser({ id: userX }, createUserToken(userX));
+				await expectHTTPErrorCode(
+					403,
+					clientX.channel('messaging', { members: [userY, userZ] }).create(),
+					'StreamChat error code 17: GetOrCreateChannel failed with error: "When creating distinct channel, the creator should be present as a member"',
 				);
 			});
 		});
