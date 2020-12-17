@@ -428,8 +428,6 @@ export type MessageResponse<
   status?: string;
   type?: string;
   updated_at?: string;
-  webhook_failed?: boolean;
-  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -1213,8 +1211,10 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
+  enforce_unique_usernames?: 'no' | 'app' | 'team';
   firebase_config?: {
     credentials_json: string;
     data_template?: string;
@@ -1549,6 +1549,7 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
