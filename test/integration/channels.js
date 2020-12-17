@@ -2064,3 +2064,146 @@ describe('notification.channel_deleted', () => {
 		await waiter;
 	});
 });
+
+describe('Threadless replies', () => {
+	let client, channel, ruud, friend, firstMessage;
+
+	before(async () => {
+		ruud = 'ruud-' + uuidv4();
+		friend = 'friend-' + uuidv4();
+		await createUsers([ruud, friend]);
+		client = await getTestClient(true);
+		channel = client.channel('messaging', uuidv4(), {
+			created_by_id: ruud,
+			members: [ruud, friend],
+		});
+		await channel.create();
+	});
+
+	after(async () => {
+		await channel.delete();
+		await client.deleteUser(ruud, { hard_delete: true });
+		await client.deleteUser(friend, { hard_delete: true });
+	});
+
+	describe('Ruud sends a message in the channel', () => {
+		it('is possible to create a message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The one message to rule them all',
+				user_id: ruud,
+			});
+			firstMessage = res.message;
+		});
+	});
+
+	describe('Friend replies to the message in a thread', () => {
+		it('is possible to reply to the message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first threaded reply',
+				user_id: friend,
+				parent_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.parent_id).to.not.be.undefined;
+			expect(res.message.type).to.equal('reply');
+		});
+	});
+
+	describe('Friend sends a threadless / quoted reply', () => {
+		let threadlessReply;
+
+		it("is possible to send a reply that isn't in a thread", async () => {
+			const res = await channel.sendMessage({
+				text: 'The first threadless reply',
+				user_id: friend,
+				reply_to_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
+			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.text).to.not.be.undefined;
+			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+
+			threadlessReply = res.message;
+		});
+
+		it('the threadless reply is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.not.be.undefined;
+			expect(clm.id).to.equal(threadlessReply.id);
+			expect(clm.reply_to_message_id).to.not.be.undefined;
+			expect(clm.reply_to_message).to.not.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
+			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
+			expect(clm.reply_to_message.text).to.not.be.undefined;
+			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Ruud and friend send 15 random messages each and try sending a threadless reply again', () => {
+		let threadlessReply;
+
+		it('is possible to send random messages', async () => {
+			for (let i = 0; i < 15; i++) {
+				await channel.sendMessage({ text: uuidv4(), user_id: ruud });
+				await channel.sendMessage({ text: uuidv4(), user_id: friend });
+			}
+		});
+
+		it('is still possible to make a threadless reply to the first message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The second threadless reply',
+				user_id: friend,
+				reply_to_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
+			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.text).to.not.be.undefined;
+			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+
+			threadlessReply = res.message;
+		});
+
+		it('the threadless reply is still properly enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.not.be.undefined;
+			expect(clm.id).to.equal(threadlessReply.id);
+			expect(clm.reply_to_message_id).to.not.be.undefined;
+			expect(clm.reply_to_message).to.not.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
+			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
+			expect(clm.reply_to_message.text).to.not.be.undefined;
+			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+});
