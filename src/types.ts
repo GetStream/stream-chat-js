@@ -1549,6 +1549,7 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
