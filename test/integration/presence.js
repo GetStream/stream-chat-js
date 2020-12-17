@@ -135,17 +135,19 @@ describe('Presence', function () {
 			const results = [];
 			const eventPromise = new Promise((resolve) => {
 				b.on('all', (e) => {
-					results.push([e.watcher_count, e.user.id]);
-					expect(e.watcher_count).to.equal(b.state.watcher_count);
-					// expect to see thierry join, james join and james leave
-					if (results.length === 3) {
-						const expected = [
-							[1, 'user1'],
-							[2, 'james'],
-							[1, 'james'],
-						];
-						expect(results).to.deep.equal(expected);
-						resolve();
+					if (e.type.split('.')[0] !== 'notification') {
+						results.push([e.watcher_count, e.user.id]);
+						expect(e.watcher_count).to.equal(b.state.watcher_count);
+						// expect to see thierry join, james join and james leave
+						if (results.length === 3) {
+							const expected = [
+								[1, 'user1'],
+								[2, 'james'],
+								[1, 'james'],
+							];
+							expect(results).to.deep.equal(expected);
+							resolve();
+						}
 					}
 				});
 			});
