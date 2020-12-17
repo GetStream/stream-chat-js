@@ -428,8 +428,6 @@ export type MessageResponse<
   status?: string;
   type?: string;
   updated_at?: string;
-  webhook_failed?: boolean;
-  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -1555,6 +1553,7 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
