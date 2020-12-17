@@ -135,7 +135,7 @@ describe('Presence', function () {
 			const results = [];
 			const eventPromise = new Promise((resolve) => {
 				b.on('all', (e) => {
-					if (e.type.split('.')[0] !== 'notification') {
+					if (!e.type.startsWith('notification.')) {
 						results.push([e.watcher_count, e.user.id]);
 						expect(e.watcher_count).to.equal(b.state.watcher_count);
 						// expect to see thierry join, james join and james leave
