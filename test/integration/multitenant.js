@@ -254,7 +254,7 @@ describe('Custom permissions and roles', function () {
 	it('get missing custom permission should return a 404', async function () {
 		const p = client.getPermission('cbsdhbvsdfh');
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 16: CreateGetCustomPermission failed with error: "custom permission "cbsdhbvsdfh" not found"',
+			'StreamChat error code 16: GetCustomPermission failed with error: "custom permission "cbsdhbvsdfh" not found"',
 		);
 	});
 
@@ -316,7 +316,7 @@ describe('Custom permissions and roles', function () {
 		}
 		const p = client.deleteRole('rockstar');
 		await expect(p).to.be.rejectedWith(
-			`StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "rockstar" cannot be deleted, at least one user is using this role (ie. "${userId}")"`,
+			`StreamChat error code 4: DeleteCustomRole failed with error: "role "rockstar" cannot be deleted, at least one user is using this role (ie. "${userId}")"`,
 		);
 	});
 
@@ -337,14 +337,14 @@ describe('Custom permissions and roles', function () {
 	it('delete a custom role that does not exist', async function () {
 		const p = client.deleteRole('rockstar');
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "rockstar" does not exist"',
+			'StreamChat error code 4: DeleteCustomRole failed with error: "role "rockstar" does not exist"',
 		);
 	});
 
 	it('delete a built-in role should fail', async function () {
 		const p = client.deleteRole('admin');
 		await expect(p).to.be.rejectedWith(
-			'StreamChat error code 4: CreateDeleteCustomRole failed with error: "role "admin" is a built-in role and cannot be deleted"',
+			'StreamChat error code 4: DeleteCustomRole failed with error: "role "admin" is a built-in role and cannot be deleted"',
 		);
 	});
 });
