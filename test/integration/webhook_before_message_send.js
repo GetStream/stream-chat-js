@@ -26,14 +26,12 @@ describe('Before Message Send Webhook', function () {
 	});
 
 	it('Webhook gets called', async () => {
-		const resp = await chan.sendMessage({
+		await chan.sendMessage({
 			text: 'sample_text',
 			user: { id: tommasoID },
 		});
 		expect(webhook.requested).to.eq(true);
 		expect(webhook.request.message.text).to.eq('sample_text');
-		expect(resp.message.webhook_id).not.to.be.null;
-		expect(resp.message.webhook_failed).to.be.false;
 	});
 
 	it('Webhook changes text', async () => {
@@ -54,25 +52,15 @@ describe('Before Message Send Webhook', function () {
 		expect(webhook.requested).to.eq(true);
 		expect(webhook.request.message.text).to.eq('hi');
 		expect(resp.message.text).to.eq('hi');
-		expect(resp.message.webhook_failed).to.be.true;
-
-		const { results } = await chan.search({
-			webhook_failed: {
-				$eq: true,
-			},
-		});
-		expect(results[0].message.id).to.eq(resp.message.id);
 	});
 
 	it("Webhook doesn't get called when it's disabled", async () => {
 		await webhook.tearDown();
-		const { message } = await chan.sendMessage({
+		await chan.sendMessage({
 			text: uuidv4(),
 			user: { id: tommasoID },
 		});
 		expect(webhook.requested).to.eql(false);
-		expect(message.webhook_id).to.be.empty;
-		expect(message.webhook_failed).to.eql(false);
 		webhook = await setupWebhook(client, 'before_message_send_hook_url');
 	});
 
@@ -83,7 +71,6 @@ describe('Before Message Send Webhook', function () {
 		});
 		expect(message.user.id).to.eql(tommasoID);
 		expect(webhook.requested).to.eql(true);
-		expect(message.webhook_failed).to.eql(false);
 	});
 
 	it('Returning empty body should fail the webhook', async () => {
@@ -94,7 +81,6 @@ describe('Before Message Send Webhook', function () {
 		});
 		expect(message.user.id).to.eql(tommasoID);
 		expect(webhook.requested).to.eql(true);
-		expect(message.webhook_failed).to.eql(true);
 	});
 
 	it('Webhook gets a call when updating a message too', async () => {
@@ -114,7 +100,6 @@ describe('Before Message Send Webhook', function () {
 		expect(message.user.id).to.eql(tommasoID);
 		expect(message.text).to.eql('bad bad bad');
 		expect(webhook.requested).to.eql(true);
-		expect(message.webhook_failed).to.eql(false);
 	});
 
 	it('Webhook changes type to ERROR on update', async () => {
@@ -134,7 +119,6 @@ describe('Before Message Send Webhook', function () {
 		expect(message.user.id).to.eql(tommasoID);
 		expect(message.type).to.eql('error');
 		expect(webhook.requested).to.eql(true);
-		expect(message.webhook_failed).to.eql(false);
 	});
 
 	it('Webhooks adds custom field', async () => {
@@ -148,7 +132,6 @@ describe('Before Message Send Webhook', function () {
 		});
 		expect(message.user.id).to.eql(tommasoID);
 		expect(message.myCustomThingie).to.eql(42);
-		expect(message.webhook_failed).to.eql(false);
 	});
 
 	it('Webhook changes type to error on create', async () => {
@@ -162,7 +145,6 @@ describe('Before Message Send Webhook', function () {
 		});
 		expect(message.user.id).to.eql(tommasoID);
 		expect(message.type).to.eql('error');
-		expect(message.webhook_failed).to.eql(false);
 	});
 
 	it('Errored messages do not exist', async () => {
@@ -184,6 +166,5 @@ describe('Before Message Send Webhook', function () {
 		});
 		expect(message.user.id).to.eql(tommasoID);
 		expect(message.type).to.eql('regular');
-		expect(message.webhook_failed).to.eql(true);
 	});
 });
