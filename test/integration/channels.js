@@ -2065,7 +2065,7 @@ describe('notification.channel_deleted', () => {
 	});
 });
 
-describe.only('partial update channel', () => {
+describe('partial update channel', () => {
 	let channel;
 	let ssClient;
 	let ownerClient;
@@ -2132,35 +2132,19 @@ describe.only('partial update channel', () => {
 	it('partial update concurrently works', async () => {
 		// keep in mind that there is no way to ensure ordering...
 		const promises = [];
-		for (let i = 0; i < 4; i++) {
+		for (let i = 0; i < 3; i++) {
 			const field = 'field' + i.toString();
 			const update = { set: {} };
 			update.set[field] = field;
 			promises.push(channel.updatePartial(update));
 		}
-
 		await Promise.all(promises);
 
 		// expect all the fields to be present
-		const resp = await channel.query({ state: true });
+		const resp = await channel.query();
 		expect(resp.channel.field0).to.be.equal('field0');
 		expect(resp.channel.field1).to.be.equal('field1');
 		expect(resp.channel.field2).to.be.equal('field2');
-		expect(resp.channel.field3).to.be.equal('field3');
-	});
-
-	it('moderators and server side can set slowmode field', async () => {
-		// moderators can set cooldown
-		let resp = await modClient
-			.channel(channel.type, channel.id)
-			.updatePartial({ set: { cooldown: 10 } });
-		expect(resp.channel.cooldown).to.be.equal(10);
-
-		// server side auth can set cooldown
-		resp = await ssClient
-			.channel(channel.type, channel.id)
-			.updatePartial({ set: { cooldown: 0 } });
-		expect(resp.channel.cooldown).to.be.undefined;
 	});
 
 	it('moderators and server side can set slowmode field', async () => {
@@ -2178,7 +2162,6 @@ describe.only('partial update channel', () => {
 	});
 
 	it('team cannot be updated by moderators', async () => {
-		// moderators can set cooldown
 		await expectHTTPErrorCode(
 			403,
 			modClient
@@ -2186,5 +2169,19 @@ describe.only('partial update channel', () => {
 				.updatePartial({ set: { team: 'blue' } }),
 			'StreamChat error code 17: UpdateChannelPartial failed with error: "you are not allowed to update the field `team`"',
 		);
+	});
+
+	it('ensure that reserved fields cant be updated', async () => {
+		for (const field of ['updated_at', 'created_at', 'members', 'member_count']) {
+			const update = { set: {} };
+			update.set[field] = 0;
+			await expectHTTPErrorCode(
+				403,
+				modClient.channel(channel.type, channel.id).updatePartial(update),
+				'StreamChat error code 17: UpdateChannelPartial failed with error: "field `' +
+					field +
+					'` is reserved and cannot updated"',
+			);
+		}
 	});
 });
