@@ -2087,6 +2087,7 @@ describe.only('partial update channel', () => {
 			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
 		});
 		await channel.create();
+		await ssClient.channel(channel.type, channel.id).addModerators([moderator]);
 	});
 
 	it('change the source property', async () => {
@@ -2146,5 +2147,44 @@ describe.only('partial update channel', () => {
 		expect(resp.channel.field1).to.be.equal('field1');
 		expect(resp.channel.field2).to.be.equal('field2');
 		expect(resp.channel.field3).to.be.equal('field3');
+	});
+
+	it('moderators and server side can set slowmode field', async () => {
+		// moderators can set cooldown
+		let resp = await modClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 10 } });
+		expect(resp.channel.cooldown).to.be.equal(10);
+
+		// server side auth can set cooldown
+		resp = await ssClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 0 } });
+		expect(resp.channel.cooldown).to.be.undefined;
+	});
+
+	it('moderators and server side can set slowmode field', async () => {
+		// moderators can set cooldown
+		let resp = await modClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 10 } });
+		expect(resp.channel.cooldown).to.be.equal(10);
+
+		// server side auth can set cooldown
+		resp = await ssClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 0 } });
+		expect(resp.channel.cooldown).to.be.undefined;
+	});
+
+	it('team cannot be updated by moderators', async () => {
+		// moderators can set cooldown
+		await expectHTTPErrorCode(
+			403,
+			modClient
+				.channel(channel.type, channel.id)
+				.updatePartial({ set: { team: 'blue' } }),
+			'StreamChat error code 17: UpdateChannelPartial failed with error: "you are not allowed to update the field `team`"',
+		);
 	});
 });
