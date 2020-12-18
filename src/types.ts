@@ -1474,7 +1474,7 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   unset?: Array<keyof UserResponse<UserType>>;
 };
 
-export type PartialChannelUpdate<ChannelType = UnknownType> = {
+export type PartialUpdateChannel<ChannelType = UnknownType> = {
   set?: Partial<ChannelResponse<ChannelType>>;
   unset?: Array<keyof ChannelResponse<ChannelType>>;
 };

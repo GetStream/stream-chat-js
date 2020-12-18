@@ -27,7 +27,7 @@ import {
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
-  PartialChannelUpdate,
+  PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
   Reaction,
   ReactionAPIResponse,
@@ -530,12 +530,12 @@ export class Channel<
   /**
    * updatePartial - partial update channel properties
    *
-   * @param {PartialChannelUpdate<ChannelType>} partial update request
+   * @param {PartialUpdateChannel<ChannelType>} partial update request
    *
    * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
    */
-  async updatePartial(update: PartialChannelUpdate<ChannelType>) {
-    return this.getClient().patch<
+  async updatePartial(update: PartialUpdateChannel<ChannelType>) {
+    return await this.getClient().patch<
       PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this._channelURL(), update);
   }
