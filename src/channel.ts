@@ -537,9 +537,7 @@ export class Channel<
   async updatePartial(update: PartialChannelUpdate<ChannelType>) {
     return this.getClient().patch<
       PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(this._channelURL(), {
-      ...update,
-    });
+    >(this._channelURL(), update);
   }
 
   /**
