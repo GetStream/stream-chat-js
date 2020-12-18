@@ -543,19 +543,6 @@ describe('Channels - members', function () {
 				expect(messagesY[1].text).to.be.equal('msg2');
 				expect(messagesY[2].text).to.be.equal('msg3');
 			});
-			it('X cannot create distinct channel [Y,Z]', async () => {
-				const userX = uuidv4();
-				const userY = uuidv4();
-				const userZ = uuidv4();
-				await createUsers([userX, userY, userZ]);
-				const clientX = getTestClient();
-				await clientX.setUser({ id: userX }, createUserToken(userX));
-				await expectHTTPErrorCode(
-					403,
-					clientX.channel('messaging', { members: [userY, userZ] }).create(),
-					'StreamChat error code 17: GetOrCreateChannel failed with error: "When creating distinct channel, the creator should be present as a member"',
-				);
-			});
 		});
 
 		describe('when managing distinct channel members from server-side', () => {
