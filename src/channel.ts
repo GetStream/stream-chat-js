@@ -535,7 +535,7 @@ export class Channel<
    * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
    */
   async updatePartial(update: PartialChannelUpdate<ChannelType>) {
-    return await this.getClient().patch<
+    return this.getClient().patch<
       PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this._channelURL(), {
       ...update,
