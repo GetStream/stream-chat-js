@@ -2108,4 +2108,43 @@ describe.only('partial update channel', () => {
 			rating: 'pg',
 		});
 	});
+
+	it('set a nested property', async () => {
+		const resp = await channel.updatePartial({
+			set: { 'channel_detail.topic': 'Nature' },
+		});
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Nature',
+			rating: 'pg',
+		});
+	});
+
+	it('unset a nested property', async () => {
+		const resp = await channel.updatePartial({ unset: ['channel_detail.topic'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
+	});
+
+	it('partial update concurrently works', async () => {
+		// keep in mind that there is no way to ensure ordering...
+		const promises = [];
+		for (let i = 0; i < 4; i++) {
+			const field = 'field' + i.toString();
+			const update = { set: {} };
+			update.set[field] = field;
+			promises.push(channel.updatePartial(update));
+		}
+
+		await Promise.all(promises);
+
+		// expect all the fields to be present
+		const resp = await channel.query({ state: true });
+		expect(resp.channel.field0).to.be.equal('field0');
+		expect(resp.channel.field1).to.be.equal('field1');
+		expect(resp.channel.field2).to.be.equal('field2');
+		expect(resp.channel.field3).to.be.equal('field3');
+	});
 });
