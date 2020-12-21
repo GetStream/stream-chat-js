@@ -251,7 +251,8 @@ describe('Query Users', function () {
 		});
 
 		it('$autocomplete query with random characters', async () => {
-			const punctuation = '~`!@#$%^&*()_-+=?/>.<,"\':;}]{[|\\]';
+			const punctuation = `~\`!@#$%^&*()	_- +=?/>.
+			<,"':;}]{[|\\]`;
 			const azAZ09 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 			const randomString = (length) => Array.from(
 				{ length },
@@ -273,7 +274,7 @@ describe('Query Users', function () {
 				}
 			).join('');
 
-			for (let i = 0; i < 10000; i++) {
+			for (let i = 0; i < 100; i++) {
 				try {
 					await client.queryUsers({
 						id: {
