@@ -253,15 +253,17 @@ describe('Query Users', function () {
 		it('$autocomplete query with random characters', async () => {
 			const punctuation = `~\`!@#$%^&*()	_- +=?/>.
 			<,"':;}]{[|\\]`;
-			const azAZ09 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-			const randomString = (length) => Array.from(
-				{ length },
-				() => {
+			const azAZ09 =
+				'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+			const randomString = (length) =>
+				Array.from({ length }, () => {
 					const rand = Math.floor(Math.random() * 100);
 
 					// 1/4 of the characters is punctuation
 					if (rand <= 25) {
-						return punctuation[Math.floor(Math.random() * punctuation.length)];
+						return punctuation[
+							Math.floor(Math.random() * punctuation.length)
+						];
 					}
 
 					// 2/4 of the characters are random unicode characters
@@ -271,17 +273,16 @@ describe('Query Users', function () {
 
 					// 1/4 of the characters are regular azAZ09
 					return azAZ09[Math.floor(Math.random() * azAZ09.length)];
-				}
-			).join('');
+				}).join('');
 
 			for (let i = 0; i < 100; i++) {
 				try {
 					await client.queryUsers({
 						id: {
-							$autocomplete: randomString(24)
+							$autocomplete: randomString(24),
 						},
 					});
-				} catch(e) {
+				} catch (e) {
 					expect(e.response).to.not.be.undefined;
 					expect(e.response.data).to.not.be.undefined;
 					expect(e.response.data.code).to.equal(4);
