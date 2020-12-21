@@ -2199,3 +2199,124 @@ describe('notification.channel_deleted', () => {
 		await waiter;
 	});
 });
+
+describe('partial update channel', () => {
+	let channel;
+	let ssClient;
+	let ownerClient;
+	let modClient;
+	let memberClient;
+	const moderator = uuidv4();
+	const member = uuidv4();
+	const owner = uuidv4();
+
+	before(async () => {
+		ssClient = await getServerTestClient();
+		ownerClient = await getTestClientForUser(owner);
+		modClient = await getTestClientForUser(moderator);
+		memberClient = await getTestClientForUser(member);
+		channel = ownerClient.channel('messaging', uuidv4(), {
+			members: [owner, moderator, member],
+			source: 'user',
+			source_detail: { user_id: 123 },
+			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+		});
+		await channel.create();
+		await ssClient.channel(channel.type, channel.id).addModerators([moderator]);
+	});
+
+	it('change the source property', async () => {
+		const resp = await channel.updatePartial({ set: { source: 'system' } });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.eql({ user_id: 123 });
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('unset the source_detail', async () => {
+		const resp = await channel.updatePartial({ unset: ['source_detail'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('set a nested property', async () => {
+		const resp = await channel.updatePartial({
+			set: { 'channel_detail.topic': 'Nature' },
+		});
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Nature',
+			rating: 'pg',
+		});
+	});
+
+	it('unset a nested property', async () => {
+		const resp = await channel.updatePartial({ unset: ['channel_detail.topic'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
+	});
+
+	it('partial update concurrently works', async () => {
+		// keep in mind that there is no way to ensure ordering...
+		const promises = [];
+		for (let i = 0; i < 3; i++) {
+			const field = 'field' + i.toString();
+			const update = { set: {} };
+			update.set[field] = field;
+			promises.push(channel.updatePartial(update));
+		}
+		await Promise.all(promises);
+
+		// expect all the fields to be present
+		const resp = await channel.query();
+		expect(resp.channel.field0).to.be.equal('field0');
+		expect(resp.channel.field1).to.be.equal('field1');
+		expect(resp.channel.field2).to.be.equal('field2');
+	});
+
+	it('moderators and server side can set slowmode field', async () => {
+		// moderators can set cooldown
+		let resp = await modClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 10 } });
+		expect(resp.channel.cooldown).to.be.equal(10);
+
+		// server side auth can set cooldown
+		resp = await ssClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 0 } });
+		expect(resp.channel.cooldown).to.be.undefined;
+	});
+
+	it('team cannot be updated by moderators', async () => {
+		await expectHTTPErrorCode(
+			403,
+			modClient
+				.channel(channel.type, channel.id)
+				.updatePartial({ set: { team: 'blue' } }),
+			'StreamChat error code 17: UpdateChannelPartial failed with error: "you are not allowed to update the field `team`"',
+		);
+	});
+
+	it('ensure that reserved fields cant be updated', async () => {
+		for (const field of ['updated_at', 'created_at', 'members', 'member_count']) {
+			const update = { set: {} };
+			update.set[field] = 0;
+			await expectHTTPErrorCode(
+				403,
+				modClient.channel(channel.type, channel.id).updatePartial(update),
+				'StreamChat error code 17: UpdateChannelPartial failed with error: "field `' +
+					field +
+					'` is reserved and cannot updated"',
+			);
+		}
+	});
+});
