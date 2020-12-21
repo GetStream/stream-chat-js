@@ -82,7 +82,7 @@ describe('Detect node environment', () => {
 
 		await client.disconnect();
 		expect(warning).to.equal(
-			'Please do not use connectUser server side. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
 		);
 
 		console.warn = _warn;
