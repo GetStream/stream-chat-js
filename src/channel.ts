@@ -27,6 +27,8 @@ import {
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
+  PartialUpdateChannel,
+  PartialUpdateChannelAPIResponse,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -523,6 +525,19 @@ export class Channel<
     });
     this.data = data.channel;
     return data;
+  }
+
+  /**
+   * updatePartial - partial update channel properties
+   *
+   * @param {PartialUpdateChannel<ChannelType>} partial update request
+   *
+   * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
+   */
+  async updatePartial(update: PartialUpdateChannel<ChannelType>) {
+    return await this.getClient().patch<
+      PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
+    >(this._channelURL(), update);
   }
 
   /**
