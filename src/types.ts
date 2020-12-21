@@ -423,6 +423,17 @@ export type MessageResponse<
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
+  reply_to_message?: Omit<
+    MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    'reply_to_message'
+  >;
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
@@ -1459,6 +1470,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  reply_to_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;
