@@ -62,3 +62,48 @@ describe('Client userMuteStatus', function () {
 		expect(client.userMuteStatus('missingUser')).not.to.be.ok;
 	});
 });
+
+describe('Detect node environment', () => {
+	const client = new StreamChat('', '');
+	it('node property should be true', () => {
+		expect(client.node).to.be.true;
+	});
+
+	it('should warn when using connectUser on a node environment', async () => {
+		const _warn = console.warn;
+		let warning = '';
+		console.warn = (msg) => {
+			warning = msg;
+		};
+
+		try {
+			await client.connectUser({ id: 'user' }, 'fake token');
+		} catch (e) {}
+
+		await client.disconnect();
+		expect(warning).to.equal(
+			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+		);
+
+		console.warn = _warn;
+	});
+
+	it('should not warn when adding the allowServerSideConnect flag', async () => {
+		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
+
+		const _warn = console.warn;
+		let warning = '';
+		console.warn = (msg) => {
+			warning = msg;
+		};
+
+		try {
+			await client2.connectUser({ id: 'user' }, 'fake token');
+		} catch (e) {}
+
+		await client2.disconnect();
+		expect(warning).to.equal('');
+
+		console.warn = _warn;
+	});
+});
