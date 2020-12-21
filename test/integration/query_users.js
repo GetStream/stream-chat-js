@@ -204,7 +204,7 @@ describe('Query Users', function () {
 		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
 	});
 
-	describe('$autocompete queries should be sanitized properly', () => {
+	describe('$autocomplete queries should be sanitized properly', () => {
 		let user, numericalUserID, numericalUser, client;
 
 		before(async () => {
@@ -251,14 +251,42 @@ describe('Query Users', function () {
 		});
 
 		it('$autocomplete query with random characters', async () => {
-			const response = await client.queryUsers({
-				id: {
-					$autocomplete: `Ru  
-						`,
-				},
-			});
-			expect(response.users).to.not.be.undefined;
-			expect(response.users[0].id).to.equal(user.id);
+			const punctuation = '~`!@#$%^&*()_-+=?/>.<,"\':;}]{[|\\]';
+			const azAZ09 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+			const randomString = (length) => Array.from(
+				{ length },
+				() => {
+					const rand = Math.floor(Math.random() * 100);
+
+					// 1/4 of the characters is punctuation
+					if (rand <= 25) {
+						return punctuation[Math.floor(Math.random() * punctuation.length)];
+					}
+
+					// 2/4 of the characters are random unicode characters
+					if (rand > 25 && rand <= 75) {
+						return String.fromCharCode(Math.floor(Math.random() * 65536));
+					}
+
+					// 1/4 of the characters are regular azAZ09
+					return azAZ09[Math.floor(Math.random() * azAZ09.length)];
+				}
+			).join('');
+
+			for (let i = 0; i < 10000; i++) {
+				try {
+					await client.queryUsers({
+						id: {
+							$autocomplete: randomString(24)
+						},
+					});
+				} catch(e) {
+					expect(e.response).to.not.be.undefined;
+					expect(e.response.data).to.not.be.undefined;
+					expect(e.response.data.code).to.equal(4);
+					expect(e.response.data.StatusCode).to.equal(400);
+				}
+			}
 		});
 	});
 });
