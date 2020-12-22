@@ -354,12 +354,9 @@ describe('Push Webhook', function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('reaction.updated'),
 			chan.sendReaction(messageResponse.message.id, {
-				type: 'love',
+				type: 'lol',
 				user: { id: tommasoID },
-			}),
-			chan.sendReaction(messageResponse.message.id, {
-				type: 'love',
-				user: { id: tommasoID },
+				score: 5
 			}),
 		]);
 		const event = events[0];
@@ -368,7 +365,7 @@ describe('Push Webhook', function () {
 		expect(event.channel_id).to.eq(chan.id);
 		expect(event.user).to.be.an('object');
 		expect(event.type).to.eq('reaction.updated');
-		expect(event.message.reaction_counts).to.eql({ lol:1, love: 1 });
+		expect(event.message.reaction_counts).to.eql({ lol: 5 });
 	});
 
 	it('reaction.deleted when reaction is removed', async function () {
@@ -378,7 +375,6 @@ describe('Push Webhook', function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('reaction.deleted'),
 			tommasoChannel.deleteReaction(messageResponse.message.id, 'lol'),
-			tommasoChannel.deleteReaction(messageResponse.message.id, 'love'),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
