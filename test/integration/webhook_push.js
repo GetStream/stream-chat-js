@@ -356,7 +356,7 @@ describe('Push Webhook', function () {
 			chan.sendReaction(messageResponse.message.id, {
 				type: 'lol',
 				user: { id: tommasoID },
-				score: 5
+				score: 5,
 			}),
 		]);
 		const event = events[0];
