@@ -2066,7 +2066,7 @@ describe('notification.channel_deleted', () => {
 });
 
 describe('Threadless replies', () => {
-	let client, channel, ruud, friend, firstMessage;
+	let client, channel, ruud, friend, firstMessage, threadlessReply;
 
 	before(async () => {
 		ruud = 'ruud-' + uuidv4();
@@ -2113,8 +2113,6 @@ describe('Threadless replies', () => {
 	});
 
 	describe('Friend sends a threadless / quoted reply', () => {
-		let threadlessReply;
-
 		it("is possible to send a reply that isn't in a thread", async () => {
 			const res = await channel.sendMessage({
 				text: 'The first threadless reply',
@@ -2151,6 +2149,52 @@ describe('Threadless replies', () => {
 			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.text).to.not.be.undefined;
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe("Ruud sends a threadless reply to the friend's reply", () => {
+		let threadlessReplyReply;
+
+		it('is possible to send a threadless reply to a threadless reply', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first threadless reply',
+				user_id: friend,
+				reply_to_message_id: threadlessReply.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
+			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(threadlessReply.id);
+			expect(res.message.reply_to_message.id).to.equal(threadlessReply.id);
+			expect(res.message.reply_to_message.text).to.not.be.undefined;
+			expect(res.message.reply_to_message.text).to.equal(threadlessReply.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+
+			threadlessReplyReply = res.message;
+		});
+
+		it('the threadless reply to the threadless reply is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.not.be.undefined;
+			expect(clm.id).to.equal(threadlessReplyReply.id);
+			expect(clm.reply_to_message_id).to.not.be.undefined;
+			expect(clm.reply_to_message).to.not.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(threadlessReply.id);
+			expect(clm.reply_to_message.id).to.equal(threadlessReply.id);
+			expect(clm.reply_to_message.text).to.not.be.undefined;
+			expect(clm.reply_to_message.text).to.equal(threadlessReply.text);
+			// No nested threadless replies
+			expect(clm.reply_to_message.reply_to_message).to.be.undefined;
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
