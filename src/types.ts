@@ -428,6 +428,8 @@ export type MessageResponse<
   status?: string;
   type?: string;
   updated_at?: string;
+  webhook_failed?: boolean;
+  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -570,6 +572,15 @@ export type UpdateChannelAPIResponse<
     ReactionType,
     UserType
   >;
+};
+
+export type PartialUpdateChannelAPIResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  members: ChannelMemberResponse<UserType>[];
 };
 
 export type UpdateChannelResponse<
@@ -791,6 +802,10 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  /**
+   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
+   */
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
   /**
@@ -1461,6 +1476,11 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
+};
+
+export type PartialUpdateChannel<ChannelType = UnknownType> = {
+  set?: Partial<ChannelResponse<ChannelType>>;
+  unset?: Array<keyof ChannelResponse<ChannelType>>;
 };
 
 export type PermissionAPIObject = {
