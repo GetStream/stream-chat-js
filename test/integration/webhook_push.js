@@ -365,7 +365,8 @@ describe('Push Webhook', function () {
 		expect(event.channel_id).to.eq(chan.id);
 		expect(event.user).to.be.an('object');
 		expect(event.type).to.eq('reaction.updated');
-		expect(event.message.reaction_counts).to.eql({ lol: 5 });
+		expect(event.message.reaction_scores).to.eql({ lol: 5 });
+		expect(event.message.reaction_counts).to.eql({ lol: 1 });
 	});
 
 	it('reaction.deleted when reaction is removed', async function () {
