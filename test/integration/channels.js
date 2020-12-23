@@ -2439,3 +2439,60 @@ describe('partial update channel', () => {
 		}
 	});
 });
+
+describe('pinned messages', () => {
+	let channel;
+	let ssClient;
+	let ownerClient;
+	let modClient;
+	let memberClient;
+	const moderator = uuidv4();
+	const member = uuidv4();
+	const owner = uuidv4();
+
+	before(async () => {
+		ssClient = await getServerTestClient();
+		ownerClient = await getTestClientForUser(owner);
+		modClient = await getTestClientForUser(moderator);
+		memberClient = await getTestClientForUser(member);
+		channel = ownerClient.channel('messaging', uuidv4(), {
+			members: [owner, moderator, member],
+			source: 'user',
+			source_detail: { user_id: 123 },
+			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+		});
+		await channel.create();
+		await ssClient.channel(channel.type, channel.id).addModerators([moderator]);
+	});
+
+	it('send pinned message', async () => {
+		await channel.sendMessage({
+			text: 'Regular message 1',
+			pinned: false,
+		});
+		const { message } = await channel.sendMessage({
+			text: 'Pinned message 1',
+			pinned: true,
+		});
+		expect(message.pinned).to.be.equal(true);
+		expect(message.pinned_at).to.be.not.empty;
+		expect(message.pinned_by.id).to.be.equal(owner);
+
+		const { results } = await channel.search({ pinned: true });
+		expect(results.length).to.be.equal(1);
+		expect(results[0].message.id).to.be.equal(message.id);
+	});
+
+	it('unpin message', async () => {
+		const { message } = await channel.sendMessage({
+			text: 'Pinned message 2',
+			pinned: true,
+		});
+		expect(message.pinned).to.be.equal(true);
+		const { message: updatedMessage } = await ownerClient.updateMessage({
+			id: message.id,
+			pinned: false,
+		});
+		expect(updatedMessage.pinned).to.be.equal(false);
+	});
+});
