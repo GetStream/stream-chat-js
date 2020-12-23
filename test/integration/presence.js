@@ -70,7 +70,7 @@ describe('Presence', function () {
 				});
 			};
 
-			expect(setUserAndThrow).to.throw(/setUser was called twice/);
+			expect(setUserAndThrow).to.throw(/connectUser was called twice/);
 		});
 
 		it('login as a different user', async function () {
@@ -134,7 +134,7 @@ describe('Presence', function () {
 			await b.create();
 			const results = [];
 			const eventPromise = new Promise((resolve) => {
-				b.on('all', (e) => {
+				const handler = (e) => {
 					results.push([e.watcher_count, e.user.id]);
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					// expect to see thierry join, james join and james leave
@@ -147,7 +147,10 @@ describe('Presence', function () {
 						expect(results).to.deep.equal(expected);
 						resolve();
 					}
-				});
+				};
+
+				b.on('user.watching.start', handler);
+				b.on('user.watching.stop', handler);
 			});
 
 			// user1 starts watching

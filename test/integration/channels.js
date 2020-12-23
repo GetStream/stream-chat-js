@@ -12,6 +12,7 @@ import {
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import { get } from 'https';
 
 const expect = chai.expect;
 
@@ -188,6 +189,7 @@ describe('Channels - members', function () {
 
 	const tommasoClient = getTestClient();
 	const thierryClient = getTestClient();
+	const serverClient = getTestClient(true);
 
 	let tommasoChannel, thierryChannel;
 	const message = { text: 'nice little chat API' };
@@ -324,7 +326,7 @@ describe('Channels - members', function () {
 	});
 
 	it('thierry gets promoted', async function () {
-		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+		await getTestClient(true).upsertUser({ id: thierryID, role: 'admin' });
 	});
 
 	it('correct member count', async function () {
@@ -423,6 +425,148 @@ describe('Channels - members', function () {
 					members: { $in: newMembers },
 				});
 				expect(resp.length).to.be.equal(0);
+			});
+
+			it('returns error if adding and removing same member in a single request', async () => {
+				const resp = await tommasoClient
+					.channel('messaging', { members: [tommasoID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					400,
+					thierryClient.post(
+						`${thierryClient.baseURL}/channels/messaging/${resp.channel.id}`,
+						{
+							remove_members: [thierryID],
+							add_members: [thierryID],
+						},
+					),
+				);
+			});
+		});
+
+		describe('Distinct channel manipulations', () => {
+			it('successfully joins back if the channel is distinct', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await thierryClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				const { members } = await thierryClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+				expect(members.length).to.be.eq(2);
+			});
+
+			it('fails to join back if the channel is not distinct', async () => {
+				const chanID = uuidv4();
+				const chan = await thierryClient.channel('messaging', chanID);
+				await chan.create();
+				await chan.addMembers([tommasoID, thierryID]);
+				// after self-remove, user is not able to join regular channel by himself
+				await tommasoClient
+					.channel('messaging', chanID)
+					.removeMembers([tommasoID]);
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient.channel('messaging', chanID).addMembers([tommasoID]),
+				);
+			});
+
+			it('fails to join foreign distinct channel', async () => {
+				const resp = await thierryClient
+					.channel('messaging', { members: [thierryID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient
+						.channel('messaging', resp.channel.id)
+						.addMembers([tommasoID]),
+				);
+			});
+			it('X leaves [X,Y] and creates the channel again', async () => {
+				// Case 1
+				// 1. X creates distinct channel [X,Y]
+				// 2. X sends a message
+				// 3. X leaves the channel
+				// 4. X creates distinct channel [X,Y]
+				// 5. X sends a message
+				// Expected behavior: X should be added back as a channel member and see all the messages
+				const userX = 'x-' + uuidv4();
+				const userY = 'y-' + uuidv4();
+				await createUsers([userX, userY]);
+				const clientX = getTestClient();
+				await clientX.setUser({ id: userX }, createUserToken(userX));
+				const clientY = getTestClient();
+				await clientY.setUser({ id: userY }, createUserToken(userY));
+
+				let channelX = clientX.channel('messaging', { members: [userX, userY] });
+				await channelX.create();
+				const channelCID = channelX.cid;
+				await channelX.sendMessage({ text: 'msg1' });
+				await channelX.removeMembers([userX]);
+				channelX = clientX.channel('messaging', { members: [userX, userY] });
+				const { members: membersX } = await channelX.create();
+				await channelX.sendMessage({ text: 'msg2' });
+				const { messages: messagesX } = await channelX.query({
+					messages: { limit: 2 },
+				});
+
+				expect(channelCID).to.be.equal(channelX.cid);
+				expect(membersX.length).to.be.equal(2);
+				expect(messagesX.length).to.be.equal(2);
+				expect(messagesX[0].text).to.be.equal('msg1');
+				expect(messagesX[1].text).to.be.equal('msg2');
+
+				// The same thing the other way around. When Y creates distinct channel, X should not be added back
+				// Case 2 (continuation from case 1)
+				// 1. Y creates distinct channel [X,Y] (receives existing channel)
+				// 2. Y sends a message
+				// 3. X leaves the channel
+				// 4. Y creates distinct channel [X,Y] (receives existing channel)
+				// 5. Y sends a message
+				// Expected behavior: Y should be able to interact with channel freely, but X will not be added back when Y recreates the channel
+				await channelX.removeMembers([userX]);
+				const channelY = clientY.channel('messaging', {
+					members: [userX, userY],
+				});
+				const { members: membersY } = await channelY.create();
+				await channelY.sendMessage({ text: 'msg3' });
+				const { messages: messagesY } = await channelY.query({
+					messages: { limit: 3 },
+				});
+
+				expect(channelY.cid).to.be.equal(channelX.cid);
+				expect(membersY.length).to.be.equal(1);
+				expect(messagesY.length).to.be.equal(3);
+				expect(messagesY[0].text).to.be.equal('msg1');
+				expect(messagesY[1].text).to.be.equal('msg2');
+				expect(messagesY[2].text).to.be.equal('msg3');
+			});
+		});
+
+		describe('when managing distinct channel members from server-side', () => {
+			it('successfully removes and adds back member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await serverClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				await serverClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+			});
+			it('fails to add foreign member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					serverClient
+						.channel('messaging', channel.id)
+						.addMembers([newMembers[0]]),
+				);
 			});
 		});
 	});
@@ -700,17 +844,9 @@ describe('Channels - Distinct channels', function () {
 
 	it('adding members to distinct channel should fail', async function () {
 		await expectHTTPErrorCode(
-			400,
+			403,
 			distinctChannel.addMembers([newMember]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
-		);
-	});
-
-	it('removing members from a distinct channel should fail', async function () {
-		await expectHTTPErrorCode(
-			400,
-			distinctChannel.removeMembers([tommasoID]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
+			'StreamChat error code 17: UpdateChannel failed with error: "cannot add members to the distinct channel they don\'t belong to, please create a new distinct channel with the desired members"',
 		);
 	});
 });
@@ -1738,8 +1874,24 @@ describe('unread counts on hard delete messages', function () {
 
 describe('channel message search', function () {
 	let authClient;
+	const userID = uuidv4();
 	before(async () => {
-		authClient = await getTestClientForUser(uuidv4());
+		authClient = await getTestClientForUser(userID);
+	});
+
+	it('No searchable fails', async () => {
+		const channelID = uuidv4();
+		// search is disabled for gaming
+		const channel = getServerTestClient().channel('gaming', channelID, {
+			created_by_id: userID,
+			members: [userID],
+		});
+		await channel.create();
+		await expectHTTPErrorCode(400, channel.search('missing'));
+		await expectHTTPErrorCode(
+			400,
+			authClient.channel('gaming', channelID).search('missing'),
+		);
 	});
 
 	it('Basic Query (old format)', async function () {
@@ -1933,6 +2085,23 @@ describe('channel message search', function () {
 		expect(response.results.length).to.equal(1);
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
+
+	it('message contains own_reactions', async function () {
+		// add a very special messsage
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+
+		await channel.sendReaction(smResp.message.id, { type: 'like' });
+
+		const response = await channel.search(
+			{ id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
+		expect(response.results[0].message.own_reactions.length).to.equal(1);
+	});
 });
 
 describe('search on deleted channels', function () {
@@ -2045,5 +2214,126 @@ describe('notification.channel_deleted', () => {
 		const waiter = createEventWaiter(memberClient, 'notification.channel_deleted');
 		await channel.delete();
 		await waiter;
+	});
+});
+
+describe('partial update channel', () => {
+	let channel;
+	let ssClient;
+	let ownerClient;
+	let modClient;
+	let memberClient;
+	const moderator = uuidv4();
+	const member = uuidv4();
+	const owner = uuidv4();
+
+	before(async () => {
+		ssClient = await getServerTestClient();
+		ownerClient = await getTestClientForUser(owner);
+		modClient = await getTestClientForUser(moderator);
+		memberClient = await getTestClientForUser(member);
+		channel = ownerClient.channel('messaging', uuidv4(), {
+			members: [owner, moderator, member],
+			source: 'user',
+			source_detail: { user_id: 123 },
+			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+		});
+		await channel.create();
+		await ssClient.channel(channel.type, channel.id).addModerators([moderator]);
+	});
+
+	it('change the source property', async () => {
+		const resp = await channel.updatePartial({ set: { source: 'system' } });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.eql({ user_id: 123 });
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('unset the source_detail', async () => {
+		const resp = await channel.updatePartial({ unset: ['source_detail'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('set a nested property', async () => {
+		const resp = await channel.updatePartial({
+			set: { 'channel_detail.topic': 'Nature' },
+		});
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Nature',
+			rating: 'pg',
+		});
+	});
+
+	it('unset a nested property', async () => {
+		const resp = await channel.updatePartial({ unset: ['channel_detail.topic'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
+	});
+
+	it.skip('partial update concurrently works', async () => {
+		// keep in mind that there is no way to ensure ordering...
+		const promises = [];
+		for (let i = 0; i < 3; i++) {
+			const field = 'field' + i.toString();
+			const update = { set: {} };
+			update.set[field] = field;
+			promises.push(channel.updatePartial(update));
+		}
+		await Promise.all(promises);
+
+		// expect all the fields to be present
+		const resp = await channel.query();
+		expect(resp.channel.field0).to.be.equal('field0');
+		expect(resp.channel.field1).to.be.equal('field1');
+		expect(resp.channel.field2).to.be.equal('field2');
+	});
+
+	it('moderators and server side can set slowmode field', async () => {
+		// moderators can set cooldown
+		let resp = await modClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 10 } });
+		expect(resp.channel.cooldown).to.be.equal(10);
+
+		// server side auth can set cooldown
+		resp = await ssClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 0 } });
+		expect(resp.channel.cooldown).to.be.undefined;
+	});
+
+	it('team cannot be updated by moderators', async () => {
+		await expectHTTPErrorCode(
+			403,
+			modClient
+				.channel(channel.type, channel.id)
+				.updatePartial({ set: { team: 'blue' } }),
+			'StreamChat error code 17: UpdateChannelPartial failed with error: "you are not allowed to update the field `team`"',
+		);
+	});
+
+	it('ensure that reserved fields cant be updated', async () => {
+		for (const field of ['updated_at', 'created_at', 'members', 'member_count']) {
+			const update = { set: {} };
+			update.set[field] = 0;
+			await expectHTTPErrorCode(
+				403,
+				modClient.channel(channel.type, channel.id).updatePartial(update),
+				'StreamChat error code 17: UpdateChannelPartial failed with error: "field `' +
+					field +
+					'` is reserved and cannot updated"',
+			);
+		}
 	});
 });
