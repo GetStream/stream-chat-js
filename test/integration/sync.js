@@ -101,11 +101,7 @@ describe('Sync endpoint', () => {
 
 	it('add a message reaction', async () => {
 		messageWithReaction = messages[1].message.id;
-		await blueChannel.sendReaction(
-			messageWithReaction,
-			{ type: 'like' },
-			otherUserID,
-		);
+		await blueChannel.sendReaction(messageWithReaction, { type: 'like' }, userID);
 	});
 
 	it('hide the green channel for current user (via backend)', async () => {
@@ -163,7 +159,7 @@ describe('Sync endpoint', () => {
 		expect(evts).to.have.length(1);
 		expect(evts[0].message.latest_reactions).to.have.length(1);
 		expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
-		expect(evts[0].message.own_reactions).to.eql({ like: 1 });
+		expect(evts[0].message.own_reactions.length).to.eql(1);
 		expect(evts[0].user).to.not.be.undefined;
 		expect(evts[0].message.user).to.not.be.undefined;
 	});
