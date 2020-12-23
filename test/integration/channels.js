@@ -2434,12 +2434,14 @@ describe('Threadless replies', () => {
 
 	describe('Friend changes the message they reply to', () => {
 		it('is possible to change a reply_to_message_id', async () => {
-			const res = await channel.sendMessage({
-				id: threadlessReply.id,
-				text: 'The first threadless reply',
-				user_id: friend,
-				reply_to_message_id: secondMessage.id,
-			});
+			const res = await client.updateMessage(
+				{
+					id: threadlessReply.id,
+					text: 'The first threadless reply',
+					reply_to_message_id: secondMessage.id,
+				},
+				friend,
+			);
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.undefined;
@@ -2475,12 +2477,14 @@ describe('Threadless replies', () => {
 		});
 
 		it('is possible to change the reply_to_message_id back', async () => {
-			const res = await channel.sendMessage({
-				id: threadlessReply.id,
-				text: 'The first threadless reply',
-				user_id: friend,
-				reply_to_message_id: firstMessage.id,
-			});
+			const res = await client.updateMessage(
+				{
+					id: threadlessReply.id,
+					text: 'The first threadless reply',
+					reply_to_message_id: firstMessage.id,
+				},
+				friend,
+			);
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.undefined;
