@@ -2281,7 +2281,7 @@ describe('partial update channel', () => {
 		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
 	});
 
-	it('partial update concurrently works', async () => {
+	it.skip('partial update concurrently works', async () => {
 		// keep in mind that there is no way to ensure ordering...
 		const promises = [];
 		for (let i = 0; i < 3; i++) {
