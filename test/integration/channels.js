@@ -2322,7 +2322,7 @@ describe('partial update channel', () => {
 });
 
 describe('Threadless replies', () => {
-	let client, channel, ruud, friend, firstMessage, threadlessReply;
+	let client, channel, ruud, friend, firstMessage, secondMessage, threadlessReply;
 
 	before(async () => {
 		ruud = 'ruud-' + uuidv4();
@@ -2343,12 +2343,17 @@ describe('Threadless replies', () => {
 	});
 
 	describe('Ruud sends a message in the channel', () => {
-		it('is possible to create a message', async () => {
+		it('is possible to create regular messages', async () => {
 			const res = await channel.sendMessage({
 				text: 'The one message to rule them all',
 				user_id: ruud,
 			});
+			const res2 = await channel.sendMessage({
+				text: 'The second message to rule all, except the first message',
+				user_id: ruud,
+			});
 			firstMessage = res.message;
+			secondMessage = res2.message;
 		});
 	});
 
@@ -2407,6 +2412,72 @@ describe('Threadless replies', () => {
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Friend changes the message they reply to', () => {
+		it('is possible to change a reply_to_message_id', async () => {
+			const res = await channel.sendMessage({
+				id: threadlessReply.id,
+				text: 'The first threadless reply',
+				user_id: friend,
+				reply_to_message_id: secondMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
+			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(secondMessage.id);
+			expect(res.message.reply_to_message.id).to.equal(secondMessage.id);
+			expect(res.message.reply_to_message.text).to.not.be.undefined;
+			expect(res.message.reply_to_message.text).to.equal(secondMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+
+			threadlessReply = res.message;
+		});
+
+		it('the threadless reply is enriched with the changed reply_to_message', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.not.be.undefined;
+			expect(clm.id).to.equal(threadlessReply.id);
+			expect(clm.reply_to_message_id).to.not.be.undefined;
+			expect(clm.reply_to_message).to.not.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(secondMessage.id);
+			expect(clm.reply_to_message.id).to.equal(secondMessage.id);
+			expect(clm.reply_to_message.text).to.not.be.undefined;
+			expect(clm.reply_to_message.text).to.equal(secondMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+
+		it('is possible to change the reply_to_message_id back', async () => {
+			const res = await channel.sendMessage({
+				id: threadlessReply.id,
+				text: 'The first threadless reply',
+				user_id: friend,
+				reply_to_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
+			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
+			expect(res.message.reply_to_message.text).to.not.be.undefined;
+			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+
+			threadlessReply = res.message;
 		});
 	});
 
