@@ -88,9 +88,6 @@ export function DevToken(userId: string) {
  */
 export function CheckSignature(body: string, secret: string, signature: string) {
   const key = Buffer.from(secret, 'ascii');
-  const hash = crypto
-    .createHmac('sha256', key)
-    .update(body)
-    .digest('hex');
+  const hash = crypto.createHmac('sha256', key).update(body).digest('hex');
   return hash === signature;
 }

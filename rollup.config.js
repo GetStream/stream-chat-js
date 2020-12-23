@@ -15,16 +15,15 @@ const externalPackages = [
 	'form-data',
 	'isomorphic-ws',
 	'seamless-immutable',
-	'uuid/v4',
 	'base64-js',
 	/@babel\/runtime/,
 ];
 
 const browserIgnore = {
 	name: 'browser-remapper',
-	resolveId: importee =>
+	resolveId: (importee) =>
 		['jsonwebtoken', 'https', 'crypto'].includes(importee) ? importee : null,
-	load: id =>
+	load: (id) =>
 		['jsonwebtoken', 'https', 'crypto'].includes(id) ? 'export default null;' : null,
 };
 

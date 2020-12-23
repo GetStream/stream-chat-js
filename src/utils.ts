@@ -1,4 +1,5 @@
-import FormData, { AppendOptions } from 'form-data';
+import FormData from 'form-data';
+import { AscDesc, QuerySort } from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -9,12 +10,12 @@ import FormData, { AppendOptions } from 'form-data';
  *
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
-  promise.then().catch(error => {
+  promise.then().catch((error) => {
     console.warn(`failed to do ${name}, ran into error: `, error);
   });
 }
 
-export const sleep = (m: number): Promise<void> => new Promise(r => setTimeout(r, m));
+export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
 export function isFunction<T>(value: Function | T): value is Function {
   return (
@@ -61,19 +62,47 @@ export function addFileToFormData(
 ) {
   const data = new FormData();
 
-  const appendOptions: AppendOptions = {};
-  if (name) appendOptions.filename = name;
-  if (contentType) appendOptions.contentType = contentType;
-
   if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri)) {
-    data.append('file', uri, appendOptions);
+    if (name) data.append('file', uri, name);
+    else data.append('file', uri);
   } else {
     data.append('file', {
       uri,
       name: name || (uri as string).split('/').reverse()[0],
       contentType: contentType || undefined,
+      type: contentType || undefined,
     });
   }
 
   return data;
+}
+
+export function normalizeQuerySort<T extends QuerySort>(sort: T) {
+  const sortFields = [];
+  const sortArr = Array.isArray(sort) ? sort : [sort];
+  for (const item of sortArr) {
+    const entries = (Object.entries(item) as unknown) as [
+      T extends (infer K)[] ? keyof K : keyof T,
+      AscDesc,
+    ][];
+    if (entries.length > 1) {
+      console.warn(
+        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
+      );
+    }
+    for (const [field, direction] of entries) {
+      sortFields.push({ field, direction });
+    }
+  }
+  return sortFields;
+}
+
+/** adopted from https://github.com/ai/nanoid/blob/master/non-secure/index.js */
+const alphabet = 'ModuleSymbhasOwnPr0123456789ABCDEFGHNRVfgctiUvzKqYTJkLxpZXIjQW';
+export function randomId() {
+  let id = '';
+  for (let i = 0; i < 21; i++) {
+    id += alphabet[(Math.random() * 64) | 0];
+  }
+  return id;
 }

@@ -1,3 +1,128 @@
+## December 21, 2020 - 2.10.0
+
+### Feature
+
+- New `channel.updatePartial()` function can be used to set and unset specific fields when it is necessary to retain additional custom data fields on Channel #550
+- `client.testPushSettings()` accepts `skipDevices` boolean attribute which skip config/device checks and sending to real devices #548
+- `channel.sendReaction()` accepts `enforce_unique` attribute to overwrite existing reactions if any #527
+
+### Fix
+
+- deprecate `setUser` and `setAnonymousUser` in favor of `connectUser` and `connectAnonymousUser` #529
+- Update channel read state when a new message is sent #536
+- Removed unused `user_details` field from `query_channels` #545
+
+- `MessageResponse` type #551
+- `AppSettings` type #541
+
+## December 7, 2020 - 2.9.0
+
+- Adding `recoverStateOnReconnect` option - [#534](https://github.com/GetStream/stream-chat-js/pull/534)
+- Adding `UpdatedMessage` typescript type
+
+## November 27, 2020 - 2.8.4
+
+### Fix
+
+- Reset `unreadCount` when channel gets truncated [#521](https://github.com/GetStream/stream-js/pull/521)
+
+## November 25, 2020 - 2.8.3
+
+### Fix
+
+- add `custom_event` to channel types [#520](https://github.com/GetStream/stream-js/pull/520)
+
+## November 25, 2020 - 2.8.2
+
+### Fix
+
+- Replace uuid with simple random generator [#518](https://github.com/GetStream/stream-js/pull/518)
+
+## November 20, 2020 - 2.8.1
+
+### Fix
+
+- Duplicate message from current user [#509](https://github.com/GetStream/stream-js/pull/509)
+- Sort direction array for queries [#501](https://github.com/GetStream/stream-js/pull/501)
+- Add `enforce_unique_usernames` to `AppSettingsAPIResponse` type [#511](https://github.com/GetStream/stream-js/pull/511)
+
+## November 17, 2020 - 2.8.0
+
+### Feature
+
+- Channel Export [#504](https://github.com/GetStream/stream-js/pull/504)
+- New event `notification.invite_rejected` [#467](https://github.com/GetStream/stream-js/pull/467)
+- Channel stopTyping accepts optional `parent_id` for typing in threads `notification.invite_rejected` [#505](https://github.com/GetStream/stream-js/pull/505)
+
+### Fix
+
+- Mute users no longer counted in channel unread [#498](https://github.com/GetStream/stream-js/pull/498)
+- `AppSettingsAPIResponse` type includes `image_moderation_enabled` [#497](https://github.com/GetStream/stream-js/pull/497)
+- User ban function signature updated [#502](https://github.com/GetStream/stream-js/pull/502): `client.banUser('user1', {user_id: 'user2'})` is replaced with `client.banUser('user1', {banned_by_id: 'user2'})`
+
+## November 06, 2020 - 2.7.4
+
+### Feature
+
+- Ban user by ip [#485](https://github.com/GetStream/stream-js/pull/485)
+
+## November 03, 2020 - 2.7.3
+
+### Fix
+
+- Browser file upload incorrect file name [#487](https://github.com/GetStream/stream-js/pull/487)
+
+## October 30, 2020 - 2.7.2
+
+### Fix
+
+- Improve types of `sendMessage()`, `updateMessage()`, `ChannelFilters` and `AppSettingsAPIResponse` [#480](https://github.com/GetStream/stream-chat-js/pull/480) [#483](https://github.com/GetStream/stream-chat-js/pull/483)
+
+## October 26, 2020 - 2.7.1
+
+### Feature
+
+- New functions to shadow ban a user from one or all channels [#447](https://github.com/GetStream/stream-chat-js/pull/447)
+
+```js
+// global shadow ban on all channels
+client.shadowBan(target_user_id);
+client.removeShadowBan(target_user_id);
+
+// channel speceifc shadow ban
+channel.shadowBan(target_user_id);
+channel.removeShadowBan(target_user_id);
+```
+
+### Fix
+
+- Ignore shadowed messages in the unread count [#475](https://github.com/GetStream/stream-chat-js/pull/475)
+- Remove duplicated \_initializeState call [#473](https://github.com/GetStream/stream-chat-js/pull/473)
+
+### Chore
+
+- Upgrade dependencies [#477](https://github.com/GetStream/stream-chat-js/pull/477)
+
+## October 20, 2020 - 2.7.0
+
+### Fix
+
+- `channel.addMessageSorted` performance has been improved. It now accepts an extra parameter `timestampChanged: boolean` which needs to be set for updating a message in the state with the same `id` and different `created_at` [#470](https://github.com/GetStream/stream-chat-js/pull/470/)
+
+## October 12, 2020 - 2.6.0
+
+### Feature
+
+- Typing events for thread #445 [#445](https://github.com/GetStream/stream-chat-js/pull/445/)
+- Hard deleted messages are removed from `channel.state.messages` [#454](https://github.com/GetStream/stream-chat-js/pull/454/)
+- Simplify and document flag/unflag functions for server side usage [#462](https://github.com/GetStream/stream-chat-js/pull/462/)
+
+### Fix
+
+- BlockList types [#455](https://github.com/GetStream/stream-chat-js/pull/455/)
+- `Channel.countUnread()` returns correct unread [#452](https://github.com/GetStream/stream-chat-js/pull/452/)
+- `type` key-value pair added to image uploads to fix React Native Android image upload failures [#464](https://github.com/GetStream/stream-chat-js/pull/464/)
+
 ## October 1, 2020 - 2.5.0
 
 ### Feature

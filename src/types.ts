@@ -59,9 +59,11 @@ export type AppSettingsAPIResponse<
       {
         automod?: ChannelConfigAutomod;
         automod_behavior?: ChannelConfigAutomodBehavior;
+        blocklist_behavior?: ChannelConfigAutomodBehavior;
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
+        custom_events?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -80,12 +82,15 @@ export type AppSettingsAPIResponse<
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
+    enforce_unique_usernames?: string;
+    image_moderation_enabled?: boolean;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
@@ -94,6 +99,22 @@ export type AppSettingsAPIResponse<
     user_search_disallowed_roles?: string[];
     webhook_url?: string;
   };
+};
+
+export type BlockListResponse = BlockList & {
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ExportChannelResponse = {
+  task_id: string;
+};
+
+export type ExportChannelStatusResponse = {
+  created_at?: string;
+  error?: {};
+  result?: {};
+  updated_at?: string;
 };
 
 export type ChannelResponse<
@@ -168,12 +189,14 @@ export type UpdateMessageAPIResponse<
 };
 
 export type ChannelMemberResponse<UserType = UnknownType> = {
+  banned?: boolean;
   created_at?: string;
   invite_accepted_at?: string;
   invite_rejected_at?: string;
   invited?: boolean;
   is_moderator?: boolean;
   role?: string;
+  shadow_banned?: boolean;
   updated_at?: string;
   user?: UserResponse<UserType>;
   user_id?: string;
@@ -189,7 +212,9 @@ export type CheckPushResponse = APIResponse & {
   rendered_firebase_template?: string;
 };
 
-export type CommandResponse<CommandType extends string = LiteralStringForUnion> = {
+export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
+  CreatedAtUpdatedAt
+> & {
   args?: string;
   description?: string;
   name?: CommandVariants<CommandType>;
@@ -398,10 +423,13 @@ export type MessageResponse<
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
+  shadowed?: boolean;
   silent?: boolean;
   status?: string;
   type?: string;
   updated_at?: string;
+  webhook_failed?: boolean;
+  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
@@ -546,6 +574,15 @@ export type UpdateChannelAPIResponse<
   >;
 };
 
+export type PartialUpdateChannelAPIResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  members: ChannelMemberResponse<UserType>[];
+};
+
 export type UpdateChannelResponse<
   CommandType extends string = LiteralStringForUnion
 > = APIResponse &
@@ -562,13 +599,14 @@ export type UpdateUsersAPIResponse<UserType = UnknownType> = APIResponse & {
   users: { [key: string]: UserResponse<UserType> };
 };
 
-export type UserResponse<T = UnknownType> = User<T> & {
+export type UserResponse<UserType = UnknownType> = User<UserType> & {
   banned?: boolean;
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
   last_active?: string;
   online?: boolean;
+  shadow_banned?: boolean;
   updated_at?: string;
 };
 
@@ -577,9 +615,18 @@ export type UserResponse<T = UnknownType> = User<T> & {
  */
 
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
+  banned_by?: UserResponse<UserType>;
+  banned_by_id?: string;
+  ip_ban?: boolean;
   reason?: string;
   timeout?: number;
+  /**
+   * @deprecated please use banned_by
+   */
   user?: UserResponse<UserType>;
+  /**
+   * @deprecated please use banned_by_id
+   */
   user_id?: string;
 };
 
@@ -639,10 +686,12 @@ export type ListCommandsResponse<
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
   connection_id?: string;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -679,16 +728,6 @@ export type ChannelQueryOptions<
   state?: boolean;
   watch?: boolean;
   watchers?: PaginationOptions;
-};
-
-export type FlagMessageOptions<UserType = UnknownType> = {
-  client_id?: string;
-  connection_id?: string;
-  created_by?: string;
-  target_message_id?: string;
-  target_user_id?: string;
-  user?: UserResponse<UserType>;
-  user_id?: string;
 };
 
 export type InviteOptions<
@@ -763,8 +802,22 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  /**
+   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
+   */
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
 };
 
@@ -772,6 +825,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
+  shadow?: boolean;
   target_user_id?: string;
   type?: string;
 };
@@ -826,6 +880,7 @@ export type Event<
     UserType
   >;
   online?: boolean;
+  parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
   unread_count?: number;
@@ -879,6 +934,7 @@ export type EventTypes =
   | 'notification.channel_mutes_updated'
   | 'notification.channel_truncated'
   | 'notification.invite_accepted'
+  | 'notification.invite_rejected'
   | 'notification.invited'
   | 'notification.mark_read'
   | 'notification.message_new'
@@ -909,7 +965,10 @@ export type ChannelFilters<
   UserType = UnknownType
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
-    members?: QueryFilter<string>;
+    members?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
+      | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+      | PrimitiveFilter<string[]>;
   } & {
     name?:
       | RequireOnlyOne<
@@ -1104,7 +1163,11 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
-export type ChannelSort<ChannelType = UnknownType> = Sort<ChannelType> & {
+export type ChannelSort<ChannelType = UnknownType> =
+  | ChannelSortBase<ChannelType>
+  | Array<ChannelSortBase<ChannelType>>;
+
+export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1118,7 +1181,13 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type UserSort<UserType = UnknownType> = Sort<UserResponse<UserType>>;
+export type UserSort<UserType = UnknownType> =
+  | Sort<UserResponse<UserType>>
+  | Array<Sort<UserResponse<UserType>>>;
+
+export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | ChannelSort<ChannelType>
+  | UserSort<UserType>;
 
 /**
  * Base Types
@@ -1157,12 +1226,18 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
+  enforce_unique_usernames?: 'no' | 'app' | 'team';
   firebase_config?: {
+    credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
+  };
+  push_config?: {
+    version?: string;
   };
   webhook_url?: string;
 };
@@ -1188,6 +1263,18 @@ export type Attachment<T = UnknownType> = T & {
   type?: string;
 };
 
+export type BlockList = {
+  name: string;
+  words: string[];
+};
+
+export type ExportChannelRequest = {
+  id: string;
+  type: string;
+  messages_since?: Date;
+  messages_until?: Date;
+};
+
 export type ChannelConfig<
   CommandType extends string = LiteralStringForUnion
 > = ChannelConfigFields &
@@ -1202,7 +1289,9 @@ export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1319,6 +1408,7 @@ export type Field = {
 };
 
 export type FirebaseConfig = {
+  credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
@@ -1336,19 +1426,38 @@ export type Message<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
   UserType = UnknownType
-> = MessageBase<AttachmentType, MessageType, UserType> & {
+> = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
+
+export type UpdatedMessage<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'mentioned_users'
+> & { mentioned_users?: string[] };
 
 export type MessageBase<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
   UserType = UnknownType
 > = MessageType & {
+  id: string;
   attachments?: Attachment<AttachmentType>[];
   cid?: string;
   html?: string;
-  id?: string;
   mml?: string;
   parent_id?: string;
   show_in_channel?: boolean;
@@ -1368,6 +1477,11 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
+};
+
+export type PartialUpdateChannel<ChannelType = UnknownType> = {
+  set?: Partial<ChannelResponse<ChannelType>>;
+  unset?: Array<keyof ChannelResponse<ChannelType>>;
 };
 
 export type PermissionAPIObject = {
@@ -1456,13 +1570,14 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
 
-export type User<T = UnknownType> = T & {
+export type User<UserType = UnknownType> = UserType & {
   id: string;
   anon?: boolean;
   name?: string;
@@ -1472,8 +1587,3 @@ export type User<T = UnknownType> = T & {
 };
 
 export type TypingStartEvent = Event;
-
-export type BlockList = {
-  name: string;
-  words: string[];
-};

@@ -1,7 +1,7 @@
 import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
-import { logChatPromiseExecution } from './utils';
+import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -27,6 +27,8 @@ import {
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
+  PartialUpdateChannel,
+  PartialUpdateChannelAPIResponse,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -195,7 +197,7 @@ export class Channel<
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
-    return await this.getClient().post<
+    const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
         AttachmentType,
         ChannelType,
@@ -207,6 +209,11 @@ export class Channel<
     >(this._channelURL() + '/message', {
       message,
     });
+
+    // Reset unreadCount to 0.
+    this.state.unreadCount = 0;
+
+    return sendMessageResponse;
   }
 
   sendFile(
@@ -347,23 +354,20 @@ export class Channel<
   }
 
   /**
-   * search - Query Members
+   * queryMembers - Query Members
    *
    * @param {UserFilters<UserType>}  filterConditions object MongoDB style filters
-   * @param {UserSort<UserType>} [sort] Sort options, for instance {created_at: -1}
+   * @param {UserSort<UserType>} [sort] Sort options, for instance [{created_at: -1}].
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
    *
-   * @return {Promise<ChannelMemberAPIResponse<UserType>>} search members response
+   * @return {Promise<ChannelMemberAPIResponse<UserType>>} Query Members response
    */
   async queryMembers(
     filterConditions: UserFilters<UserType>,
-    sort: UserSort<UserType> = {},
+    sort: UserSort<UserType> = [],
     options: { limit?: number; offset?: number } = {},
   ) {
-    const sortFields = [];
-    for (const [k, v] of Object.entries(sort)) {
-      sortFields.push({ field: k, direction: v });
-    }
     let id: string | undefined;
     const type = this.type;
     let members: string[] | ChannelMemberResponse<UserType>[] | undefined;
@@ -380,7 +384,7 @@ export class Channel<
           type,
           id,
           members,
-          sort: sortFields,
+          sort: normalizeQuerySort(sort),
           filter_conditions: filterConditions,
           ...options,
         },
@@ -394,6 +398,7 @@ export class Channel<
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
    * @param {string} [user_id] the id of the user (used only for server side request) default null
+   * @param {boolean} [enforce_unique] set true to overwrite existing reactions if any
    *
    * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
@@ -401,6 +406,7 @@ export class Channel<
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
     user_id?: string,
+    enforce_unique?: boolean,
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -410,6 +416,7 @@ export class Channel<
     }
     const body = {
       reaction,
+      enforce_unique,
     };
     if (user_id != null) {
       body.reaction = { ...reaction, user: { id: user_id } as UserResponse<UserType> };
@@ -499,7 +506,7 @@ export class Channel<
       'updated_at',
       'last_message_at',
     ];
-    reserved.forEach(key => {
+    reserved.forEach((key) => {
       delete channelData[key];
     });
 
@@ -518,6 +525,19 @@ export class Channel<
     });
     this.data = data.channel;
     return data;
+  }
+
+  /**
+   * updatePartial - partial update channel properties
+   *
+   * @param {PartialUpdateChannel<ChannelType>} partial update request
+   *
+   * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
+   */
+  async updatePartial(update: PartialUpdateChannel<ChannelType>) {
+    return await this.getClient().patch<
+      PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
+    >(this._channelURL(), update);
   }
 
   /**
@@ -871,9 +891,11 @@ export class Channel<
 
   /**
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
-   *  Call this on every keystroke
+   * Call this on every keystroke
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async keystroke() {
+  async keystroke(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -886,14 +908,17 @@ export class Channel<
       this.lastTypingEvent = new Date();
       await this.sendEvent({
         type: 'typing.start',
+        parent_id,
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }
   }
 
   /**
    * stopTyping - Sets last typing to null and sends the typing.stop event
+   * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
+   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping() {
+  async stopTyping(parent_id?: string) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -901,6 +926,7 @@ export class Channel<
     this.isTyping = false;
     await this.sendEvent({
       type: 'typing.stop',
+      parent_id,
     } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
   }
 
@@ -996,7 +1022,6 @@ export class Channel<
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined);
     this.initialized = true;
-    this._initializeState(state);
     this.data = state.channel;
 
     this._client.logger(
@@ -1117,31 +1142,34 @@ export class Channel<
     }
   }
 
+  _countMessageAsUnread(message: {
+    shadowed?: boolean;
+    silent?: boolean;
+    user?: { id?: string } | null;
+  }) {
+    if (message.shadowed) return false;
+    if (message.silent) return false;
+    if (message.user?.id === this.getClient().userID) return false;
+    if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
+      return false;
+
+    return true;
+  }
+
   /**
-   * countUnread - Count the number of messages with a date thats newer than the last read timestamp
+   * countUnread - Count of unread messages
    *
    * @param {Date | Immutable.ImmutableDate | null} [lastRead] lastRead the time that the user read a message, defaults to current user's read state
    *
    * @return {number} Unread count
    */
   countUnread(lastRead?: Date | Immutable.ImmutableDate | null) {
-    if (lastRead == null) {
-      lastRead = this.lastRead();
-    }
+    if (!lastRead) return this.state.unreadCount;
+
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
-        count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
     }
@@ -1155,24 +1183,17 @@ export class Channel<
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
+    const userID = this.getClient().userID;
+
     let count = 0;
-    for (const m of this.state.messages.asMutable()) {
-      const message = m.asMutable({ deep: true });
-      if (this.getClient().userID === message.user?.id) {
-        continue;
-      }
-      if (m.silent) {
-        continue;
-      }
-      if (lastRead == null) {
+    for (let i = 0; i < this.state.messages.length; i += 1) {
+      const message = this.state.messages[i];
+      if (
+        this._countMessageAsUnread(message) &&
+        (!lastRead || message.created_at > lastRead) &&
+        message.mentioned_users?.find((u) => u.id === userID)
+      ) {
         count++;
-        continue;
-      }
-      if (m.created_at > lastRead) {
-        const userID = this.getClient().userID;
-        if (m.mentioned_users?.findIndex(u => u.id === userID) !== -1) {
-          count++;
-        }
       }
     }
     return count;
@@ -1296,6 +1317,36 @@ export class Channel<
   async unbanUser(targetUserID: string) {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserID, {
+      type: this.type,
+      id: this.id,
+    });
+  }
+
+  /**
+   * shadowBan - Shadow bans a user from a channel
+   *
+   * @param {string} targetUserID
+   * @param {BanUserOptions<UserType>} options
+   * @returns {Promise<APIResponse>}
+   */
+  async shadowBan(targetUserID: string, options: BanUserOptions<UserType>) {
+    this._checkInitialized();
+    return await this.getClient().shadowBan(targetUserID, {
+      ...options,
+      type: this.type,
+      id: this.id,
+    });
+  }
+
+  /**
+   * removeShadowBan - Removes the shadow ban for a user on a channel
+   *
+   * @param {string} targetUserID
+   * @returns {Promise<APIResponse>}
+   */
+  async removeShadowBan(targetUserID: string) {
+    this._checkInitialized();
+    return await this.getClient().removeShadowBan(targetUserID, {
       type: this.type,
       id: this.id,
     });
@@ -1441,9 +1492,10 @@ export class Channel<
       `Removing listener for ${key} event from channel ${this.cid}`,
       { tags: ['event', 'channel'], channel: this },
     );
-    this.listeners[key] = this.listeners[key].filter(value => value !== callback);
+    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(
     event: Event<
       AttachmentType,
@@ -1483,6 +1535,10 @@ export class Channel<
             event.user.id,
             Immutable({ user: { ...event.user }, last_read: event.received_at }),
           );
+
+          if (event.user?.id === this.getClient().user?.id) {
+            s.unreadCount = 0;
+          }
         }
         break;
       case 'user.watching.start':
@@ -1496,15 +1552,37 @@ export class Channel<
           s.watchers = s.watchers.without(event.user.id);
         }
         break;
-      case 'message.new':
-      case 'message.updated':
       case 'message.deleted':
+        if (event.message) {
+          if (event.hard_delete) s.removeMessage(event.message);
+          else s.addMessageSorted(event.message);
+        }
+        break;
+      case 'message.new':
+        if (event.message) {
+          /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
+          const ownMessage = event.user?.id === this.getClient().user?.id;
+          s.addMessageSorted(event.message, ownMessage);
+
+          if (ownMessage && event.user?.id) {
+            s.unreadCount = 0;
+            s.read = s.read.set(
+              event.user.id,
+              Immutable({ user: { ...event.user }, last_read: event.created_at }),
+            );
+          } else if (this._countMessageAsUnread(event.message)) {
+            s.unreadCount = s.unreadCount + 1;
+          }
+        }
+        break;
+      case 'message.updated':
         if (event.message) {
           s.addMessageSorted(event.message);
         }
         break;
       case 'channel.truncated':
         s.clearMessages();
+        s.unreadCount = 0;
         break;
       case 'member.added':
       case 'member.updated':
@@ -1530,6 +1608,12 @@ export class Channel<
       case 'reaction.deleted':
         if (event.reaction) {
           s.removeReaction(event.reaction, event.message);
+        }
+        break;
+      case 'reaction.updated':
+        if (event.reaction) {
+          // assuming reaction.updated is only called if enforce_unique is true
+          s.addReaction(event.reaction, event.message, true);
         }
         break;
       case 'channel.hidden':
@@ -1595,6 +1679,7 @@ export class Channel<
     }
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   _initializeState(
     state: ChannelAPIResponse<
       AttachmentType,
@@ -1630,7 +1715,7 @@ export class Channel<
     if (!this.state.messages) {
       this.state.messages = Immutable([]);
     }
-    this.state.addMessagesSorted(messages, true);
+    this.state.addMessagesSorted(messages, false, true);
     this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
@@ -1663,6 +1748,9 @@ export class Channel<
         const parsedRead = Object.assign({ ...read });
         parsedRead.last_read = new Date(read.last_read);
         this.state.read = this.state.read.set(read.user.id, parsedRead);
+        if (read.user.id === this.getClient().user?.id) {
+          this.state.unreadCount = parsedRead.unread_messages;
+        }
       }
     }
 

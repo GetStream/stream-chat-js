@@ -11,17 +11,6 @@ import {
   UserResponse,
 } from './types';
 
-const byDate = (
-  a: { created_at: Date | Immutable.ImmutableDate },
-  b: { created_at: Date | Immutable.ImmutableDate },
-) => {
-  if (!a.created_at) return -1;
-
-  if (!b.created_at) return 1;
-
-  return a.created_at.getTime() - b.created_at.getTime();
-};
-
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -95,6 +84,7 @@ export class ChannelState<
   members: Immutable.ImmutableObject<{
     [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
   }>;
+  unreadCount: number;
   membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
 
@@ -155,6 +145,7 @@ export class ChannelState<
       [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
     }>({});
     this.membership = Immutable<ChannelMembership<UserType>>({});
+    this.unreadCount = 0;
     this.last_message_at =
       channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)
@@ -165,6 +156,7 @@ export class ChannelState<
    * addMessageSorted - Add a message to the state
    *
    * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage A new message
+   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    *
    */
   addMessageSorted(
@@ -176,8 +168,9 @@ export class ChannelState<
       ReactionType,
       UserType
     >,
+    timestampChanged = false,
   ) {
-    return this.addMessagesSorted([newMessage]);
+    return this.addMessagesSorted([newMessage], timestampChanged);
   }
 
   /**
@@ -211,7 +204,8 @@ export class ChannelState<
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
    * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
-   * @param {boolean} initializing Weather channel is being initialized.
+   * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
+   * @param {boolean} initializing Whether channel is being initialized.
    *
    */
   addMessagesSorted(
@@ -223,21 +217,12 @@ export class ChannelState<
       ReactionType,
       UserType
     >[],
+    timestampChanged = false,
     initializing = false,
   ) {
-    // parse all the new message dates and add __html for react
-    const parsedMessages: ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['messageToImmutable']
-    >[] = [];
-    for (const message of newMessages) {
+    for (let i = 0; i < newMessages.length; i += 1) {
+      const message = this.messageToImmutable(newMessages[i]);
+
       if (initializing && message.id && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
         // then in that case we remove thread related to this message from threads object.
@@ -245,50 +230,29 @@ export class ChannelState<
         // and consumer can refetch the replies.
         this.threads = this.threads.without(message.id);
       }
-      const parsedMsg = this.messageToImmutable(message);
-
-      parsedMessages.push(parsedMsg);
 
       if (!this.last_message_at) {
-        this.last_message_at = new Date(parsedMsg.created_at.getTime());
+        this.last_message_at = new Date(message.created_at.getTime());
       }
 
-      if (
-        this.last_message_at &&
-        parsedMsg.created_at.getTime() > this.last_message_at.getTime()
-      ) {
-        this.last_message_at = new Date(parsedMsg.created_at.getTime());
+      if (message.created_at.getTime() > this.last_message_at.getTime()) {
+        this.last_message_at = new Date(message.created_at.getTime());
       }
-    }
 
-    // update or append the messages...
-    const updatedThreads: string[] = [];
-    for (const message of parsedMessages) {
-      const isThreadReply = !!(message.parent_id && !message.show_in_channel);
+      // update or append the messages...
+      const parentID = message.parent_id;
+
       // add to the main message list
-      if (!isThreadReply) {
-        this.messages = this._addToMessageList(this.messages, message);
+      if (!parentID || message.show_in_channel) {
+        this.messages = this._addToMessageList(this.messages, message, timestampChanged);
       }
+
       // add to the thread if applicable..
-      const parentID: string | undefined = message.parent_id;
       if (parentID) {
         const thread = this.threads[parentID] || Immutable([]);
-        const threadMessages = this._addToMessageList(thread, message);
+        const threadMessages = this._addToMessageList(thread, message, timestampChanged);
         this.threads = this.threads.set(parentID, threadMessages);
-        updatedThreads.push(parentID);
       }
-    }
-
-    // Resort the main messages and the threads that changed...
-    const messages = Immutable.asMutable(this.messages);
-    messages.sort(byDate);
-    this.messages = Immutable(messages);
-    for (const parentID of updatedThreads) {
-      const threadMessages = this.threads[parentID]
-        ? Immutable.asMutable(this.threads[parentID])
-        : [];
-      threadMessages.sort(byDate);
-      this.threads = this.threads.set(parentID, threadMessages);
     }
   }
 
@@ -302,6 +266,7 @@ export class ChannelState<
       ReactionType,
       UserType
     >,
+    enforce_unique?: boolean,
   ) {
     const { messages } = this;
     if (!message) return;
@@ -312,7 +277,11 @@ export class ChannelState<
 
       for (let i = 0; i < thread.length; i++) {
         const msg = thread[i];
-        const messageWithReaction = this._addReactionToMessage(msg, reaction);
+        const messageWithReaction = this._addReactionToMessage(
+          msg,
+          reaction,
+          enforce_unique,
+        );
         if (!messageWithReaction) {
           continue;
         }
@@ -326,7 +295,11 @@ export class ChannelState<
     if ((!show_in_channel && !parent_id) || show_in_channel) {
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        const messageWithReaction = this._addReactionToMessage(msg, reaction);
+        const messageWithReaction = this._addReactionToMessage(
+          msg,
+          reaction,
+          enforce_unique,
+        );
         if (!messageWithReaction) {
           continue;
         }
@@ -353,6 +326,7 @@ export class ChannelState<
       >
     >,
     reaction: ReactionResponse<ReactionType, UserType>,
+    enforce_unique?: boolean,
   ) {
     const idMatch = !!message.id && message.id === reaction.message_id;
 
@@ -360,7 +334,7 @@ export class ChannelState<
       return false;
     }
 
-    let newMessage = this._removeReactionFromMessage(message, reaction);
+    let newMessage = this._removeReactionFromMessage(message, reaction, enforce_unique);
     if (this._channel.getClient().userID === reaction.user?.id) {
       newMessage = newMessage.update(
         'own_reactions',
@@ -394,13 +368,27 @@ export class ChannelState<
       >
     >,
     reaction: ReactionResponse<ReactionType, UserType>,
+    enforce_unique?: boolean,
   ) {
     const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
-      old.filter(
-        item => item.type !== reaction.type || item.user?.id !== reaction.user?.id,
+      old.filter((item) =>
+        enforce_unique
+          ? item.user?.id !== reaction.user?.id
+          : item.type !== reaction.type || item.user?.id !== reaction.user?.id,
       );
     let newMessage = message.update('own_reactions', filterReaction);
     newMessage = newMessage.update('latest_reactions', filterReaction);
+    if (enforce_unique) {
+      const oldReaction = message.own_reactions?.find(
+        ({ type }) => type === reaction.type,
+      );
+      if (oldReaction) {
+        newMessage = newMessage.updateIn(
+          ['reaction_counts', oldReaction.type],
+          (old: number) => (old ? old - 1 : 0),
+        );
+      }
+    }
     return newMessage;
   }
 
@@ -465,6 +453,7 @@ export class ChannelState<
    *
    * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
    * @param {ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    *
    */
   _addToMessageList(
@@ -481,7 +470,7 @@ export class ChannelState<
         >['messageToImmutable']
       >
     >,
-    newMessage: ReturnType<
+    message: ReturnType<
       ChannelState<
         AttachmentType,
         ChannelType,
@@ -492,36 +481,61 @@ export class ChannelState<
         UserType
       >['messageToImmutable']
     >,
+    timestampChanged = false,
   ) {
-    let updated = false;
-    let newMessages: Immutable.ImmutableArray<ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['messageToImmutable']
-    >> = Immutable([]);
+    let messageArr = messages;
 
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
-      const idMatch = !!message.id && !!newMessage.id && message.id === newMessage.id;
+    // if created_at has changed, message should be filtered and re-inserted in correct order
+    // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
+    if (timestampChanged) {
+      messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
+    }
 
-      if (idMatch) {
+    // for empty list just concat and return
+    if (messageArr.length === 0) return messageArr.concat(message);
+
+    const messageTime = message.created_at.getTime();
+
+    // if message is newer than last item in the list concat and return
+    if (messageArr[messageArr.length - 1].created_at.getTime() < messageTime)
+      return messageArr.concat(message);
+
+    // find the closest index to push the new message
+    let left = 0;
+    let middle = 0;
+    let right = messageArr.length - 1;
+    while (left <= right) {
+      middle = Math.floor((right + left) / 2);
+      if (messageArr[middle].created_at.getTime() <= messageTime) left = middle + 1;
+      else right = middle - 1;
+    }
+
+    // message already exists and not filtered due to timestampChanged, update and return
+    if (!timestampChanged && message.id) {
+      if (messageArr[left] && message.id === messageArr[left].id)
         // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        newMessages = messages.set(i, newMessage);
-        updated = true;
-      }
+        return messageArr.set(left, message);
+
+      if (messageArr[left - 1] && message.id === messageArr[left - 1].id)
+        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
+        return messageArr.set(left - 1, message);
     }
 
-    if (!updated) {
-      newMessages = messages.concat([newMessage]);
-    }
-
-    return newMessages;
+    const mutable = messageArr.asMutable() as Array<
+      ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['messageToImmutable']
+      >
+    >;
+    mutable.splice(left, 0, message);
+    return Immutable(mutable);
   }
 
   /**
@@ -574,7 +588,7 @@ export class ChannelState<
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter(
-      message => !(!!message.id && !!msg.id && message.id === msg.id),
+      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
     );
 
     return { removed: result.length < msgArray.length, result };
@@ -584,7 +598,7 @@ export class ChannelState<
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.messages.filter(message => message.type !== 'error');
+    const filteredMessages = this.messages.filter((message) => message.type !== 'error');
 
     this.messages = filteredMessages;
   }
