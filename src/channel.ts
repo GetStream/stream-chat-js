@@ -1610,6 +1610,12 @@ export class Channel<
           s.removeReaction(event.reaction, event.message);
         }
         break;
+      case 'reaction.updated':
+        if (event.reaction) {
+          // assuming reaction.updated is only called if enforce_unique is true
+          s.addReaction(event.reaction, event.message, true);
+        }
+        break;
       case 'channel.hidden':
         if (event.clear_history) {
           s.clearMessages();
