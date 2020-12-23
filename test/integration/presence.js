@@ -70,7 +70,7 @@ describe('Presence', function () {
 				});
 			};
 
-			expect(setUserAndThrow).to.throw(/setUser was called twice/);
+			expect(setUserAndThrow).to.throw(/connectUser was called twice/);
 		});
 
 		it('login as a different user', async function () {

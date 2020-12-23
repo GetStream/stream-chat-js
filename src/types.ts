@@ -802,6 +802,10 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  /**
+   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
+   */
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
   /**

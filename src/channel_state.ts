@@ -266,6 +266,7 @@ export class ChannelState<
       ReactionType,
       UserType
     >,
+    enforce_unique?: boolean,
   ) {
     const { messages } = this;
     if (!message) return;
@@ -276,7 +277,11 @@ export class ChannelState<
 
       for (let i = 0; i < thread.length; i++) {
         const msg = thread[i];
-        const messageWithReaction = this._addReactionToMessage(msg, reaction);
+        const messageWithReaction = this._addReactionToMessage(
+          msg,
+          reaction,
+          enforce_unique,
+        );
         if (!messageWithReaction) {
           continue;
         }
@@ -290,7 +295,11 @@ export class ChannelState<
     if ((!show_in_channel && !parent_id) || show_in_channel) {
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        const messageWithReaction = this._addReactionToMessage(msg, reaction);
+        const messageWithReaction = this._addReactionToMessage(
+          msg,
+          reaction,
+          enforce_unique,
+        );
         if (!messageWithReaction) {
           continue;
         }
@@ -317,6 +326,7 @@ export class ChannelState<
       >
     >,
     reaction: ReactionResponse<ReactionType, UserType>,
+    enforce_unique?: boolean,
   ) {
     const idMatch = !!message.id && message.id === reaction.message_id;
 
@@ -324,7 +334,7 @@ export class ChannelState<
       return false;
     }
 
-    let newMessage = this._removeReactionFromMessage(message, reaction);
+    let newMessage = this._removeReactionFromMessage(message, reaction, enforce_unique);
     if (this._channel.getClient().userID === reaction.user?.id) {
       newMessage = newMessage.update(
         'own_reactions',
@@ -358,13 +368,27 @@ export class ChannelState<
       >
     >,
     reaction: ReactionResponse<ReactionType, UserType>,
+    enforce_unique?: boolean,
   ) {
     const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
-      old.filter(
-        (item) => item.type !== reaction.type || item.user?.id !== reaction.user?.id,
+      old.filter((item) =>
+        enforce_unique
+          ? item.user?.id !== reaction.user?.id
+          : item.type !== reaction.type || item.user?.id !== reaction.user?.id,
       );
     let newMessage = message.update('own_reactions', filterReaction);
     newMessage = newMessage.update('latest_reactions', filterReaction);
+    if (enforce_unique) {
+      const oldReaction = message.own_reactions?.find(
+        ({ type }) => type === reaction.type,
+      );
+      if (oldReaction) {
+        newMessage = newMessage.updateIn(
+          ['reaction_counts', oldReaction.type],
+          (old: number) => (old ? old - 1 : 0),
+        );
+      }
+    }
     return newMessage;
   }
 

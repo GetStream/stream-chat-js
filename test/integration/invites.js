@@ -457,7 +457,7 @@ describe('update channel - invites', function () {
 		});
 		await distinctChannel.create();
 		await expect(distinctChannel.inviteMembers([invited])).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members',
+			'StreamChat error code 17: UpdateChannel failed with error: "cannot invite members to the distinct channel, please create a new distinct channel with the desired members"',
 		);
 	});
 
