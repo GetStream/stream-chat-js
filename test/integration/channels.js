@@ -2085,6 +2085,23 @@ describe('channel message search', function () {
 		expect(response.results.length).to.equal(1);
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
+
+	it('message contains own_reactions', async function () {
+		// add a very special messsage
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+
+		await channel.sendReaction(smResp.message.id, { type: 'like' });
+
+		const response = await channel.search(
+			{ id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
+		expect(response.results[0].message.own_reactions.length).to.equal(1);
+	});
 });
 
 describe('search on deleted channels', function () {
@@ -2264,7 +2281,7 @@ describe('partial update channel', () => {
 		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
 	});
 
-	it('partial update concurrently works', async () => {
+	it.skip('partial update concurrently works', async () => {
 		// keep in mind that there is no way to ensure ordering...
 		const promises = [];
 		for (let i = 0; i < 3; i++) {

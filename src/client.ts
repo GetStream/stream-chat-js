@@ -1271,7 +1271,7 @@ export class StreamChat<
       ...options,
     };
 
-    const data = await this.get<{
+    const data = await this.post<{
       channels: ChannelAPIResponse<
         AttachmentType,
         ChannelType,
@@ -1280,9 +1280,7 @@ export class StreamChat<
         ReactionType,
         UserType
       >[];
-    }>(this.baseURL + '/channels', {
-      payload,
-    });
+    }>(this.baseURL + '/channels', payload);
 
     const channels: Channel<
       AttachmentType,
