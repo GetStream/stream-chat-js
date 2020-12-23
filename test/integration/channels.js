@@ -2345,7 +2345,7 @@ describe('Threadless replies', () => {
 		ruud = 'ruud-' + uuidv4();
 		friend = 'friend-' + uuidv4();
 		await createUsers([ruud, friend]);
-		client = await getTestClient(true);
+		client = getServerTestClient();
 		channel = client.channel('messaging', uuidv4(), {
 			created_by_id: ruud,
 			members: [ruud, friend],
@@ -2383,7 +2383,6 @@ describe('Threadless replies', () => {
 			});
 
 			expect(res.message).to.not.be.undefined;
-			expect(res.message.id).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
 			expect(res.message.parent_id).to.not.be.undefined;
 			expect(res.message.type).to.equal('reply');
@@ -2399,13 +2398,10 @@ describe('Threadless replies', () => {
 			});
 
 			expect(res.message).to.not.be.undefined;
-			expect(res.message.id).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
 			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.not.be.undefined;
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
@@ -2419,13 +2415,10 @@ describe('Threadless replies', () => {
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message_id).to.not.be.undefined;
 			expect(clm.reply_to_message).to.not.be.undefined;
 			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.text).to.not.be.undefined;
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
@@ -2444,13 +2437,10 @@ describe('Threadless replies', () => {
 			);
 
 			expect(res.message).to.not.be.undefined;
-			expect(res.message.id).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
 			expect(res.message.reply_to_message_id).to.equal(secondMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(secondMessage.id);
-			expect(res.message.reply_to_message.text).to.not.be.undefined;
 			expect(res.message.reply_to_message.text).to.equal(secondMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
@@ -2464,13 +2454,10 @@ describe('Threadless replies', () => {
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message_id).to.not.be.undefined;
 			expect(clm.reply_to_message).to.not.be.undefined;
 			expect(clm.reply_to_message_id).to.equal(secondMessage.id);
 			expect(clm.reply_to_message.id).to.equal(secondMessage.id);
-			expect(clm.reply_to_message.text).to.not.be.undefined;
 			expect(clm.reply_to_message.text).to.equal(secondMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
@@ -2487,13 +2474,10 @@ describe('Threadless replies', () => {
 			);
 
 			expect(res.message).to.not.be.undefined;
-			expect(res.message.id).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
 			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.not.be.undefined;
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
@@ -2513,13 +2497,10 @@ describe('Threadless replies', () => {
 			});
 
 			expect(res.message).to.not.be.undefined;
-			expect(res.message.id).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
 			expect(res.message.reply_to_message_id).to.equal(threadlessReply.id);
 			expect(res.message.reply_to_message.id).to.equal(threadlessReply.id);
-			expect(res.message.reply_to_message.text).to.not.be.undefined;
 			expect(res.message.reply_to_message.text).to.equal(threadlessReply.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
@@ -2533,9 +2514,7 @@ describe('Threadless replies', () => {
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReplyReply.id);
-			expect(clm.reply_to_message_id).to.not.be.undefined;
 			expect(clm.reply_to_message).to.not.be.undefined;
 			expect(clm.reply_to_message_id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message.id).to.equal(threadlessReply.id);
@@ -2567,12 +2546,10 @@ describe('Threadless replies', () => {
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.undefined;
-			expect(res.message.id).to.not.be.empty;
 			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
 			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.not.be.undefined;
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
@@ -2586,13 +2563,10 @@ describe('Threadless replies', () => {
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message_id).to.not.be.undefined;
 			expect(clm.reply_to_message).to.not.be.undefined;
 			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.text).to.not.be.undefined;
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
