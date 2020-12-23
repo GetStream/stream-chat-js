@@ -20,7 +20,7 @@ describe('Sync endpoint', () => {
 	it('should not work if called before set user', async () => {
 		const client = getTestClient(false);
 		const id = uuidv4();
-		client.setUser({ id }, createUserToken(id));
+		client.connectUser({ id }, createUserToken(id));
 		const p = client.sync();
 		await expect(p).to.be.rejected;
 	});
@@ -46,7 +46,7 @@ describe('Sync endpoint', () => {
 
 	it('connect to red, blue and green channels and put some messages', async () => {
 		serverSideClient = getTestClient(true);
-		await serverSideClient.updateUser({ id: otherUserID });
+		await serverSideClient.upsertUser({ id: otherUserID });
 		blueChannel = serverSideClient.channel('messaging', `blue-${uuidv4()}`, {
 			created_by_id: otherUserID,
 			members: [userID, otherUserID],
@@ -163,6 +163,7 @@ describe('Sync endpoint', () => {
 		expect(evts).to.have.length(1);
 		expect(evts[0].message.latest_reactions).to.have.length(1);
 		expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
+		expect(evts[0].message.own_reactions).to.eql({ like: 1 });
 		expect(evts[0].user).to.not.be.undefined;
 		expect(evts[0].message.user).to.not.be.undefined;
 	});
