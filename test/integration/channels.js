@@ -2394,15 +2394,13 @@ describe('Threadless replies', () => {
 			const res = await channel.sendMessage({
 				text: 'The first threadless reply',
 				user_id: friend,
-				reply_to_message: {
-					id: firstMessage.id
-				},
+				reply_to_message_id: firstMessage.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
 			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
@@ -2419,7 +2417,7 @@ describe('Threadless replies', () => {
 			expect(clm).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
@@ -2428,14 +2426,12 @@ describe('Threadless replies', () => {
 	});
 
 	describe('Friend changes the message they reply to', () => {
-		it('is possible to change a reply_to_message', async () => {
+		it('is possible to change a reply_to_message_id', async () => {
 			const res = await client.updateMessage(
 				{
 					id: threadlessReply.id,
 					text: 'The first threadless reply',
-					reply_to_message: {
-						id: secondMessage.id
-					},
+					reply_to_message_id: secondMessage.id,
 				},
 				friend,
 			);
@@ -2443,7 +2439,7 @@ describe('Threadless replies', () => {
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
 			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(secondMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(secondMessage.id);
 			expect(res.message.reply_to_message.text).to.equal(secondMessage.text);
 			expect(res.message.type).to.equal('regular');
@@ -2460,7 +2456,7 @@ describe('Threadless replies', () => {
 			expect(clm).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(secondMessage.id);
 			expect(clm.reply_to_message.id).to.equal(secondMessage.id);
 			expect(clm.reply_to_message.text).to.equal(secondMessage.text);
 			expect(clm.type).to.equal('regular');
@@ -2472,9 +2468,7 @@ describe('Threadless replies', () => {
 				{
 					id: threadlessReply.id,
 					text: 'The first threadless reply',
-					reply_to_message: {
-						id: firstMessage.id
-					},
+					reply_to_message_id: firstMessage.id,
 				},
 				friend,
 			);
@@ -2482,7 +2476,7 @@ describe('Threadless replies', () => {
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
 			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
@@ -2499,15 +2493,13 @@ describe('Threadless replies', () => {
 			const res = await channel.sendMessage({
 				text: 'The first threadless reply',
 				user_id: friend,
-				reply_to_message: {
-					id: threadlessReply.id
-				},
+				reply_to_message_id: threadlessReply.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
 			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(threadlessReply.id);
 			expect(res.message.reply_to_message.id).to.equal(threadlessReply.id);
 			expect(res.message.reply_to_message.text).to.equal(threadlessReply.text);
 			expect(res.message.type).to.equal('regular');
@@ -2524,7 +2516,7 @@ describe('Threadless replies', () => {
 			expect(clm).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReplyReply.id);
 			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message.id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message.text).to.not.be.undefined;
 			expect(clm.reply_to_message.text).to.equal(threadlessReply.text);
@@ -2549,15 +2541,14 @@ describe('Threadless replies', () => {
 			const res = await channel.sendMessage({
 				text: 'The second threadless reply',
 				user_id: friend,
-				reply_to_message: {
-					id: firstMessage.id
-				},
+				reply_to_message_id: firstMessage.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.be.undefined;
+			expect(res.message.reply_to_message_id).to.not.be.undefined;
 			expect(res.message.reply_to_message).to.not.be.undefined;
+			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
 			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
@@ -2574,7 +2565,7 @@ describe('Threadless replies', () => {
 			expect(clm).to.not.be.undefined;
 			expect(clm.id).to.equal(threadlessReply.id);
 			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.be.undefined;
+			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
 			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
