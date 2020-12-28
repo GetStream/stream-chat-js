@@ -2483,6 +2483,18 @@ describe('pinned messages', () => {
 		expect(results[0].message.id).to.be.equal(message.id);
 	});
 
+	it('pin message', async () => {
+		const { message } = await channel.sendMessage({
+			text: 'Regular message 2',
+		});
+		expect(message.pinned).to.be.equal(false);
+		const { message: updatedMessage } = await ownerClient.updateMessage({
+			id: message.id,
+			pinned: true,
+		});
+		expect(updatedMessage.pinned).to.be.equal(true);
+	});
+
 	it('unpin message', async () => {
 		const { message } = await channel.sendMessage({
 			text: 'Pinned message 2',
@@ -2494,5 +2506,21 @@ describe('pinned messages', () => {
 			pinned: false,
 		});
 		expect(updatedMessage.pinned).to.be.equal(false);
+	});
+
+	it('pin message with expiration', async () => {
+		const now = new Date();
+		now.setSeconds(now.getSeconds() + 1);
+		const { message } = await channel.sendMessage({
+			text: 'Pinned message 3',
+			pinned: true,
+			pinned_till: now.toISOString(),
+		});
+		expect(message.pinned).to.be.equal(true);
+		const { message: updatedMessage1 } = await ownerClient.getMessage(message.id);
+		expect(updatedMessage1.pinned).to.be.equal(true);
+		await sleep(1500);
+		const { message: updatedMessage2 } = await ownerClient.getMessage(message.id);
+		expect(updatedMessage2.pinned).to.be.equal(false);
 	});
 });
