@@ -94,6 +94,9 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    sqs_key?: string;
+    sqs_secret?: string;
+    sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[];
@@ -1245,6 +1248,9 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
   webhook_url?: string;
 };
 
