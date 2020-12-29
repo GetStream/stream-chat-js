@@ -420,9 +420,6 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
-  reaction_counts?: { [key: string]: number } | null;
-  reaction_scores?: { [key: string]: number } | null;
-  reply_count?: number;
   quoted_message?: Omit<
     MessageResponse<
       AttachmentType,
@@ -434,6 +431,9 @@ export type MessageResponse<
     >,
     'quoted_message'
   >;
+  reaction_counts?: { [key: string]: number } | null;
+  reaction_scores?: { [key: string]: number } | null;
+  reply_count?: number;
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
