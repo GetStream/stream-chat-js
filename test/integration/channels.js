@@ -2390,7 +2390,7 @@ describe('Quote messages', () => {
 	});
 
 	describe('Friend quotes message', () => {
-		it("is possible to quote a message", async () => {
+		it('is possible to quote a message', async () => {
 			const res = await channel.sendMessage({
 				text: 'The first message that quotes a message',
 				user_id: friend,
