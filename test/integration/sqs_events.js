@@ -97,7 +97,6 @@ describe('SQS check endpoint', function () {
 		expect(response.error).to.contain(
 			'invalid SQS url https://foobar.com/123456789012/MyQueue',
 		);
-		expect(response.data).to.eq(undefined);
 	});
 
 	it('should check the valid sqs settings', async function () {
@@ -125,7 +124,6 @@ describe('SQS check endpoint', function () {
 		expect(response.error).to.contain(
 			'invalid SQS url https://foobar.com/123456789012/MyQueue',
 		);
-		expect(response.data).to.eq(undefined);
 	});
 });
 
