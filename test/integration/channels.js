@@ -2514,7 +2514,7 @@ describe('pinned messages', () => {
 		const { message } = await channel.sendMessage({
 			text: 'Pinned message 3',
 			pinned: true,
-			pinned_till: now.toISOString(),
+			pin_expires: now.toISOString(),
 		});
 		expect(message.pinned).to.be.equal(true);
 		const { message: updatedMessage1 } = await ownerClient.getMessage(message.id);

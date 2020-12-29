@@ -1472,9 +1472,9 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string;
   pinned_at?: string;
   pinned_by?: UserResponse<UserType> | null;
-  pinned_till?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;
