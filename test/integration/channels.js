@@ -2338,8 +2338,8 @@ describe('partial update channel', () => {
 	});
 });
 
-describe('Threadless replies', () => {
-	let client, channel, ruud, friend, firstMessage, secondMessage, threadlessReply;
+describe('Quote messages', () => {
+	let client, channel, ruud, friend, firstMessage, secondMessage, messageWithQuote;
 
 	before(async () => {
 		ruud = 'ruud-' + uuidv4();
@@ -2389,146 +2389,146 @@ describe('Threadless replies', () => {
 		});
 	});
 
-	describe('Friend sends a threadless / quoted reply', () => {
-		it("is possible to send a reply that isn't in a thread", async () => {
+	describe('Friend quotes message', () => {
+		it("is possible to quote a message", async () => {
 			const res = await channel.sendMessage({
-				text: 'The first threadless reply',
+				text: 'The first message that quotes a message',
 				user_id: friend,
-				reply_to_message_id: firstMessage.id,
+				quoted_message_id: firstMessage.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
 
-			threadlessReply = res.message;
+			messageWithQuote = res.message;
 		});
 
-		it('the threadless reply is enriched when querying the channel with its messages', async () => {
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
 			const chan = await client
 				.channel('messaging', channel.id)
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
 	});
 
-	describe('Friend changes the message they reply to', () => {
-		it('is possible to change a reply_to_message_id', async () => {
+	describe('Friend changes the message they quoted', () => {
+		it('is possible to change a quoted_message_id', async () => {
 			const res = await client.updateMessage(
 				{
-					id: threadlessReply.id,
-					text: 'The first threadless reply',
-					reply_to_message_id: secondMessage.id,
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: secondMessage.id,
 				},
 				friend,
 			);
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.equal(secondMessage.id);
-			expect(res.message.reply_to_message.id).to.equal(secondMessage.id);
-			expect(res.message.reply_to_message.text).to.equal(secondMessage.text);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
 
-			threadlessReply = res.message;
+			messageWithQuote = res.message;
 		});
 
-		it('the threadless reply is enriched with the changed reply_to_message', async () => {
+		it('the quoted message is enriched with the changed quoted_message_id', async () => {
 			const chan = await client
 				.channel('messaging', channel.id)
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.equal(secondMessage.id);
-			expect(clm.reply_to_message.id).to.equal(secondMessage.id);
-			expect(clm.reply_to_message.text).to.equal(secondMessage.text);
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.text).to.equal(secondMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
 
-		it('is possible to change the reply_to_message_id back', async () => {
+		it('is possible to change the quoted_message_id back', async () => {
 			const res = await client.updateMessage(
 				{
-					id: threadlessReply.id,
-					text: 'The first threadless reply',
-					reply_to_message_id: firstMessage.id,
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: firstMessage.id,
 				},
 				friend,
 			);
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
 
-			threadlessReply = res.message;
+			messageWithQuote = res.message;
 		});
 	});
 
-	describe("Ruud sends a threadless reply to the friend's reply", () => {
-		let threadlessReplyReply;
+	describe("Ruud quotes the friend's message with the quoted message", () => {
+		let quoteQuotedMessage;
 
-		it('is possible to send a threadless reply to a threadless reply', async () => {
+		it('is possible to quote a message with a quoted message', async () => {
 			const res = await channel.sendMessage({
-				text: 'The first threadless reply',
+				text: 'The first message to quote a message with a quoted message',
 				user_id: friend,
-				reply_to_message_id: threadlessReply.id,
+				quoted_message_id: messageWithQuote.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.equal(threadlessReply.id);
-			expect(res.message.reply_to_message.id).to.equal(threadlessReply.id);
-			expect(res.message.reply_to_message.text).to.equal(threadlessReply.text);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.text).to.equal(messageWithQuote.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
 
-			threadlessReplyReply = res.message;
+			quoteQuotedMessage = res.message;
 		});
 
-		it('the threadless reply to the threadless reply is enriched when querying the channel with its messages', async () => {
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
 			const chan = await client
 				.channel('messaging', channel.id)
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.equal(threadlessReplyReply.id);
-			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message.text).to.not.be.undefined;
-			expect(clm.reply_to_message.text).to.equal(threadlessReply.text);
-			// No nested threadless replies
-			expect(clm.reply_to_message.reply_to_message).to.be.undefined;
+			expect(clm.id).to.equal(quoteQuotedMessage.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.text).to.not.be.undefined;
+			expect(clm.quoted_message.text).to.equal(messageWithQuote.text);
+			// No nested quotes
+			expect(clm.quoted_message.quoted_message).to.be.undefined;
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
 	});
 
-	describe('Ruud and friend send 15 random messages each and try sending a threadless reply again', () => {
-		let threadlessReply;
+	describe('Ruud and friend send 15 random messages each and try sending a message with a quoted message again', () => {
+		let messageWithQuote;
 
 		it('is possible to send random messages', async () => {
 			for (let i = 0; i < 15; i++) {
@@ -2537,37 +2537,37 @@ describe('Threadless replies', () => {
 			}
 		});
 
-		it('is still possible to make a threadless reply to the first message', async () => {
+		it('is still possible to quote the first message', async () => {
 			const res = await channel.sendMessage({
-				text: 'The second threadless reply',
+				text: 'The second quoted reply',
 				user_id: friend,
-				reply_to_message_id: firstMessage.id,
+				quoted_message_id: firstMessage.id,
 			});
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.not.be.undefined;
-			expect(res.message.reply_to_message).to.not.be.undefined;
-			expect(res.message.reply_to_message_id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.id).to.equal(firstMessage.id);
-			expect(res.message.reply_to_message.text).to.equal(firstMessage.text);
+			expect(res.message.quoted_message_id).to.not.be.undefined;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
 
-			threadlessReply = res.message;
+			messageWithQuote = res.message;
 		});
 
-		it('the threadless reply is still properly enriched when querying the channel with its messages', async () => {
+		it('the quoted message is still properly enriched when querying the channel with its messages', async () => {
 			const chan = await client
 				.channel('messaging', channel.id)
 				.query({ state: true });
 			const clm = chan.messages.pop();
 			expect(clm).to.not.be.undefined;
-			expect(clm.id).to.equal(threadlessReply.id);
-			expect(clm.reply_to_message).to.not.be.undefined;
-			expect(clm.reply_to_message_id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.id).to.equal(firstMessage.id);
-			expect(clm.reply_to_message.text).to.equal(firstMessage.text);
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
