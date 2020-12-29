@@ -1397,6 +1397,9 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 };
 
 export type DeviceFields = {
+  created_at: string;
+  disabled?: boolean;
+  disabled_reason?: string;
   id?: string;
   push_provider?: 'apn' | 'firebase';
 };
