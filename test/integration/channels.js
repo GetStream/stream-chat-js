@@ -2405,7 +2405,7 @@ describe('Quote messages', () => {
 			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
-
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 			messageWithQuote = res.message;
 		});
 
@@ -2419,6 +2419,7 @@ describe('Quote messages', () => {
 			expect(clm.quoted_message).to.not.be.undefined;
 			expect(clm.quoted_message_id).to.equal(firstMessage.id);
 			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.user).to.not.be.undefined;
 			expect(clm.quoted_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
@@ -2444,7 +2445,7 @@ describe('Quote messages', () => {
 			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
-
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 			messageWithQuote = res.message;
 		});
 
@@ -2461,6 +2462,7 @@ describe('Quote messages', () => {
 			expect(clm.quoted_message.text).to.equal(secondMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
 		});
 
 		it('is possible to change the quoted_message_id back', async () => {
@@ -2481,7 +2483,7 @@ describe('Quote messages', () => {
 			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
-
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 			messageWithQuote = res.message;
 		});
 	});
@@ -2504,7 +2506,7 @@ describe('Quote messages', () => {
 			expect(res.message.quoted_message.text).to.equal(messageWithQuote.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
-
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 			quoteQuotedMessage = res.message;
 		});
 
@@ -2522,16 +2524,17 @@ describe('Quote messages', () => {
 			expect(clm.quoted_message.text).to.equal(messageWithQuote.text);
 			// No nested quotes
 			expect(clm.quoted_message.quoted_message).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 		});
 	});
 
-	describe('Ruud and friend send 15 random messages each and try sending a message with a quoted message again', () => {
+	describe('Ruud and friend send 55 random messages each and try sending a message with a quoted message again', () => {
 		let messageWithQuote;
 
 		it('is possible to send random messages', async () => {
-			for (let i = 0; i < 15; i++) {
+			for (let i = 0; i < 55; i++) {
 				await channel.sendMessage({ text: uuidv4(), user_id: ruud });
 				await channel.sendMessage({ text: uuidv4(), user_id: friend });
 			}
@@ -2553,7 +2556,7 @@ describe('Quote messages', () => {
 			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
 			expect(res.message.type).to.equal('regular');
 			expect(res.message.parent_id).to.be.undefined;
-
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 			messageWithQuote = res.message;
 		});
 
@@ -2570,6 +2573,7 @@ describe('Quote messages', () => {
 			expect(clm.quoted_message.text).to.equal(firstMessage.text);
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
 		});
 	});
 });
