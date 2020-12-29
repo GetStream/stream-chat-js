@@ -15,6 +15,7 @@ import {
 	runAndLogPromise,
 	sleep,
 	expectHTTPErrorCode,
+	randomUnicodeString,
 } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -278,36 +279,31 @@ describe('Query Users', function () {
 			expect(error).to.be.true;
 		});
 
+		it('$autocomplete query with special symbols only should lead to a status 400 error', async () => {
+			let error = false;
+			try {
+				await client.queryUsers({
+					name: { $autocomplete: '!@#$%!%^!^!^&*()' },
+				});
+			} catch (e) {
+				error = true;
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+				expect(e.response.data.message).to.equal(
+					'QueryUsers failed with error: "$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete"',
+				);
+			}
+			expect(error).to.be.true;
+		});
+
 		it('$autocomplete query with random characters', async () => {
-			const punctuation = `~\`!@#$%^&*()	_- +=?/>.
-			<,"':;}]{[|\\]`;
-			const azAZ09 =
-				'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-			const randomString = (length) =>
-				Array.from({ length }, () => {
-					const rand = Math.floor(Math.random() * 100);
-
-					// 1/4 of the characters is punctuation
-					if (rand <= 25) {
-						return punctuation[
-							Math.floor(Math.random() * punctuation.length)
-						];
-					}
-
-					// 2/4 of the characters are random unicode characters
-					if (rand > 25 && rand <= 75) {
-						return String.fromCharCode(Math.floor(Math.random() * 65536));
-					}
-
-					// 1/4 of the characters are regular azAZ09
-					return azAZ09[Math.floor(Math.random() * azAZ09.length)];
-				}).join('');
-
 			for (let i = 0; i < 100; i++) {
 				try {
 					await client.queryUsers({
 						id: {
-							$autocomplete: randomString(24),
+							$autocomplete: randomUnicodeString(24),
 						},
 					});
 				} catch (e) {
