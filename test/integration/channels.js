@@ -1819,7 +1819,7 @@ describe('query by $autocomplete operator on channels.name', function () {
 			await client.queryChannels({
 				members: [user],
 				name: {
-					$autocomplete: '!@#?$?%^%$',
+					$autocomplete: '!@#$%!%&*()',
 				},
 			});
 		} catch (e) {

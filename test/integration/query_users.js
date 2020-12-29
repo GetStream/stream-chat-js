@@ -283,7 +283,7 @@ describe('Query Users', function () {
 			let error = false;
 			try {
 				await client.queryUsers({
-					name: { $autocomplete: '!@#$%!%^!^!^&*()' },
+					name: { $autocomplete: '!@#$%!%&*()' },
 				});
 			} catch (e) {
 				error = true;
