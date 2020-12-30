@@ -299,7 +299,7 @@ describe('Query Users', function () {
 		});
 
 		it('$autocomplete query with random characters', async () => {
-			for (let i = 0; i < 100; i++) {
+			for (let i = 0; i < 10; i++) {
 				try {
 					await client.queryUsers({
 						id: {
