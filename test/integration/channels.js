@@ -2062,7 +2062,7 @@ describe('channel message search', function () {
 			await expectHTTPErrorCode(
 				400,
 				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
-				'StreamChat error code 4: Search failed with error: "mentioned.user.id only supports $contains operator"',
+				'StreamChat error code 4: Search failed with error: "mentioned_users.id only supports $contains operator"',
 			);
 		});
 	});
