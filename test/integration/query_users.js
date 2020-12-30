@@ -15,6 +15,7 @@ import {
 	runAndLogPromise,
 	sleep,
 	expectHTTPErrorCode,
+	randomUnicodeString,
 } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -232,7 +233,7 @@ describe('Query Users', function () {
 		expect([mute1.target.id, mute2.target.id]).to.have.members([userID2, userID3]);
 	});
 
-	describe('$autocompete queries should be sanitized properly', () => {
+	describe('$autocomplete queries should be sanitized properly', () => {
 		let user, numericalUserID, numericalUser, client;
 
 		before(async () => {
@@ -278,25 +279,11 @@ describe('Query Users', function () {
 			expect(error).to.be.true;
 		});
 
-		it('$autocomplete query with linebreak', async () => {
-			const response = await client.queryUsers({
-				id: {
-					$autocomplete: `Ru  
-						`,
-				},
-			});
-			expect(response.users).to.not.be.undefined;
-			expect(response.users[0].id).to.equal(user.id);
-		});
-
-		it('$autocomplete query with special characters', async () => {
+		it('$autocomplete query with special symbols only should lead to a status 400 error', async () => {
 			let error = false;
-
 			try {
 				await client.queryUsers({
-					id: {
-						$autocomplete: `+$#@`,
-					},
+					name: { $autocomplete: '!@#$%!%&*()' },
 				});
 			} catch (e) {
 				error = true;
@@ -311,14 +298,21 @@ describe('Query Users', function () {
 			expect(error).to.be.true;
 		});
 
-		it('$autocomplete query with special characters, but with valid results', async () => {
-			const result = await client.queryUsers({
-				id: {
-					$autocomplete: `Ru+$#@!`,
-				},
-			});
-			expect(result.users).to.not.be.undefined;
-			expect(result.users.length).to.be.gt(0);
+		it('$autocomplete query with random characters', async () => {
+			for (let i = 0; i < 10; i++) {
+				try {
+					await client.queryUsers({
+						id: {
+							$autocomplete: randomUnicodeString(24),
+						},
+					});
+				} catch (e) {
+					expect(e.response).to.not.be.undefined;
+					expect(e.response.data).to.not.be.undefined;
+					expect(e.response.data.code).to.equal(4);
+					expect(e.response.data.StatusCode).to.equal(400);
+				}
+			}
 		});
 	});
 });
