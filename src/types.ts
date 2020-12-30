@@ -1473,6 +1473,7 @@ export type MessageBase<
   mml?: string;
   parent_id?: string;
   pin_expires?: string;
+  pin_timeout?: number;
   pinned_at?: string;
   pinned_by?: UserResponse<UserType> | null;
   show_in_channel?: boolean;

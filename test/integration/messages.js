@@ -180,10 +180,43 @@ describe('pinned messages', () => {
 			expect(updatedMessage2.pinned).to.be.equal(false);
 		});
 
+		it('pin message with timeout', async () => {
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Pinned message 4',
+				pinned: true,
+				pin_timeout: 1,
+			});
+			expect(message.pinned).to.be.equal(true);
+			const { message: updatedMessage1 } = await chat.owner.client.getMessage(
+				message.id,
+			);
+			expect(updatedMessage1.pinned).to.be.equal(true);
+			await sleep(1500);
+			const { message: updatedMessage2 } = await chat.owner.client.getMessage(
+				message.id,
+			);
+			expect(updatedMessage2.pinned).to.be.equal(false);
+		});
+
+		it('cannot pin message with both timeout and expiration', async () => {
+			const now = new Date();
+			now.setSeconds(now.getSeconds() + 1);
+			await expectHTTPErrorCode(
+				400,
+				chat.owner.channel.sendMessage({
+					text: 'Whoops',
+					pinned: true,
+					pin_timeout: 1,
+					pin_expires: now.toISOString(),
+				}),
+				'StreamChat error code 4: SendMessage failed with error: "Please only set either pin_timeout or pin_expires when you pin the message"',
+			);
+		});
+
 		it('pin and unpin message server side', async () => {
 			const { message } = await chat.serverSide.channel.sendMessage({
 				user_id: chat.owner.id,
-				text: 'Pinned message 4',
+				text: 'Pinned message 5',
 				pinned: true,
 			});
 			expect(message.pinned).to.be.equal(true);
