@@ -3253,3 +3253,87 @@ describe('warm up', () => {
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
 	});
 });
+
+describe('paginate by message created_at', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	const messages = [];
+	const messageID = (user, i) => {
+		return i.toString() + '-' + user;
+	};
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			messages.push(
+				(
+					await channel.sendMessage({
+						text: user + i.toString(),
+						id: messageID(user, i),
+					})
+				).message,
+			);
+			await sleep(5);
+		}
+	});
+
+	it('invalid date should return an error', async () => {
+		await expect(
+			channel.query({
+				messages: { limit: 2, created_at_after: 'invalid' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.created_at_after" but got "invalid"',
+		);
+	});
+
+	it('created_at_after (message 5) should return message 6 to 7', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
+	});
+
+	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 6));
+	});
+
+	it('created_at_before (message_5) should return message 3 to 4', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 5));
+	});
+
+	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
+		const result = await channel.query({
+			messages: {
+				limit: 2,
+				created_at_before: messages[4].created_at,
+				created_at_after: messages[2].created_at,
+			},
+		});
+		expect(result.messages.length).to.be.equal(1);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+	});
+});
