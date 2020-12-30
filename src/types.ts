@@ -574,6 +574,15 @@ export type UpdateChannelAPIResponse<
   >;
 };
 
+export type PartialUpdateChannelAPIResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  members: ChannelMemberResponse<UserType>[];
+};
+
 export type UpdateChannelResponse<
   CommandType extends string = LiteralStringForUnion
 > = APIResponse &
@@ -793,6 +802,10 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  /**
+   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
+   */
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
   /**
@@ -1465,6 +1478,11 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   unset?: Array<keyof UserResponse<UserType>>;
 };
 
+export type PartialUpdateChannel<ChannelType = UnknownType> = {
+  set?: Partial<ChannelResponse<ChannelType>>;
+  unset?: Array<keyof ChannelResponse<ChannelType>>;
+};
+
 export type PermissionAPIObject = {
   custom?: boolean;
   name?: string;
@@ -1551,6 +1569,7 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;

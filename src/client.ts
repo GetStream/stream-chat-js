@@ -332,22 +332,32 @@ export class StreamChat<
   _hasConnectionID = () => Boolean(this.connectionID);
 
   /**
-   * setUser - Set the current user, this triggers a connection to the API
+   * connectUser - Set the current user and open a WebSocket connection
    *
    * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (
+  connectUser = (
     user: UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
       throw new Error(
-        'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
+        'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
     }
+
+    if (
+      (this._isUsingServerAuth() || this.node) &&
+      !this.options.allowServerSideConnect
+    ) {
+      console.warn(
+        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+      );
+    }
+
     // we generate the client id client side
     this.userID = user.id;
 
@@ -370,6 +380,22 @@ export class StreamChat<
 
     return this.setUserPromise;
   };
+
+  /**
+   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
+   *
+   * setUser - Set the current user and open a WebSocket connection
+   *
+   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {TokenOrProvider} userTokenOrProvider Token or provider
+   *
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
+   */
+  setUser = (
+    user: UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
+    this.connectUser(user, userTokenOrProvider);
 
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
@@ -432,6 +458,7 @@ export class StreamChat<
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
 				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+				  skipDevices: true, // skip config/device checks and sending to real devices
 			}
 	 */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
@@ -443,6 +470,7 @@ export class StreamChat<
       ...(data.firebaseDataTemplate
         ? { firebase_data_template: data.firebaseDataTemplate }
         : {}),
+      ...(data.skipDevices ? { skip_devices: true } : {}),
     });
   }
 
@@ -485,7 +513,19 @@ export class StreamChat<
     return Promise.resolve();
   }
 
-  setAnonymousUser = () => {
+  /**
+   * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
+   */
+  connectAnonymousUser = () => {
+    if (
+      (this._isUsingServerAuth() || this.node) &&
+      !this.options.allowServerSideConnect
+    ) {
+      console.warn(
+        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+      );
+    }
+
     this.anonymous = true;
     this.userID = randomId();
     const anonymousUser = {
@@ -498,6 +538,11 @@ export class StreamChat<
 
     return this._setupConnection();
   };
+
+  /**
+   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
+   */
+  setAnonymousUser = () => this.connectAnonymousUser();
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -520,7 +565,10 @@ export class StreamChat<
     this.anonymous = false;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
-    return await this.setUser(guestUser as UserResponse<UserType>, response.access_token);
+    return await this.connectUser(
+      guestUser as UserResponse<UserType>,
+      response.access_token,
+    );
   }
 
   /**
@@ -1096,7 +1144,9 @@ export class StreamChat<
     this.failures = 0;
 
     if (client.userID == null || this._user == null) {
-      throw Error('Call setUser or setAnonymousUser before starting the connection');
+      throw Error(
+        'Call connectUser or connectAnonymousUser before starting the connection',
+      );
     }
 
     if (client.wsBaseURL == null) {
@@ -1217,12 +1267,11 @@ export class StreamChat<
     const payload = {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
-      user_details: this._user,
       ...defaultOptions,
       ...options,
     };
 
-    const data = await this.get<{
+    const data = await this.post<{
       channels: ChannelAPIResponse<
         AttachmentType,
         ChannelType,
@@ -1231,9 +1280,7 @@ export class StreamChat<
         ReactionType,
         UserType
       >[];
-    }>(this.baseURL + '/channels', {
-      payload,
-    });
+    }>(this.baseURL + '/channels', payload);
 
     const channels: Channel<
       AttachmentType,
@@ -1422,7 +1469,7 @@ export class StreamChat<
     custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
-      throw Error('Call setUser or setAnonymousUser before creating a channel');
+      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
     if (~channelType.indexOf(':')) {

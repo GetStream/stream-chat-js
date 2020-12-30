@@ -27,6 +27,8 @@ import {
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
+  PartialUpdateChannel,
+  PartialUpdateChannelAPIResponse,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -523,6 +525,19 @@ export class Channel<
     });
     this.data = data.channel;
     return data;
+  }
+
+  /**
+   * updatePartial - partial update channel properties
+   *
+   * @param {PartialUpdateChannel<ChannelType>} partial update request
+   *
+   * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
+   */
+  async updatePartial(update: PartialUpdateChannel<ChannelType>) {
+    return await this.getClient().patch<
+      PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
+    >(this._channelURL(), update);
   }
 
   /**
@@ -1593,6 +1608,12 @@ export class Channel<
       case 'reaction.deleted':
         if (event.reaction) {
           s.removeReaction(event.reaction, event.message);
+        }
+        break;
+      case 'reaction.updated':
+        if (event.reaction) {
+          // assuming reaction.updated is only called if enforce_unique is true
+          s.addReaction(event.reaction, event.message, true);
         }
         break;
       case 'channel.hidden':

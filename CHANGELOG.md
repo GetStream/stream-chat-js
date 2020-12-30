@@ -1,3 +1,20 @@
+## December 21, 2020 - 2.10.0
+
+### Feature
+
+- New `channel.updatePartial()` function can be used to set and unset specific fields when it is necessary to retain additional custom data fields on Channel #550
+- `client.testPushSettings()` accepts `skipDevices` boolean attribute which skip config/device checks and sending to real devices #548
+- `channel.sendReaction()` accepts `enforce_unique` attribute to overwrite existing reactions if any #527
+
+### Fix
+
+- deprecate `setUser` and `setAnonymousUser` in favor of `connectUser` and `connectAnonymousUser` #529
+- Update channel read state when a new message is sent #536
+- Removed unused `user_details` field from `query_channels` #545
+
+- `MessageResponse` type #551
+- `AppSettings` type #541
+
 ## December 7, 2020 - 2.9.0
 
 - Adding `recoverStateOnReconnect` option - [#534](https://github.com/GetStream/stream-chat-js/pull/534)

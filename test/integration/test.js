@@ -2518,8 +2518,8 @@ describe('Chat', () => {
 		let message;
 
 		before(async () => {
-			serverClient = await getTestClient(true);
-			await serverClient.updateUser(thierry);
+			serverClient = getServerTestClient();
+			await serverClient.upsertUser(thierry);
 			channel = serverClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [thierry.id],
@@ -2540,9 +2540,10 @@ describe('Chat', () => {
 			expect(p).to.be.rejectedWith('message with id bad message not found');
 		});
 
-		it('servers side get a message should work', async () => {
+		it('server side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -2554,6 +2555,7 @@ describe('Chat', () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
