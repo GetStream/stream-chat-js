@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { StreamChat } from '../../src';
 import chai from 'chai';
 import http from 'http';
@@ -11,8 +9,7 @@ const apiSecret = process.env.STREAM_API_SECRET;
 export function getTestClient(serverSide) {
 	return new StreamChat(apiKey, serverSide ? apiSecret : null, {
 		timeout: 15000,
-		// mute warnings because tests are being run on server-side
-		allowServerSideConnect: true,
+		allowServerSideConnect: serverSide,
 	});
 }
 
@@ -22,13 +19,13 @@ export function getServerTestClient() {
 
 export function getTestClientForUser2(userID, status, options) {
 	const client = getTestClient(false);
-	client.connectUser({ id: userID, status, ...options }, createUserToken(userID));
+	client.setUser({ id: userID, status, ...options }, createUserToken(userID));
 	return client;
 }
 
 export async function getTestClientForUser(userID, status, options) {
 	const client = getTestClient(false);
-	client.health = await client.connectUser(
+	client.health = await client.setUser(
 		{ id: userID, status, ...options },
 		createUserToken(userID),
 	);
