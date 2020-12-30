@@ -141,10 +141,11 @@ describe('pinned messages', () => {
 			});
 			expect(message.pinned).to.be.equal(false);
 			const { message: updatedMessage } = await chat.owner.client.updateMessage({
-				id: message.id,
+				...message,
 				pinned: true,
 			});
 			expect(updatedMessage.pinned).to.be.equal(true);
+			expect(updatedMessage.text).to.be.equal('Regular message 2');
 		});
 
 		it('unpin message', async () => {
@@ -154,10 +155,11 @@ describe('pinned messages', () => {
 			});
 			expect(message.pinned).to.be.equal(true);
 			const { message: updatedMessage } = await chat.owner.client.updateMessage({
-				id: message.id,
+				...message,
 				pinned: false,
 			});
 			expect(updatedMessage.pinned).to.be.equal(false);
+			expect(updatedMessage.text).to.be.equal('Pinned message 2');
 		});
 
 		it('pin message with expiration', async () => {
@@ -223,17 +225,18 @@ describe('pinned messages', () => {
 			const {
 				message: updatedMessage1,
 			} = await chat.serverSide.client.updateMessage({
-				user_id: chat.owner.id,
-				id: message.id,
+				...message,
 				pinned: false,
+				user_id: chat.owner.id,
 			});
 			expect(updatedMessage1.pinned).to.be.equal(false);
+			expect(updatedMessage1.text).to.be.equal('Pinned message 5');
 			const {
 				message: updatedMessage2,
 			} = await chat.serverSide.client.updateMessage({
-				user_id: chat.owner.id,
-				id: message.id,
+				...updatedMessage1,
 				pinned: true,
+				user_id: chat.owner.id,
 			});
 			expect(updatedMessage2.pinned).to.be.equal(true);
 		});
