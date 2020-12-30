@@ -2042,26 +2042,26 @@ describe('channel message search', function () {
 			});
 		});
 
-		it('mentioned.users.id $contains tommaso', async () => {
+		it('mentioned_users.id $contains tommaso', async () => {
 			const response = await channel.search({
-				'mentioned.users.id': { $contains: tommaso },
+				'mentioned_users.id': { $contains: tommaso },
 			});
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.id).to.equal(mention.message.id);
 		});
 
-		it('mentioned.users.id invalid value type', async () => {
+		it('mentioned_users.id invalid value type', async () => {
 			await expectHTTPErrorCode(
 				400,
-				channel.search({ 'mentioned.users.id': { $contains: [tommaso] } }),
-				'StreamChat error code 4: Search failed with error: "field `mentioned.users.id` contains type array. expecting string"',
+				channel.search({ 'mentioned_users.id': { $contains: [tommaso] } }),
+				'StreamChat error code 4: Search failed with error: "field `mentioned_users.id` contains type array. expecting string"',
 			);
 		});
 
-		it('mentioned.users.id invalid operator', async () => {
+		it('mentioned_users.id invalid operator', async () => {
 			await expectHTTPErrorCode(
 				400,
-				channel.search({ 'mentioned.users.id': { $eq: tommaso } }),
+				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
 				'StreamChat error code 4: Search failed with error: "mentioned.user.id only supports $contains operator"',
 			);
 		});
