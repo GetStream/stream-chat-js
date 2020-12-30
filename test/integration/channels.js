@@ -9,6 +9,7 @@ import {
 	getServerTestClient,
 	sleep,
 	createEventWaiter,
+	randomUnicodeString,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -1788,6 +1789,62 @@ describe('query by $autocomplete operator on channels.name', function () {
 		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
+	});
+
+	it('empty $autocomplete query should lead to a status 400 error', async () => {
+		let error = false;
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '',
+				},
+			});
+		} catch (e) {
+			error = true;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+		expect(error).to.be.true;
+	});
+
+	it('$autocomplete with special symbols only should lead to a status 400 error', async () => {
+		let error = false;
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '!@#$%!%&*()',
+				},
+			});
+		} catch (e) {
+			error = true;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+		expect(error).to.be.true;
+	});
+
+	it('$autocomplete query with random characters', async () => {
+		for (let i = 0; i < 10; i++) {
+			try {
+				await client.queryChannels({
+					members: [user],
+					name: {
+						$autocomplete: randomUnicodeString(24),
+					},
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+		}
 	});
 });
 
