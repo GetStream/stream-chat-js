@@ -2439,3 +2439,243 @@ describe('partial update channel', () => {
 		}
 	});
 });
+
+describe('Quote messages', () => {
+	let client, channel, ruud, friend, firstMessage, secondMessage, messageWithQuote;
+
+	before(async () => {
+		ruud = 'ruud-' + uuidv4();
+		friend = 'friend-' + uuidv4();
+		await createUsers([ruud, friend]);
+		client = getServerTestClient();
+		channel = client.channel('messaging', uuidv4(), {
+			created_by_id: ruud,
+			members: [ruud, friend],
+		});
+		await channel.create();
+	});
+
+	after(async () => {
+		await channel.delete();
+		await client.deleteUser(ruud, { hard_delete: true });
+		await client.deleteUser(friend, { hard_delete: true });
+	});
+
+	describe('Ruud sends a message in the channel', () => {
+		it('is possible to create regular messages', async () => {
+			const res = await channel.sendMessage({
+				text: 'The one message to rule them all',
+				user_id: ruud,
+			});
+			const res2 = await channel.sendMessage({
+				text: 'The second message to rule all, except the first message',
+				user_id: ruud,
+			});
+			firstMessage = res.message;
+			secondMessage = res2.message;
+		});
+	});
+
+	describe('Friend replies to the message in a thread', () => {
+		it('is possible to reply to the message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first threaded reply',
+				user_id: friend,
+				parent_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.parent_id).to.not.be.undefined;
+			expect(res.message.type).to.equal('reply');
+		});
+	});
+
+	describe('Friend quotes message', () => {
+		it('is possible to quote a message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first message that quotes a message',
+				user_id: friend,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.user).to.not.be.undefined;
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Friend changes the message they quoted', () => {
+		it('is possible to change a quoted_message_id', async () => {
+			const res = await client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: secondMessage.id,
+				},
+				friend,
+			);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is enriched with the changed quoted_message_id', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.text).to.equal(secondMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+		});
+
+		it('is possible to change the quoted_message_id back', async () => {
+			const res = await client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: firstMessage.id,
+				},
+				friend,
+			);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+	});
+
+	describe("Ruud quotes the friend's message with the quoted message", () => {
+		let quoteQuotedMessage;
+
+		it('is possible to quote a message with a quoted message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first message to quote a message with a quoted message',
+				user_id: friend,
+				quoted_message_id: messageWithQuote.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.text).to.equal(messageWithQuote.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			quoteQuotedMessage = res.message;
+		});
+
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(quoteQuotedMessage.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.text).to.not.be.undefined;
+			expect(clm.quoted_message.text).to.equal(messageWithQuote.text);
+			// No nested quotes
+			expect(clm.quoted_message.quoted_message).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Ruud and friend send 55 random messages each and try sending a message with a quoted message again', () => {
+		let messageWithQuote;
+
+		it('is possible to send random messages', async () => {
+			for (let i = 0; i < 55; i++) {
+				await channel.sendMessage({ text: uuidv4(), user_id: ruud });
+				await channel.sendMessage({ text: uuidv4(), user_id: friend });
+			}
+		});
+
+		it('is still possible to quote the first message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The second quoted reply',
+				user_id: friend,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.not.be.undefined;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is still properly enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+		});
+	});
+});
