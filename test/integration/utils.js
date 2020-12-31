@@ -186,3 +186,26 @@ export async function setupWebhook(client, appWebhookOptionName, onRequest) {
 	]);
 	return webhook;
 }
+
+export function randomUnicodeString(length) {
+	const punctuation = `~\`!@#$%^&*()	_- +=?/>.
+				<,"':;}]{[|\\]`;
+	const azAZ09 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+	return Array.from({ length }, () => {
+		const rand = Math.floor(Math.random() * 100);
+
+		// 1/4 of the characters is punctuation
+		if (rand <= 25) {
+			return punctuation[Math.floor(Math.random() * punctuation.length)];
+		}
+
+		// 2/4 of the characters are random unicode characters
+		if (rand > 25 && rand <= 75) {
+			return String.fromCharCode(Math.floor(Math.random() * 65536));
+		}
+
+		// 1/4 of the characters are regular azAZ09
+		return azAZ09[Math.floor(Math.random() * azAZ09.length)];
+	}).join('');
+}

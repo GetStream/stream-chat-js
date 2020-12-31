@@ -94,6 +94,9 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    sqs_key?: string;
+    sqs_secret?: string;
+    sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[];
@@ -210,6 +213,12 @@ export type CheckPushResponse = APIResponse & {
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
+};
+
+export type CheckSQSResponse = APIResponse & {
+  status: string;
+  data?: {};
+  error?: string;
 };
 
 export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
@@ -420,6 +429,17 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  quoted_message?: Omit<
+    MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    'quoted_message'
+  >;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
@@ -1239,6 +1259,9 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
   webhook_url?: string;
 };
 
@@ -1397,6 +1420,9 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 };
 
 export type DeviceFields = {
+  created_at: string;
+  disabled?: boolean;
+  disabled_reason?: string;
   id?: string;
   push_provider?: 'apn' | 'firebase';
 };
@@ -1459,6 +1485,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;
@@ -1570,6 +1597,12 @@ export type TestPushDataInput = {
   firebaseTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
+};
+
+export type TestSQSDataInput = {
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;

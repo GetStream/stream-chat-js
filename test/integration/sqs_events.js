@@ -1,85 +1,174 @@
 import chai from 'chai';
-import {
-	createUserToken,
-	getTestClient,
-	getTestClientForUser,
-	setupWebhook,
-} from './utils';
+import http from 'http';
+import { createUserToken, getTestClient, getTestClientForUser, sleep } from './utils';
 import { v4 as uuidv4 } from 'uuid';
+import querystring from 'querystring';
+import crypto from 'crypto';
 
 const expect = chai.expect;
 
-describe('Push Webhook', function () {
-	const tommasoID = `tommaso-${uuidv4()}`;
-	const thierryID = `thierry-${uuidv4()}`;
-	const horatiuID = `horatiu-${uuidv4()}`;
-	const jaapID = `jaap-${uuidv4()}`;
+const promises = {
+	events: {},
+	resolvers: {},
+	counters: {},
+	eventReceived(newEvent) {
+		const type = newEvent.type;
+		const events = this.events[type];
+
+		if (events === undefined) {
+			return;
+		}
+
+		events.push(newEvent);
+
+		if (events.length >= this.counters[type]) {
+			this.resolvers[type](events);
+		}
+	},
+	waitForEvents(type, count = 1) {
+		this.events[type] = [];
+		this.counters[type] = count;
+		this.resolvers[type] = () => {};
+		return new Promise((resolve) => {
+			this.resolvers[type] = resolve;
+		});
+	},
+};
+
+const sqsHandler = function (req, res) {
+	let body = '';
+
+	req.on('data', (chunk) => {
+		body += chunk.toString(); // convert Buffer to string
+	});
+
+	req.on('end', () => {
+		const message = querystring.decode(body);
+		const event = JSON.parse(message.MessageBody);
+		const hash = crypto.createHash('md5').update(message.MessageBody).digest('hex');
+		res.end(`
+          <SendMessageResponse>
+              <SendMessageResult>
+                  <MD5OfMessageBody>${hash}</MD5OfMessageBody>
+                  <MD5OfMessageAttributes>3ae8f24a165a8cedc005670c81a27295</MD5OfMessageAttributes>
+                  <MessageId>5fea7756-0ea4-451a-a703-a558b933e274</MessageId>
+              </SendMessageResult>
+              <ResponseMetadata>
+                  <RequestId>27daac76-34dd-47df-bd01-1f6e873584a0</RequestId>
+              </ResponseMetadata>
+          </SendMessageResponse>
+        `);
+		promises.eventReceived(event);
+	});
+
+	res.writeHead(200, { 'Content-Type': 'text/plain' });
+};
+
+describe('SQS check endpoint', function () {
+	const client = getTestClient(true);
+	let server;
+
+	before(async () => {
+		server = http.createServer(sqsHandler);
+
+		await server.listen(4566, '127.0.0.1');
+	});
+
+	after(async () => {
+		await server.close();
+	});
+
+	it('should check the given valid sqs configuration parameters', async function () {
+		const sqs_url = 'https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue',
+			sqs_key = 'abc',
+			sqs_secret = 'xyz';
+		const response = await client.testSQSSettings({ sqs_url, sqs_key, sqs_secret });
+		expect(response.status).to.eq('ok');
+		expect(response.error).to.eq(undefined);
+		expect(response.data).to.eq(undefined);
+	});
+
+	it('should check the given invalid sqs configuration parameters', async function () {
+		const sqs_url = 'https://foobar.com/123456789012/MyQueue',
+			sqs_key = 'abc',
+			sqs_secret = 'xyz';
+		const response = await client.testSQSSettings({ sqs_url, sqs_key, sqs_secret });
+		expect(response.status).to.eq('error');
+		expect(response.error).to.contain(
+			'invalid SQS url https://foobar.com/123456789012/MyQueue',
+		);
+	});
+
+	it('should check the valid sqs settings', async function () {
+		await client.updateAppSettings({
+			sqs_url: 'https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue',
+			sqs_key: 'abc',
+			sqs_secret: 'xyz',
+		});
+
+		const response = await client.testSQSSettings();
+		expect(response.status).to.eq('ok');
+		expect(response.error).to.eq(undefined);
+		expect(response.data).to.eq(undefined);
+	});
+
+	it('should check the invalid sqs settings', async function () {
+		await client.updateAppSettings({
+			sqs_url: 'https://foobar.com/123456789012/MyQueue',
+			sqs_key: 'abc',
+			sqs_secret: 'xyz',
+		});
+
+		const response = await client.testSQSSettings();
+		expect(response.status).to.eq('error');
+		expect(response.error).to.contain(
+			'invalid SQS url https://foobar.com/123456789012/MyQueue',
+		);
+	});
+});
+
+describe('SQS event endpoint', function () {
+	const paulID = `paul-${uuidv4()}`;
+	const johnID = `john-${uuidv4()}`;
+	const ringoID = `ringo-${uuidv4()}`;
+	const georgeID = `george-${uuidv4()}`;
 	const channelID = `fun-${uuidv4()}`;
 	const client = getTestClient(true);
 
-	let chan, webhook, messageResponse;
-
-	const promises = {
-		events: {},
-		resolvers: {},
-		counters: {},
-		eventReceived(newEvent) {
-			const type = newEvent.type;
-			const events = this.events[type];
-
-			if (events === undefined) {
-				return;
-			}
-
-			events.push(newEvent);
-
-			if (events.length >= this.counters[type]) {
-				this.resolvers[type](events);
-			}
-		},
-		waitForEvents(type, count = 1) {
-			this.events[type] = [];
-			this.counters[type] = count;
-			this.resolvers[type] = () => {};
-			return new Promise((resolve) => {
-				this.resolvers[type] = resolve;
-			});
-		},
-	};
+	let chan, server, messageResponse;
 
 	before(async () => {
-		chan = client.channel('messaging', channelID, { created_by: { id: tommasoID } });
-		webhook = await setupWebhook(client, 'webhook_url', (request, body, response) => {
-			// make sure the request signature is correct
-			expect(client.verifyWebhook(body, request.headers['x-signature'])).to.eq(
-				true,
-			);
-			promises.eventReceived(JSON.parse(body));
-			response.writeHead(201);
-		});
+		chan = client.channel('messaging', channelID, { created_by: { id: paulID } });
+
+		server = http.createServer(sqsHandler);
 
 		await Promise.all([
-			client.upsertUser({ id: thierryID }),
-			client.upsertUser({ id: tommasoID }),
-			client.upsertUser({ id: horatiuID }),
-			client.upsertUser({ id: jaapID }),
+			client.upsertUser({ id: johnID }),
+			client.upsertUser({ id: paulID }),
+			client.upsertUser({ id: ringoID }),
+			client.upsertUser({ id: georgeID }),
+			client.updateAppSettings({
+				sqs_url: 'https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue',
+				sqs_key: 'abc',
+				sqs_secret: 'xyz',
+			}),
+			server.listen(4566, '127.0.0.1'),
 			chan.create(),
 		]);
 	});
 
-	afterEach(() => {
-		webhook.reset();
-	});
-
 	after(async () => {
-		await webhook.tearDown();
+		await Promise.all([
+			client.updateAppSettings({ webhook_url: '' }),
+			server.close(),
+		]);
 	});
 
 	it('should receive new message event', async function () {
 		await chan.create();
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.new'),
-			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			chan.sendMessage({ text: uuidv4(), user: { id: paulID } }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
@@ -97,7 +186,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('message.new'),
 			(sendMessageResp = await chan.sendMessage({
 				text: 'flag candidate',
-				user: { id: tommasoID },
+				user: { id: paulID },
 			})),
 		]);
 		const msgNewEvent = events.pop();
@@ -109,7 +198,7 @@ describe('Push Webhook', function () {
 		// expect message.flagged event
 		[events] = await Promise.all([
 			promises.waitForEvents('message.flagged'),
-			client.flagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
+			client.flagMessage(sendMessageResp.message.id, { user_id: paulID }),
 		]);
 		const userFlaggedEvent = events.pop();
 		expect(userFlaggedEvent).to.not.be.null;
@@ -122,7 +211,7 @@ describe('Push Webhook', function () {
 		// expect message.unflagged event
 		[events] = await Promise.all([
 			promises.waitForEvents('message.unflagged'),
-			client.unflagMessage(sendMessageResp.message.id, { user_id: tommasoID }),
+			client.unflagMessage(sendMessageResp.message.id, { user_id: paulID }),
 		]);
 		const userUnFlaggedEvent = events.pop();
 		expect(userUnFlaggedEvent).to.not.be.null;
@@ -139,7 +228,7 @@ describe('Push Webhook', function () {
 		// expect user.flagged event
 		let [events] = await Promise.all([
 			promises.waitForEvents('user.flagged'),
-			client.flagUser(tommasoID, { user_id: tommasoID }),
+			client.flagUser(paulID, { user_id: paulID }),
 		]);
 		const userFlaggedEvent = events.pop();
 		expect(userFlaggedEvent).to.not.be.null;
@@ -149,7 +238,7 @@ describe('Push Webhook', function () {
 		// expect user.unflagged event
 		[events] = await Promise.all([
 			promises.waitForEvents('user.unflagged'),
-			client.unflagUser(tommasoID, { user_id: tommasoID }),
+			client.unflagUser(paulID, { user_id: paulID }),
 		]);
 		const userUnFlaggedEvent = events.pop();
 		expect(userUnFlaggedEvent).to.not.be.null;
@@ -158,10 +247,10 @@ describe('Push Webhook', function () {
 	});
 
 	it('should receive new message event with members included', async function () {
-		await chan.addMembers([thierryID, tommasoID]);
+		await chan.addMembers([johnID, paulID]);
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.new'),
-			chan.sendMessage({ text: uuidv4(), user: { id: tommasoID } }),
+			chan.sendMessage({ text: uuidv4(), user: { id: paulID } }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
@@ -172,40 +261,40 @@ describe('Push Webhook', function () {
 		expect(event.members).to.be.an('array');
 		expect(event.members).to.have.length(2);
 
-		const thierry = event.members.find((mem) => mem.user.id === thierryID);
-		const tommaso = event.members.find((mem) => mem.user.id === tommasoID);
-		expect(thierry).to.not.be.undefined;
-		expect(tommaso).to.not.be.undefined;
-		expect(thierry.user.unread_count).to.eq(1);
-		expect(thierry.user.total_unread_count).to.eq(1);
-		expect(thierry.user.unread_channels).to.eq(1);
-		expect(thierry.user.online).to.eq(false);
-		// tommaso gets the same count since he created the msg
-		expect(tommaso.user.unread_count).to.eq(0);
-		expect(tommaso.user.total_unread_count).to.eq(0);
-		expect(tommaso.user.unread_channels).to.eq(0);
-		expect(tommaso.user.online).to.eq(false);
+		const john = event.members.find((mem) => mem.user.id === johnID);
+		const paul = event.members.find((mem) => mem.user.id === paulID);
+		expect(john).to.not.be.undefined;
+		expect(paul).to.not.be.undefined;
+		expect(john.user.unread_count).to.eq(1);
+		expect(john.user.total_unread_count).to.eq(1);
+		expect(john.user.unread_channels).to.eq(1);
+		expect(john.user.online).to.eq(false);
+		// paul gets the same count since he created the msg
+		expect(paul.user.unread_count).to.eq(0);
+		expect(paul.user.total_unread_count).to.eq(0);
+		expect(paul.user.unread_channels).to.eq(0);
+		expect(paul.user.online).to.eq(false);
 	});
 
 	it('should receive new message event with thread participants', async function () {
-		await chan.addMembers([horatiuID]);
+		await chan.addMembers([ringoID]);
 
 		const eventsPromise = promises.waitForEvents('message.new', 3);
 
 		const parent = await chan.sendMessage({
 			text: uuidv4(),
-			user: { id: tommasoID },
+			user: { id: paulID },
 		});
 
 		await chan.sendMessage({
 			text: uuidv4(),
-			user: { id: thierryID },
+			user: { id: johnID },
 			parent_id: parent.message.id,
 		});
 
 		await chan.sendMessage({
 			text: uuidv4(),
-			user: { id: horatiuID },
+			user: { id: ringoID },
 			parent_id: parent.message.id,
 		});
 
@@ -213,23 +302,23 @@ describe('Push Webhook', function () {
 
 		expect(events[0].thread_participants).to.be.undefined; // no thread participant for parent
 		expect(events[1].thread_participants.map((u) => u.id)).to.have.members([
-			thierryID,
-			tommasoID,
+			johnID,
+			paulID,
 		]);
 		expect(events[2].thread_participants.map((u) => u.id)).to.have.members([
-			thierryID,
-			tommasoID,
-			horatiuID,
+			johnID,
+			paulID,
+			ringoID,
 		]);
 	});
 
-	it('thierry marks the channel as read', async function () {
-		const thierryClient = await getTestClientForUser(thierryID);
-		const thierryChannel = thierryClient.channel(chan.type, chan.id);
-		await thierryChannel.watch();
+	it('john marks the channel as read', async function () {
+		const johnClient = await getTestClientForUser(johnID);
+		const johnChannel = johnClient.channel(chan.type, chan.id);
+		await johnChannel.watch();
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.read'),
-			thierryChannel.markRead(),
+			johnChannel.markRead(),
 		]);
 		const event = events[0];
 		expect(event.channel_type).to.eq(chan.type);
@@ -250,7 +339,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('message.new'),
 			chan.sendMessage({
 				text: uuidv4(),
-				user: { id: tommasoID },
+				user: { id: paulID },
 			}),
 		]);
 		const event = events[0];
@@ -261,39 +350,39 @@ describe('Push Webhook', function () {
 		expect(event.channel_id).to.eq(chan.id);
 		expect(event.members).to.have.lengthOf(3);
 
-		const thierry = event.members.find((mem) => mem.user.id === thierryID);
-		const tommaso = event.members.find((mem) => mem.user.id === tommasoID);
-		expect(thierry).to.not.be.undefined;
-		expect(tommaso).to.not.be.undefined;
-		expect(thierry.user.online).to.eq(true);
-		expect(thierry.user.unread_count).to.eq(1);
-		expect(thierry.user.channel_unread_count).to.eq(1);
-		expect(thierry.user.total_unread_count).to.eq(1);
-		expect(thierry.user.unread_channels).to.eq(1);
-		expect(thierry.user.channel_last_read_at).to.not.be.null;
-		const lastRead = new Date(thierry.user.channel_last_read_at);
+		const john = event.members.find((mem) => mem.user.id === johnID);
+		const paul = event.members.find((mem) => mem.user.id === paulID);
+		expect(john).to.not.be.undefined;
+		expect(paul).to.not.be.undefined;
+		expect(john.user.online).to.eq(true);
+		expect(john.user.unread_count).to.eq(1);
+		expect(john.user.channel_unread_count).to.eq(1);
+		expect(john.user.total_unread_count).to.eq(1);
+		expect(john.user.unread_channels).to.eq(1);
+		expect(john.user.channel_last_read_at).to.not.be.null;
+		const lastRead = new Date(john.user.channel_last_read_at);
 		expect(lastRead.toString()).to.not.be.eq('Invalid Date');
-		expect(tommaso.user.online).to.eq(false);
-		expect(tommaso.user.unread_count).to.eq(0);
-		expect(tommaso.user.channel_unread_count).to.eq(0);
-		expect(tommaso.user.total_unread_count).to.eq(0);
-		expect(tommaso.user.unread_channels).to.eq(0);
-		expect(tommaso.user.channel_last_read_at).to.not.be.null;
+		expect(paul.user.online).to.eq(false);
+		expect(paul.user.unread_count).to.eq(0);
+		expect(paul.user.channel_unread_count).to.eq(0);
+		expect(paul.user.total_unread_count).to.eq(0);
+		expect(paul.user.unread_channels).to.eq(0);
+		expect(paul.user.channel_last_read_at).to.not.be.null;
 	});
 
 	it('unread_count and channel_unread_count should not be the same', async function () {
 		const serverSideClient = getTestClient(true);
 		const cid = uuidv4();
 		const chan2 = serverSideClient.channel('messaging', cid, {
-			created_by: { id: tommasoID },
-			members: [thierryID, tommasoID],
+			created_by: { id: paulID },
+			members: [johnID, paulID],
 		});
 		await chan2.create();
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.new'),
 			chan2.sendMessage({
 				text: uuidv4(),
-				user: { id: tommasoID },
+				user: { id: paulID },
 			}),
 		]);
 
@@ -302,13 +391,13 @@ describe('Push Webhook', function () {
 		expect(event.channel_type).to.eq(chan2.type);
 		expect(event.channel_id).to.eq(chan2.id);
 		expect(event.members).to.have.lengthOf(2);
-		const thierry = event.members.find((mem) => mem.user.id === thierryID);
-		expect(thierry).to.not.be.undefined;
-		expect(thierry.user.online).to.eq(true);
-		expect(thierry.user.unread_count).to.eq(2);
-		expect(thierry.user.channel_unread_count).to.eq(1);
-		expect(thierry.user.total_unread_count).to.eq(2);
-		expect(thierry.user.unread_channels).to.eq(2);
+		const john = event.members.find((mem) => mem.user.id === johnID);
+		expect(john).to.not.be.undefined;
+		expect(john.user.online).to.eq(true);
+		expect(john.user.unread_count).to.eq(2);
+		expect(john.user.channel_unread_count).to.eq(1);
+		expect(john.user.total_unread_count).to.eq(2);
+		expect(john.user.unread_channels).to.eq(2);
 	});
 
 	it('message.update', async function () {
@@ -319,7 +408,7 @@ describe('Push Webhook', function () {
 					...messageResponse.message,
 					text: 'new stuff',
 				},
-				tommasoID,
+				paulID,
 			),
 		]);
 		const event = events[0];
@@ -328,7 +417,7 @@ describe('Push Webhook', function () {
 		expect(event.channel_id).to.eq(chan.id);
 		expect(event.user).to.be.an('object');
 		expect(event.type).to.eq('message.updated');
-		expect(event.user.id).to.eq(tommasoID);
+		expect(event.user.id).to.eq(paulID);
 		expect(event.message).to.be.an('object');
 		expect(event.message.text).to.eq('new stuff');
 	});
@@ -338,7 +427,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('reaction.new'),
 			chan.sendReaction(messageResponse.message.id, {
 				type: 'lol',
-				user: { id: tommasoID },
+				user: { id: paulID },
 			}),
 		]);
 		const event = events[0];
@@ -350,32 +439,13 @@ describe('Push Webhook', function () {
 		expect(event.message.reaction_counts).to.eql({ lol: 1 });
 	});
 
-	it('reaction.updated when a reaction is updated', async function () {
-		const [events] = await Promise.all([
-			promises.waitForEvents('reaction.updated'),
-			chan.sendReaction(messageResponse.message.id, {
-				type: 'lol',
-				user: { id: tommasoID },
-				score: 5,
-			}),
-		]);
-		const event = events[0];
-		expect(event).to.not.be.null;
-		expect(event.channel_type).to.eq(chan.type);
-		expect(event.channel_id).to.eq(chan.id);
-		expect(event.user).to.be.an('object');
-		expect(event.type).to.eq('reaction.updated');
-		expect(event.message.reaction_scores).to.eql({ lol: 5 });
-		expect(event.message.reaction_counts).to.eql({ lol: 1 });
-	});
-
 	it('reaction.deleted when reaction is removed', async function () {
-		const tommasoClient = await getTestClientForUser(tommasoID);
-		const tommasoChannel = tommasoClient.channel(chan.type, chan.id);
-		await tommasoChannel.watch();
+		const paulClient = await getTestClientForUser(paulID);
+		const paulChannel = paulClient.channel(chan.type, chan.id);
+		await paulChannel.watch();
 		const [events] = await Promise.all([
 			promises.waitForEvents('reaction.deleted'),
-			tommasoChannel.deleteReaction(messageResponse.message.id, 'lol'),
+			paulChannel.deleteReaction(messageResponse.message.id, 'lol'),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
@@ -397,54 +467,54 @@ describe('Push Webhook', function () {
 		expect(event.channel_id).to.eq(chan.id);
 		expect(event.type).to.eq('message.deleted');
 		expect(event.message.user).to.be.an('object');
-		expect(event.message.user.id).to.eq(tommasoID);
+		expect(event.message.user.id).to.eq(paulID);
 	});
 
 	it('user.updated', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.updated'),
-			client.upsertUser({ id: thierryID, awesome: true }),
+			client.upsertUser({ id: johnID, awesome: true }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.updated');
-		expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.eq(johnID);
 	});
 
 	it('member.added', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('member.added'),
-			chan.addMembers([jaapID]),
+			chan.addMembers([georgeID]),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('member.added');
-		expect(event.user.id).to.eq(jaapID);
+		expect(event.user.id).to.eq(georgeID);
 	});
 
 	it('member.updated', async function () {
 		await Promise.all([
 			promises.waitForEvents('member.updated'),
-			chan.addModerators([thierryID]),
+			chan.addModerators([johnID]),
 		]);
 	});
 
 	it('member.removed', async function () {
 		await Promise.all([
 			promises.waitForEvents('member.removed', 4),
-			chan.removeMembers([thierryID]),
-			chan.removeMembers([tommasoID]),
-			chan.removeMembers([jaapID]),
-			chan.removeMembers([horatiuID]),
+			chan.removeMembers([johnID]),
+			chan.removeMembers([paulID]),
+			chan.removeMembers([georgeID]),
+			chan.removeMembers([ringoID]),
 		]);
 	});
 
-	it('thierry should not be in the member list anymore', async function () {
+	it('john should not be in the member list anymore', async function () {
 		const [events, response] = await Promise.all([
 			promises.waitForEvents('message.new'),
 			chan.sendMessage({
 				text: uuidv4(),
-				user: { id: tommasoID },
+				user: { id: paulID },
 			}),
 		]);
 		messageResponse = response;
@@ -474,7 +544,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('channel.updated'),
 			chan.update(
 				{ awesome: 'yes yes' },
-				{ text: uuidv4(), custom_stuff: 'bananas', user: { id: tommasoID } },
+				{ text: uuidv4(), custom_stuff: 'bananas', user: { id: paulID } },
 			),
 		]);
 		const event = events[0];
@@ -489,7 +559,7 @@ describe('Push Webhook', function () {
 
 	it('channel.created', async function () {
 		const chan2 = client.channel('messaging', uuidv4(), {
-			created_by: { id: tommasoID },
+			created_by: { id: paulID },
 		});
 		const [events] = await Promise.all([
 			promises.waitForEvents('channel.created'),
@@ -505,121 +575,121 @@ describe('Push Webhook', function () {
 	it('moderation mute', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.muted'),
-			client.muteUser(tommasoID, jaapID),
+			client.muteUser(paulID, georgeID),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.muted');
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(jaapID);
+		expect(event.user.id).to.eq(georgeID);
 		expect(event.target_user).to.be.an('object');
-		expect(event.target_user.id).to.eq(tommasoID);
+		expect(event.target_user.id).to.eq(paulID);
 	});
 
 	it('slash mute', async function () {
-		const text = `/mute ${tommasoID}`;
+		const text = `/mute ${paulID}`;
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.muted'),
-			chan.sendMessage({ text, user_id: jaapID }),
+			chan.sendMessage({ text, user_id: georgeID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.muted');
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(jaapID);
+		expect(event.user.id).to.eq(georgeID);
 		expect(event.target_user).to.be.an('object');
-		expect(event.target_user.id).to.eq(tommasoID);
+		expect(event.target_user.id).to.eq(paulID);
 	});
 
 	it('moderation unmute', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.unmuted'),
-			client.unmuteUser(tommasoID, jaapID),
+			client.unmuteUser(paulID, georgeID),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.unmuted');
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(jaapID);
+		expect(event.user.id).to.eq(georgeID);
 		expect(event.target_user).to.be.an('object');
-		expect(event.target_user.id).to.eq(tommasoID);
+		expect(event.target_user.id).to.eq(paulID);
 	});
 
 	it('channel mute', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('channel.muted'),
-			chan.mute({ user_id: jaapID }),
+			chan.mute({ user_id: georgeID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('channel.muted');
 		expect(event.mute).to.be.an('object');
 		expect(event.mute.channel.cid).to.eq(chan.cid);
-		expect(event.mute.user.id).to.eq(jaapID);
+		expect(event.mute.user.id).to.eq(georgeID);
 	});
 
 	it('channel unmute', async function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('channel.unmuted'),
-			chan.unmute({ user_id: jaapID }),
+			chan.unmute({ user_id: georgeID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('channel.unmuted');
 		expect(event.mute).to.be.an('object');
 		expect(event.mute.channel.cid).to.eq(chan.cid);
-		expect(event.mute.user.id).to.eq(jaapID);
+		expect(event.mute.user.id).to.eq(georgeID);
 	});
 
 	it('slash unmute', async function () {
-		let text = `/mute ${thierryID}`;
-		await chan.sendMessage({ text, user_id: jaapID });
-		text = `/unmute ${thierryID}`;
+		let text = `/mute ${johnID}`;
+		await chan.sendMessage({ text, user_id: georgeID });
+		text = `/unmute ${johnID}`;
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.unmuted'),
-			chan.sendMessage({ text, user_id: jaapID }),
+			chan.sendMessage({ text, user_id: georgeID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('user.unmuted');
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(jaapID);
+		expect(event.user.id).to.eq(georgeID);
 		expect(event.target_user).to.be.an('object');
-		expect(event.target_user.id).to.eq(thierryID);
+		expect(event.target_user.id).to.eq(johnID);
 	});
 
 	it('message is flagged', async function () {
 		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
-			user_id: jaapID,
+			user_id: georgeID,
 		});
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.flagged'),
-			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+			client.flagMessage(messageResponse.message.id, { user_id: johnID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('message.flagged');
 		expect(event.message).to.be.an('object');
 		expect(event.cid).to.eq(chan.cid);
-		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.message.user.id).to.eq(georgeID);
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.eq(johnID);
 	});
 
 	it('message is unflagged', async function () {
 		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
-			user_id: jaapID,
+			user_id: georgeID,
 		});
 		await Promise.all([
 			promises.waitForEvents('message.flagged'),
-			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+			client.flagMessage(messageResponse.message.id, { user_id: johnID }),
 		]);
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.unflagged'),
 			client.unflagMessage(messageResponse.message.id, {
-				user_id: thierryID,
+				user_id: johnID,
 				reason: 'the cat in the hat',
 			}),
 		]);
@@ -628,9 +698,9 @@ describe('Push Webhook', function () {
 		expect(event.type).to.eq('message.unflagged');
 		expect(event.message).to.be.an('object');
 		expect(event.cid).to.eq(chan.cid);
-		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.message.user.id).to.eq(georgeID);
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.eq(johnID);
 	});
 
 	it('user is deactivated ("user.deactivated")', async function () {
@@ -641,7 +711,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('user.deactivated'),
 			client.deactivateUser(newUserID, {
 				reason: 'the cat in the hat',
-				created_by_id: thierryID,
+				created_by_id: johnID,
 			}),
 		]);
 		const event = events[0];
@@ -649,7 +719,7 @@ describe('Push Webhook', function () {
 		expect(event.type).to.eq('user.deactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
-		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(johnID);
 	});
 
 	it('user is reactivated ("user.reactivated")', async function () {
@@ -662,7 +732,7 @@ describe('Push Webhook', function () {
 		const [events] = await Promise.all([
 			promises.waitForEvents('user.reactivated'),
 			client.reactivateUser(newUserID, {
-				created_by_id: thierryID,
+				created_by_id: johnID,
 			}),
 		]);
 		const event = events[0];
@@ -670,7 +740,7 @@ describe('Push Webhook', function () {
 		expect(event.type).to.eq('user.reactivated');
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
-		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(johnID);
 	});
 
 	it('user created using setUser trigger webhook event', async function () {
@@ -686,12 +756,12 @@ describe('Push Webhook', function () {
 
 	it('user updated using setUser trigger webhook event', async function () {
 		const client = getTestClient(false);
-		client.setUser({ id: tommasoID, cto: true }, createUserToken(tommasoID));
+		client.setUser({ id: paulID, cto: true }, createUserToken(paulID));
 
 		const [events] = await Promise.all([promises.waitForEvents('user.updated')]);
 		const event = events[0];
 		expect(event).to.not.be.null;
-		expect(event.user.id).to.be.eq(tommasoID);
+		expect(event.user.id).to.be.eq(paulID);
 		expect(event.user.cto).to.be.eq(true);
 	});
 
@@ -722,7 +792,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('user.banned'),
 			client.banUser(newUserID, {
 				reason: 'testy mctestify',
-				banned_by_id: thierryID,
+				banned_by_id: johnID,
 				timeout: 120,
 			}),
 		]);
@@ -734,8 +804,8 @@ describe('Push Webhook', function () {
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
 		expect(event.expiration).to.not.be.null;
-		expect(event.created_by.id).to.be.eq(thierryID);
-		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(johnID);
+		expect(event.created_by.id).to.be.eq(johnID);
 		expect(event.total_bans).to.be.eq(1);
 	});
 
@@ -750,7 +820,7 @@ describe('Push Webhook', function () {
 			promises.waitForEvents('user.banned'),
 			chan.banUser(newUserID, {
 				reason: 'testy mctestify',
-				banned_by_id: thierryID,
+				banned_by_id: johnID,
 			}),
 		]);
 
@@ -760,7 +830,7 @@ describe('Push Webhook', function () {
 		expect(event.user).to.be.an('object');
 		expect(event.user.id).to.be.eq(newUserID);
 		expect(event.reason).to.be.eq('testy mctestify');
-		expect(event.created_by.id).to.be.eq(thierryID);
+		expect(event.created_by.id).to.be.eq(johnID);
 		expect(event.channel_id).to.be.eq(chan.id);
 		expect(event.total_bans).to.be.eq(1);
 	});
@@ -771,7 +841,7 @@ describe('Push Webhook', function () {
 		await client.upsertUser({ id: newUserID });
 		await client.banUser(newUserID, {
 			reason: 'testy mctestify',
-			banned_by_id: thierryID,
+			banned_by_id: johnID,
 		});
 
 		// Unban the user
@@ -805,35 +875,35 @@ describe('Push Webhook', function () {
 		await chan.create();
 		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
-			user_id: jaapID,
+			user_id: georgeID,
 		});
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.flagged'),
-			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+			client.flagMessage(messageResponse.message.id, { user_id: johnID }),
 		]);
 		const event = events[0];
 		expect(event).to.not.be.null;
 		expect(event.type).to.eq('message.flagged');
 		expect(event.message).to.be.an('object');
 		expect(event.cid).to.eq(chan.cid);
-		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.message.user.id).to.eq(georgeID);
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.eq(johnID);
 	});
 
 	it('message is unflagged', async function () {
 		const messageResponse = await chan.sendMessage({
 			text: 'hello world',
-			user_id: jaapID,
+			user_id: georgeID,
 		});
 		await Promise.all([
 			promises.waitForEvents('message.flagged'),
-			client.flagMessage(messageResponse.message.id, { user_id: thierryID }),
+			client.flagMessage(messageResponse.message.id, { user_id: johnID }),
 		]);
 		const [events] = await Promise.all([
 			promises.waitForEvents('message.unflagged'),
 			client.unflagMessage(messageResponse.message.id, {
-				user_id: thierryID,
+				user_id: johnID,
 				reason: 'the cat in the hat',
 			}),
 		]);
@@ -842,8 +912,8 @@ describe('Push Webhook', function () {
 		expect(event.type).to.eq('message.unflagged');
 		expect(event.message).to.be.an('object');
 		expect(event.cid).to.eq(chan.cid);
-		expect(event.message.user.id).to.eq(jaapID);
+		expect(event.message.user.id).to.eq(georgeID);
 		expect(event.user).to.be.an('object');
-		expect(event.user.id).to.eq(thierryID);
+		expect(event.user.id).to.eq(johnID);
 	});
 });
