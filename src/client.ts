@@ -1973,6 +1973,11 @@ export class StreamChat<
     });
   }
 
+  /**
+   * pinMessage - pins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   */
   pinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2001,6 +2006,10 @@ export class StreamChat<
     });
   }
 
+  /**
+   * unpinMessage - unpins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   */
   unpinMessage(
     message: UpdatedMessage<
       AttachmentType,
