@@ -903,6 +903,8 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  total_unread_count?: number;
+  unread_channels?: number;
   unread_count?: number;
   user?: UserResponse<UserType>;
   user_id?: string;
