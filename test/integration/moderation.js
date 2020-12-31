@@ -551,6 +551,13 @@ describe('block list moderation CRUD', () => {
 
 	it('should block messages that match the blocklist', async () => {
 		const userClient = await getTestClientForUser('tommaso');
+		await client
+			.channel('messaging', 'caaakes', {
+				members: ['tommaso'],
+				created_by_id: 'tommaso',
+			})
+			.create();
+
 		const chan = userClient.channel('messaging', 'caaakes');
 		await chan.watch();
 		const response = await chan.sendMessage({

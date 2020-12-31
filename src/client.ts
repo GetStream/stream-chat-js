@@ -3,15 +3,21 @@
 
 import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
-import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'isomorphic-ws';
+
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
-import { isFunction, addFileToFormData, chatCodes, normalizeQuerySort } from './utils';
+import {
+  isFunction,
+  addFileToFormData,
+  chatCodes,
+  normalizeQuerySort,
+  randomId,
+} from './utils';
 
 import {
   APIResponse,
@@ -27,6 +33,7 @@ import {
   ChannelOptions,
   ChannelSort,
   CheckPushResponse,
+  CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
   ConnectionChangeEvent,
@@ -57,6 +64,7 @@ import {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  OwnUserResponse,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -67,6 +75,7 @@ import {
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
+  TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
   UnknownType,
@@ -74,6 +83,7 @@ import {
   UpdateChannelResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
+  UpdatedMessage,
   UpdateMessageAPIResponse,
   UserFilters,
   UserOptions,
@@ -94,7 +104,7 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
-  _user?: UserResponse<UserType>;
+  _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
       AttachmentType,
@@ -134,6 +144,16 @@ export class StreamChat<
     >;
   };
   logger: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   mutedChannels: ChannelMute<ChannelType, CommandType, UserType>[];
   mutedUsers: Mute<UserType>[];
   node: boolean;
@@ -142,10 +162,9 @@ export class StreamChat<
   setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   state: ClientState<UserType>;
   tokenManager: TokenManager<UserType>;
-  user?: UserResponse<UserType>;
+  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
-  UUID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
@@ -204,6 +223,7 @@ export class StreamChat<
       timeout: 3000,
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
+      recoverStateOnReconnect: true,
       ...inputOptions,
     };
 
@@ -220,6 +240,10 @@ export class StreamChat<
 
     if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
+    }
+
+    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_HOST) {
+      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
     }
 
     // WS connection is initialized when setUser is called
@@ -285,6 +309,7 @@ export class StreamChat<
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
+    this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
   }
 
   devToken(userID: string) {
@@ -301,8 +326,7 @@ export class StreamChat<
   }
 
   _setupConnection = () => {
-    this.UUID = uuidv4();
-    this.clientID = `${this.userID}--${this.UUID}`;
+    this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
@@ -311,22 +335,32 @@ export class StreamChat<
   _hasConnectionID = () => Boolean(this.connectionID);
 
   /**
-   * setUser - Set the current user, this triggers a connection to the API
+   * connectUser - Set the current user and open a WebSocket connection
    *
-   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (
-    user: UserResponse<UserType>,
+  connectUser = (
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
       throw new Error(
-        'Use client.disconnect() before trying to connect as a different user. setUser was called twice.',
+        'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
     }
+
+    if (
+      (this._isUsingServerAuth() || this.node) &&
+      !this.options.allowServerSideConnect
+    ) {
+      console.warn(
+        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+      );
+    }
+
     // we generate the client id client side
     this.userID = user.id;
 
@@ -350,10 +384,28 @@ export class StreamChat<
     return this.setUserPromise;
   };
 
+  /**
+   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
+   *
+   * setUser - Set the current user and open a WebSocket connection
+   *
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {TokenOrProvider} userTokenOrProvider Token or provider
+   *
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
+   */
+  setUser = (
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
+    this.connectUser(user, userTokenOrProvider);
+
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: UserResponse<UserType>) {
+  _setUser(
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+  ) {
     // this one is used by the frontend
     this.user = user;
     // this one is actually used for requests...
@@ -411,6 +463,7 @@ export class StreamChat<
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
 				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+				  skipDevices: true, // skip config/device checks and sending to real devices
 			}
 	 */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
@@ -422,7 +475,24 @@ export class StreamChat<
       ...(data.firebaseDataTemplate
         ? { firebase_data_template: data.firebaseDataTemplate }
         : {}),
+      ...(data.skipDevices ? { skip_devices: true } : {}),
     });
+  }
+
+  /**
+   * testSQSSettings - Tests that the given or configured SQS configuration is valid
+   *
+   * @param {string} userID User ID. If user has no devices, it will error
+   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   * 		IE: {
+				  messageID: 'id-of-message',//will error if message does not exist
+				  apnTemplate: '{}', //if app doesn't have apn configured it will error
+				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+			}
+   */
+  async testSQSSettings(data: TestSQSDataInput = {}) {
+    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
   }
 
   /**
@@ -464,9 +534,21 @@ export class StreamChat<
     return Promise.resolve();
   }
 
-  setAnonymousUser = () => {
+  /**
+   * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
+   */
+  connectAnonymousUser = () => {
+    if (
+      (this._isUsingServerAuth() || this.node) &&
+      !this.options.allowServerSideConnect
+    ) {
+      console.warn(
+        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+      );
+    }
+
     this.anonymous = true;
-    this.userID = uuidv4();
+    this.userID = randomId();
     const anonymousUser = {
       id: this.userID,
       anon: true,
@@ -477,6 +559,11 @@ export class StreamChat<
 
     return this._setupConnection();
   };
+
+  /**
+   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
+   */
+  setAnonymousUser = () => this.connectAnonymousUser();
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -499,7 +586,10 @@ export class StreamChat<
     this.anonymous = false;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
-    return await this.setUser(guestUser as UserResponse<UserType>, response.access_token);
+    return await this.connectUser(
+      guestUser as UserResponse<UserType>,
+      response.access_token,
+    );
   }
 
   /**
@@ -1018,7 +1108,7 @@ export class StreamChat<
     );
     this.connectionID = this.wsConnection?.connectionID;
     const cids = Object.keys(this.activeChannels);
-    if (cids.length) {
+    if (cids.length && this.recoverStateOnReconnect) {
       this.logger(
         'info',
         `client:recoverState() - Start the querying of ${cids.length} channels`,
@@ -1035,6 +1125,10 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
+      this.dispatchEvent({
+        type: 'connection.recovered',
+      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+    } else {
       this.dispatchEvent({
         type: 'connection.recovered',
       } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
@@ -1071,7 +1165,9 @@ export class StreamChat<
     this.failures = 0;
 
     if (client.userID == null || this._user == null) {
-      throw Error('Call setUser or setAnonymousUser before starting the connection');
+      throw Error(
+        'Call connectUser or connectAnonymousUser before starting the connection',
+      );
     }
 
     if (client.wsBaseURL == null) {
@@ -1192,12 +1288,11 @@ export class StreamChat<
     const payload = {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
-      user_details: this._user,
       ...defaultOptions,
       ...options,
     };
 
-    const data = await this.get<{
+    const data = await this.post<{
       channels: ChannelAPIResponse<
         AttachmentType,
         ChannelType,
@@ -1206,9 +1301,7 @@ export class StreamChat<
         ReactionType,
         UserType
       >[];
-    }>(this.baseURL + '/channels', {
-      payload,
-    });
+    }>(this.baseURL + '/channels', payload);
 
     const channels: Channel<
       AttachmentType,
@@ -1314,7 +1407,7 @@ export class StreamChat<
   /**
    * getDevices - Returns the devices associated with a current user
    *
-   * @param {string} [userID] User ID. Only works on serversidex
+   * @param {string} [userID] User ID. Only works on serverside
    *
    * @return {APIResponse & Device<UserType>[]} Array of devices
    */
@@ -1397,7 +1490,7 @@ export class StreamChat<
     custom: ChannelData<ChannelType> = {} as ChannelData<ChannelType>,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
-      throw Error('Call setUser or setAnonymousUser before creating a channel');
+      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
     if (~channelType.indexOf(':')) {
@@ -1536,7 +1629,7 @@ export class StreamChat<
   }
 
   /**
-   * updateUsers - Batch partial update of users
+   * partialUpdateUsers - Batch partial update of users
    *
    * @param {PartialUserUpdate<UserType>[]} users list of partial update requests
    *
@@ -1892,17 +1985,14 @@ export class StreamChat<
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
    */
   async updateMessage(
-    message: Omit<
-      MessageResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >,
-      'mentioned_users'
-    > & { mentioned_users?: string[] },
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
     userId?: string | { id: string },
   ) {
     if (!message.id) {

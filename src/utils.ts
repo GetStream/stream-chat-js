@@ -1,5 +1,12 @@
 import FormData from 'form-data';
-import { AscDesc, QuerySort } from './types';
+import {
+  AscDesc,
+  LiteralStringForUnion,
+  OwnUserResponse,
+  QuerySort,
+  UnknownType,
+  UserResponse,
+} from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -55,6 +62,19 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
+export function isOwnUser<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(
+  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+): user is OwnUserResponse<ChannelType, CommandType, UserType> {
+  return (
+    (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
+    undefined
+  );
+}
+
 export function addFileToFormData(
   uri: string | NodeJS.ReadableStream | Buffer | File,
   name?: string,
@@ -95,4 +115,14 @@ export function normalizeQuerySort<T extends QuerySort>(sort: T) {
     }
   }
   return sortFields;
+}
+
+/** adopted from https://github.com/ai/nanoid/blob/master/non-secure/index.js */
+const alphabet = 'ModuleSymbhasOwnPr0123456789ABCDEFGHNRVfgctiUvzKqYTJkLxpZXIjQW';
+export function randomId() {
+  let id = '';
+  for (let i = 0; i < 21; i++) {
+    id += alphabet[(Math.random() * 64) | 0];
+  }
+  return id;
 }

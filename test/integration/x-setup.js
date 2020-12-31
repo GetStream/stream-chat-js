@@ -46,7 +46,6 @@ let runBefore = false;
 
 beforeEach(async () => {
 	if (runBefore === true) return;
-	console.log('global setup');
 	const serverAuthClient = getTestClient(true);
 	await setupEverythingDisabledChannel(serverAuthClient);
 	await setupMessagingChannelType(serverAuthClient);

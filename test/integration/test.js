@@ -479,6 +479,23 @@ describe('Chat', () => {
 	});
 
 	describe('Search', () => {
+		it('No searchable fails', async () => {
+			const userID = uuidv4();
+			const channelID = uuidv4();
+			// search is disabled for gaming
+			const channel = getServerTestClient().channel('gaming', channelID, {
+				created_by_id: userID,
+				members: [userID],
+			});
+			await channel.create();
+			await authClient.channel('gaming', channelID).sendMessage({ text: 'mine' });
+
+			await expectHTTPErrorCode(
+				400,
+				authClient.search({ type: 'gaming' }, 'mine', { limit: 2 }),
+			);
+		});
+
 		it('Basic Query (old format)', async () => {
 			const channelId = uuidv4();
 			// add a very special message
@@ -565,6 +582,41 @@ describe('Chat', () => {
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.be.undefined;
+		});
+
+		it('query messages by attachment type', async () => {
+			const authClientTommaso = getTestClient(true);
+			const userTommaso = { id: uuidv4(), name: 'Tommaso Barbugli' };
+
+			await serverAuthClient.upsertUser(userTommaso);
+			await authClientTommaso.setUser(userTommaso);
+
+			const attachments = [
+				{
+					type: 'image',
+					image_url: 'https://some_url_for_image',
+				},
+			];
+
+			const channel = authClientTommaso.channel('messaging', uuidv4(), {
+				members: [userTommaso.id],
+			});
+			await channel.create();
+
+			const { message } = await channel.sendMessage({
+				text: 'Check my images',
+				attachments,
+			});
+
+			const channelFilters = { cid: { $in: [channel.cid] } };
+			const messageFilters = { 'attachments.type': { $in: ['image'] } };
+			const response = await authClientTommaso.search(
+				channelFilters,
+				messageFilters,
+			);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(message.id);
+			expect(response.results[0].message.channel.id).to.be.equal(channel.id);
 		});
 
 		it('query messages with empty text', async () => {
@@ -2554,8 +2606,8 @@ describe('Chat', () => {
 		let message;
 
 		before(async () => {
-			serverClient = await getTestClient(true);
-			await serverClient.updateUser(thierry);
+			serverClient = getServerTestClient();
+			await serverClient.upsertUser(thierry);
 			channel = serverClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [thierry.id],
@@ -2576,9 +2628,10 @@ describe('Chat', () => {
 			expect(p).to.be.rejectedWith('message with id bad message not found');
 		});
 
-		it('servers side get a message should work', async () => {
+		it('server side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -2590,6 +2643,7 @@ describe('Chat', () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -3285,5 +3339,89 @@ describe('warm up', () => {
 		const withoutWarmUpDur = t1 - t0;
 		console.log('time taken without warm up ' + withoutWarmUpDur + ' milliseconds.');
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
+	});
+});
+
+describe('paginate by message created_at', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	const messages = [];
+	const messageID = (user, i) => {
+		return i.toString() + '-' + user;
+	};
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			messages.push(
+				(
+					await channel.sendMessage({
+						text: user + i.toString(),
+						id: messageID(user, i),
+					})
+				).message,
+			);
+			await sleep(5);
+		}
+	});
+
+	it('invalid date should return an error', async () => {
+		await expect(
+			channel.query({
+				messages: { limit: 2, created_at_after: 'invalid' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.created_at_after" but got "invalid"',
+		);
+	});
+
+	it('created_at_after (message 5) should return message 6 to 7', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
+	});
+
+	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 6));
+	});
+
+	it('created_at_before (message_5) should return message 3 to 4', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 5));
+	});
+
+	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
+		const result = await channel.query({
+			messages: {
+				limit: 2,
+				created_at_before: messages[4].created_at,
+				created_at_after: messages[2].created_at,
+			},
+		});
+		expect(result.messages.length).to.be.equal(1);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
 	});
 });
