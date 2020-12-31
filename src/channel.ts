@@ -1562,13 +1562,21 @@ export class Channel<
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          s.addMessageSorted(event.message, ownMessage);
+          const isThreadMessage =
+            event.message.parent_id && !event.message.show_in_channel;
+
+          if (this.state.isUpToDate || isThreadMessage) {
+            s.addMessageSorted(event.message, ownMessage);
+          }
 
           if (ownMessage && event.user?.id) {
             s.unreadCount = 0;
             s.read = s.read.set(
               event.user.id,
-              Immutable({ user: { ...event.user }, last_read: event.created_at }),
+              Immutable({
+                user: { ...event.user },
+                last_read: new Date(event.created_at as string),
+              }),
             );
           } else if (this._countMessageAsUnread(event.message)) {
             s.unreadCount = s.unreadCount + 1;
