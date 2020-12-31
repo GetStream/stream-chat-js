@@ -2679,3 +2679,44 @@ describe('Quote messages', () => {
 		});
 	});
 });
+
+describe.only('Channel - isUpToDate', async () => {
+	it('new message should skip state, if channel is not upToDate', async () => {
+		const userIdVish = 'vishal';
+		const userIdAmin = 'amin';
+		await createUsers([userIdVish, userIdAmin]);
+
+		const clientVish = await getTestClientForUser(userIdVish);
+		const channelId = uuidv4();
+		const channelVish = clientVish.channel('messaging', channelId, {
+			members: [userIdAmin, userIdVish],
+		});
+		await channelVish.watch();
+
+		const serverClient = await getServerTestClient();
+		const channelAmin = serverClient.channel('messaging', channelId);
+
+		// First lets try with upToDate list.
+		let waiter = createEventWaiter(channelVish, 'message.new');
+		const { message: message1 } = await channelAmin.sendMessage({
+			text: uuidv4(),
+			user_id: userIdAmin,
+		});
+		await waiter;
+		expect(
+			channelVish.state.messages.findIndex((m) => m.id === message1.id),
+		).to.be.equal(0);
+
+		// Now lets check not upToDate list.
+		channelVish.state.setIsUpToDate(false);
+		waiter = createEventWaiter(channelVish, 'message.new');
+		const { message: message2 } = await channelAmin.sendMessage({
+			text: uuidv4(),
+			user_id: userIdAmin,
+		});
+		await waiter;
+		expect(
+			channelVish.state.messages.findIndex((m) => m.id === message2.id),
+		).to.be.equal(-1);
+	});
+});

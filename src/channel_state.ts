@@ -469,7 +469,7 @@ export class ChannelState<
    *                    When false, any new message (received by websocket event - message.new) will not
    *                    be pushed on to message list.
    */
-  setIsUptoDate = (isUpToDate: boolean) => {
+  setIsUpToDate = (isUpToDate: boolean) => {
     this.isUpToDate = isUpToDate;
   };
 
