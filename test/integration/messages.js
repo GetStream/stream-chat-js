@@ -140,11 +140,11 @@ describe('pinned messages', () => {
 				text: 'Regular message 2',
 			});
 			expect(message.pinned).to.be.equal(false);
-			const { message: updatedMessage } = await chat.owner.client.updateMessage({
-				...message,
-				pinned: true,
-			});
+			const { message: updatedMessage } = await chat.owner.client.pinMessage(
+				message,
+			);
 			expect(updatedMessage.pinned).to.be.equal(true);
+			expect(updatedMessage.pin_expires).to.be.equal(null);
 			expect(updatedMessage.text).to.be.equal('Regular message 2');
 		});
 
@@ -154,23 +154,51 @@ describe('pinned messages', () => {
 				pinned: true,
 			});
 			expect(message.pinned).to.be.equal(true);
-			const { message: updatedMessage } = await chat.owner.client.updateMessage({
-				...message,
-				pinned: false,
-			});
+			const { message: updatedMessage } = await chat.owner.client.unpinMessage(
+				message,
+			);
 			expect(updatedMessage.pinned).to.be.equal(false);
+			expect(updatedMessage.pin_expires).to.be.equal(null);
 			expect(updatedMessage.text).to.be.equal('Pinned message 2');
 		});
 
-		it('pin message with expiration', async () => {
-			const now = new Date();
-			now.setSeconds(now.getSeconds() + 1);
+		it('pin message with expiration date', async () => {
+			const expires = new Date();
+			expires.setSeconds(expires.getSeconds() + 1);
 			const { message } = await chat.owner.channel.sendMessage({
-				text: 'Pinned message 3',
-				pinned: true,
-				pin_expires: now.toISOString(),
+				text: 'Bla bla bla',
 			});
-			expect(message.pinned).to.be.equal(true);
+			expect(message.pinned).to.be.equal(false);
+			const { message: updatedMessage } = await chat.owner.client.pinMessage(
+				message,
+				expires,
+			);
+			expect(updatedMessage.pinned).to.be.equal(true);
+			expect(updatedMessage.pin_expires).not.to.be.equal(undefined);
+			const { message: updatedMessage1 } = await chat.owner.client.getMessage(
+				message.id,
+			);
+			expect(updatedMessage1.pinned).to.be.equal(true);
+			await sleep(1500);
+			const { message: updatedMessage2 } = await chat.owner.client.getMessage(
+				message.id,
+			);
+			expect(updatedMessage2.pinned).to.be.equal(false);
+		});
+
+		it('pin message with expiration date as string', async () => {
+			const expires = new Date();
+			expires.setSeconds(expires.getSeconds() + 1);
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Bla bla bla',
+			});
+			expect(message.pinned).to.be.equal(false);
+			const { message: updatedMessage } = await chat.owner.client.pinMessage(
+				message,
+				expires.toISOString(),
+			);
+			expect(updatedMessage.pinned).to.be.equal(true);
+			expect(updatedMessage.pin_expires).not.to.be.equal(null);
 			const { message: updatedMessage1 } = await chat.owner.client.getMessage(
 				message.id,
 			);
@@ -184,11 +212,15 @@ describe('pinned messages', () => {
 
 		it('pin message with timeout', async () => {
 			const { message } = await chat.owner.channel.sendMessage({
-				text: 'Pinned message 4',
-				pinned: true,
-				pin_timeout: 1,
+				text: 'Bla bla bla',
 			});
-			expect(message.pinned).to.be.equal(true);
+			expect(message.pinned).to.be.equal(false);
+			const { message: updatedMessage } = await chat.owner.client.pinMessage(
+				message,
+				1,
+			);
+			expect(updatedMessage.pinned).to.be.equal(true);
+			expect(updatedMessage.pin_expires).not.to.be.equal(null);
 			const { message: updatedMessage1 } = await chat.owner.client.getMessage(
 				message.id,
 			);
@@ -200,19 +232,32 @@ describe('pinned messages', () => {
 			expect(updatedMessage2.pinned).to.be.equal(false);
 		});
 
-		it('cannot pin message with both timeout and expiration', async () => {
-			const now = new Date();
-			now.setSeconds(now.getSeconds() + 1);
-			await expectHTTPErrorCode(
-				400,
-				chat.owner.channel.sendMessage({
-					text: 'Whoops',
-					pinned: true,
-					pin_timeout: 1,
-					pin_expires: now.toISOString(),
-				}),
-				'StreamChat error code 4: SendMessage failed with error: "Please only set either pin_timeout or pin_expires when you pin the message"',
+		it('pin message with invalid timeout', async () => {
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Bla bla bla',
+			});
+			expect(message.pinned).to.be.equal(false);
+			await expectHTTPErrorCode(400, chat.owner.client.pinMessage(message, 0));
+		});
+
+		it('change pinned message expiration', async () => {
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Bla bla bla',
+				pinned: true,
+			});
+			expect(message.pinned).to.be.equal(true);
+			expect(message.pin_expires).to.be.equal(null);
+			const { message: updatedMessage1 } = await chat.owner.client.pinMessage(
+				message,
+				60,
 			);
+			expect(updatedMessage1.pinned).to.be.equal(true);
+			expect(updatedMessage1.pin_expires).not.to.be.equal(null);
+			const { message: updatedMessage2 } = await chat.owner.client.pinMessage(
+				message,
+			);
+			expect(updatedMessage2.pinned).to.be.equal(true);
+			expect(updatedMessage2.pin_expires).to.be.equal(null);
 		});
 
 		it('pin and unpin message server side', async () => {
@@ -224,18 +269,14 @@ describe('pinned messages', () => {
 			expect(message.pinned).to.be.equal(true);
 			const {
 				message: updatedMessage1,
-			} = await chat.serverSide.client.updateMessage({
+			} = await chat.serverSide.client.unpinMessage({
 				...message,
-				pinned: false,
 				user_id: chat.owner.id,
 			});
 			expect(updatedMessage1.pinned).to.be.equal(false);
 			expect(updatedMessage1.text).to.be.equal('Pinned message 5');
-			const {
-				message: updatedMessage2,
-			} = await chat.serverSide.client.updateMessage({
+			const { message: updatedMessage2 } = await chat.serverSide.client.pinMessage({
 				...updatedMessage1,
-				pinned: true,
 				user_id: chat.owner.id,
 			});
 			expect(updatedMessage2.pinned).to.be.equal(true);

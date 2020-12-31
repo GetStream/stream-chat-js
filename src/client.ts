@@ -1973,6 +1973,50 @@ export class StreamChat<
     });
   }
 
+  pinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    timeoutOrExpirationDate?: number | string | Date,
+  ) {
+    let pinExpires;
+    if (typeof timeoutOrExpirationDate === 'number') {
+      const now = new Date();
+      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
+      pinExpires = now.toISOString();
+    } else if (isString(timeoutOrExpirationDate)) {
+      pinExpires = timeoutOrExpirationDate;
+    } else if (timeoutOrExpirationDate instanceof Date) {
+      pinExpires = timeoutOrExpirationDate.toISOString();
+    }
+    return this.updateMessage({
+      ...message,
+      pinned: true,
+      pin_expires: pinExpires,
+    });
+  }
+
+  unpinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    return this.updateMessage({
+      ...message,
+      pinned: false,
+    });
+  }
+
   /**
    * updateMessage - Update the given message
    *
