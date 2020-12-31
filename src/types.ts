@@ -429,6 +429,17 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  quoted_message?: Omit<
+    MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    'quoted_message'
+  >;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
@@ -1474,6 +1485,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;
