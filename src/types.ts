@@ -830,8 +830,8 @@ export type StreamChatOptions = AxiosRequestConfig & {
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
    *
    * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
    * When false, user/consumer of this client will need to make sure all the channels present on UI by
@@ -903,6 +903,8 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  total_unread_count?: number;
+  unread_channels?: number;
   unread_count?: number;
   user?: UserResponse<UserType>;
   user_id?: string;
