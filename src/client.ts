@@ -64,6 +64,7 @@ import {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  OwnUserResponse,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -103,7 +104,7 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
-  _user?: UserResponse<UserType>;
+  _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
       AttachmentType,
@@ -161,7 +162,7 @@ export class StreamChat<
   setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   state: ClientState<UserType>;
   tokenManager: TokenManager<UserType>;
-  user?: UserResponse<UserType>;
+  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
   wsBaseURL?: string;
@@ -336,13 +337,13 @@ export class StreamChat<
   /**
    * connectUser - Set the current user and open a WebSocket connection
    *
-   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
   connectUser = (
-    user: UserResponse<UserType>,
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
@@ -388,13 +389,13 @@ export class StreamChat<
    *
    * setUser - Set the current user and open a WebSocket connection
    *
-   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
   setUser = (
-    user: UserResponse<UserType>,
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
     this.connectUser(user, userTokenOrProvider);
@@ -402,7 +403,9 @@ export class StreamChat<
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: UserResponse<UserType>) {
+  _setUser(
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+  ) {
     // this one is used by the frontend
     this.user = user;
     // this one is actually used for requests...
