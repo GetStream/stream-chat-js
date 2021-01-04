@@ -1,3 +1,7 @@
+## January 4, 2021 - 2.11.1
+
+- Updated/fixed types on event object regarding unread counts. [36e2297](https://github.com/GetStream/stream-chat-js/commit/36e2297526682276c4e597fd171c27d115ba0bb6)
+
 ## December 31, 2020 - 2.11.0
 
 - Added support for quoted messages [#561](https://github.com/GetStream/stream-chat-js/pull/561/files)
