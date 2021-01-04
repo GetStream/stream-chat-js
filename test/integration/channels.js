@@ -618,7 +618,10 @@ describe('Channels - members', function () {
 			it('leave channel with RemoveOwnChannelMembership', async () => {
 				const type = uuidv4();
 				const permissions = minimalPermissions;
-				permissions[0].resources.push('RemoveOwnChannelMembership');
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+				];
 				await ssClient.createChannelType({
 					name: type,
 					permissions,
@@ -630,7 +633,10 @@ describe('Channels - members', function () {
 			it('leave channel with RemoveOwnChannelMembership', async () => {
 				const type = uuidv4();
 				const permissions = minimalPermissions;
-				permissions[0].resources.push('UpdateChannelMembers');
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'UpdateChannelMembers',
+				];
 				await ssClient.createChannelType({
 					name: type,
 					permissions,
@@ -642,8 +648,11 @@ describe('Channels - members', function () {
 			it('leave channel with RemoveOwnChannelMembership and UpdateChannelMembers', async () => {
 				const type = uuidv4();
 				const permissions = minimalPermissions;
-				permissions[0].resources.push('UpdateChannelMembers');
-				permissions[0].resources.push('RemoveOwnChannelMembership');
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+					'UpdateChannelMembers',
+				];
 				await ssClient.createChannelType({
 					name: type,
 					permissions,
