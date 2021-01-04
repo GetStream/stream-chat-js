@@ -1483,10 +1483,14 @@ export type MessageBase<
   UserType = UnknownType
 > = MessageType & {
   id: string;
+  pinned: boolean;
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string;
+  pinned_at?: string;
+  pinned_by?: UserResponse<UserType> | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
