@@ -570,6 +570,89 @@ describe('Channels - members', function () {
 				);
 			});
 		});
+
+		describe('leave channel permissions', () => {
+			const minimalPermissions = [
+				{
+					action: 'Allow',
+					name: 'Channel member permissions',
+					resources: ['ReadChannel', 'CreateChannel'],
+					roles: ['channel_member'],
+					owner: false,
+					priority: 70,
+				},
+				{
+					action: 'Allow',
+					name: 'Users can create channels',
+					resources: ['CreateChannel'],
+					roles: ['user'],
+					owner: false,
+					priority: 60,
+				},
+				{
+					action: 'Deny',
+					name: 'deny all policy',
+					resources: ['*'],
+					roles: ['*'],
+					owner: false,
+					priority: 1,
+				},
+			];
+			let ssClient;
+			let client;
+			const user = uuidv4();
+			before(async () => {
+				ssClient = getTestClient(true);
+				client = await getTestClientForUser(user);
+			});
+			it('no permissions to leave', async () => {
+				const type = uuidv4();
+				await ssClient.createChannelType({
+					name: type,
+					permissions: minimalPermissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await expectHTTPErrorCode(403, channel.removeMembers([user]));
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources.push('RemoveOwnChannelMembership');
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources.push('UpdateChannelMembers');
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership and UpdateChannelMembers', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources.push('UpdateChannelMembers');
+				permissions[0].resources.push('RemoveOwnChannelMembership');
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+		});
 	});
 
 	it('channel messages and last_message_at are correctly returned', async function () {
