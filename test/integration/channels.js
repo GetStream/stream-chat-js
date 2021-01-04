@@ -2680,7 +2680,7 @@ describe('Quote messages', () => {
 	});
 });
 
-describe.only('Channel - isUpToDate', async () => {
+describe('Channel - isUpToDate', async () => {
 	it('new message should skip state, if channel is not upToDate', async () => {
 		const userIdVish = 'vishal';
 		const userIdAmin = 'amin';
