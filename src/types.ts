@@ -429,6 +429,17 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  quoted_message?: Omit<
+    MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    'quoted_message'
+  >;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
@@ -819,8 +830,8 @@ export type StreamChatOptions = AxiosRequestConfig & {
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
    *
    * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
    * When false, user/consumer of this client will need to make sure all the channels present on UI by
@@ -892,6 +903,8 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  total_unread_count?: number;
+  unread_channels?: number;
   unread_count?: number;
   user?: UserResponse<UserType>;
   user_id?: string;
@@ -1409,6 +1422,9 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 };
 
 export type DeviceFields = {
+  created_at: string;
+  disabled?: boolean;
+  disabled_reason?: string;
   id?: string;
   push_provider?: 'apn' | 'firebase';
 };
@@ -1475,6 +1491,7 @@ export type MessageBase<
   pin_expires?: string;
   pinned_at?: string;
   pinned_by?: UserResponse<UserType> | null;
+  quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;

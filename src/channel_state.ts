@@ -87,7 +87,13 @@ export class ChannelState<
   unreadCount: number;
   membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
   last_message_at: Date | null;
-
+  /**
+   * Flag which indicates if channel state contain latest/recent messages or no.
+   * This flag should be managed by UI sdks using a setter - setIsUpToDate.
+   * When false, any new message (received by websocket event - message.new) will not
+   * be pushed on to message list.
+   */
+  isUpToDate: boolean;
   constructor(
     channel: Channel<
       AttachmentType,
@@ -146,6 +152,13 @@ export class ChannelState<
     }>({});
     this.membership = Immutable<ChannelMembership<UserType>>({});
     this.unreadCount = 0;
+    /**
+     * Flag which indicates if channel state contain latest/recent messages or no.
+     * This flag should be managed by UI sdks using a setter - setIsUpToDate.
+     * When false, any new message (received by websocket event - message.new) will not
+     * be pushed on to message list.
+     */
+    this.isUpToDate = true;
     this.last_message_at =
       channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)
@@ -447,6 +460,18 @@ export class ChannelState<
       }
     }
   }
+
+  /**
+   * Setter for isUpToDate.
+   *
+   * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
+   *                    This flag should be managed by UI sdks using a setter - setIsUpToDate.
+   *                    When false, any new message (received by websocket event - message.new) will not
+   *                    be pushed on to message list.
+   */
+  setIsUpToDate = (isUpToDate: boolean) => {
+    this.isUpToDate = isUpToDate;
+  };
 
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
