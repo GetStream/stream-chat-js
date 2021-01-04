@@ -17,7 +17,11 @@ async function getMessage() {
 	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`);
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
-
+	await channel.sendMessage({
+		text: 'Hey, I am replying to a message!',
+		parent_id: message.id,
+		show_in_channel: false,
+	});
 	return await authClient.getMessage(message.id);
 }
 

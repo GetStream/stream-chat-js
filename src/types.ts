@@ -446,6 +446,7 @@ export type MessageResponse<
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
+  thread_participants?: UserResponse[];
   type?: string;
   updated_at?: string;
   webhook_failed?: boolean;
