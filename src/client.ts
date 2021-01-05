@@ -2108,7 +2108,7 @@ export class StreamChat<
   }
 
   /**
-   * updateMessage - Update the given message
+   * partialUpdateMessage - Update the given message id while retaining additional properties
    *
    * @param {string} id the message id
    *
@@ -2126,7 +2126,7 @@ export class StreamChat<
     if (!id) {
       throw Error('Please specify the message id when calling partialUpdateMessage');
     }
-    let user;
+    let user = userId;
     if (userId != null && isString(userId)) {
       user = { id: userId };
     }
@@ -2141,7 +2141,6 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${id}`, {
       ...partialMessageObject,
-      user_id: userId,
       user,
     });
   }
