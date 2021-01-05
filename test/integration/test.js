@@ -3425,3 +3425,60 @@ describe('paginate by message created_at', () => {
 		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
 	});
 });
+
+describe.only('partial update message', async () => {
+	const user = uuidv4();
+	let client;
+	let channel;
+	let message;
+
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		message = (
+			await channel.sendMessage({
+				text: 'this message is about to be partially updated',
+				color: 'red',
+			})
+		).message;
+	});
+
+	it('partial update reserved fields must fail', async () => {
+		const reserved = ['created_at', 'updated_at', 'app_pk'];
+		for (const field of reserved) {
+			const update = { set: {} };
+			update.set[field] = null;
+			await expectHTTPErrorCode(
+				403,
+				client.partialUpdateMessage(message.id, update),
+				`StreamChat error code 17: UpdateMessagePartial failed with error: "field \`${field}\` is reserved and cannot updated"`,
+			);
+		}
+	});
+
+	it('partial update message text', async () => {
+		const text = 'the text was partial updated';
+		const updated = await client.partialUpdateMessage(message.id, { set: { text } });
+		expect(updated.message.text).to.be.equal(text);
+		expect(updated.message.color).to.be.equal(message.color);
+	});
+
+	it('unset color property', async () => {
+		const text = 'the text was partial updated';
+		const updated = await client.partialUpdateMessage(message.id, {
+			unset: ['color'],
+		});
+		expect(updated.message.text).to.be.equal(text);
+		expect(updated.message.color).to.be.undefined;
+	});
+
+	it('unset color property', async () => {
+		const text = 'the text was partial updated';
+		const updated = await client.partialUpdateMessage(message.id, {
+			unset: ['color'],
+		});
+		expect(updated.message.text).to.be.equal(text);
+		expect(updated.message.color).to.be.undefined;
+	});
+});
