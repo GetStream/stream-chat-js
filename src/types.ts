@@ -1516,6 +1516,11 @@ export type PartialUpdateChannel<ChannelType = UnknownType> = {
   unset?: Array<keyof ChannelResponse<ChannelType>>;
 };
 
+export type PartialUpdateMessage<MessageType = UnknownType> = {
+  set?: Partial<MessageResponse<MessageType>>;
+  unset?: Array<keyof MessageResponse<MessageType>>;
+};
+
 export type PermissionAPIObject = {
   custom?: boolean;
   name?: string;

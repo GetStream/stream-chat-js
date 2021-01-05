@@ -65,6 +65,7 @@ import {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
+  PartialUpdateMessage,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -2103,6 +2104,45 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
+    });
+  }
+
+  /**
+   * updateMessage - Update the given message
+   *
+   * @param {string} id the message id
+   *
+   * @param {PartialUpdateMessage<MessageType>}  partialMessageObject which should contain id and any of "set" or "unset" params;
+   *         example: {id: "user1", set:{field: value}, unset:["field2"]}
+   * @param {string | { id: string }} [userId]
+   *
+   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
+   */
+  async partialUpdateMessage(
+    id: string,
+    partialMessageObject: PartialUpdateMessage<MessageType>,
+    userId?: string | { id: string },
+  ) {
+    if (!id) {
+      throw Error('Please specify the message id when calling partialUpdateMessage');
+    }
+    let user;
+    if (userId != null && isString(userId)) {
+      user = { id: userId };
+    }
+    return await this.put<
+      UpdateMessageAPIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + `/messages/${id}`, {
+      ...partialMessageObject,
+      user_id: userId,
+      user,
     });
   }
 
