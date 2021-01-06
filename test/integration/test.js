@@ -3426,7 +3426,7 @@ describe('paginate by message created_at', () => {
 	});
 });
 
-describe.only('partial update message', async () => {
+describe('partial update message', async () => {
 	const user = uuidv4();
 	let client;
 	let channel;
@@ -3440,6 +3440,9 @@ describe.only('partial update message', async () => {
 			await channel.sendMessage({
 				text: 'this message is about to be partially updated',
 				color: 'red',
+				details: {
+					status: 'pending',
+				},
 			})
 		).message;
 	});
@@ -3465,20 +3468,18 @@ describe.only('partial update message', async () => {
 	});
 
 	it('unset color property', async () => {
-		const text = 'the text was partial updated';
 		const updated = await client.partialUpdateMessage(message.id, {
 			unset: ['color'],
 		});
-		expect(updated.message.text).to.be.equal(text);
+		expect(updated.message.text).to.be.not.null;
 		expect(updated.message.color).to.be.undefined;
 	});
 
-	it('unset color property', async () => {
-		const text = 'the text was partial updated';
+	it('set nested property', async () => {
 		const updated = await client.partialUpdateMessage(message.id, {
-			unset: ['color'],
+			set: { 'details.status': 'complete' },
 		});
-		expect(updated.message.text).to.be.equal(text);
-		expect(updated.message.color).to.be.undefined;
+		expect(updated.message.details.status).to.be.equal('complete');
+		expect(updated.message.text).to.be.not.null;
 	});
 });
