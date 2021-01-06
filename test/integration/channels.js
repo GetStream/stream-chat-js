@@ -1923,17 +1923,18 @@ describe('query by $autocomplete operator on channels.name', function () {
 
 	it('$autocomplete query with random characters', async () => {
 		for (let i = 0; i < 10; i++) {
+			const query = randomUnicodeString(24);
 			try {
 				await client.queryChannels({
 					members: [user],
 					name: {
-						$autocomplete: randomUnicodeString(24),
+						$autocomplete: query,
 					},
 				});
 			} catch (e) {
 				expect(e.response).to.not.be.undefined;
 				expect(e.response.data).to.not.be.undefined;
-				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.code).to.equal(4, query);
 				expect(e.response.data.StatusCode).to.equal(400);
 			}
 		}
