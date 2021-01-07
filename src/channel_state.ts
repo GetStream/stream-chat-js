@@ -62,6 +62,19 @@ export class ChannelState<
       >['messageToImmutable']
     >
   >;
+  pinned_messages: Immutable.ImmutableArray<
+    ReturnType<
+      ChannelState<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >['messageToImmutable']
+    >
+  >;
   threads: Immutable.ImmutableObject<{
     [key: string]: Immutable.ImmutableArray<
       ReturnType<
@@ -127,6 +140,7 @@ export class ChannelState<
       }>;
     }>({});
     this.messages = Immutable([]);
+    this.pinned_messages = Immutable([]);
     this.threads = Immutable<{
       [key: string]: Immutable.ImmutableArray<
         ReturnType<

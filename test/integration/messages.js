@@ -255,6 +255,7 @@ describe('pinned messages', () => {
 			expect(updatedMessage1.pin_expires).not.to.be.equal(null);
 			const { message: updatedMessage2 } = await chat.owner.client.pinMessage(
 				message,
+				null,
 			);
 			expect(updatedMessage2.pinned).to.be.equal(true);
 			expect(updatedMessage2.pin_expires).to.be.equal(null);
@@ -280,6 +281,83 @@ describe('pinned messages', () => {
 				user_id: chat.owner.id,
 			});
 			expect(updatedMessage2.pinned).to.be.equal(true);
+		});
+	});
+	context('channel state', () => {
+		let chat;
+		before(async () => {
+			chat = await setupTestChannel('messaging', false);
+		});
+		it('send pinned messages', async () => {
+			await chat.owner.channel.sendMessage({
+				text: 'Hello',
+				pinned: true,
+			});
+			await chat.owner.channel.sendMessage({
+				text: 'Bye',
+			});
+			let state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(1);
+			await chat.owner.channel.sendMessage({
+				text: 'Hallo',
+				pinned: true,
+			});
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(2);
+		});
+		it('unpin the message', async () => {
+			let state = await chat.owner.channel.query();
+			const initialCount = state.pinned_messages.length;
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Unpin me',
+				pinned: true,
+			});
+			await chat.owner.client.unpinMessage(message);
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(initialCount);
+		});
+		it('pin expires', async () => {
+			let state = await chat.owner.channel.query();
+			const initialCount = state.pinned_messages.length;
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'I will expire me',
+			});
+			await chat.owner.client.pinMessage(message, 1);
+			await sleep(1500);
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(initialCount);
+		});
+	});
+	context('channel state: message count', () => {
+		let chat;
+		before(async () => {
+			chat = await setupTestChannel('messaging', false);
+		});
+		it('pin 10 messages and see all of them', async () => {
+			for (let i = 0; i < 10; i++) {
+				await chat.owner.channel.sendMessage({
+					text: 'Message #' + (i + 1),
+					pinned: true,
+				});
+			}
+			const state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(10);
+			for (let i = 0; i < 10; i++) {
+				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (10 - i));
+			}
+		});
+		it('pin 20 messages and only see last 10', async () => {
+			for (let i = 0; i < 20; i++) {
+				await chat.owner.channel.sendMessage({
+					text: 'Message #' + (i + 1),
+					pinned: true,
+				});
+			}
+			const state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(10);
+			for (let i = 0; i < 10; i++) {
+				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (20 - i));
+			}
 		});
 	});
 	context('livestream permissions', () => {

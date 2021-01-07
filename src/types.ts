@@ -162,6 +162,14 @@ export type ChannelAPIResponse<
     ReactionType,
     UserType
   >[];
+  pinned_messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
   hidden?: boolean;
   membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
