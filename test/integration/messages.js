@@ -344,30 +344,27 @@ describe('pinned messages', () => {
 		before(async () => {
 			chat = await setupTestChannel('messaging', false);
 		});
-		it('pin 10 messages and see all of them', async () => {
+		it('pin 10 permanent and 11 temporary messages', async () => {
 			for (let i = 0; i < 10; i++) {
 				await chat.owner.channel.sendMessage({
 					text: 'Message #' + (i + 1),
 					pinned: true,
 				});
 			}
+			const expires = new Date();
+			expires.setSeconds(expires.getSeconds() + 5);
+			for (let i = 10; i < 21; i++) {
+				await chat.owner.channel.sendMessage({
+					text: 'Message #' + (i + 1),
+					pinned: true,
+					pin_expires: expires.toISOString(),
+				});
+			}
+			await sleep(5000);
 			const state = await chat.owner.channel.query();
 			expect(state.pinned_messages.length).to.be.equal(10);
 			for (let i = 0; i < 10; i++) {
 				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (10 - i));
-			}
-		});
-		it('pin 20 messages and only see last 10', async () => {
-			for (let i = 0; i < 20; i++) {
-				await chat.owner.channel.sendMessage({
-					text: 'Message #' + (i + 1),
-					pinned: true,
-				});
-			}
-			const state = await chat.owner.channel.query();
-			expect(state.pinned_messages.length).to.be.equal(10);
-			for (let i = 0; i < 10; i++) {
-				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (20 - i));
 			}
 		});
 	});
