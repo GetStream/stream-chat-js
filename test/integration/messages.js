@@ -316,6 +316,17 @@ describe('pinned messages', () => {
 			state = await chat.owner.channel.query();
 			expect(state.pinned_messages.length).to.be.equal(initialCount);
 		});
+		it('delete pinned message', async () => {
+			let state = await chat.owner.channel.query();
+			const initialCount = state.pinned_messages.length;
+			const { message } = await chat.owner.channel.sendMessage({
+				text: 'Delete me',
+				pinned: true,
+			});
+			await chat.serverSide.client.deleteMessage(message.id, true);
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(initialCount);
+		});
 		it('pin expires', async () => {
 			let state = await chat.owner.channel.query();
 			const initialCount = state.pinned_messages.length;
