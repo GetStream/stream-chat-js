@@ -232,6 +232,12 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getMessagesById']>>",
 	},
 	{
+		f: rg.getMessageWithReply,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString: string }>['getMessage']>>",
+	},
+	{
 		f: rg.getPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
