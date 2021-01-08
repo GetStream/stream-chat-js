@@ -1883,7 +1883,6 @@ describe('query by $autocomplete operator on channels.name', function () {
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
 
-
 	it('empty $autocomplete query should lead to a status 400 error', async () => {
 		let error = false;
 		try {
@@ -2814,7 +2813,7 @@ describe('Channel - isUpToDate', async () => {
 	});
 });
 
-describe('message has exposed cid', function() {
+describe('message has exposed cid', function () {
 	let client;
 	let serverClient;
 	let channel;
@@ -2830,7 +2829,7 @@ describe('message has exposed cid', function() {
 		await channel.create();
 	});
 
-	describe('when sending and deleting a reaction', function() {
+	describe('when sending and deleting a reaction', function () {
 		before(async () => {
 			await channel.watch();
 		});
@@ -2851,7 +2850,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when sending, updating, getting and deleting a message', function() {
+	describe('when sending, updating, getting and deleting a message', function () {
 		it('should populate cid', async () => {
 			const res1 = await channel.sendMessage({ text: 'test123' });
 			expect(res1.message.id).to.not.be.empty;
@@ -2874,7 +2873,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when sending a message on a frozen channel', function() {
+	describe('when sending a message on a frozen channel', function () {
 		before(async () => {
 			await channel.update({ frozen: true });
 		});
@@ -2890,7 +2889,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when exporting a user', function() {
+	describe('when exporting a user', function () {
 		// Make sure a message is available on the user
 		before(async () => {
 			const res = await channel.sendMessage({ text: 'test123' });
@@ -2901,12 +2900,12 @@ describe('message has exposed cid', function() {
 			const res = await serverClient.exportUser(user);
 			expect(res.messages).to.not.have.lengthOf(0);
 			expect(
-				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+				res.messages.filter((msg) => msg.cid === undefined || msg.cid === ''),
 			).to.have.lengthOf(0);
 		});
 	});
 
-	describe('when getting multiple messages', function() {
+	describe('when getting multiple messages', function () {
 		const messageIds = [];
 
 		// Make sure multiple messages are available on the channel
@@ -2924,12 +2923,12 @@ describe('message has exposed cid', function() {
 			const res = await channel.getMessagesById(messageIds);
 			expect(res.messages).to.have.lengthOf(messageIds.length);
 			expect(
-				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+				res.messages.filter((msg) => msg.cid === undefined || msg.cid === ''),
 			).to.have.lengthOf(0);
 		});
 	});
 
-	describe('when getOrCreate an existing channel', function() {
+	describe('when getOrCreate an existing channel', function () {
 		// Make sure a message is available on the channel
 		before(async () => {
 			const res = await channel.sendMessage({ text: 'test123' });
@@ -2942,12 +2941,14 @@ describe('message has exposed cid', function() {
 			expect(res.state.messages).to.exist;
 			expect(res.state.messages.length).to.be.greaterThan(0);
 			expect(
-				res.state.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+				res.state.messages.filter(
+					(msg) => msg.cid === undefined || msg.cid === '',
+				),
 			).to.have.lengthOf(0);
 		});
 	});
 
-	describe('when getting replies to a message', function() {
+	describe('when getting replies to a message', function () {
 		let msgId;
 
 		// Make sure a message with a reply is available on the channel
@@ -2974,12 +2975,12 @@ describe('message has exposed cid', function() {
 			expect(res.messages).to.exist;
 			expect(res.messages).to.have.lengthOf(2);
 			expect(
-				res.messages.filter(msg => msg.cid === undefined || msg.cid === ''),
+				res.messages.filter((msg) => msg.cid === undefined || msg.cid === ''),
 			).to.have.lengthOf(0);
 		});
 	});
 
-	describe('when querying channels', function() {
+	describe('when querying channels', function () {
 		// Make sure a message is available on the channel
 		before(async () => {
 			const res = await channel.sendMessage({ text: 'test123' });
@@ -2994,13 +2995,13 @@ describe('message has exposed cid', function() {
 			expect(res[0].state.messages.length).to.be.greaterThan(0);
 			expect(
 				res[0].state.messages.filter(
-					msg => msg.cid === undefined || msg.cid === '',
+					(msg) => msg.cid === undefined || msg.cid === '',
 				),
 			).to.have.lengthOf(0);
 		});
 	});
 
-	describe('when running message action', function() {
+	describe('when running message action', function () {
 		it('should populate cid on message', async () => {
 			const res1 = await channel.sendMessage({ text: '/giphy test' });
 			expect(res1.message.id).to.not.be.empty;
@@ -3016,7 +3017,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when searching messages', function() {
+	describe('when searching messages', function () {
 		const msgText = 'supercalifragilisticexpialidocious';
 		// Make sure a message is available on the channel
 		before(async () => {
@@ -3036,10 +3037,10 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when triggering an event with a message', function() {
+	describe('when triggering an event with a message', function () {
 		it('should populate cid on message', async () => {
-			const p = new Promise(res => {
-				channel.on('message.new', event => {
+			const p = new Promise((res) => {
+				channel.on('message.new', (event) => {
 					expect(event.message.id).not.to.be.empty;
 					expect(event.message.cid).not.to.be.empty;
 					res();
@@ -3052,7 +3053,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when translating a message', function() {
+	describe('when translating a message', function () {
 		let msgId;
 
 		before(async () => {
@@ -3068,7 +3069,7 @@ describe('message has exposed cid', function() {
 		});
 	});
 
-	describe('when updating a channel with a message', function() {
+	describe('when updating a channel with a message', function () {
 		it('should populate cid on message', async () => {
 			const res = await channel.update(
 				{ frozen: false },
