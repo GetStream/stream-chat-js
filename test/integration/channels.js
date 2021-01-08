@@ -9,6 +9,7 @@ import {
 	getServerTestClient,
 	sleep,
 	createEventWaiter,
+	randomUnicodeString,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -567,6 +568,98 @@ describe('Channels - members', function () {
 						.channel('messaging', channel.id)
 						.addMembers([newMembers[0]]),
 				);
+			});
+		});
+
+		describe('leave channel permissions', () => {
+			const minimalPermissions = [
+				{
+					action: 'Allow',
+					name: 'Channel member permissions',
+					resources: ['ReadChannel', 'CreateChannel'],
+					roles: ['channel_member'],
+					owner: false,
+					priority: 70,
+				},
+				{
+					action: 'Allow',
+					name: 'Users can create channels',
+					resources: ['CreateChannel'],
+					roles: ['user'],
+					owner: false,
+					priority: 60,
+				},
+				{
+					action: 'Deny',
+					name: 'deny all policy',
+					resources: ['*'],
+					roles: ['*'],
+					owner: false,
+					priority: 1,
+				},
+			];
+			let ssClient;
+			let client;
+			const user = uuidv4();
+			before(async () => {
+				ssClient = getTestClient(true);
+				client = await getTestClientForUser(user);
+			});
+			it('no permissions to leave', async () => {
+				const type = uuidv4();
+				await ssClient.createChannelType({
+					name: type,
+					permissions: minimalPermissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await expectHTTPErrorCode(403, channel.removeMembers([user]));
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership and UpdateChannelMembers', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
 			});
 		});
 	});
@@ -1789,6 +1882,63 @@ describe('query by $autocomplete operator on channels.name', function () {
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
 	});
+
+
+	it('empty $autocomplete query should lead to a status 400 error', async () => {
+		let error = false;
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '',
+				},
+			});
+		} catch (e) {
+			error = true;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+		expect(error).to.be.true;
+	});
+
+	it('$autocomplete with special symbols only should lead to a status 400 error', async () => {
+		let error = false;
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '!@#$%!%&*()',
+				},
+			});
+		} catch (e) {
+			error = true;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+		expect(error).to.be.true;
+	});
+
+	it('$autocomplete query with random characters', async () => {
+		for (let i = 0; i < 10; i++) {
+			try {
+				await client.queryChannels({
+					members: [user],
+					name: {
+						$autocomplete: randomUnicodeString(24),
+					},
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+		}
+	});
 });
 
 describe('unread counts on hard delete messages', function () {
@@ -1814,6 +1964,51 @@ describe('unread counts on hard delete messages', function () {
 		for (let i = 0; i < 3; i++) {
 			messages.push(await channel.sendMessage({ text: 'hi' }));
 		}
+	});
+
+	describe('search by mentioned users', () => {
+		const unique = uuidv4();
+		let channel;
+		const tommaso = uuidv4();
+		const thierry = uuidv4();
+
+		let mention;
+		before(async () => {
+			channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await createUsers([tommaso, thierry]);
+			await channel.create();
+			await channel.sendMessage({ text: 'regular' });
+			mention = await channel.sendMessage({
+				text: 'mentions',
+				mentioned_users: [tommaso, thierry],
+			});
+		});
+
+		it('mentioned_users.id $contains tommaso', async () => {
+			const response = await channel.search({
+				'mentioned_users.id': { $contains: tommaso },
+			});
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.equal(mention.message.id);
+		});
+
+		it('mentioned_users.id invalid value type', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $contains: [tommaso] } }),
+				'StreamChat error code 4: Search failed with error: "field `mentioned_users.id` contains type array. expecting string"',
+			);
+		});
+
+		it('mentioned_users.id invalid operator', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
+				'StreamChat error code 4: Search failed with error: "mentioned_users.id only supports $contains operator"',
+			);
+		});
 	});
 
 	it('tommaso deletes the 1st message', async function () {
@@ -2712,7 +2907,7 @@ describe('message has exposed cid', function() {
 	});
 
 	describe('when getting multiple messages', function() {
-		let messageIds = [];
+		const messageIds = [];
 
 		// Make sure multiple messages are available on the channel
 		before(async () => {
@@ -2843,7 +3038,7 @@ describe('message has exposed cid', function() {
 
 	describe('when triggering an event with a message', function() {
 		it('should populate cid on message', async () => {
-			let p = new Promise(res => {
+			const p = new Promise(res => {
 				channel.on('message.new', event => {
 					expect(event.message.id).not.to.be.empty;
 					expect(event.message.cid).not.to.be.empty;
