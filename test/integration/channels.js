@@ -1966,51 +1966,6 @@ describe('unread counts on hard delete messages', function () {
 		}
 	});
 
-	describe('search by mentioned users', () => {
-		const unique = uuidv4();
-		let channel;
-		const tommaso = uuidv4();
-		const thierry = uuidv4();
-
-		let mention;
-		before(async () => {
-			channel = authClient.channel('messaging', uuidv4(), {
-				unique,
-			});
-			await createUsers([tommaso, thierry]);
-			await channel.create();
-			await channel.sendMessage({ text: 'regular' });
-			mention = await channel.sendMessage({
-				text: 'mentions',
-				mentioned_users: [tommaso, thierry],
-			});
-		});
-
-		it('mentioned_users.id $contains tommaso', async () => {
-			const response = await channel.search({
-				'mentioned_users.id': { $contains: tommaso },
-			});
-			expect(response.results.length).to.equal(1);
-			expect(response.results[0].message.id).to.equal(mention.message.id);
-		});
-
-		it('mentioned_users.id invalid value type', async () => {
-			await expectHTTPErrorCode(
-				400,
-				channel.search({ 'mentioned_users.id': { $contains: [tommaso] } }),
-				'StreamChat error code 4: Search failed with error: "field `mentioned_users.id` contains type array. expecting string"',
-			);
-		});
-
-		it('mentioned_users.id invalid operator', async () => {
-			await expectHTTPErrorCode(
-				400,
-				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
-				'StreamChat error code 4: Search failed with error: "mentioned_users.id only supports $contains operator"',
-			);
-		});
-	});
-
 	it('tommaso deletes the 1st message', async function () {
 		await ssclient.deleteMessage(messages[0].message.id, true);
 	});
@@ -2158,6 +2113,51 @@ describe('channel message search', function () {
 
 		response = await channel.search({ type: { $in: ['reply', 'regular'] } });
 		expect(response.results.length).to.equal(2);
+	});
+
+	describe('search by mentioned users', () => {
+		const unique = uuidv4();
+		let channel;
+		const tommaso = uuidv4();
+		const thierry = uuidv4();
+
+		let mention;
+		before(async () => {
+			channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await createUsers([tommaso, thierry]);
+			await channel.create();
+			await channel.sendMessage({ text: 'regular' });
+			mention = await channel.sendMessage({
+				text: 'mentions',
+				mentioned_users: [tommaso, thierry],
+			});
+		});
+
+		it('mentioned_users.id $contains tommaso', async () => {
+			const response = await channel.search({
+				'mentioned_users.id': { $contains: tommaso },
+			});
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.equal(mention.message.id);
+		});
+
+		it('mentioned_users.id invalid value type', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $contains: [tommaso] } }),
+				'StreamChat error code 4: Search failed with error: "field `mentioned_users.id` contains type array. expecting string"',
+			);
+		});
+
+		it('mentioned_users.id invalid operator', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
+				'StreamChat error code 4: Search failed with error: "mentioned_users.id only supports $contains operator"',
+			);
+		});
 	});
 
 	it('query message text and custom field', async function () {
