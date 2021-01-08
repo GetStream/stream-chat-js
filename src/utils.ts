@@ -1,5 +1,12 @@
 import FormData from 'form-data';
-import { AscDesc, QuerySort } from './types';
+import {
+  AscDesc,
+  LiteralStringForUnion,
+  OwnUserResponse,
+  QuerySort,
+  UnknownType,
+  UserResponse,
+} from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -53,6 +60,19 @@ function isBuffer(obj: unknown): obj is Buffer {
 
 function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
+}
+
+export function isOwnUser<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(
+  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+): user is OwnUserResponse<ChannelType, CommandType, UserType> {
+  return (
+    (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
+    undefined
+  );
 }
 
 export function addFileToFormData(

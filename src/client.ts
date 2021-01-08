@@ -33,6 +33,7 @@ import {
   ChannelOptions,
   ChannelSort,
   CheckPushResponse,
+  CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
   ConnectionChangeEvent,
@@ -63,6 +64,7 @@ import {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  OwnUserResponse,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -73,6 +75,7 @@ import {
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
+  TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
   UnknownType,
@@ -101,7 +104,7 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
-  _user?: UserResponse<UserType>;
+  _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
       AttachmentType,
@@ -159,7 +162,7 @@ export class StreamChat<
   setUserPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   state: ClientState<UserType>;
   tokenManager: TokenManager<UserType>;
-  user?: UserResponse<UserType>;
+  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   userAgent?: string;
   userID?: string;
   wsBaseURL?: string;
@@ -334,13 +337,13 @@ export class StreamChat<
   /**
    * connectUser - Set the current user and open a WebSocket connection
    *
-   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
   connectUser = (
-    user: UserResponse<UserType>,
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
     if (this.userID) {
@@ -386,13 +389,13 @@ export class StreamChat<
    *
    * setUser - Set the current user and open a WebSocket connection
    *
-   * @param {UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
   setUser = (
-    user: UserResponse<UserType>,
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
     this.connectUser(user, userTokenOrProvider);
@@ -400,7 +403,9 @@ export class StreamChat<
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: UserResponse<UserType>) {
+  _setUser(
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+  ) {
     // this one is used by the frontend
     this.user = user;
     // this one is actually used for requests...
@@ -472,6 +477,22 @@ export class StreamChat<
         : {}),
       ...(data.skipDevices ? { skip_devices: true } : {}),
     });
+  }
+
+  /**
+   * testSQSSettings - Tests that the given or configured SQS configuration is valid
+   *
+   * @param {string} userID User ID. If user has no devices, it will error
+   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   * 		IE: {
+				  messageID: 'id-of-message',//will error if message does not exist
+				  apnTemplate: '{}', //if app doesn't have apn configured it will error
+				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
+				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+			}
+   */
+  async testSQSSettings(data: TestSQSDataInput = {}) {
+    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
   }
 
   /**
@@ -1952,6 +1973,59 @@ export class StreamChat<
         >
     >(this.baseURL + `/messages/${messageId}/translate`, {
       language,
+    });
+  }
+
+  /**
+   * pinMessage - pins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   */
+  pinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    timeoutOrExpirationDate?: number | string | Date,
+  ) {
+    let pinExpires;
+    if (typeof timeoutOrExpirationDate === 'number') {
+      const now = new Date();
+      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
+      pinExpires = now.toISOString();
+    } else if (isString(timeoutOrExpirationDate)) {
+      pinExpires = timeoutOrExpirationDate;
+    } else if (timeoutOrExpirationDate instanceof Date) {
+      pinExpires = timeoutOrExpirationDate.toISOString();
+    }
+    return this.updateMessage({
+      ...message,
+      pinned: true,
+      pin_expires: pinExpires,
+    });
+  }
+
+  /**
+   * unpinMessage - unpins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   */
+  unpinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    return this.updateMessage({
+      ...message,
+      pinned: false,
     });
   }
 

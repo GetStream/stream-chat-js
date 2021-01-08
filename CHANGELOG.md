@@ -1,3 +1,15 @@
+## January 4, 2021 - 2.11.1
+
+- Updated/fixed types on event object regarding unread counts. [36e2297](https://github.com/GetStream/stream-chat-js/commit/36e2297526682276c4e597fd171c27d115ba0bb6)
+
+## December 31, 2020 - 2.11.0
+
+- Added support for quoted messages [#561](https://github.com/GetStream/stream-chat-js/pull/561/files)
+- Added support for `enforce_unique` param on send reaction api. When true, previous reaction (if any) from user will be replaced with new reaction. [27ddd4f](https://github.com/GetStream/stream-chat-js/commit/27ddd4f63a71daab2ca1c55f193719c9780047b4)
+- Added event handler for event `reaction.updated` [27ddd4f](https://github.com/GetStream/stream-chat-js/commit/27ddd4f63a71daab2ca1c55f193719c9780047b4)
+- Added new flag on channel state `isUpToDate` (please check description for details) [588c0e9](https://github.com/GetStream/stream-chat-js/commit/588c0e91c92ca1f031cd11a030de0364ac04c59e)
+- Fixed types for `client.user` [d855779](https://github.com/GetStream/stream-chat-js/commit/d855779c700104ebaaa7b907d45d2fa722ae0718)
+
 ## December 21, 2020 - 2.10.0
 
 ### Feature

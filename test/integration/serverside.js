@@ -2155,6 +2155,9 @@ describe('Devices', function () {
 				const result = await client.getDevices(users[i]);
 				expect(result.devices.length).to.equal(1);
 				expect(result.devices[0].id).to.equal(devices[i]);
+				expect(result.devices[0].created_at).to.not.be.empty;
+				expect(result.devices[0].disabled).to.equal(undefined);
+				expect(result.devices[0].disabled_reason).to.equal(undefined);
 			}
 		});
 		it('can delete any device', async () => {

@@ -2413,6 +2413,94 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('Custom events', () => {
+		let channel;
+		let client;
+		let serverChannel;
+		const channelID = uuidv4();
+		let client2;
+		let otherUserChannel;
+		const userID = uuidv4();
+		const otherUserID = uuidv4();
+
+		it('enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to a livestream channel', async () => {
+			client = await getTestClientForUser(userID);
+			client2 = await getTestClientForUser(otherUserID);
+
+			serverChannel = serverAuthClient.channel('livestream', channelID, {
+				created_by: { id: uuidv4() },
+			});
+
+			channel = client.channel('livestream', channelID);
+			await channel.watch();
+
+			otherUserChannel = client2.channel('livestream', channelID);
+			await otherUserChannel.watch();
+
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event');
+			await channel.sendEvent({ type: 'custom-event' });
+
+			const eventsReceived = await waiter;
+
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event');
+			expect(eventsReceived[0].user).to.not.be.undefined;
+			expect(eventsReceived[0].user.id).to.not.be.undefined;
+		});
+
+		it('send a custom event with custom data', async () => {
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event-with-data');
+			await channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+
+			const eventsReceived = await waiter;
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event-with-data');
+			expect(eventsReceived[0].color).to.eql('red');
+		});
+
+		it('disable custom events for livestream', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: false,
+			});
+			const p = channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+			await expect(p).to.be.rejectedWith(
+				'Channel type livestream does not support custom events',
+			);
+		});
+
+		it('re-enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to messaging channel - permission checks', async () => {
+			let chan = serverAuthClient.channel('messaging', channelID, {
+				created_by: { id: uuidv4() },
+				members: [userID],
+			});
+			await chan.create();
+
+			chan = client.channel('messaging', channelID);
+			await chan.watch();
+			await chan.sendEvent({ type: 'custom-event' });
+
+			chan = client2.channel('messaging', channelID);
+			chan.initialized = true; // force event sending by changing internal state
+			const p = chan.sendEvent({ type: 'custom-event' });
+
+			await expect(p).to.be.rejectedWith(
+				`User '${otherUserID}' with role user is not allowed to access Resource SendCustomEvent on channel type messaging`,
+			);
+		});
+	});
+
 	describe('Anonymous users', () => {
 		let client;
 		let channel;
@@ -2518,8 +2606,8 @@ describe('Chat', () => {
 		let message;
 
 		before(async () => {
-			serverClient = await getTestClient(true);
-			await serverClient.updateUser(thierry);
+			serverClient = getServerTestClient();
+			await serverClient.upsertUser(thierry);
 			channel = serverClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [thierry.id],
@@ -2540,9 +2628,10 @@ describe('Chat', () => {
 			expect(p).to.be.rejectedWith('message with id bad message not found');
 		});
 
-		it('servers side get a message should work', async () => {
+		it('server side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -2554,6 +2643,7 @@ describe('Chat', () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -3249,5 +3339,89 @@ describe('warm up', () => {
 		const withoutWarmUpDur = t1 - t0;
 		console.log('time taken without warm up ' + withoutWarmUpDur + ' milliseconds.');
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
+	});
+});
+
+describe('paginate by message created_at', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	const messages = [];
+	const messageID = (user, i) => {
+		return i.toString() + '-' + user;
+	};
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			messages.push(
+				(
+					await channel.sendMessage({
+						text: user + i.toString(),
+						id: messageID(user, i),
+					})
+				).message,
+			);
+			await sleep(5);
+		}
+	});
+
+	it('invalid date should return an error', async () => {
+		await expect(
+			channel.query({
+				messages: { limit: 2, created_at_after: 'invalid' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.created_at_after" but got "invalid"',
+		);
+	});
+
+	it('created_at_after (message 5) should return message 6 to 7', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
+	});
+
+	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 6));
+	});
+
+	it('created_at_before (message_5) should return message 3 to 4', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 5));
+	});
+
+	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
+		const result = await channel.query({
+			messages: {
+				limit: 2,
+				created_at_before: messages[4].created_at,
+				created_at_after: messages[2].created_at,
+			},
+		});
+		expect(result.messages.length).to.be.equal(1);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
 	});
 });
