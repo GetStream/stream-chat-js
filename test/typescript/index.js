@@ -235,7 +235,7 @@ const executables = [
 		f: rg.getMessageWithReply,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString: string }>['getMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['getMessage']>>",
 	},
 	{
 		f: rg.getPermission,
@@ -391,7 +391,7 @@ const executables = [
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendAction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendAction']>>",
 	},
 	{
 		f: rg.sendFile,
@@ -409,7 +409,7 @@ const executables = [
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendMessage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendMessage']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
@@ -548,7 +548,7 @@ const executables = [
 		f: rg.updateMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['updateMessage']>>",
 	},
 	{
 		f: rg.updatePermission,
