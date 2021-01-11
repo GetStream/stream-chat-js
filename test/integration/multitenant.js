@@ -355,7 +355,7 @@ describe('User teams field', function () {
 
 	before(async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 		await client.disconnect(5000);
 	});
 
@@ -375,7 +375,7 @@ describe('User teams field', function () {
 	it('should not be possible to set user.team on connect', function (done) {
 		const client = getTestClient(false);
 		const userToken = uuidv4();
-		const p = client.setUser(
+		const p = client.connectUser(
 			{ id: userToken, teams: ['alpha', 'bravo'] },
 			createUserToken(userToken),
 		);
@@ -386,7 +386,7 @@ describe('User teams field', function () {
 
 	it('should not be possible to update user.team on connect', async function () {
 		const client = getTestClient(false);
-		const p = client.setUser({ id: userId, teams: ['alpha', 'bravo'] }, token);
+		const p = client.connectUser({ id: userId, teams: ['alpha', 'bravo'] }, token);
 
 		await expect(p).to.be.rejectedWith(
 			'user teams cannot be changed at connection time',
@@ -396,7 +396,7 @@ describe('User teams field', function () {
 	it('create users server-side with team is OK', async function () {
 		const client = getTestClient(true);
 		const id = uuidv4();
-		const p = client.updateUser({ id, teams: ['red'] });
+		const p = client.upsertUser({ id, teams: ['red'] });
 		await expect(p).to.not.be.rejected;
 		const response = await p;
 		expect(response.users[id].teams).to.eql(['red']);
@@ -404,7 +404,7 @@ describe('User teams field', function () {
 
 	it('change a user team server-side is OK', async function () {
 		const client = getTestClient(true);
-		const p = client.updateUser({ id: userId, teams: ['alpha', 'bravo'] });
+		const p = client.upsertUser({ id: userId, teams: ['alpha', 'bravo'] });
 		await expect(p).to.not.be.rejected;
 		const response = await p;
 		expect(response.users[userId].teams).to.eql(['alpha', 'bravo']);
@@ -412,36 +412,36 @@ describe('User teams field', function () {
 
 	it('should be possible to send user.team on connect as long as it did not change', async function () {
 		const client = getTestClient(false);
-		const p = client.setUser({ id: userId, teams: ['bravo', 'alpha'] }, token);
+		const p = client.connectUser({ id: userId, teams: ['bravo', 'alpha'] }, token);
 
 		await expect(p).to.not.be.rejected;
 	});
 
-	it('should not be possible to update own user teams with the updateUser endpoint', async function () {
+	it('should not be possible to update own user teams with the upsertUser endpoint', async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 
-		const p = client.updateUser({ id: userId, teams: [uuidv4()] });
+		const p = client.upsertUser({ id: userId, teams: [uuidv4()] });
 		await expect(p).to.be.rejectedWith('user teams can only be updated server-side');
 	});
 
-	it('should be possible to update own user with the updateUser endpoint if teams are not sent', async function () {
+	it('should be possible to update own user with the upsertUser endpoint if teams are not sent', async function () {
 		const client = getTestClient(false);
-		const response = await client.setUser({ id: userId }, token);
+		const response = await client.connectUser({ id: userId }, token);
 
-		const p1 = client.updateUser({ id: userId, teams: response.me.teams });
+		const p1 = client.upsertUser({ id: userId, teams: response.me.teams });
 		await expect(p1).to.not.be.rejected;
 
-		const p2 = client.updateUser({ id: userId, teams: null });
+		const p2 = client.upsertUser({ id: userId, teams: null });
 		await expect(p2).to.not.be.rejected;
 
-		const p3 = client.updateUser({ id: userId, teams: [] });
+		const p3 = client.upsertUser({ id: userId, teams: [] });
 		await expect(p3).to.not.be.rejected;
 	});
 
 	it('should not be possible to create a channel without team', async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4()).create();
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team """',
@@ -450,7 +450,7 @@ describe('User teams field', function () {
 
 	it('should not be possible to create a channel for a different team', async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4(), { team: 'tango' }).create();
 		await expect(p).to.be.rejectedWith(
 			'StreamChat error code 5: GetOrCreateChannel failed with error: "user from teams ["alpha" "bravo"] cannot create a channel for team "tango""',
@@ -459,14 +459,14 @@ describe('User teams field', function () {
 
 	it('should be possible to create a channel for same team', async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 		const p = client.channel('messaging', uuidv4(), { team: 'alpha' }).create();
 		await expect(p).to.not.be.rejected;
 	});
 
 	it('should not be possible to update channel.team using client side auth', async function () {
 		const client = getTestClient(false);
-		await client.setUser({ id: userId }, token);
+		await client.connectUser({ id: userId }, token);
 
 		const chan = client.channel('messaging', uuidv4(), { team: 'bravo' });
 		const p1 = chan.create();
@@ -517,7 +517,7 @@ describe('Full test', function () {
 			multi_tenant_enabled: true,
 		});
 
-		await client.updateUsers([
+		await client.upsertUsers([
 			{ id: team1User, teams: [team1] },
 			{ id: team2User, teams: [team2] },
 		]);
@@ -677,8 +677,8 @@ describe('Full test', function () {
 		let channel;
 		const jaap = 'jaap' + uuidv4();
 
-		const ss = await getTestClient(true);
-		await ss.updateUser({ id: jaap, teams: ['red', 'blue'] });
+		const ss = getTestClient(true);
+		await ss.upsertUser({ id: jaap, teams: ['red', 'blue'] });
 		channel = ss.channel('messaging', uuidv4(), {
 			members: [jaap],
 			team: 'blue',
