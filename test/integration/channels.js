@@ -2822,7 +2822,7 @@ describe('message has exposed cid', function () {
 	before(async function () {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
-		serverClient = await getServerTestClient();
+		serverClient = getServerTestClient();
 		channel = client.channel('messaging', uuidv4(), {
 			members: [user],
 		});
