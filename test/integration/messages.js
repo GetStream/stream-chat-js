@@ -368,6 +368,42 @@ describe('pinned messages', () => {
 			}
 		});
 	});
+	context('channel state: delete messages', () => {
+		let chat;
+		before(async () => {
+			chat = await setupTestChannel('messaging', false);
+		});
+		it('pin 21 message and delete them in chunks', async () => {
+			const messages = [];
+			for (let i = 0; i < 21; i++) {
+				messages.push(
+					await chat.owner.channel.sendMessage({
+						text: 'Message #' + (i + 1),
+						pinned: true,
+					}),
+				);
+			}
+			let state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(10);
+			for (let i = 0; i < 10; i++) {
+				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (21 - i));
+			}
+			for (let i = 10; i < 21; i++) {
+				await chat.owner.client.deleteMessage(messages[i].message.id);
+			}
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(10);
+			for (let i = 0; i < 10; i++) {
+				expect(state.pinned_messages[i].text).to.be.equal('Message #' + (10 - i));
+			}
+			for (let i = 0; i < 9; i++) {
+				await chat.owner.client.deleteMessage(messages[i].message.id);
+			}
+			state = await chat.owner.channel.query();
+			expect(state.pinned_messages.length).to.be.equal(1);
+			expect(state.pinned_messages[0].text).to.be.equal('Message #10');
+		});
+	});
 	context('livestream permissions', () => {
 		testMessagePinPermissions('livestream', false, {
 			owner: true,
