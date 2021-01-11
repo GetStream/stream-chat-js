@@ -111,7 +111,7 @@ describe('Sync endpoint', () => {
 	let syncReply;
 
 	it('sync should return a response', async () => {
-		await userClient.setUser({ id: userID }, createUserToken(userID));
+		await userClient.connectUser({ id: userID }, createUserToken(userID));
 		syncReply = await userClient.sync(
 			[blueChannel.cid, redChannel.cid, greenChannel.cid],
 			lastEventAt,

@@ -17,7 +17,7 @@ describe('channel slow mode', function () {
 	let memberClient;
 	let channel;
 	before(async function () {
-		ssClient = await getTestClient(true);
+		ssClient = getTestClient(true);
 		await ssClient.upsertUsers([
 			{ id: admin, role: 'admin' },
 			{ id: member },

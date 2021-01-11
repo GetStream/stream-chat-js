@@ -204,8 +204,8 @@ describe('Channels - members', function () {
 	let tommasoMessageID;
 
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 	});
 
 	it('tommaso creates a new channel', async function () {
@@ -497,9 +497,9 @@ describe('Channels - members', function () {
 				const userY = 'y-' + uuidv4();
 				await createUsers([userX, userY]);
 				const clientX = getTestClient();
-				await clientX.setUser({ id: userX }, createUserToken(userX));
+				await clientX.connectUser({ id: userX }, createUserToken(userX));
 				const clientY = getTestClient();
-				await clientY.setUser({ id: userY }, createUserToken(userY));
+				await clientY.connectUser({ id: userY }, createUserToken(userY));
 
 				let channelX = clientX.channel('messaging', { members: [userX, userY] });
 				await channelX.create();
@@ -830,7 +830,7 @@ describe('Channels - Member limit', function () {
 	let channel;
 	let ssClient;
 	before(async () => {
-		ssClient = await getServerTestClient();
+		ssClient = getServerTestClient();
 		await createUsers([memberOne, memberTwo, memberThree]);
 		channel = ssClient.channel('messaging', uuidv4(), {
 			unique,
@@ -893,8 +893,8 @@ describe('Channels - Distinct channels', function () {
 
 	const unique = uuidv4();
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 		await createUsers([newMember]);
 	});
 
@@ -1246,7 +1246,7 @@ describe('hard delete messages', function () {
 
 	before(async function () {
 		client = await getTestClientForUser(user);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 		channel = client.channel('messaging', channelID);
 		await channel.create();
 	});
@@ -1951,7 +1951,7 @@ describe('unread counts on hard delete messages', function () {
 	before(async function () {
 		await createUsers([tommaso, thierry, nick]);
 		client = await getTestClientForUser(tommaso);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 
 		channel = client.channel('messaging', uuidv4(), {
 			members: [tommaso, thierry, nick],
@@ -2364,7 +2364,7 @@ describe('update channel with reserved fields', function () {
 	let channel;
 	let client;
 	before(async function () {
-		client = await getServerTestClient();
+		client = getServerTestClient();
 
 		await client.createChannelType({
 			name: channelType,
@@ -2394,7 +2394,7 @@ describe('notification.channel_deleted', () => {
 	before(async () => {
 		const creator = 'creator' + uuidv4();
 		await createUsers([member, creator]);
-		const c = await getTestClient(true);
+		const c = getTestClient(true);
 
 		channel = c.channel('messaging', uuidv4(), {
 			created_by_id: creator,
@@ -2422,7 +2422,7 @@ describe('partial update channel', () => {
 	const owner = uuidv4();
 
 	before(async () => {
-		ssClient = await getServerTestClient();
+		ssClient = getServerTestClient();
 		ownerClient = await getTestClientForUser(owner);
 		modClient = await getTestClientForUser(moderator);
 		memberClient = await getTestClientForUser(member);
@@ -2785,7 +2785,7 @@ describe('Channel - isUpToDate', async () => {
 		});
 		await channelVish.watch();
 
-		const serverClient = await getServerTestClient();
+		const serverClient = getServerTestClient();
 		const channelAmin = serverClient.channel('messaging', channelId);
 
 		// First lets try with upToDate list.

@@ -45,7 +45,7 @@ describe('Member style server side', () => {
 		await createUsers(['thierry', 'tommaso']);
 	});
 	it('member based id server side', async () => {
-		const client = await getServerTestClient();
+		const client = getServerTestClient();
 		const c = client.channel('messaging', {
 			name: 'Founder Chat',
 			image: 'http://bit.ly/2O35mws',
@@ -260,7 +260,7 @@ describe('Query invites', function () {
 		});
 	});
 	it('Querying for invites with server side auth require an user to be set', async function () {
-		const ssClient = await getTestClient(true);
+		const ssClient = getTestClient(true);
 		const resp = ssClient.queryChannels({ invite: 'pending' });
 		expect(resp).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "invite requires a valid user"',
@@ -278,7 +278,7 @@ describe('Query invites', function () {
 		expect(state.channel.id).to.be.equal(channelID);
 	});
 	it('Querying for invites with server side user should work if the user is provided', async function () {
-		const ssClient = await getTestClient(true);
+		const ssClient = getTestClient(true);
 		const resp = await ssClient.queryChannels(
 			{ invite: 'pending' },
 			{},

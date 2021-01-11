@@ -133,7 +133,7 @@ async function setUser() {
 	await client1.muteUser(user2);
 
 	const authClient = await utils.getTestClient(false);
-	return authClient.setUser({ id: user1 }, utils.createUserToken(user1));
+	return authClient.connectUser({ id: user1 }, utils.createUserToken(user1));
 }
 
 async function sync() {
