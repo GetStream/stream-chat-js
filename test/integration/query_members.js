@@ -38,15 +38,15 @@ describe('Query Members', function () {
 	let channel;
 	let ssClient;
 	before(async function () {
-		ssClient = await getServerTestClient();
-		await ssClient.updateUser({ id: rob, name: 'Robert' });
-		await ssClient.updateUser({ id: rob2, name: 'Robert2' });
-		await ssClient.updateUser({ id: mod, name: 'Tomas' });
-		await ssClient.updateUser({ id: adam, name: 'Adame' });
-		await ssClient.updateUser({ id: invited, name: 'Mary' });
-		await ssClient.updateUser({ id: pending, name: 'Carlos' });
-		await ssClient.updateUser({ id: rejected, name: 'Joseph' });
-		await ssClient.updateUser({ id: banned, name: 'Evil' });
+		ssClient = getServerTestClient();
+		await ssClient.upsertUser({ id: rob, name: 'Robert' });
+		await ssClient.upsertUser({ id: rob2, name: 'Robert2' });
+		await ssClient.upsertUser({ id: mod, name: 'Tomas' });
+		await ssClient.upsertUser({ id: adam, name: 'Adame' });
+		await ssClient.upsertUser({ id: invited, name: 'Mary' });
+		await ssClient.upsertUser({ id: pending, name: 'Carlos' });
+		await ssClient.upsertUser({ id: rejected, name: 'Joseph' });
+		await ssClient.upsertUser({ id: banned, name: 'Evil' });
 
 		channel = ssClient.channel('messaging', uuidv4(), {
 			created_by_id: mod,
@@ -413,7 +413,7 @@ describe('Query Members', function () {
 		let ssClient;
 		const identifier = uuidv4();
 		before(async function () {
-			ssClient = await getServerTestClient();
+			ssClient = getServerTestClient();
 			await ssClient.upsertUsers([zappa, nick, peter, noname]);
 			channel = ssClient.channel('messaging', uuidv4(), {
 				created_by: zappa,
