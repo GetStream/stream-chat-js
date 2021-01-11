@@ -446,6 +446,7 @@ export type MessageResponse<
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
+  thread_participants?: UserResponse<UserType>[];
   type?: string;
   updated_at?: string;
 };
@@ -1481,13 +1482,13 @@ export type MessageBase<
   UserType = UnknownType
 > = MessageType & {
   id: string;
-  pinned: boolean;
   attachments?: Attachment<AttachmentType>[];
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string;
-  pinned_at?: string;
+  pin_expires?: string | null;
+  pinned?: boolean;
+  pinned_at?: string | null;
   pinned_by?: UserResponse<UserType> | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
