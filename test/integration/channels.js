@@ -2819,7 +2819,7 @@ describe('message has exposed cid', function () {
 	let channel;
 	const user = uuidv4();
 
-	before(async function() {
+	before(async function () {
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		serverClient = await getServerTestClient();
