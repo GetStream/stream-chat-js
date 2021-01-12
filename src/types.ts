@@ -83,7 +83,9 @@ export type AppSettingsAPIResponse<
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: string;
+    file_upload_config?: FileUploadConfig;
     image_moderation_enabled?: boolean;
+    image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
@@ -1250,11 +1252,23 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
+  file_upload_config?: {
+    allowed_file_extensions?: string[];
+    allowed_mime_types?: string[];
+    blocked_file_extensions?: string[];
+    blocked_mime_types?: string[];
+  };
   firebase_config?: {
     credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
+  };
+  image_upload_config?: {
+    allowed_file_extensions?: string[];
+    allowed_mime_types?: string[];
+    blocked_file_extensions?: string[];
+    blocked_mime_types?: string[];
   };
   push_config?: {
     version?: string;
@@ -1431,6 +1445,13 @@ export type Field = {
   short?: boolean;
   title?: string;
   value?: string;
+};
+
+export type FileUploadConfig = {
+  allowed_file_extensions?: string[];
+  allowed_mime_types?: string[];
+  blocked_file_extensions?: string[];
+  blocked_mime_types?: string[];
 };
 
 export type FirebaseConfig = {
