@@ -139,7 +139,7 @@ describe('Uploads', () => {
 					allowed_file_extensions: ['.txt', '.csv'],
 				},
 			});
-			const file = fs.createReadStream('helloworld.md');
+			const file = Buffer.from('random string');
 			await expectHTTPErrorCode(
 				400,
 				channel.sendFile(file, 'helloworld.md', 'text/markdown'),
@@ -165,7 +165,7 @@ describe('Uploads', () => {
 					blocked_file_extensions: ['.md'],
 				},
 			});
-			const file = fs.createReadStream('helloworld.md');
+			const file = Buffer.from('random string');
 			await expectHTTPErrorCode(
 				400,
 				channel.sendFile(file, 'helloworld.md', 'text/markdown'),
@@ -273,7 +273,7 @@ describe('Uploads', () => {
 					allowed_mime_types: ['text/plain', 'text/csv'],
 				},
 			});
-			const file = fs.createReadStream('helloworld.md');
+			const file = Buffer.from('random string');
 			await expectHTTPErrorCode(
 				400,
 				channel.sendFile(file, 'helloworld.md', 'text/markdown'),
@@ -299,7 +299,7 @@ describe('Uploads', () => {
 					blocked_mime_types: ['text/markdown'],
 				},
 			});
-			const file = fs.createReadStream('helloworld.md');
+			const file = Buffer.from('random string');
 			await expectHTTPErrorCode(
 				400,
 				channel.sendFile(file, 'helloworld.md', 'text/markdown'),
