@@ -232,6 +232,12 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getMessagesById']>>",
 	},
 	{
+		f: rg.getMessageWithReply,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['getMessage']>>",
+	},
+	{
 		f: rg.getPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -271,7 +277,7 @@ const executables = [
 		f: rg.lastMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
 	},
 	{
 		f: rg.listBlockLists,
@@ -385,7 +391,7 @@ const executables = [
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendAction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendAction']>>",
 	},
 	{
 		f: rg.sendFile,
@@ -403,7 +409,7 @@ const executables = [
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendMessage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendMessage']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
@@ -542,7 +548,7 @@ const executables = [
 		f: rg.updateMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['updateMessage']>>",
 	},
 	{
 		f: rg.updatePermission,
