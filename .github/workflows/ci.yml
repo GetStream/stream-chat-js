@@ -1,8 +1,6 @@
 name: build
 on:
   push:
-    branches:
-      - 'master'
   pull_request:
 
 jobs:
@@ -17,32 +15,22 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Install deps
-        run: yarn
+      - name: Cache Dependencies
+        uses: actions/cache@v2
+        with:
+          path: ./node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+
+      - name: Install Dependencies & Build
+        run: yarn install --frozen-lockfile
 
       - name: Lint
+        if: matrix.node == 14
         run: yarn lint
 
       - name: Unit tests
         run: yarn run test-unit
 
-  test-types:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [12]
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2-beta
-        with:
-          node-version: ${{ matrix.node }}
-
       - name: Run API type definition tests
-        run: yarn && yarn test-types
-
-      # not running this, but we should, tests are broken though
-      # - name: Test
-      #   env:
-      #     STREAM_API_KEY: ${{secrets.STREAM_API_KEY}}
-      #     STREAM_API_SECRET: ${{secrets.STREAM_API_SECRET}}
-      #   run: yarn test
+        if: matrix.node == 14
+        run: yarn test-types
