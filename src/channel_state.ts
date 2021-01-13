@@ -284,6 +284,12 @@ export class ChannelState<
     }
   }
 
+  /**
+   * setPinnedMessages - updates messages in pinned_messages property. See setPinnedMessages for details
+   *
+   * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
+   *
+   */
   setPinnedMessages(
     newMessages: MessageResponse<
       AttachmentType,
@@ -299,6 +305,13 @@ export class ChannelState<
     }
   }
 
+  /**
+   * setPinnedMessage - update message in pinned_messages property. The messages will be added to pinned_messages if it
+   * is pinned and removed otherwise
+   *
+   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage message to update
+   *
+   */
   setPinnedMessage(
     newMessage: MessageResponse<
       AttachmentType,
@@ -602,7 +615,7 @@ export class ChannelState<
     const messageTime = sortBy(message).getTime();
 
     // if message is newer than last item in the list concat and return
-    if (sortBy(mutable[mutable.length - 1]).getTime() < messageTime)
+    if (sortBy(mutable[messageArr.length - 1]).getTime() < messageTime)
       return messageArr.concat(message);
 
     // find the closest index to push the new message
