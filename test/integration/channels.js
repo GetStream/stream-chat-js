@@ -2758,7 +2758,6 @@ describe('Quote messages', () => {
 			expect(updatedEvent.message.parent_id).to.be.undefined;
 			expect(updatedEvent.message.quoted_message.user).to.not.be.undefined;
 
-			console.log('before teardown');
 			await webhook.tearDown();
 		});
 
