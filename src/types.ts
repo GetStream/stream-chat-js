@@ -437,6 +437,9 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  pin_expires?: string;
+  pinned_at?: string;
+  pinned_by?: UserResponse<UserType> | null;
   quoted_message?: Omit<
     MessageResponse<
       AttachmentType,
@@ -1494,10 +1497,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string | null;
   pinned?: boolean;
-  pinned_at?: string | null;
-  pinned_by?: UserResponse<UserType> | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;

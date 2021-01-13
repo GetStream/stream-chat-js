@@ -1,4 +1,4 @@
-import Immutable from 'seamless-immutable';
+import Immutable, { ImmutableDate } from 'seamless-immutable';
 import { Channel } from './channel';
 import {
   ChannelMemberResponse,
@@ -221,6 +221,7 @@ export class ChannelState<
       ...message,
       __html: message.html,
       // parse the date..
+      pinned_at: message.pinned_at ? new Date(message.pinned_at) : new Date(),
       created_at: message.created_at ? new Date(message.created_at) : new Date(),
       updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
       status: message.status || 'received',
@@ -280,6 +281,45 @@ export class ChannelState<
         const threadMessages = this._addToMessageList(thread, message, timestampChanged);
         this.threads = this.threads.set(parentID, threadMessages);
       }
+    }
+  }
+
+  setPinnedMessages(
+    newMessages: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >[],
+  ) {
+    for (let i = 0; i < newMessages.length; i += 1) {
+      this.setPinnedMessage(newMessages[i]);
+    }
+  }
+
+  setPinnedMessage(
+    newMessage: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    const message = this.messageToImmutable(newMessage);
+    if (message.pinned) {
+      this.pinned_messages = this._addToMessageList(
+        this.pinned_messages,
+        message,
+        false,
+        (msg) => msg.pinned_at,
+      );
+    } else {
+      const { result } = this.removeMessageFromArray(this.pinned_messages, message);
+      this.pinned_messages = result;
     }
   }
 
@@ -491,9 +531,9 @@ export class ChannelState<
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
    *
    * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
-   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   *
+   * @param sortBy date function to sort messages by
    */
   _addToMessageList(
     messages: Immutable.ImmutableArray<
@@ -521,8 +561,34 @@ export class ChannelState<
       >['messageToImmutable']
     >,
     timestampChanged = false,
+    sortBy: (
+      msg: ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['messageToImmutable']
+      >,
+    ) => ImmutableDate = (msg) => msg.created_at,
   ) {
     let messageArr = messages;
+    const mutable = messageArr.asMutable() as Array<
+      ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['messageToImmutable']
+      >
+    >;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
     // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
@@ -533,10 +599,10 @@ export class ChannelState<
     // for empty list just concat and return
     if (messageArr.length === 0) return messageArr.concat(message);
 
-    const messageTime = message.created_at.getTime();
+    const messageTime = sortBy(message).getTime();
 
     // if message is newer than last item in the list concat and return
-    if (messageArr[messageArr.length - 1].created_at.getTime() < messageTime)
+    if (sortBy(mutable[mutable.length - 1]).getTime() < messageTime)
       return messageArr.concat(message);
 
     // find the closest index to push the new message
@@ -545,7 +611,7 @@ export class ChannelState<
     let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (messageArr[middle].created_at.getTime() <= messageTime) left = middle + 1;
+      if (sortBy(mutable[middle]).getTime() <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
@@ -560,19 +626,6 @@ export class ChannelState<
         return messageArr.set(left - 1, message);
     }
 
-    const mutable = messageArr.asMutable() as Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['messageToImmutable']
-      >
-    >;
     mutable.splice(left, 0, message);
     return Immutable(mutable);
   }

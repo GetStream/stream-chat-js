@@ -1568,6 +1568,9 @@ export class Channel<
           if (this.state.isUpToDate || isThreadMessage) {
             s.addMessageSorted(event.message, ownMessage);
           }
+          if (event.message.pinned) {
+            s.setPinnedMessage(event.message);
+          }
 
           if (ownMessage && event.user?.id) {
             s.unreadCount = 0;
@@ -1586,6 +1589,7 @@ export class Channel<
       case 'message.updated':
         if (event.message) {
           s.addMessageSorted(event.message);
+          s.setPinnedMessage(event.message);
         }
         break;
       case 'channel.truncated':
@@ -1724,6 +1728,11 @@ export class Channel<
       this.state.messages = Immutable([]);
     }
     this.state.addMessagesSorted(messages, false, true);
+    const pinnedMessages = state.pinned_messages || [];
+    if (!this.state.pinned_messages) {
+      this.state.pinned_messages = Immutable([]);
+    }
+    this.state.setPinnedMessages(pinnedMessages);
     this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
