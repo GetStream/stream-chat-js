@@ -162,6 +162,14 @@ export type ChannelAPIResponse<
     ReactionType,
     UserType
   >[];
+  pinned_messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
   hidden?: boolean;
   membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
@@ -429,6 +437,9 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  pin_expires?: string | null;
+  pinned_at?: string | null;
+  pinned_by?: UserResponse<UserType> | null;
   quoted_message?: Omit<
     MessageResponse<
       AttachmentType,
@@ -1496,10 +1507,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string | null;
   pinned?: boolean;
-  pinned_at?: string | null;
-  pinned_by?: UserResponse<UserType> | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
