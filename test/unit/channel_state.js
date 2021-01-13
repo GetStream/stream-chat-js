@@ -267,9 +267,9 @@ describe('ChannelState addMessagesSorted', function () {
 		msgs[2].pinned_at = new Date('2020-01-01T00:00:00.011Z');
 		const state = new ChannelState();
 		state.setPinnedMessages(msgs);
-		expect(state.pinned_messages.length).to.be.equal(3);
-		expect(state.pinned_messages[0].id).to.be.equal('1');
-		expect(state.pinned_messages[1].id).to.be.equal('3');
-		expect(state.pinned_messages[2].id).to.be.equal('2');
+		expect(state.pinnedMessages.length).to.be.equal(3);
+		expect(state.pinnedMessages[0].id).to.be.equal('1');
+		expect(state.pinnedMessages[1].id).to.be.equal('3');
+		expect(state.pinnedMessages[2].id).to.be.equal('2');
 	});
 });

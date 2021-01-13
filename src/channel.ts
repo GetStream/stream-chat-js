@@ -1728,11 +1728,10 @@ export class Channel<
       this.state.messages = Immutable([]);
     }
     this.state.addMessagesSorted(messages, false, true);
-    const pinnedMessages = state.pinned_messages || [];
-    if (!this.state.pinned_messages) {
-      this.state.pinned_messages = Immutable([]);
+    if (!this.state.pinnedMessages) {
+      this.state.pinnedMessages = Immutable([]);
     }
-    this.state.setPinnedMessages(pinnedMessages);
+    this.state.setPinnedMessages(state.pinned_messages || []);
     this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
