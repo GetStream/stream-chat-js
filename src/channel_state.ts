@@ -601,10 +601,10 @@ export class ChannelState<
     if (messageArr.length === 0) return messageArr.concat(message);
 
     const messageTime = message[sortBy]?.getTime() || 0;
+    const lastMessageTime = messageArr[messageArr.length - 1][sortBy]?.getTime() || 0;
 
     // if message is newer than last item in the list concat and return
-    if (messageArr[messageArr.length - 1][sortBy]?.getTime() || 0 < messageTime)
-      return messageArr.concat(message);
+    if (lastMessageTime < messageTime) return messageArr.concat(message);
 
     // find the closest index to push the new message
     let left = 0;
@@ -612,7 +612,8 @@ export class ChannelState<
     let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (messageArr[middle][sortBy]?.getTime() || 0 <= messageTime) left = middle + 1;
+      const time = messageArr[middle][sortBy]?.getTime() || 0;
+      if (time <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
