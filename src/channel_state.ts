@@ -221,7 +221,7 @@ export class ChannelState<
       ...message,
       __html: message.html,
       // parse the date..
-      pinned_at: message.pinned_at ? new Date(message.pinned_at) : new Date(),
+      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
       created_at: message.created_at ? new Date(message.created_at) : new Date(),
       updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
       status: message.status || 'received',
@@ -600,10 +600,10 @@ export class ChannelState<
     // for empty list just concat and return
     if (messageArr.length === 0) return messageArr.concat(message);
 
-    const messageTime = message[sortBy].getTime();
+    const messageTime = message[sortBy]?.getTime() || 0;
 
     // if message is newer than last item in the list concat and return
-    if (messageArr[messageArr.length - 1][sortBy].getTime() < messageTime)
+    if (messageArr[messageArr.length - 1][sortBy]?.getTime() || 0 < messageTime)
       return messageArr.concat(message);
 
     // find the closest index to push the new message
@@ -612,7 +612,7 @@ export class ChannelState<
     let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (messageArr[middle][sortBy].getTime() <= messageTime) left = middle + 1;
+      if (messageArr[middle][sortBy]?.getTime() || 0 <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
