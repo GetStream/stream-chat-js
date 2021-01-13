@@ -454,6 +454,7 @@ export type MessageResponse<
 export type MuteResponse<UserType = UnknownType> = {
   user: UserResponse<UserType>;
   created_at?: string;
+  expires?: string;
   target?: UserResponse<UserType>;
   updated_at?: string;
 };
@@ -705,6 +706,8 @@ export type ListCommandsResponse<
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  automod_thresholds?: ChannelConfigAutomodThresholds;
+  blocklist?: string;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
   commands?: CommandVariants<CommandType>[];
@@ -1257,6 +1260,7 @@ export type AppSettings = {
     notification_template?: string;
     server_key?: string;
   };
+  image_moderation_enabled?: boolean;
   push_config?: {
     version?: string;
   };
@@ -1309,6 +1313,12 @@ export type ChannelConfig<
 export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
 
 export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
+
+export type ChannelConfigAutomodThresholds = null | {
+  explicit?: { block?: number; flag?: number };
+  spam?: { block?: number; flag?: number };
+  toxic?: { block?: number; flag?: number };
+};
 
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
