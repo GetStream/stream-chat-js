@@ -285,12 +285,12 @@ export class ChannelState<
   }
 
   /**
-   * setPinnedMessages - updates messages in pinned_messages property
+   * addPinnedMessages - adds messages in pinnedMessages property
    *
    * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} pinnedMessages A list of pinned messages
    *
    */
-  setPinnedMessages(
+  addPinnedMessages(
     pinnedMessages: MessageResponse<
       AttachmentType,
       ChannelType,
@@ -301,18 +301,17 @@ export class ChannelState<
     >[],
   ) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
-      this.setPinnedMessage(pinnedMessages[i]);
+      this.addPinnedMessage(pinnedMessages[i]);
     }
   }
 
   /**
-   * setPinnedMessage - update message in pinned_messages property. The messages will be added to pinned_messages if it
-   * is pinned and removed otherwise
+   * addPinnedMessage - adds message in pinnedMessages
    *
    * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} pinnedMessage message to update
    *
    */
-  setPinnedMessage(
+  addPinnedMessage(
     pinnedMessage: MessageResponse<
       AttachmentType,
       ChannelType,
@@ -322,18 +321,32 @@ export class ChannelState<
       UserType
     >,
   ) {
-    const message = this.messageToImmutable(pinnedMessage);
-    if (message.pinned) {
-      this.pinnedMessages = this._addToMessageList(
-        this.pinnedMessages,
-        message,
-        false,
-        'pinned_at',
-      );
-    } else {
-      const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
-      this.pinnedMessages = result;
-    }
+    this.pinnedMessages = this._addToMessageList(
+      this.pinnedMessages,
+      this.messageToImmutable(pinnedMessage),
+      false,
+      'pinned_at',
+    );
+  }
+
+  /**
+   * removePinnedMessage - removes pinned message from pinnedMessages
+   *
+   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message message to remove
+   *
+   */
+  removePinnedMessage(
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
+    this.pinnedMessages = result;
   }
 
   addReaction(

@@ -1556,6 +1556,9 @@ export class Channel<
         if (event.message) {
           if (event.hard_delete) s.removeMessage(event.message);
           else s.addMessageSorted(event.message);
+          if (event.message.pinned) {
+            s.removePinnedMessage(event.message);
+          }
         }
         break;
       case 'message.new':
@@ -1569,7 +1572,7 @@ export class Channel<
             s.addMessageSorted(event.message, ownMessage);
           }
           if (event.message.pinned) {
-            s.setPinnedMessage(event.message);
+            s.addPinnedMessage(event.message);
           }
 
           if (ownMessage && event.user?.id) {
@@ -1589,7 +1592,11 @@ export class Channel<
       case 'message.updated':
         if (event.message) {
           s.addMessageSorted(event.message);
-          s.setPinnedMessage(event.message);
+          if (event.message.pinned) {
+            s.addPinnedMessage(event.message);
+          } else {
+            s.removePinnedMessage(event.message);
+          }
         }
         break;
       case 'channel.truncated':
@@ -1731,7 +1738,7 @@ export class Channel<
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = Immutable([]);
     }
-    this.state.setPinnedMessages(state.pinned_messages || []);
+    this.state.addPinnedMessages(state.pinned_messages || []);
     this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
