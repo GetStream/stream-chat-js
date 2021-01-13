@@ -590,19 +590,6 @@ export class ChannelState<
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
   ) {
     let messageArr = messages;
-    const mutable = messageArr.asMutable() as Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['messageToImmutable']
-      >
-    >;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
     // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
@@ -616,7 +603,7 @@ export class ChannelState<
     const messageTime = message[sortBy].getTime();
 
     // if message is newer than last item in the list concat and return
-    if (mutable[messageArr.length - 1][sortBy].getTime() < messageTime)
+    if (messageArr[messageArr.length - 1][sortBy].getTime() < messageTime)
       return messageArr.concat(message);
 
     // find the closest index to push the new message
@@ -625,7 +612,7 @@ export class ChannelState<
     let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (mutable[middle][sortBy].getTime() <= messageTime) left = middle + 1;
+      if (messageArr[middle][sortBy].getTime() <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
@@ -640,6 +627,19 @@ export class ChannelState<
         return messageArr.set(left - 1, message);
     }
 
+    const mutable = messageArr.asMutable() as Array<
+      ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['messageToImmutable']
+      >
+    >;
     mutable.splice(left, 0, message);
     return Immutable(mutable);
   }
