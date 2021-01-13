@@ -1858,11 +1858,14 @@ describe('$ne operator', function () {
 	});
 });
 
-describe('query by $autocomplete operator on channels.name', function () {
-	let client;
-	let channel;
+describe('autocomplete and message search sanitization', function () {
+	let client, channel, filters;
 	const user = uuidv4();
+	const msgText =
+		'I would tell you a joke about a needle in a haystack, but I don’t think you’d see the point.';
+
 	before(async function () {
+		filters = { members: { $in: [user] } };
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4(), {
@@ -1870,6 +1873,9 @@ describe('query by $autocomplete operator on channels.name', function () {
 			name: uuidv4(),
 		});
 		await channel.create();
+		await channel.sendMessage({
+			text: msgText,
+		});
 	});
 
 	it('return 1 result', async function () {
@@ -1881,10 +1887,30 @@ describe('query by $autocomplete operator on channels.name', function () {
 		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
+
+		const searchResp = await client.search(filters, 'needle in a haystack', {
+			limit: 2,
+			offset: 0,
+		});
+
+		expect(searchResp.results).to.have.lengthOf(1);
+		expect(searchResp.results[0].message).to.not.be.undefined;
+		expect(searchResp.results[0].message.text).to.equal(msgText);
+
+		const searchResp2 = await client.search(
+			filters,
+			'needle    in a  %#$$%! haystack',
+			{ limit: 2, offset: 0 },
+		);
+
+		expect(searchResp2.results).to.have.lengthOf(1);
+		expect(searchResp2.results[0].message).to.not.be.undefined;
+		expect(searchResp2.results[0].message.text).to.equal(msgText);
 	});
 
-	it('empty $autocomplete query should lead to a status 400 error', async () => {
-		let error = false;
+	it('empty query should lead to a status 400 error', async () => {
+		let errors = 0;
+
 		try {
 			await client.queryChannels({
 				members: [user],
@@ -1893,17 +1919,29 @@ describe('query by $autocomplete operator on channels.name', function () {
 				},
 			});
 		} catch (e) {
-			error = true;
+			errors++;
 			expect(e.response).to.not.be.undefined;
 			expect(e.response.data).to.not.be.undefined;
 			expect(e.response.data.code).to.equal(4);
 			expect(e.response.data.StatusCode).to.equal(400);
 		}
-		expect(error).to.be.true;
+
+		try {
+			await client.search(filters, '', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
 	});
 
-	it('$autocomplete with special symbols only should lead to a status 400 error', async () => {
-		let error = false;
+	it('query with special symbols only should lead to a status 400 error', async () => {
+		let errors = 0;
+
 		try {
 			await client.queryChannels({
 				members: [user],
@@ -1912,16 +1950,27 @@ describe('query by $autocomplete operator on channels.name', function () {
 				},
 			});
 		} catch (e) {
-			error = true;
+			errors++;
 			expect(e.response).to.not.be.undefined;
 			expect(e.response.data).to.not.be.undefined;
 			expect(e.response.data.code).to.equal(4);
 			expect(e.response.data.StatusCode).to.equal(400);
 		}
-		expect(error).to.be.true;
+
+		try {
+			await client.search(filters, '!@#$%!%&*()', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
 	});
 
-	it('$autocomplete query with random characters', async () => {
+	it('query with random characters', async () => {
 		for (let i = 0; i < 10; i++) {
 			try {
 				await client.queryChannels({
@@ -1929,6 +1978,18 @@ describe('query by $autocomplete operator on channels.name', function () {
 					name: {
 						$autocomplete: randomUnicodeString(24),
 					},
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+
+			try {
+				await client.search(filters, randomUnicodeString(24), {
+					limit: 2,
+					offset: 0,
 				});
 			} catch (e) {
 				expect(e.response).to.not.be.undefined;
