@@ -40,12 +40,12 @@ module.exports = {
 	getTestClient: function getTestClient(serverSide) {
 		return new StreamChat(apiKey, serverSide ? apiSecret : null, {
 			timeout: 8000,
-			allowServerSideConnect: serverSide,
+			allowServerSideConnect: true,
 		});
 	},
 	getTestClientForUser: async function getTestClientForUser(userID, options = {}) {
 		const client = this.getTestClient(false);
-		const health = await client.setUser(
+		const health = await client.connectUser(
 			{ id: userID, ...options },
 			this.createUserToken(userID),
 		);
@@ -54,7 +54,7 @@ module.exports = {
 	},
 	getTestClientForUser2: function getTestClientForUser2(userID, options) {
 		const client = this.getTestClient(false);
-		client.setUser({ id: userID, ...options }, this.createUserToken(userID));
+		client.connectUser({ id: userID, ...options }, this.createUserToken(userID));
 		return client;
 	},
 	runAndLogPromise: function runAndLogPromise(promiseCallable) {

@@ -10,6 +10,7 @@ import {
 	sleep,
 	createEventWaiter,
 	randomUnicodeString,
+	setupWebhook,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -204,8 +205,8 @@ describe('Channels - members', function () {
 	let tommasoMessageID;
 
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 	});
 
 	it('tommaso creates a new channel', async function () {
@@ -497,9 +498,9 @@ describe('Channels - members', function () {
 				const userY = 'y-' + uuidv4();
 				await createUsers([userX, userY]);
 				const clientX = getTestClient();
-				await clientX.setUser({ id: userX }, createUserToken(userX));
+				await clientX.connectUser({ id: userX }, createUserToken(userX));
 				const clientY = getTestClient();
-				await clientY.setUser({ id: userY }, createUserToken(userY));
+				await clientY.connectUser({ id: userY }, createUserToken(userY));
 
 				let channelX = clientX.channel('messaging', { members: [userX, userY] });
 				await channelX.create();
@@ -568,6 +569,98 @@ describe('Channels - members', function () {
 						.channel('messaging', channel.id)
 						.addMembers([newMembers[0]]),
 				);
+			});
+		});
+
+		describe('leave channel permissions', () => {
+			const minimalPermissions = [
+				{
+					action: 'Allow',
+					name: 'Channel member permissions',
+					resources: ['ReadChannel', 'CreateChannel'],
+					roles: ['channel_member'],
+					owner: false,
+					priority: 70,
+				},
+				{
+					action: 'Allow',
+					name: 'Users can create channels',
+					resources: ['CreateChannel'],
+					roles: ['user'],
+					owner: false,
+					priority: 60,
+				},
+				{
+					action: 'Deny',
+					name: 'deny all policy',
+					resources: ['*'],
+					roles: ['*'],
+					owner: false,
+					priority: 1,
+				},
+			];
+			let ssClient;
+			let client;
+			const user = uuidv4();
+			before(async () => {
+				ssClient = getTestClient(true);
+				client = await getTestClientForUser(user);
+			});
+			it('no permissions to leave', async () => {
+				const type = uuidv4();
+				await ssClient.createChannelType({
+					name: type,
+					permissions: minimalPermissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await expectHTTPErrorCode(403, channel.removeMembers([user]));
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership and UpdateChannelMembers', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
 			});
 		});
 	});
@@ -738,7 +831,7 @@ describe('Channels - Member limit', function () {
 	let channel;
 	let ssClient;
 	before(async () => {
-		ssClient = await getServerTestClient();
+		ssClient = getServerTestClient();
 		await createUsers([memberOne, memberTwo, memberThree]);
 		channel = ssClient.channel('messaging', uuidv4(), {
 			unique,
@@ -801,8 +894,8 @@ describe('Channels - Distinct channels', function () {
 
 	const unique = uuidv4();
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 		await createUsers([newMember]);
 	});
 
@@ -1154,7 +1247,7 @@ describe('hard delete messages', function () {
 
 	before(async function () {
 		client = await getTestClientForUser(user);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 		channel = client.channel('messaging', channelID);
 		await channel.create();
 	});
@@ -1766,11 +1859,14 @@ describe('$ne operator', function () {
 	});
 });
 
-describe('query by $autocomplete operator on channels.name', function () {
-	let client;
-	let channel;
+describe('autocomplete and message search sanitization', function () {
+	let client, channel, filters;
 	const user = uuidv4();
+	const msgText =
+		'I would tell you a joke about a needle in a haystack, but I don’t think you’d see the point.';
+
 	before(async function () {
+		filters = { members: { $in: [user] } };
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4(), {
@@ -1778,6 +1874,9 @@ describe('query by $autocomplete operator on channels.name', function () {
 			name: uuidv4(),
 		});
 		await channel.create();
+		await channel.sendMessage({
+			text: msgText,
+		});
 	});
 
 	it('return 1 result', async function () {
@@ -1789,10 +1888,30 @@ describe('query by $autocomplete operator on channels.name', function () {
 		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
+
+		const searchResp = await client.search(filters, 'needle in a haystack', {
+			limit: 2,
+			offset: 0,
+		});
+
+		expect(searchResp.results).to.have.lengthOf(1);
+		expect(searchResp.results[0].message).to.not.be.undefined;
+		expect(searchResp.results[0].message.text).to.equal(msgText);
+
+		const searchResp2 = await client.search(
+			filters,
+			'needle    in a  %#$$%! haystack',
+			{ limit: 2, offset: 0 },
+		);
+
+		expect(searchResp2.results).to.have.lengthOf(1);
+		expect(searchResp2.results[0].message).to.not.be.undefined;
+		expect(searchResp2.results[0].message.text).to.equal(msgText);
 	});
 
-	it('empty $autocomplete query should lead to a status 400 error', async () => {
-		let error = false;
+	it('empty query should lead to a status 400 error', async () => {
+		let errors = 0;
+
 		try {
 			await client.queryChannels({
 				members: [user],
@@ -1801,17 +1920,29 @@ describe('query by $autocomplete operator on channels.name', function () {
 				},
 			});
 		} catch (e) {
-			error = true;
+			errors++;
 			expect(e.response).to.not.be.undefined;
 			expect(e.response.data).to.not.be.undefined;
 			expect(e.response.data.code).to.equal(4);
 			expect(e.response.data.StatusCode).to.equal(400);
 		}
-		expect(error).to.be.true;
+
+		try {
+			await client.search(filters, '', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
 	});
 
-	it('$autocomplete with special symbols only should lead to a status 400 error', async () => {
-		let error = false;
+	it('query with special symbols only should lead to a status 400 error', async () => {
+		let errors = 0;
+
 		try {
 			await client.queryChannels({
 				members: [user],
@@ -1820,16 +1951,27 @@ describe('query by $autocomplete operator on channels.name', function () {
 				},
 			});
 		} catch (e) {
-			error = true;
+			errors++;
 			expect(e.response).to.not.be.undefined;
 			expect(e.response.data).to.not.be.undefined;
 			expect(e.response.data.code).to.equal(4);
 			expect(e.response.data.StatusCode).to.equal(400);
 		}
-		expect(error).to.be.true;
+
+		try {
+			await client.search(filters, '!@#$%!%&*()', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
 	});
 
-	it('$autocomplete query with random characters', async () => {
+	it('query with random characters', async () => {
 		for (let i = 0; i < 10; i++) {
 			try {
 				await client.queryChannels({
@@ -1837,6 +1979,18 @@ describe('query by $autocomplete operator on channels.name', function () {
 					name: {
 						$autocomplete: randomUnicodeString(24),
 					},
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+
+			try {
+				await client.search(filters, randomUnicodeString(24), {
+					limit: 2,
+					offset: 0,
 				});
 			} catch (e) {
 				expect(e.response).to.not.be.undefined;
@@ -1859,7 +2013,7 @@ describe('unread counts on hard delete messages', function () {
 	before(async function () {
 		await createUsers([tommaso, thierry, nick]);
 		client = await getTestClientForUser(tommaso);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 
 		channel = client.channel('messaging', uuidv4(), {
 			members: [tommaso, thierry, nick],
@@ -2272,7 +2426,7 @@ describe('update channel with reserved fields', function () {
 	let channel;
 	let client;
 	before(async function () {
-		client = await getServerTestClient();
+		client = getServerTestClient();
 
 		await client.createChannelType({
 			name: channelType,
@@ -2302,7 +2456,7 @@ describe('notification.channel_deleted', () => {
 	before(async () => {
 		const creator = 'creator' + uuidv4();
 		await createUsers([member, creator]);
-		const c = await getTestClient(true);
+		const c = getTestClient(true);
 
 		channel = c.channel('messaging', uuidv4(), {
 			created_by_id: creator,
@@ -2330,7 +2484,7 @@ describe('partial update channel', () => {
 	const owner = uuidv4();
 
 	before(async () => {
-		ssClient = await getServerTestClient();
+		ssClient = getServerTestClient();
 		ownerClient = await getTestClientForUser(owner);
 		modClient = await getTestClientForUser(moderator);
 		memberClient = await getTestClientForUser(member);
@@ -2477,6 +2631,8 @@ describe('Quote messages', () => {
 	});
 
 	describe('Friend replies to the message in a thread', () => {
+		let firstThreadReply;
+
 		it('is possible to reply to the message', async () => {
 			const res = await channel.sendMessage({
 				text: 'The first threaded reply',
@@ -2486,8 +2642,48 @@ describe('Quote messages', () => {
 
 			expect(res.message).to.not.be.undefined;
 			expect(res.message.id).to.not.be.empty;
-			expect(res.message.parent_id).to.not.be.undefined;
+			expect(res.message.parent_id).to.equal(firstMessage.id);
 			expect(res.message.type).to.equal('reply');
+		});
+
+		it('should be possible to quote the message in a thread', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first thread reply that also quotes a message',
+				user_id: friend,
+				parent_id: firstMessage.id,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('reply');
+			expect(res.message.parent_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			firstThreadReply = res.message;
+		});
+
+		it('should be possible quote the regular reply in a thread', async () => {
+			const res = await channel.sendMessage({
+				text:
+					'The first thread reply that quotes another reply in the same thread',
+				user_id: friend,
+				parent_id: firstMessage.id,
+				quoted_message_id: firstThreadReply.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstThreadReply.id);
+			expect(res.message.quoted_message.id).to.equal(firstThreadReply.id);
+			expect(res.message.quoted_message.text).to.equal(firstThreadReply.text);
+			expect(res.message.type).to.equal('reply');
+			expect(res.message.parent_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.user).to.not.be.undefined;
 		});
 	});
 
@@ -2565,6 +2761,65 @@ describe('Quote messages', () => {
 			expect(clm.type).to.equal('regular');
 			expect(clm.parent_id).to.be.undefined;
 			expect(clm.quoted_message.user).to.not.be.undefined;
+		});
+
+		it('is possible to otherwise change a message that contains a quoted_message', async () => {
+			const msgText =
+				'The first message that quotes a message, now with changed text';
+
+			let messageUpdatedListenerRes;
+			const messageUpdatedListener = new Promise((res) => {
+				messageUpdatedListenerRes = res;
+			});
+
+			const webhook = await setupWebhook(
+				client,
+				'webhook_url',
+				(request, body, response) => {
+					const b = JSON.parse(body);
+					if (b.type === 'message.updated') {
+						messageUpdatedListenerRes(b);
+					}
+					response.writeHead(200);
+				},
+			);
+
+			const updateMessageReq = client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: msgText,
+				},
+				friend,
+			);
+
+			const [updatedEvent, res] = await Promise.all([
+				messageUpdatedListener,
+				updateMessageReq,
+			]);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.text).to.equal(msgText);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+
+			expect(updatedEvent.message).to.not.be.undefined;
+			expect(updatedEvent.message.id).to.not.be.empty;
+			expect(updatedEvent.message.text).to.equal(msgText);
+			expect(updatedEvent.message.quoted_message).to.not.be.undefined;
+			expect(updatedEvent.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(updatedEvent.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(updatedEvent.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(updatedEvent.message.type).to.equal('regular');
+			expect(updatedEvent.message.parent_id).to.be.undefined;
+			expect(updatedEvent.message.quoted_message.user).to.not.be.undefined;
+
+			await webhook.tearDown();
 		});
 
 		it('is possible to change the quoted_message_id back', async () => {
@@ -2693,7 +2948,7 @@ describe('Channel - isUpToDate', async () => {
 		});
 		await channelVish.watch();
 
-		const serverClient = await getServerTestClient();
+		const serverClient = getServerTestClient();
 		const channelAmin = serverClient.channel('messaging', channelId);
 
 		// First lets try with upToDate list.

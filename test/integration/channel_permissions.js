@@ -28,13 +28,13 @@ class Context {
 	}
 
 	async setup() {
-		await this.authClient.updateUser(this.adminUser);
-		await this.authClient.updateUser(this.moderator);
-		await this.authClient.updateUser(this.guestUser);
-		await this.authClient.updateUser(this.channelMember);
-		await this.authClient.updateUser(this.channelOwner);
-		await this.authClient.updateUser(this.messageOwner);
-		await this.authClient.updateUser(this.scapegoatUser);
+		await this.authClient.upsertUser(this.adminUser);
+		await this.authClient.upsertUser(this.moderator);
+		await this.authClient.upsertUser(this.guestUser);
+		await this.authClient.upsertUser(this.channelMember);
+		await this.authClient.upsertUser(this.channelOwner);
+		await this.authClient.upsertUser(this.messageOwner);
+		await this.authClient.upsertUser(this.scapegoatUser);
 
 		this.channel = this.authClient.channel(this.channelType, this.channelId, {
 			created_by: this.channelOwner,
@@ -55,13 +55,13 @@ function setupUser(ctx, user, done, test) {
 	const client = getTestClient(false);
 	const token = ctx.authClient.createToken(user.id);
 	return client
-		.setUser(user, token)
+		.connectUser(user, token)
 		.then(() => {
 			test(client);
 		})
 		.catch((e) => {
 			console.log(e);
-			done('failed to setUser');
+			done('failed to connectUser');
 		});
 }
 
@@ -240,7 +240,7 @@ function changeRole(ctx, user, responseTest) {
 			const newUser = Object.assign({}, user, {
 				role: user.role !== 'user' ? 'user' : 'admin',
 			});
-			responseTest(client.updateUser(newUser), done);
+			responseTest(client.upsertUser(newUser), done);
 		});
 	};
 }
@@ -249,7 +249,7 @@ function changeOwnUser(ctx, user, responseTest) {
 	return function (done) {
 		setupUser(ctx, user, done, (client) => {
 			const newUser = Object.assign({}, user, { changed: true });
-			responseTest(client.updateUser(newUser), done);
+			responseTest(client.upsertUser(newUser), done);
 		});
 	};
 }
@@ -260,7 +260,7 @@ function changeOtherUser(ctx, user, responseTest) {
 			const newUser = Object.assign({}, ctx.scapegoatUser, {
 				name: 'new-name',
 			});
-			responseTest(client.updateUser(newUser), done);
+			responseTest(client.upsertUser(newUser), done);
 		});
 	};
 }

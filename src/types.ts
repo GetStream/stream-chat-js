@@ -162,6 +162,14 @@ export type ChannelAPIResponse<
     ReactionType,
     UserType
   >[];
+  pinned_messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
   hidden?: boolean;
   membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
@@ -429,6 +437,9 @@ export type MessageResponse<
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  pin_expires?: string | null;
+  pinned_at?: string | null;
+  pinned_by?: UserResponse<UserType> | null;
   quoted_message?: Omit<
     MessageResponse<
       AttachmentType,
@@ -446,16 +457,15 @@ export type MessageResponse<
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
-  thread_participants?: UserResponse[];
+  thread_participants?: UserResponse<UserType>[];
   type?: string;
   updated_at?: string;
-  webhook_failed?: boolean;
-  webhook_id?: string;
 };
 
 export type MuteResponse<UserType = UnknownType> = {
   user: UserResponse<UserType>;
   created_at?: string;
+  expires?: string;
   target?: UserResponse<UserType>;
   updated_at?: string;
 };
@@ -707,6 +717,8 @@ export type ListCommandsResponse<
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  automod_thresholds?: ChannelConfigAutomodThresholds;
+  blocklist?: string;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
   commands?: CommandVariants<CommandType>[];
@@ -1259,6 +1271,7 @@ export type AppSettings = {
     notification_template?: string;
     server_key?: string;
   };
+  image_moderation_enabled?: boolean;
   push_config?: {
     version?: string;
   };
@@ -1311,6 +1324,12 @@ export type ChannelConfig<
 export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
 
 export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
+
+export type ChannelConfigAutomodThresholds = null | {
+  explicit?: { block?: number; flag?: number };
+  spam?: { block?: number; flag?: number };
+  toxic?: { block?: number; flag?: number };
+};
 
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
@@ -1488,6 +1507,7 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  pinned?: boolean;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;

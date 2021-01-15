@@ -743,10 +743,10 @@ describe('SQS event endpoint', function () {
 		expect(event.created_by.id).to.be.eq(johnID);
 	});
 
-	it('user created using setUser trigger webhook event', async function () {
+	it('user created using connectUser trigger webhook event', async function () {
 		const client = getTestClient(false);
 		const newUserID = uuidv4();
-		client.setUser({ id: newUserID }, createUserToken(newUserID));
+		client.connectUser({ id: newUserID }, createUserToken(newUserID));
 
 		const [events] = await Promise.all([promises.waitForEvents('user.updated')]);
 		const event = events[0];
@@ -754,9 +754,9 @@ describe('SQS event endpoint', function () {
 		expect(event.user.id).to.be.eq(newUserID);
 	});
 
-	it('user updated using setUser trigger webhook event', async function () {
+	it('user updated using connectUser trigger webhook event', async function () {
 		const client = getTestClient(false);
-		client.setUser({ id: paulID, cto: true }, createUserToken(paulID));
+		client.connectUser({ id: paulID, cto: true }, createUserToken(paulID));
 
 		const [events] = await Promise.all([promises.waitForEvents('user.updated')]);
 		const event = events[0];

@@ -1,3 +1,7 @@
+## January 11, 2021 - 2.11.1
+
+- Add thread_participants to MessageResponse and correct pinned types [8e357a8](https://github.com/GetStream/stream-chat-js/commit/9d10998cc56c807e34e3131eccd8bf561c1ce822)
+
 ## January 4, 2021 - 2.11.1
 
 - Updated/fixed types on event object regarding unread counts. [36e2297](https://github.com/GetStream/stream-chat-js/commit/36e2297526682276c4e597fd171c27d115ba0bb6)

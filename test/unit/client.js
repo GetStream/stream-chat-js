@@ -7,7 +7,7 @@ describe('Client userMuteStatus', function () {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };
 
-	client.setUser = async () => {
+	client.connectUser = async () => {
 		client.user = user;
 		client.wsPromise = Promise.resolve();
 	};
@@ -27,8 +27,8 @@ describe('Client userMuteStatus', function () {
 		expect(() => client.userMuteStatus('')).to.throw();
 	});
 
-	it('should not throw error if setUser is called', async function () {
-		await client.setUser();
+	it('should not throw error if connectUser is called', async function () {
+		await client.connectUser();
 		expect(() => client.userMuteStatus('')).not.to.throw();
 	});
 

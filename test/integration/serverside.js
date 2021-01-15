@@ -657,12 +657,15 @@ describe('App configs', function () {
 		await client.updateAppSettings({
 			disable_auth_checks: false,
 		});
-		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
+		await expectHTTPErrorCode(401, client2.connectUser(user, userToken));
 		client2.disconnect(5000);
 	});
 
 	it('Using dev token fails because of auth enabled', async () => {
-		await expectHTTPErrorCode(401, client2.setUser(user, client2.devToken(user.id)));
+		await expectHTTPErrorCode(
+			401,
+			client2.connectUser(user, client2.devToken(user.id)),
+		);
 		client2.disconnect(5000);
 	});
 
@@ -674,12 +677,12 @@ describe('App configs', function () {
 	});
 
 	it('Using a tampered token does not fail because auth is disabled', async () => {
-		await client2.setUser(user, userToken);
+		await client2.connectUser(user, userToken);
 		client2.disconnect(5000);
 	});
 
 	it('Using dev token does not fail because auth is disabled', async () => {
-		await client2.setUser(user, client2.devToken(user.id));
+		await client2.connectUser(user, client2.devToken(user.id));
 		client2.disconnect(5000);
 	});
 
@@ -691,7 +694,7 @@ describe('App configs', function () {
 	});
 
 	it('A user can do super stuff because permission checks are off', async () => {
-		await client2.setUser(user, userToken);
+		await client2.connectUser(user, userToken);
 		await client2.channel('messaging', 'secret-place').watch();
 		client2.disconnect(5000);
 	});
@@ -719,7 +722,7 @@ describe('App configs', function () {
 	});
 
 	it('Using a tampered token fails because auth is back on', async () => {
-		await expectHTTPErrorCode(401, client2.setUser(user, userToken));
+		await expectHTTPErrorCode(401, client2.connectUser(user, userToken));
 		client2.disconnect(5000);
 	});
 
@@ -2447,7 +2450,7 @@ describe('Moderation', function () {
 			expect(data.mute.target.id).to.equal(targetUser);
 
 			const client = getTestClient(false);
-			const connectResponse = await client.setUser(
+			const connectResponse = await client.connectUser(
 				{ id: srcUser },
 				createUserToken(srcUser),
 			);
@@ -2464,7 +2467,7 @@ describe('Moderation', function () {
 			await srvClient.unmuteUser(targetUser, srcUser);
 
 			const client = getTestClient(false);
-			const connectResponse = await client.setUser(
+			const connectResponse = await client.connectUser(
 				{ id: srcUser },
 				createUserToken(srcUser),
 			);
@@ -2642,7 +2645,7 @@ describe('User management', function () {
 
 		const channelID = uuidv4();
 
-		userClient.setUser(user, createUserToken(userID));
+		userClient.connectUser(user, createUserToken(userID));
 		const channel = userClient.channel('livestream', channelID);
 		await channel.watch();
 
@@ -3407,8 +3410,8 @@ describe('Unread counts are properly initialised', function () {
 	before(async () => {
 		//create 3 user in 3 different ways
 		//it is possible to create users by
-		//   * client.setUser
-		//   * client.updateUser
+		//   * client.connectUser
+		//   * client.upsertUser
 		//   * client.sendMessage/channel.create
 		serverSideClient = getTestClient(true);
 		await serverSideClient.upsertUser({ id: userCreatedByUpdateUsers });
@@ -3416,7 +3419,7 @@ describe('Unread counts are properly initialised', function () {
 			created_by_id: userCreatedByCreateChannel,
 		});
 		await channel.create();
-		await serverSideClient.setUser({ id: userCreatedByConnect });
+		await serverSideClient.connectUser({ id: userCreatedByConnect });
 		serverSideClient = getTestClient(true);
 		channel = serverSideClient.channel('messaging', channelID);
 		await channel.addMembers([
