@@ -2720,3 +2720,35 @@ describe('Channel - isUpToDate', async () => {
 		).to.be.equal(-1);
 	});
 });
+
+describe('Ensure single channel per cid on client', async () => {
+	it('channel created using id', async () => {
+		const userIdVish = 'vishal';
+		const userIdAmin = 'amin';
+		await createUsers([userIdVish, userIdAmin]);
+
+		const clientVish = await getTestClientForUser(userIdVish);
+		const channelVishId = uuidv4();
+		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
+		await channelVish_copy1.watch();
+
+		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
+
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+	it('channel created using member list', async () => {
+		const userIdVish = 'vishal';
+		const userIdAmin = 'amin';
+		await createUsers([userIdVish, userIdAmin]);
+
+		const clientVish = await getTestClientForUser(userIdVish);
+		const channelVish_copy1 = clientVish.channel('messaging', {
+			members: ['amin', 'vishal'],
+		});
+		await channelVish_copy1.watch();
+		const channelVish_copy2 = clientVish.channel('messaging', {
+			members: ['amin', 'vishal'],
+		});
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+});
