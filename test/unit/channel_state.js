@@ -252,4 +252,24 @@ describe('ChannelState addMessagesSorted', function () {
 			new Date('2020-01-01T00:00:00.001Z').getTime(),
 		);
 	});
+
+	it('sets pinnedMessages correctly', async function () {
+		const msgs = [
+			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+		];
+		msgs[0].pinned = true;
+		msgs[0].pinned_at = new Date('2020-01-01T00:00:00.010Z');
+		msgs[1].pinned = true;
+		msgs[1].pinned_at = new Date('2020-01-01T00:00:00.012Z');
+		msgs[2].pinned = true;
+		msgs[2].pinned_at = new Date('2020-01-01T00:00:00.011Z');
+		const state = new ChannelState();
+		state.addPinnedMessages(msgs);
+		expect(state.pinnedMessages.length).to.be.equal(3);
+		expect(state.pinnedMessages[0].id).to.be.equal('1');
+		expect(state.pinnedMessages[1].id).to.be.equal('3');
+		expect(state.pinnedMessages[2].id).to.be.equal('2');
+	});
 });
