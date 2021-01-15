@@ -1513,6 +1513,21 @@ export class StreamChat<
     }
     // support channel("messaging", {options})
     if (typeof channelIDOrCustom === 'object') {
+      // Check if the channel already exists.
+      // Only allow 1 channel object per cid
+      for (const cid in this.activeChannels) {
+        if (cid.indexOf(`${channelType}:!members-`) === 0) {
+          const channel = this.activeChannels[cid];
+          const membersStrInExistingChannel = Object.keys(channel.state.members)
+            .sort()
+            .join(',');
+          const membersStr = channelIDOrCustom.members?.sort().join(',');
+          if (membersStrInExistingChannel === membersStr) {
+            return channel;
+          }
+        }
+      }
+
       return new Channel<
         AttachmentType,
         ChannelType,
