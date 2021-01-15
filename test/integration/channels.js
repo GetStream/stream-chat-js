@@ -3002,7 +3002,7 @@ describe('Ensure single channel per cid on client', async () => {
 		});
 		await channelVish_copy1.watch();
 		const channelVish_copy2 = clientVish.channel('messaging', {
-			members: ['amin', 'vishal'],
+			members: ['vishal', 'amin'],
 		});
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
