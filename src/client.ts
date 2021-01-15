@@ -1992,6 +1992,59 @@ export class StreamChat<
   }
 
   /**
+   * pinMessage - pins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   */
+  pinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    timeoutOrExpirationDate?: number | string | Date,
+  ) {
+    let pinExpires;
+    if (typeof timeoutOrExpirationDate === 'number') {
+      const now = new Date();
+      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
+      pinExpires = now.toISOString();
+    } else if (isString(timeoutOrExpirationDate)) {
+      pinExpires = timeoutOrExpirationDate;
+    } else if (timeoutOrExpirationDate instanceof Date) {
+      pinExpires = timeoutOrExpirationDate.toISOString();
+    }
+    return this.updateMessage({
+      ...message,
+      pinned: true,
+      pin_expires: pinExpires,
+    });
+  }
+
+  /**
+   * unpinMessage - unpins provided message
+   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   */
+  unpinMessage(
+    message: UpdatedMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    return this.updateMessage({
+      ...message,
+      pinned: false,
+    });
+  }
+
+  /**
    * updateMessage - Update the given message
    *
    * @param {Omit<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified

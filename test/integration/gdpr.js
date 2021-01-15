@@ -27,7 +27,7 @@ describe('GDPR endpoints', function () {
 		const userID = uuidv4();
 		const creatorID = uuidv4();
 		const channelID = uuidv4();
-		const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+		const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 		const channel = serverClient.channel('livestream', channelID, {
 			created_by: { id: creatorID },
 		});
@@ -61,13 +61,13 @@ describe('GDPR endpoints', function () {
 			// setup
 			const userID = uuidv4();
 
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 
 			const { user } = await serverClient.deactivateUser(userID);
 			expect(user.id).to.equal(userID);
 			expect(user.deactivated_at).to.not.be.undefined;
 
-			const p = serverClient.updateUser({ id: userID, name: 'new name' });
+			const p = serverClient.upsertUser({ id: userID, name: 'new name' });
 
 			await expect(p).to.be.rejectedWith('was deactivated');
 		});
@@ -77,7 +77,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+			const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -114,7 +114,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+			const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -154,7 +154,7 @@ describe('GDPR endpoints', function () {
 	describe('reactivate user', function () {
 		it('cannot reactivate active user', async function () {
 			const userID = uuidv4();
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 
 			const p = serverClient.reactivateUser(userID);
 
@@ -165,7 +165,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -201,7 +201,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -275,7 +275,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -329,13 +329,13 @@ describe('GDPR endpoints', function () {
 			// setup
 			const userID = uuidv4();
 
-			await serverClient.updateUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
 
 			const { user } = await serverClient.deleteUser(userID);
 			expect(user.id).to.equal(userID);
 			expect(user.deleted_at).to.not.be.undefined;
 
-			const p = serverClient.updateUser({ id: userID, name: 'new name' });
+			const p = serverClient.upsertUser({ id: userID, name: 'new name' });
 
 			await expect(p).to.be.rejectedWith('was deleted');
 		});
@@ -345,7 +345,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+			const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -384,7 +384,7 @@ describe('GDPR endpoints', function () {
 			const userID = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+			const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});
@@ -425,9 +425,9 @@ describe('GDPR endpoints', function () {
 			const userID2 = uuidv4();
 			const userID3 = uuidv4();
 
-			await serverClient.updateUser({ id: userID, name: 'hello' });
-			await serverClient.updateUser({ id: userID2 });
-			await serverClient.updateUser({ id: userID3 });
+			await serverClient.upsertUser({ id: userID, name: 'hello' });
+			await serverClient.upsertUser({ id: userID2 });
+			await serverClient.upsertUser({ id: userID3 });
 
 			const chan1 = serverClient.channel('messaging', {
 				members: [userID, userID2],
@@ -496,7 +496,7 @@ describe('GDPR endpoints', function () {
 			const userID2 = uuidv4();
 			const creatorID = uuidv4();
 			const channelID = uuidv4();
-			const user = await serverClient.updateUser({ id: userID, name: 'hello' });
+			const user = await serverClient.upsertUser({ id: userID, name: 'hello' });
 			const channel = serverClient.channel('livestream', channelID, {
 				created_by: { id: creatorID },
 			});

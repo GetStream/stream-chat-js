@@ -85,7 +85,7 @@ describe('Custom Commands Webhook', () => {
 	const serverClient = getTestClient(true);
 	const userClient = getTestClient(false);
 	const guyon = { id: `guyon-${uuidv4()}` };
-	userClient.setUser(guyon, createUserToken(guyon.id));
+	userClient.connectUser(guyon, createUserToken(guyon.id));
 
 	let chan, webhook;
 	const channelID = `custom-commands-${uuidv4()}`;

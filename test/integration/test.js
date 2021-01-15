@@ -64,10 +64,10 @@ describe('Chat', () => {
 			role: 'admin',
 		};
 
-		await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+		await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 		//	delete thierry.role;
 		// await isn't needed but makes testing a bit easier
-		await authClient.setUser(thierry);
+		await authClient.connectUser(thierry);
 
 		channel = authClient.channel('livestream', 'ninja', {
 			mysearchablefield: 'hi',
@@ -88,7 +88,7 @@ describe('Chat', () => {
 	describe('User Update Events', () => {
 		it('should trigger user update event', async () => {
 			const userID = uuidv4();
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: userID,
 				name: 'jack',
 				song: 'purple rain',
@@ -109,7 +109,7 @@ describe('Chat', () => {
 					expect(event.user.id).to.equal(userID);
 					resolve();
 				});
-				serverAuthClient.updateUser({
+				serverAuthClient.upsertUser({
 					id: userID,
 					name: 'jack',
 					song: 'welcome to the jungle',
@@ -123,12 +123,12 @@ describe('Chat', () => {
 			const authClient = getTestClient(true);
 			const serverAuthClient = getTestClient(true);
 
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: u1,
 				name: 'Awesome user',
 			});
 
-			await authClient.setUser({ id: u1 });
+			await authClient.connectUser({ id: u1 });
 
 			// subscribe to user presence
 			const response = await authClient.queryUsers(
@@ -147,7 +147,7 @@ describe('Chat', () => {
 					expect(authClient.user.name).equal('Not so awesome');
 					resolve();
 				});
-				serverAuthClient.updateUser({
+				serverAuthClient.upsertUser({
 					id: u1,
 					name: 'Not so awesome',
 				});
@@ -160,8 +160,8 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			const cPromise = client.setUser({ id: userID }, createUserToken(userID));
-			// watch a new channel before setUser completes
+			const cPromise = client.connectUser({ id: userID }, createUserToken(userID));
+			// watch a new channel before connectUser completes
 			const state = await client.channel('messaging', uuidv4()).watch();
 		});
 		it('reserved fields in user', async () => {
@@ -170,7 +170,7 @@ describe('Chat', () => {
 
 			await expectHTTPErrorCode(
 				400,
-				client.setUser(
+				client.connectUser(
 					{ id: userID, created_at: 'helloworld' },
 					createUserToken(userID),
 				),
@@ -237,11 +237,11 @@ describe('Chat', () => {
 			expect(client3.health.me.updated_at).to.equal(updatedAt);
 		});
 
-		it('Update/sync before calling setUser', async () => {
+		it('Update/sync before calling connectUser', async () => {
 			const userID = uuidv4();
 			const serverClient = getServerTestClient();
 
-			const updateResponse = await serverClient.updateUsers([
+			const updateResponse = await serverClient.upsertUsers([
 				{ id: userID, book: 'dune', role: 'admin' },
 			]);
 			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
@@ -257,7 +257,7 @@ describe('Chat', () => {
 				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
 			const serverClient = new StreamChat(disabledKey, disabledSecret);
 			const userClient = new StreamChat(disabledKey);
-			const responsePromise = userClient.setUser(
+			const responsePromise = userClient.connectUser(
 				{ id: 'batman' },
 				serverClient.createToken('batman'),
 			);
@@ -266,19 +266,19 @@ describe('Chat', () => {
 			);
 		});
 
-		it('setUser and updateUsers flow', async () => {
+		it('connectUser and upsertUsers flow', async () => {
 			const userID = uuidv4();
 			const client = getTestClient(false);
 			const token = createUserToken(userID);
 			const serverClient = getServerTestClient();
 			// example for docs
-			const response = await client.setUser(
+			const response = await client.connectUser(
 				{ id: userID, role: 'admin', favorite_color: 'green' },
 				token,
 			);
 			// user object is now {id: userID, role: 'user', favorite_color: 'green'}
 			// note how you are not allowed to make the user admin via this endpoint
-			const updateResponse = await serverClient.updateUsers([
+			const updateResponse = await serverClient.upsertUsers([
 				{ id: userID, role: 'admin', book: 'dune' },
 			]);
 			// user object is now {id: userID, role: 'admin', book: 'dune'}
@@ -295,7 +295,7 @@ describe('Chat', () => {
 			const userID = uuidv4();
 			const client = getTestClient(false);
 			const token = createUserToken(userID);
-			await client.setUser({ id: userID }, token);
+			await client.connectUser({ id: userID }, token);
 
 			await client.wsConnection.disconnect(5000);
 			expect(client.wsConnection.isHealthy).to.equal(false);
@@ -319,8 +319,8 @@ describe('Chat', () => {
 				await serverClient.banUser(banned, { banned_by_id: admin.id });
 			});
 
-			it('returns banned field on setUser', async () => {
-				const response = await client.setUser(
+			it('returns banned field on connectUser', async () => {
+				const response = await client.connectUser(
 					{ id: banned, role: 'user', favorite_color: 'green' },
 					token,
 				);
@@ -361,7 +361,7 @@ describe('Chat', () => {
 			});
 
 			it('banned is set to false', async () => {
-				const response = await client.setUser(
+				const response = await client.connectUser(
 					{ id: banned, role: 'user', favorite_color: 'green' },
 					token,
 				);
@@ -394,7 +394,7 @@ describe('Chat', () => {
 			const userId = uuidv4();
 
 			before(async () => {
-				await client.setUser({ id: userId }, createUserToken(userId));
+				await client.connectUser({ id: userId }, createUserToken(userId));
 			});
 
 			describe('Adding', () => {
@@ -589,7 +589,7 @@ describe('Chat', () => {
 			const userTommaso = { id: uuidv4(), name: 'Tommaso Barbugli' };
 
 			await serverAuthClient.upsertUser(userTommaso);
-			await authClientTommaso.setUser(userTommaso);
+			await authClientTommaso.connectUser(userTommaso);
 
 			const attachments = [
 				{
@@ -736,7 +736,7 @@ describe('Chat', () => {
 		});
 
 		it('Edit a user', async () => {
-			const response = await serverAuthClient.updateUser({
+			const response = await serverAuthClient.upsertUser({
 				id: 'tommaso',
 				name: 'Tommaso Barbugli',
 				role: 'admin',
@@ -768,7 +768,7 @@ describe('Chat', () => {
 		it('Token based auth', async () => {
 			const token = createUserToken('daenerys');
 			const client3 = getTestClient(true);
-			await client3.setUser(
+			await client3.connectUser(
 				{
 					id: 'daenerys',
 					name: 'Mother of dragons',
@@ -782,7 +782,7 @@ describe('Chat', () => {
 
 			const clientSide = getTestClient();
 			await expect(
-				clientSide.setUser(
+				clientSide.connectUser(
 					{
 						id: 'daenerys',
 						name: 'Mother of dragons',
@@ -794,7 +794,7 @@ describe('Chat', () => {
 
 		it('Secret based auth', async () => {
 			const client3 = new getTestClient(true);
-			await client3.setUser({
+			await client3.connectUser({
 				id: 'daenerys',
 				name: 'Mother of dragons',
 			});
@@ -803,7 +803,7 @@ describe('Chat', () => {
 		it('No secret and no token should raise a client error', async () => {
 			const client2 = getTestClient();
 			await expect(
-				client2.setUser({
+				client2.connectUser({
 					id: 'daenerys',
 					name: 'Mother of dragons',
 				}),
@@ -813,7 +813,7 @@ describe('Chat', () => {
 		it('Invalid user token', async () => {
 			const client2 = getTestClient();
 			await expect(
-				client2.setUser(
+				client2.connectUser(
 					{
 						id: 'daenerys',
 						name: 'Mother of dragons',
@@ -823,11 +823,11 @@ describe('Chat', () => {
 			).to.be.rejectedWith(Error);
 		});
 
-		it('Invalid secret should fail setUser', async () => {
+		it('Invalid secret should fail connectUser', async () => {
 			const client3 = new StreamChat('892s22ypvt6m', 'invalidsecret');
 			await expectHTTPErrorCode(
 				401,
-				client3.setUser({
+				client3.connectUser({
 					id: 'daenerys',
 					name: 'Mother of dragons',
 				}),
@@ -851,7 +851,7 @@ describe('Chat', () => {
 			);
 
 			const anonClient = getTestClient(false);
-			await anonClient.setAnonymousUser();
+			await anonClient.connectAnonymousUser();
 			await anonClient.disconnect(5000);
 
 			p = anonClient.addDevice('deviceID', 'apn');
@@ -888,7 +888,7 @@ describe('Chat', () => {
 			const token = authClient.createToken('johny');
 
 			const client3 = getTestClient();
-			await client3.setUser(
+			await client3.connectUser(
 				{
 					id: 'johny',
 					name: 'some random guy',
@@ -912,7 +912,7 @@ describe('Chat', () => {
 				first: 'Uhtred',
 			};
 
-			const response = await client.setUser(user, token);
+			const response = await client.connectUser(user, token);
 
 			const compareUser = (userResponse) => {
 				const expectedData = { role: 'user', ...user };
@@ -950,7 +950,7 @@ describe('Chat', () => {
 				'Thierry',
 			);
 			// TODO: update the user
-			authClient.setUser({ id: 'thierry', name: 't' }, 'myusertoken');
+			authClient.connectUser({ id: 'thierry', name: 't' }, 'myusertoken');
 			// verify the update propagates
 			expect(state.messages[state.messages.length - 1].user.name).to.equal('t');
 		});
@@ -1014,7 +1014,7 @@ describe('Chat', () => {
 						resolve();
 					});
 
-					authClient.updateUser({
+					authClient.upsertUser({
 						id: user.id,
 						role: 'admin',
 						set: { test: 'true' },
@@ -1831,7 +1831,7 @@ describe('Chat', () => {
 					shadow_banned: false,
 				};
 
-				users[i] = (await serverAuthClient.updateUser(user)).users[username(i)];
+				users[i] = (await serverAuthClient.upsertUser(user)).users[username(i)];
 				userMap[username(i)] = users[i];
 			}
 		});
@@ -1932,7 +1932,7 @@ describe('Chat', () => {
 		});
 		it('Pagination on Members', async () => {
 			const id = uuidv4();
-			await serverAuthClient.updateUsers([
+			await serverAuthClient.upsertUsers([
 				{ id: 'wendy' },
 				{ id: 'helen' },
 				{ id: 'marty' },
@@ -2127,7 +2127,7 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			client.setUser({ id: userID }, createUserToken(userID));
+			client.connectUser({ id: userID }, createUserToken(userID));
 			const channel = client.channel('messaging', uuidv4());
 			let result;
 			try {
@@ -2338,10 +2338,10 @@ describe('Chat', () => {
 				created_by: { id: uuidv4() },
 			});
 			await c.create();
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: userID,
 			});
-			await client.setUser({ id: userID }, createUserToken(userID));
+			await client.connectUser({ id: userID }, createUserToken(userID));
 			await client.channel('livestream', chanName).watch();
 		});
 
@@ -2510,7 +2510,7 @@ describe('Chat', () => {
 
 		it('Create an anonymous session', async () => {
 			client = getTestClient(false);
-			await client.setAnonymousUser();
+			await client.connectAnonymousUser();
 			serverChannel = serverAuthClient.channel('livestream', channelID, {
 				created_by: owner,
 			});
@@ -2563,7 +2563,7 @@ describe('Chat', () => {
 
 		before(async () => {
 			userClient = getTestClient(false);
-			await userClient.setUser(userData, createUserToken(userData.id));
+			await userClient.connectUser(userData, createUserToken(userData.id));
 			chan = userClient.channel('livestream', 'dnd');
 			await chan.watch();
 			await chan.watch();
@@ -2577,9 +2577,9 @@ describe('Chat', () => {
 			expect(response.members).to.not.be.undefined;
 		});
 
-		it('setUser should not remove custom fields', async () => {
+		it('connectUser should not remove custom fields', async () => {
 			userClient = getTestClient(false);
-			const response = await userClient.setUser(
+			const response = await userClient.connectUser(
 				{ id: userData.id, new_field: 'yes' },
 				createUserToken(userData.id),
 			);
@@ -2591,7 +2591,10 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			await expectHTTPErrorCode(
 				413,
-				client.setUser(oversizeUserData, createUserToken(oversizeUserData.id)),
+				client.connectUser(
+					oversizeUserData,
+					createUserToken(oversizeUserData.id),
+				),
 			);
 		});
 	});
@@ -2671,8 +2674,8 @@ describe('Chat', () => {
 		let msg;
 
 		before(async () => {
-			await getTestClient(true).updateUser(thierry);
-			await getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
+			await getTestClient(true).upsertUser(thierry);
+			await getTestClient(true).upsertUser({ id: userID, instrument: 'guitar' });
 			channel = serverAuthClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [userID, thierry.id],
@@ -2731,7 +2734,7 @@ describe('Chat', () => {
 		});
 
 		it('should be possible to edit the list of mentioned users', async () => {
-			const client = await getTestClient(true);
+			const client = getTestClient(true);
 			const response = await client.updateMessage(
 				{ id: msg.id, text: msg.text, mentioned_users: [userID] },
 				thierry.id,
@@ -2910,7 +2913,7 @@ describe('Chat', () => {
 
 		before(async () => {
 			await createUsers([modUserID]);
-			await serverAuthClient.updateUser(evil);
+			await serverAuthClient.upsertUser(evil);
 		});
 
 		it('Ban', async () => {
@@ -3305,7 +3308,7 @@ describe('warm up', () => {
 		const baseUrl = 'https://chat-us-east-1.stream-io-api.com';
 		const client = getTestClient(true);
 		client.setBaseURL(baseUrl);
-		const health = await client.setUser({ id: user }, createUserToken(user));
+		const health = await client.connectUser({ id: user }, createUserToken(user));
 		client.health = health;
 		channel = await client.channel('messaging', uuidv4());
 
@@ -3315,7 +3318,7 @@ describe('warm up', () => {
 		// first client uses warmUp
 		const warmUpClient = getTestClientWithWarmUp();
 		warmUpClient.setBaseURL(baseUrl);
-		warmUpClient.health = await warmUpClient.setUser(
+		warmUpClient.health = await warmUpClient.connectUser(
 			{ id: user },
 			createUserToken(user),
 		);
@@ -3327,9 +3330,9 @@ describe('warm up', () => {
 		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
 
 		// second client without warmUp
-		const noWarmUpClient = await getTestClient(false);
+		const noWarmUpClient = getTestClient(false);
 		noWarmUpClient.setBaseURL(baseUrl);
-		noWarmUpClient.health = await noWarmUpClient.setUser(
+		noWarmUpClient.health = await noWarmUpClient.connectUser(
 			{ id: user },
 			createUserToken(user),
 		);
