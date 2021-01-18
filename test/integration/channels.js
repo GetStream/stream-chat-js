@@ -2976,7 +2976,7 @@ describe('Channel - isUpToDate', async () => {
 	});
 });
 
-describe('Ensure single channel per cid on client', async () => {
+describe('Ensure single channel per cid on client activeChannels state', async () => {
 	it('channel created using id', async () => {
 		const userIdVish = 'vishal';
 		const userIdAmin = 'amin';
