@@ -1521,13 +1521,15 @@ export class StreamChat<
   }
 
   /**
-   * Its a submethod for `client.channel()` method, used to create unique conversation or
+   * It's a helper method for `client.channel()` method, used to create unique conversation or
    * channel based on member list instead of id.
    *
-   * If the channel already exist in `activeChannels` list, then we simply return it, since that
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
    * means the same channel was already requested or created.
    *
    * Otherwise we create new instance of Channel class and return it.
+   *
+   * @private
    *
    * @param {string} channelType The channel type
    * @param {object} [custom]    Custom data to attach to the channel
@@ -1580,12 +1582,14 @@ export class StreamChat<
   };
 
   /**
-   * Its a submethod for `client.channel()` method, used to channel given the id of channel.
+   * Its a helper method for `client.channel()` method, used to channel given the id of channel.
    *
-   * If the channel already exist in `activeChannels` list, then we simply return it, since that
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
    * means the same channel was already requested or created.
    *
-   * Otherwise we create new instance of Channel class and return it.
+   * Otherwise we create a new instance of Channel class and return it.
+   *
+   * @private
    *
    * @param {string} channelType The channel type
    * @param {string} [channelID] The channel ID
