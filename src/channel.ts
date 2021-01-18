@@ -1251,7 +1251,7 @@ export class Channel<
       // set the channel as active...
       const membersStr = Object.keys(this.state.members)?.sort().join(',');
 
-      if (membersStr in this.getClient().activeChannels) {
+      if (`${this.type}:${membersStr}` in this.getClient().activeChannels) {
         delete this.getClient().activeChannels[membersStr];
       }
 
