@@ -94,7 +94,7 @@ export class StableWSConnection<
       StatusCode?: string | number;
     },
   ) => void;
-  resolvePromise?: (value?: WebSocket.MessageEvent) => void;
+  resolvePromise?: (value: WebSocket.MessageEvent) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
