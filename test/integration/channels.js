@@ -2983,27 +2983,66 @@ describe('Ensure single channel per cid on client', async () => {
 		await createUsers([userIdVish, userIdAmin]);
 
 		const clientVish = await getTestClientForUser(userIdVish);
-		const channelVishId = uuidv4();
-		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
-		await channelVish_copy1.watch();
 
-		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
+		// Case 1
+		const channelVishId_case1 = uuidv4();
+		const channelVish_copy1_case1 = clientVish.channel(
+			'messaging',
+			channelVishId_case1,
+		);
+		await channelVish_copy1_case1.watch();
+		const channelVish_copy2_case1 = clientVish.channel(
+			'messaging',
+			channelVishId_case1,
+		);
+		channelVish_copy2_case1.watch();
+		expect(channelVish_copy1_case1).to.be.equal(channelVish_copy2_case1);
 
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+		// Case 2
+		const channelVishId_case2 = uuidv4();
+		const channelVish_copy1_case2 = clientVish.channel(
+			'messaging',
+			channelVishId_case2,
+		);
+		const channelVish_copy2_case2 = clientVish.channel(
+			'messaging',
+			channelVishId_case2,
+		);
+		await channelVish_copy1_case2.watch();
+		await channelVish_copy2_case2.watch();
+
+		expect(channelVish_copy1_case2).to.be.equal(channelVish_copy2_case2);
 	});
 	it('channel created using member list', async () => {
 		const userIdVish = 'vishal';
 		const userIdAmin = 'amin';
-		await createUsers([userIdVish, userIdAmin]);
+		const userIdJaap = 'jaap';
+		const userIdTom = 'tom';
+		await createUsers([userIdVish, userIdAmin, userIdJaap, userIdTom]);
 
 		const clientVish = await getTestClientForUser(userIdVish);
-		const channelVish_copy1 = clientVish.channel('messaging', {
-			members: ['amin', 'vishal'],
+
+		// Case 1
+		const channelVish_copy1_case1 = clientVish.channel('messaging', {
+			members: [userIdAmin, userIdVish],
 		});
-		await channelVish_copy1.watch();
-		const channelVish_copy2 = clientVish.channel('messaging', {
-			members: ['vishal', 'amin'],
+		await channelVish_copy1_case1.watch();
+		const channelVish_copy2_case1 = clientVish.channel('messaging', {
+			members: [userIdVish, userIdAmin],
 		});
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+		await channelVish_copy2_case1.watch();
+		expect(channelVish_copy1_case1).to.be.equal(channelVish_copy2_case1);
+
+		// Case 2
+		const channelVish_copy1_case2 = clientVish.channel('messaging', {
+			members: [userIdJaap, userIdTom],
+		});
+		const channelVish_copy2_case2 = clientVish.channel('messaging', {
+			members: [userIdTom, userIdJaap],
+		});
+		await channelVish_copy1_case2.watch();
+		await channelVish_copy2_case2.watch();
+
+		expect(channelVish_copy1_case2).to.be.equal(channelVish_copy2_case2);
 	});
 });
