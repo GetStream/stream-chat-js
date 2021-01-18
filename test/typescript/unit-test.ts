@@ -204,24 +204,28 @@ const chUser2: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
 
 const chUser3: Immutable.ImmutableObject<UserResponse<UserType>> =
   channelState.read.someUserId.user;
-const typing: Immutable.ImmutableObject<Event<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
->> = channelState.typing['someUserId'];
+const typing: Immutable.ImmutableObject<
+  Event<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >
+> = channelState.typing['someUserId'];
 
-const acceptInvite: Promise<UpdateChannelAPIResponse<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
->> = channel.acceptInvite({});
+const acceptInvite: Promise<
+  UpdateChannelAPIResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >
+> = channel.acceptInvite({});
 
 voidReturn = channel.on(eventHandler);
 voidReturn = channel.off(eventHandler);
