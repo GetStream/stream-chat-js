@@ -1547,7 +1547,7 @@ export class StreamChat<
     // channel could exist in `activeChannels` list with either one of the following two keys:
     // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
     // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
-    //                        This gets set when you create a channel, but haven't queried yet. After query,
+    //                        This is set when you create a channel, but haven't queried yet. After query,
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
