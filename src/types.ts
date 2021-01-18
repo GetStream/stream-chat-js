@@ -229,9 +229,9 @@ export type CheckSQSResponse = APIResponse & {
   error?: string;
 };
 
-export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
-  CreatedAtUpdatedAt
-> & {
+export type CommandResponse<
+  CommandType extends string = LiteralStringForUnion
+> = Partial<CreatedAtUpdatedAt> & {
   args?: string;
   description?: string;
   name?: CommandVariants<CommandType>;
