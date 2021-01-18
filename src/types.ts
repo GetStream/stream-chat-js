@@ -430,6 +430,7 @@ export type MessageResponse<
 > = MessageBase<AttachmentType, MessageType, UserType> & {
   args?: string;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  cid?: string;
   command?: string;
   command_info?: { name?: string };
   created_at?: string;
