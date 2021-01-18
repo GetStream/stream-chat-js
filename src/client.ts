@@ -1539,7 +1539,7 @@ export class StreamChat<
     // Only allow 1 channel object per cid
     const membersStr = custom.members?.sort().join(',');
     if (!membersStr) {
-      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
+      throw Error('Please specify atleast one member when creating unique conversation');
     }
 
     // channel could exist in `activeChannels` list with either one of the following two keys:
