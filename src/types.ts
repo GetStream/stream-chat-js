@@ -822,10 +822,10 @@ export type MuteUserOptions<UserType = UnknownType> = {
 };
 
 export type PaginationOptions = {
-  created_at_after?: string | Date | SeamlessImmutable.ImmutableDate | null;
-  created_at_after_or_equal?: string | Date | SeamlessImmutable.ImmutableDate | null;
-  created_at_before?: string | Date | SeamlessImmutable.ImmutableDate | null;
-  created_at_before_or_equal?: string | Date | SeamlessImmutable.ImmutableDate | null;
+  created_at_after?: string | Date | SeamlessImmutable.ImmutableDate;
+  created_at_after_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
+  created_at_before?: string | Date | SeamlessImmutable.ImmutableDate;
+  created_at_before_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
   id_gt?: string;
   id_gte?: string;
   id_lt?: string;
