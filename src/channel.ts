@@ -943,11 +943,7 @@ export class Channel<
     // sort by pk desc
     messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
 
-    let lastMessage;
-    if (messageSlice.length > 0) {
-      lastMessage = messageSlice[0];
-    }
-    return lastMessage;
+    return messageSlice.length > 0 ? messageSlice[0] : undefined;
   }
 
   /**
