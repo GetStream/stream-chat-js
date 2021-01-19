@@ -1529,7 +1529,7 @@ export class StreamChat<
    * If the channel already exists in `activeChannels` list, then we simply return it, since that
    * means the same channel was already requested or created.
    *
-   * Otherwise we create new instance of Channel class and return it.
+   * Otherwise we create a new instance of Channel class and return it.
    *
    * @private
    *
