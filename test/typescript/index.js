@@ -275,9 +275,9 @@ const executables = [
 	},
 	{
 		f: rg.lastMessage,
-		imports: ['Channel', 'Unpacked'],
+		imports: ['Channel', 'FormatMessageResponse', 'Unpacked'],
 		type:
-			"Omit<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
+			"Omit<FormatMessageResponse<{}, { description?: string }, string & {}, {}, {}, {}>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
 	},
 	{
 		f: rg.listBlockLists,
