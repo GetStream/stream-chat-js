@@ -1540,6 +1540,8 @@ export class StreamChat<
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
     const membersStr = custom.members?.sort().join(',');
+    const tempCid = `${channelType}:!members-${membersStr}`;
+
     if (!membersStr) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
@@ -1551,7 +1553,7 @@ export class StreamChat<
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
-      if (key === `${channelType}:${membersStr}`) {
+      if (key === tempCid) {
         return channel;
       }
 
@@ -1577,7 +1579,7 @@ export class StreamChat<
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[`${channelType}:${membersStr}`] = channel;
+    this.activeChannels[tempCid] = channel;
     return channel;
   };
 
