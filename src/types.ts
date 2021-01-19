@@ -1,4 +1,3 @@
-import SeamlessImmutable from 'seamless-immutable';
 import { AxiosRequestConfig } from 'axios';
 
 /**
@@ -362,31 +361,29 @@ export type GetRepliesAPIResponse<
   >[];
 };
 
-export type ImmutableMessageResponse<
+export type FormatMessageResponse<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SeamlessImmutable.Immutable<
-  Omit<
-    MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    'created_at' | 'updated_at' | 'status'
-  > & {
-    __html: string;
-    created_at: Date;
-    status: string;
-    updated_at: Date;
-  }
->;
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'created_at' | 'updated_at' | 'status'
+> & {
+  __html: string;
+  created_at: Date;
+  status: string;
+  updated_at: Date;
+};
 
 export type ListChannelResponse<
   CommandType extends string = LiteralStringForUnion
@@ -822,10 +819,10 @@ export type MuteUserOptions<UserType = UnknownType> = {
 };
 
 export type PaginationOptions = {
-  created_at_after?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_after_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_before?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_before_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
+  created_at_after?: string | Date;
+  created_at_after_or_equal?: string | Date;
+  created_at_before?: string | Date;
+  created_at_before_or_equal?: string | Date;
   id_gt?: string;
   id_gte?: string;
   id_lt?: string;

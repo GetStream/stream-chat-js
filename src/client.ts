@@ -842,7 +842,6 @@ export class StreamChat<
           response = await this.axiosInstance.patch(url, data, requestConfig);
           break;
         case 'options':
-          // @ts-ignore
           response = await this.axiosInstance.options(url, requestConfig);
           break;
         default:
@@ -1148,14 +1147,14 @@ export class StreamChat<
     const refMap = this.state.userChannelReferences[user.id] || {};
     const refs = Object.keys(refMap);
     for (const channelID of refs) {
-      const c = this.activeChannels[channelID];
+      const channel = this.activeChannels[channelID];
       // search the members and watchers and update as needed...
-      if (c && c.state) {
-        if (c.state.members[user.id]) {
-          c.state.members = c.state.members.setIn([user.id, 'user'], user);
+      if (channel && channel.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
         }
-        if (c.state.watchers[user.id]) {
-          c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
         }
       }
     }

@@ -1,6 +1,4 @@
 // basic sanity check
-import Immutable from 'seamless-immutable';
-
 import {
   StreamChat,
   Event,
@@ -197,23 +195,18 @@ const channelState: ChannelState<
   ReactionType,
   UserType
 > = channel.state;
-const chUser1: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
-  channelState.members.someUser12433222;
-const chUser2: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
-  channelState.members.someUser124332221;
+const chUser1: ChannelMemberResponse<UserType> = channelState.members.someUser12433222;
+const chUser2: ChannelMemberResponse<UserType> = channelState.members.someUser124332221;
 
-const chUser3: Immutable.ImmutableObject<UserResponse<UserType>> =
-  channelState.read.someUserId.user;
-const typing: Immutable.ImmutableObject<
-  Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >
+const chUser3: UserResponse<UserType> = channelState.read.someUserId.user;
+const typing: Event<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
 > = channelState.typing['someUserId'];
 
 const acceptInvite: Promise<
