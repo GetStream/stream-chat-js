@@ -1250,7 +1250,10 @@ export class Channel<
       this.cid = state.channel.cid;
       // set the channel as active...
 
-      const membersStr = Object.keys(this.state.members)?.sort().join(',');
+      const membersStr = state.members
+        .map((m) => m.user_id)
+        ?.sort()
+        .join(',');
       const tempChannelCid = `${this.type}:!members-${membersStr}`;
 
       if (tempChannelCid in this.getClient().activeChannels) {
