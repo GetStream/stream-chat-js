@@ -1249,6 +1249,19 @@ export class Channel<
       this.id = state.channel.id;
       this.cid = state.channel.cid;
       // set the channel as active...
+
+      const membersStr = state.members
+        .map((m) => m.user_id)
+        ?.sort()
+        .join(',');
+      const tempChannelCid = `${this.type}:!members-${membersStr}`;
+
+      if (tempChannelCid in this.getClient().activeChannels) {
+        // This gets set in `client.channel()` function, when channel is created
+        // using members, not id.
+        delete this.getClient().activeChannels[tempChannelCid];
+      }
+
       if (!(this.cid in this.getClient().activeChannels)) {
         this.getClient().activeChannels[this.cid] = this;
       }
