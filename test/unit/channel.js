@@ -179,7 +179,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser();
 
-	it('channel created using id - case 1', () => {
+	it('channel created using id - case 1', async () => {
 		clientVish.activeChannels = {};
 
 		const channelVishId = uuidv4();
@@ -199,12 +199,12 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
 		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
 
-		channelVish_copy1.watch();
+		await channelVish_copy1.watch();
 		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
-		channelVish_copy2.watch();
+		await channelVish_copy2.watch();
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
-	it('channel created using id - case 2', () => {
+	it('channel created using id - case 2', async () => {
 		clientVish.activeChannels = {};
 
 		const channelVishId = uuidv4();
@@ -230,8 +230,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
 		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
 
-		channelVish_copy1.watch();
-		channelVish_copy2.watch();
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
