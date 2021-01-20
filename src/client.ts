@@ -1513,27 +1513,105 @@ export class StreamChat<
         UserType
       >(this, channelType, undefined, custom);
     }
+
     // support channel("messaging", {options})
     if (typeof channelIDOrCustom === 'object') {
-      return new Channel<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >(this, channelType, undefined, channelIDOrCustom);
+      return this.getChannelByMembers(channelType, channelIDOrCustom);
     }
 
-    if (typeof channelIDOrCustom === 'string' && ~channelIDOrCustom.indexOf(':')) {
-      throw Error(
-        `Invalid channel id ${channelIDOrCustom}, can't contain the : character`,
-      );
+    return this.getChannelById(channelType, channelIDOrCustom, custom);
+  }
+
+  /**
+   * It's a helper method for `client.channel()` method, used to create unique conversation or
+   * channel based on member list instead of id.
+   *
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
+   * means the same channel was already requested or created.
+   *
+   * Otherwise we create a new instance of Channel class and return it.
+   *
+   * @private
+   *
+   * @param {string} channelType The channel type
+   * @param {object} [custom]    Custom data to attach to the channel
+   *
+   * @return {channel} The channel object, initialize it using channel.watch()
+   */
+  getChannelByMembers = (channelType: string, custom: ChannelData<ChannelType>) => {
+    // Check if the channel already exists.
+    // Only allow 1 channel object per cid
+    const membersStr = custom.members?.sort().join(',');
+    const tempCid = `${channelType}:!members-${membersStr}`;
+
+    if (!membersStr) {
+      throw Error('Please specify atleast one member when creating unique conversation');
+    }
+
+    // channel could exist in `activeChannels` list with either one of the following two keys:
+    // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
+    // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
+    //                        This is set when you create a channel, but haven't queried yet. After query,
+    //                        we will replace it with `cid`
+    for (const key in this.activeChannels) {
+      const channel = this.activeChannels[key];
+      if (key === tempCid) {
+        return channel;
+      }
+
+      if (key.indexOf(`${channelType}:!members-`) === 0) {
+        const membersStrInExistingChannel = Object.keys(channel.state.members)
+          .sort()
+          .join(',');
+        if (membersStrInExistingChannel === membersStr) {
+          return channel;
+        }
+      }
+    }
+
+    const channel = new Channel<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >(this, channelType, undefined, custom);
+
+    // For the time being set the key as membersStr, since we don't know the cid yet.
+    // In channel.query, we will replace it with 'cid'.
+    this.activeChannels[tempCid] = channel;
+    return channel;
+  };
+
+  /**
+   * Its a helper method for `client.channel()` method, used to channel given the id of channel.
+   *
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
+   * means the same channel was already requested or created.
+   *
+   * Otherwise we create a new instance of Channel class and return it.
+   *
+   * @private
+   *
+   * @param {string} channelType The channel type
+   * @param {string} [channelID] The channel ID
+   * @param {object} [custom]    Custom data to attach to the channel
+   *
+   * @return {channel} The channel object, initialize it using channel.watch()
+   */
+  getChannelById = (
+    channelType: string,
+    channelID: string,
+    custom: ChannelData<ChannelType>,
+  ) => {
+    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
+      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelIDOrCustom}`;
+    const cid = `${channelType}:${channelID}`;
     if (cid in this.activeChannels) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
@@ -1550,11 +1628,11 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType
-    >(this, channelType, channelIDOrCustom, custom);
+    >(this, channelType, channelID, custom);
     this.activeChannels[channel.cid] = channel;
 
     return channel;
-  }
+  };
 
   /**
    * @deprecated Please use upsertUser() function instead.
