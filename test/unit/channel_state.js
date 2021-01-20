@@ -1,6 +1,6 @@
 import chai from 'chai';
 import { ChannelState } from '../../src/channel_state';
-import { generateMsg } from './test-utils';
+import { generateMsg } from './test-utils/generateMessage';
 
 const expect = chai.expect;
 
