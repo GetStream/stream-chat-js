@@ -17,6 +17,7 @@ import {
   chatCodes,
   normalizeQuerySort,
   randomId,
+  isSafari,
 } from './utils';
 
 import {
@@ -235,6 +236,11 @@ export class StreamChat<
     }
 
     this.axiosInstance = axios.create(this.options);
+    if (this.options.safari || isSafari()) {
+      this.axiosInstance.defaults.headers.common = {
+        'X-Safari': 'true',
+      };
+    }
 
     this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
 

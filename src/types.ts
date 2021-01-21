@@ -856,6 +856,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  safari?: boolean;
   warmUp?: boolean;
 };
 

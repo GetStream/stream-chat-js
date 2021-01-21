@@ -126,3 +126,7 @@ export function randomId() {
   }
   return id;
 }
+
+export function isSafari() {
+  return false;
+}
