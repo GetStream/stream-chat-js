@@ -123,7 +123,7 @@ describe('Channels - Constructor', function () {
 
 	it('short version with options', function (done) {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data).to.eql({ members: ['thierry', 'tommaso'] });
 		expect(channel.id).to.eql(undefined);
 		done();
 	});
