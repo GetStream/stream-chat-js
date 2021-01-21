@@ -1,3 +1,11 @@
+# CHANGELOG
+
+## January 21, 2021 - 2.11.5
+
+### Fix
+
+- Skip sorting channel members while instantiating a channel without id [#591](https://github.com/GetStream/stream-chat-js/pull/591)
+
 ## January 20, 2021 - 2.11.4
 
 - Ensure uniqe channel per cid on client's activeChannel state [#586](https://github.com/GetStream/stream-chat-js/pull/586)
