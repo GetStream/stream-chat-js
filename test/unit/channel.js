@@ -7,6 +7,7 @@ import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import { generateChannel } from './test-utils/generateChannel';
+import { getServerTestClient } from '../integration/utils';
 
 const expect = chai.expect;
 
@@ -163,6 +164,72 @@ describe('Channel _handleChannelEvent', function () {
 			message: generateMsg({ user: { id: 'mute1' } }),
 		});
 		expect(channel.state.unreadCount).to.be.equal(30);
+	});
+});
+
+describe('Channels - Constructor', function () {
+	const client = getServerTestClient();
+
+	it('canonical form', function (done) {
+		const channel = client.channel('messaging', '123', { cool: true });
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		expect(channel.data).to.eql({ cool: true });
+		done();
+	});
+
+	it('default options', function (done) {
+		const channel = client.channel('messaging', '123');
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		done();
+	});
+
+	it('null ID no options', function (done) {
+		const channel = client.channel('messaging', null);
+		expect(channel.id).to.eq(undefined);
+		done();
+	});
+
+	it('undefined ID no options', function (done) {
+		const channel = client.channel('messaging', undefined);
+		expect(channel.id).to.eql(undefined);
+		expect(channel.data).to.eql({});
+		done();
+	});
+
+	it('short version with options', function (done) {
+		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('null ID with options', function (done) {
+		const channel = client.channel('messaging', null, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function (done) {
+		const channel = client.channel('messaging', '', {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function (done) {
+		const channel = client.channel('messaging', undefined, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
 	});
 });
 
