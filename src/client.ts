@@ -1540,7 +1540,7 @@ export class StreamChat<
   getChannelByMembers = (channelType: string, custom: ChannelData<ChannelType>) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const membersStr = custom.members?.sort().join(',');
+    const membersStr = [...(custom.members || [])].sort().join(',');
     const tempCid = `${channelType}:!members-${membersStr}`;
 
     if (!membersStr) {
