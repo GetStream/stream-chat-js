@@ -27,7 +27,7 @@ const fetchTokenFromApi = async () => {
   return data.token;
 };
 
-const retryableTokenProvider = retry(fetchTokenFromApi, { minTimeout: 1000 });
+const retryableTokenProvider = () => retry(fetchTokenFromApi, { minTimeout: 1000 });
 
 client.connectUser({ id: 'vishal' }, retryableTokenProvider);
 ```
