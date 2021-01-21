@@ -1,3 +1,7 @@
+## January 20, 2021 - 2.11.4
+
+- Ensure uniqe channel per cid on client's activeChannel state [#586](https://github.com/GetStream/stream-chat-js/pull/586)
+
 ## January 18, 2021 - 2.11.3
 
 - Added types for query by date parameters - [b249e0b](https://github.com/GetStream/stream-chat-js/commit/b249e0b02da9b6e1c3984586b7ab823de072dd4b)
