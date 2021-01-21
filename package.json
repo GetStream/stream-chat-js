@@ -128,7 +128,7 @@
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
     "prepare": "yarn run build",
-    "preversion": "yarn && yarn lint",
+    "preversion": "yarn && yarn lint && yarn test-unit",
     "version": "git add yarn.lock",
     "postversion": "git push && git push --tags && npm publish"
   },
