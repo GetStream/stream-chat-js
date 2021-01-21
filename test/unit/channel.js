@@ -7,7 +7,6 @@ import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import { generateChannel } from './test-utils/generateChannel';
-import { getServerTestClient } from '../integration/utils';
 
 const expect = chai.expect;
 
@@ -168,7 +167,7 @@ describe('Channel _handleChannelEvent', function () {
 });
 
 describe('Channels - Constructor', function () {
-	const client = getServerTestClient();
+	const client = new StreamChat('key', 'secret');
 
 	it('canonical form', function (done) {
 		const channel = client.channel('messaging', '123', { cool: true });
