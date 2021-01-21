@@ -20,6 +20,13 @@ Make sure the TokenProvider function always resolves, you can wrap your async fu
 
 ```js
 const retry = require('async-retry');
+
+const fetchTokenFromApi = async () => {
+  const response = await fetch('https://my-api.com/token');
+  const data = await response.json();
+  return data.token;
+};
+
 const retryableTokenProvider = retry(fetchTokenFromApi, { minTimeout: 1000 });
 
 client.connectUser({ id: 'vishal' }, retryableTokenProvider);
