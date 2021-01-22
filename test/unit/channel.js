@@ -166,6 +166,72 @@ describe('Channel _handleChannelEvent', function () {
 	});
 });
 
+describe('Channels - Constructor', function () {
+	const client = new StreamChat('key', 'secret');
+
+	it('canonical form', function (done) {
+		const channel = client.channel('messaging', '123', { cool: true });
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		expect(channel.data).to.eql({ cool: true });
+		done();
+	});
+
+	it('default options', function (done) {
+		const channel = client.channel('messaging', '123');
+		expect(channel.cid).to.eql('messaging:123');
+		expect(channel.id).to.eql('123');
+		done();
+	});
+
+	it('null ID no options', function (done) {
+		const channel = client.channel('messaging', null);
+		expect(channel.id).to.eq(undefined);
+		done();
+	});
+
+	it('undefined ID no options', function (done) {
+		const channel = client.channel('messaging', undefined);
+		expect(channel.id).to.eql(undefined);
+		expect(channel.data).to.eql({});
+		done();
+	});
+
+	it('short version with options', function (done) {
+		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('null ID with options', function (done) {
+		const channel = client.channel('messaging', null, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function (done) {
+		const channel = client.channel('messaging', '', {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+
+	it('empty ID  with options', function (done) {
+		const channel = client.channel('messaging', undefined, {
+			members: ['tommaso', 'thierry'],
+		});
+		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.id).to.eql(undefined);
+		done();
+	});
+});
+
 describe('Ensure single channel per cid on client activeChannels state', () => {
 	const clientVish = new StreamChat('', '');
 	const user = { id: 'user' };
@@ -179,7 +245,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser();
 
-	it('channel created using id - case 1', () => {
+	it('channel created using id - case 1', async () => {
 		clientVish.activeChannels = {};
 
 		const channelVishId = uuidv4();
@@ -199,12 +265,12 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
 		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
 
-		channelVish_copy1.watch();
+		await channelVish_copy1.watch();
 		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
-		channelVish_copy2.watch();
+		await channelVish_copy2.watch();
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
-	it('channel created using id - case 2', () => {
+	it('channel created using id - case 2', async () => {
 		clientVish.activeChannels = {};
 
 		const channelVishId = uuidv4();
@@ -230,8 +296,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
 		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
 
-		channelVish_copy1.watch();
-		channelVish_copy2.watch();
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});

@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "2.11.3",
+  "version": "2.11.5",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -128,9 +128,9 @@
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
     "prepare": "yarn run build",
-    "preversion": "yarn && yarn lint",
+    "preversion": "yarn && yarn lint && yarn test-unit",
     "version": "git add yarn.lock",
-    "postversion": "git push && git push --tags"
+    "postversion": "git push && git push --tags && npm publish"
   },
   "husky": {
     "hooks": {
