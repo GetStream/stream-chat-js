@@ -310,6 +310,20 @@ export class StreamChat<
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+
+    this._addBeforeUnloadListener();
+  }
+
+  /**
+   * When in browser env, make sure to disconnect the WS before tab or browser shuts down
+   * @private
+   */
+  _addBeforeUnloadListener() {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', () => {
+        if (this.wsConnection) this.wsConnection.disconnect();
+      });
+    }
   }
 
   devToken(userID: string) {
