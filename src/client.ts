@@ -1149,7 +1149,7 @@ export class StreamChat<
     for (const channelID of refs) {
       const channel = this.activeChannels[channelID];
       // search the members and watchers and update as needed...
-      if (channel && channel.state) {
+      if (channel?.state) {
         if (channel.state.members[user.id]) {
           channel.state.members[user.id].user = user;
         }

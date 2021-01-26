@@ -392,12 +392,12 @@ export class ChannelState<
     if (this._channel.getClient().userID === reaction.user?.id) {
       const ownReactions = newMessage.own_reactions;
       if (ownReactions) {
-        newMessage.own_reactions = ownReactions.concat([reaction]);
+        newMessage.own_reactions = [...ownReactions, reaction];
       }
     }
     const latestReactions = newMessage.latest_reactions;
     if (latestReactions) {
-      newMessage.latest_reactions = latestReactions.concat([reaction]);
+      newMessage.latest_reactions = [...latestReactions, reaction];
     }
 
     const oldReactionCounts = newMessage.reaction_counts;
