@@ -23,7 +23,7 @@ import {
   PartialUserUpdate,
   PermissionObject,
   ConnectAPIResponse,
-} from '../../dist/types';
+} from '../../';
 const apiKey = 'apiKey';
 
 type UserType = {
