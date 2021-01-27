@@ -104,7 +104,7 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
-  private static _instance: StreamChat;
+  private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
   _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
@@ -338,26 +338,101 @@ export class StreamChat<
    * @example <caption>secret is optional and only used in server side mode</caption>
    * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
    */
-  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
-  public static getInstance(
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
     key: string,
     secret?: string,
     options?: StreamChatOptions,
-  ): StreamChat;
-  public static getInstance(
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
     key: string,
     secretOrOptions?: StreamChatOptions | string,
     options?: StreamChatOptions,
-  ): StreamChat {
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > {
     if (!StreamChat._instance) {
       if (typeof secretOrOptions === 'string') {
-        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions, options);
       } else {
-        StreamChat._instance = new StreamChat(key, secretOrOptions);
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions);
       }
     }
 
-    return StreamChat._instance;
+    return StreamChat._instance as StreamChat<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
   }
 
   devToken(userID: string) {
