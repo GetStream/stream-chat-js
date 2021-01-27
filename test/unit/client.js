@@ -3,6 +3,35 @@ import { StreamChat } from '../../src/client';
 
 const expect = chai.expect;
 
+describe('StreamChat getInstance', () => {
+	beforeEach(() => {
+		delete StreamChat._instance;
+	});
+
+	it('instance is stored as static property', function () {
+		expect(StreamChat._instance).to.be.undefined;
+
+		const client = StreamChat.getInstance('key');
+		expect(client).to.equal(StreamChat._instance);
+	});
+
+	it('always return the same instance', function () {
+		const client1 = StreamChat.getInstance('key1');
+		const client2 = StreamChat.getInstance('key1');
+		const client3 = StreamChat.getInstance('key1');
+		expect(client1).to.equal(client2);
+		expect(client2).to.equal(client3);
+	});
+
+	it('changin params has no effect', function () {
+		const client1 = StreamChat.getInstance('key2');
+		const client2 = StreamChat.getInstance('key3');
+
+		expect(client1).to.equal(client2);
+		expect(client2.key).to.eql('key2');
+	});
+});
+
 describe('Client userMuteStatus', function () {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };

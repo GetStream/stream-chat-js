@@ -104,6 +104,8 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
+  private static _instance: StreamChat;
+
   _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
@@ -171,6 +173,8 @@ export class StreamChat<
 
   /**
    * Initialize a client
+   *
+   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections**
    * @param {string} key - the api key
    * @param {string} [secret] - the api secret
    * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
@@ -310,6 +314,50 @@ export class StreamChat<
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+  }
+
+  /**
+   * Get a client instance
+   *
+   * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
+   *
+   * **After the first call, the client configration will not change if the key or options parameters change**
+   *
+   * @param {string} key - the api key
+   * @param {string} [secret] - the api secret
+   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
+   * @param {boolean} [options.browser] - enforce the client to be in browser mode
+   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
+   * @param {Logger} [options.Logger] - custom logger
+   * @param {number} [options.timeout] - default to 3000
+   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * @example <caption>initialize the client in user mode</caption>
+   * StreamChat.getInstance('api_key')
+   * @example <caption>initialize the client in user mode with options</caption>
+   * StreamChat.getInstance('api_key', { timeout:5000 })
+   * @example <caption>secret is optional and only used in server side mode</caption>
+   * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
+   */
+  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
+  public static getInstance(
+    key: string,
+    secret?: string,
+    options?: StreamChatOptions,
+  ): StreamChat;
+  public static getInstance(
+    key: string,
+    secretOrOptions?: StreamChatOptions | string,
+    options?: StreamChatOptions,
+  ): StreamChat {
+    if (!StreamChat._instance) {
+      if (typeof secretOrOptions === 'string') {
+        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
+      } else {
+        StreamChat._instance = new StreamChat(key, secretOrOptions);
+      }
+    }
+
+    return StreamChat._instance;
   }
 
   devToken(userID: string) {
