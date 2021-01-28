@@ -469,6 +469,18 @@ export class StreamChat<
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
+    if (!user.id) {
+      throw new Error('The "id" field on the user is missing');
+    }
+
+    /**
+     * Calling connectUser multiple times is potentially the result of a  bad integration, however,
+     * If the user id remains the same we don't throw error
+     */
+    if (this.userID === user.id && this.setUserPromise) {
+      return this.setUserPromise;
+    }
+
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
@@ -486,23 +498,16 @@ export class StreamChat<
 
     // we generate the client id client side
     this.userID = user.id;
-
-    if (!this.userID) {
-      throw new Error('The "id" field on the user is missing');
-    }
+    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
     const wsPromise = this._setupConnection();
 
-    this.anonymous = false;
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
-      .then((result) => result[1]) // We only return connection promise;
-      .catch((e) => {
-        throw e;
-      });
+    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
+      (result) => result[1], // We only return connection promise;
+    );
 
     return this.setUserPromise;
   };

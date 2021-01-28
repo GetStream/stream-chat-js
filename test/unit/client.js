@@ -42,6 +42,17 @@ describe('StreamChat getInstance', () => {
 			/connectUser was called twice/,
 		);
 	});
+
+	it('should not throw error if connectUser called twice with the same user', async () => {
+		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		client1._setupConnection = () => Promise.resolve('_setupConnection');
+		client1._setToken = () => Promise.resolve();
+
+		await client1.connectUser({ id: 'Amin' }, 'token');
+		const client2 = StreamChat.getInstance('key2');
+		const connection = await client2.connectUser({ id: 'Amin' }, 'token');
+		expect(connection).to.equal('_setupConnection');
+	});
 });
 
 describe('Client userMuteStatus', function () {
@@ -101,6 +112,44 @@ describe('Client userMuteStatus', function () {
 		expect(client.userMuteStatus('mute3')).not.to.be.ok;
 		expect(client.userMuteStatus('mute4')).not.to.be.ok;
 		expect(client.userMuteStatus('missingUser')).not.to.be.ok;
+	});
+});
+
+describe('Client connectUser', () => {
+	let client;
+	beforeEach(() => {
+		client = new StreamChat('', { allowServerSideConnect: true });
+		client._setupConnection = () => Promise.resolve('_setupConnection');
+		client._setToken = () => Promise.resolve('_setToken');
+	});
+
+	it('should throw err for missing user id', async () => {
+		expect(() => client.connectUser({ user: 'user' }, 'token')).to.throw(
+			/The "id" field on the user is missing/,
+		);
+	});
+
+	it('should return a promise when called', async () => {
+		const promise = client.connectUser({ id: 'user' }, 'token');
+		expect(promise).to.be.a('promise');
+
+		const resolved = await promise;
+		expect(resolved).to.equal('_setupConnection');
+	});
+
+	it('should throw error if connectUser called twice on the client with different user', async () => {
+		await client.connectUser({ id: 'vishal' }, 'token');
+		expect(() => client.connectUser({ id: 'Amin' }, 'token')).to.throw(
+			/connectUser was called twice/,
+		);
+	});
+
+	it('should work for multiple call for the same user', async () => {
+		const promise1 = client.connectUser({ id: 'vishal' }, 'token');
+		const promise2 = client.connectUser({ id: 'vishal' }, 'token');
+
+		expect(promise1).to.equal(promise2);
+		expect(await promise1).to.equal(await promise2);
 	});
 });
 
