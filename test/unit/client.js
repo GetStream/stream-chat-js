@@ -3,6 +3,47 @@ import { StreamChat } from '../../src/client';
 
 const expect = chai.expect;
 
+describe('StreamChat getInstance', () => {
+	beforeEach(() => {
+		delete StreamChat._instance;
+	});
+
+	it('instance is stored as static property', () => {
+		expect(StreamChat._instance).to.be.undefined;
+
+		const client = StreamChat.getInstance('key');
+		expect(client).to.equal(StreamChat._instance);
+	});
+
+	it('always return the same instance', () => {
+		const client1 = StreamChat.getInstance('key1');
+		const client2 = StreamChat.getInstance('key1');
+		const client3 = StreamChat.getInstance('key1');
+		expect(client1).to.equal(client2);
+		expect(client2).to.equal(client3);
+	});
+
+	it('changin params has no effect', () => {
+		const client1 = StreamChat.getInstance('key2');
+		const client2 = StreamChat.getInstance('key3');
+
+		expect(client1).to.equal(client2);
+		expect(client2.key).to.eql('key2');
+	});
+
+	it('should throw error if connectUser called twice on an instance', async () => {
+		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		client1._setupConnection = () => Promise.resolve();
+		client1._setToken = () => Promise.resolve();
+
+		await client1.connectUser({ id: 'vishal' }, 'token');
+		const client2 = StreamChat.getInstance('key2');
+		expect(() => client2.connectUser({ id: 'Amin' }, 'token')).to.throw(
+			/connectUser was called twice/,
+		);
+	});
+});
+
 describe('Client userMuteStatus', function () {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };

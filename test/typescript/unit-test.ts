@@ -80,6 +80,31 @@ const clientWithoutSecret: StreamChat<
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
+const singletonClient = StreamChat.getInstance<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+>(apiKey);
+
+const singletonClient1: StreamChat<
+  {},
+  ChannelType,
+  string & {},
+  {},
+  {},
+  {},
+  UserType
+> = StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
+
+const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<
+  {},
+  ChannelType
+>(apiKey, '', {});
+
 const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
 const authType: string = client.getAuthType();
@@ -103,6 +128,10 @@ const updateUser: Promise<{
 const updateUsers: Promise<{
   users: { [key: string]: UserResponse<UserType> };
 }> = client.partialUpdateUsers([updateRequest]);
+
+const updateUsersWithSingletonClient: Promise<{
+  users: { [key: string]: UserResponse<UserType> };
+}> = singletonClient.partialUpdateUsers([updateRequest]);
 
 const eventHandler = (event: Event) => {};
 voidReturn = client.on(eventHandler);
