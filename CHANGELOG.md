@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## January 28, 2021 - 2.12.0
+
+### Feature
+
+- New `StreamClient.getInstance` function to be use instead of `new StreamClient()` [#599](https://github.com/GetStream/stream-chat-js/pull/599)
+- Types for file and image upload app configuration [#582](https://github.com/GetStream/stream-chat-js/pull/582)
+
+### Fix
+
+- Allow consecutive calls with warning to `client.connectUser` for the same user [#600](https://github.com/GetStream/stream-chat-js/pull/600)
+
 ## January 21, 2021 - 2.11.5
 
 ### Fix
