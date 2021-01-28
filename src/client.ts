@@ -104,6 +104,8 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
+  private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
+
   _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
@@ -171,6 +173,8 @@ export class StreamChat<
 
   /**
    * Initialize a client
+   *
+   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections**
    * @param {string} key - the api key
    * @param {string} [secret] - the api secret
    * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
@@ -312,6 +316,125 @@ export class StreamChat<
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
   }
 
+  /**
+   * Get a client instance
+   *
+   * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
+   *
+   * **After the first call, the client configration will not change if the key or options parameters change**
+   *
+   * @param {string} key - the api key
+   * @param {string} [secret] - the api secret
+   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
+   * @param {boolean} [options.browser] - enforce the client to be in browser mode
+   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
+   * @param {Logger} [options.Logger] - custom logger
+   * @param {number} [options.timeout] - default to 3000
+   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * @example <caption>initialize the client in user mode</caption>
+   * StreamChat.getInstance('api_key')
+   * @example <caption>initialize the client in user mode with options</caption>
+   * StreamChat.getInstance('api_key', { timeout:5000 })
+   * @example <caption>secret is optional and only used in server side mode</caption>
+   * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
+   */
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    secret?: string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    secretOrOptions?: StreamChatOptions | string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > {
+    if (!StreamChat._instance) {
+      if (typeof secretOrOptions === 'string') {
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions, options);
+      } else {
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions);
+      }
+    }
+
+    return StreamChat._instance as StreamChat<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+  }
+
   devToken(userID: string) {
     return DevToken(userID);
   }
@@ -346,6 +469,21 @@ export class StreamChat<
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
+    if (!user.id) {
+      throw new Error('The "id" field on the user is missing');
+    }
+
+    /**
+     * Calling connectUser multiple times is potentially the result of a  bad integration, however,
+     * If the user id remains the same we don't throw error
+     */
+    if (this.userID === user.id && this.setUserPromise) {
+      console.warn(
+        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
+      );
+      return this.setUserPromise;
+    }
+
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
@@ -363,23 +501,16 @@ export class StreamChat<
 
     // we generate the client id client side
     this.userID = user.id;
-
-    if (!this.userID) {
-      throw new Error('The "id" field on the user is missing');
-    }
+    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
     const wsPromise = this._setupConnection();
 
-    this.anonymous = false;
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
-      .then((result) => result[1]) // We only return connection promise;
-      .catch((e) => {
-        throw e;
-      });
+    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
+      (result) => result[1], // We only return connection promise;
+    );
 
     return this.setUserPromise;
   };
