@@ -478,6 +478,9 @@ export class StreamChat<
      * If the user id remains the same we don't throw error
      */
     if (this.userID === user.id && this.setUserPromise) {
+      console.warn(
+        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
+      );
       return this.setUserPromise;
     }
 
