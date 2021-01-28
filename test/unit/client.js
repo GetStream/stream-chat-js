@@ -151,6 +151,16 @@ describe('Client connectUser', () => {
 		expect(promise1).to.equal(promise2);
 		expect(await promise1).to.equal(await promise2);
 	});
+
+	it('should work for a second call with different user after disconnecting from first user', async () => {
+		const connection1 = await client.connectUser({ id: 'vishal' }, 'token');
+		expect(connection1).to.equal('_setupConnection');
+
+		await client.disconnect();
+
+		const connection = await client.connectUser({ id: 'amin' }, 'token');
+		expect(connection).to.equal('_setupConnection');
+	});
 });
 
 describe('Detect node environment', () => {
