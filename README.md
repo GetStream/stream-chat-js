@@ -60,7 +60,8 @@ type ChatEvent = { quitChannel?: boolean };
 type CustomCommands = 'imgur';
 
 // Instantiate a new client (server side)
-const client = new StreamChat<
+// you can also use `new StreamChat<T,T,...>()`
+const client = StreamChat.getInstance<
   ChatAttachment,
   ChatChannel,
   CustomCommands,
@@ -75,7 +76,7 @@ const client = new StreamChat<
  * Unused generics default to Record<string, unknown>
  * with the exception of Command which defaults to string & {}
  */
-const client = new StreamChat<
+const client = StreamChat.getInstance<
   {},
   ChatChannel,
   {},
