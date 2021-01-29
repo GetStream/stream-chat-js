@@ -169,41 +169,36 @@ describe('Detect node environment', () => {
 		expect(client.node).to.be.true;
 	});
 
-	it('should warn when using connectUser on a node environment', async () => {
+	it('should throw an error when using connectUser on a node environment', async () => {
 		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
+		let error = '';
 
 		try {
 			await client.connectUser({ id: 'user' }, 'fake token');
-		} catch (e) {}
+		} catch (e) {
+			error = e.message;
+		}
 
 		await client.disconnect();
-		expect(warning).to.equal(
+		expect(error).to.contain(
 			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
 		);
-
-		console.warn = _warn;
 	});
 
-	it('should not warn when adding the allowServerSideConnect flag', async () => {
+	it('should not throw error when adding the allowServerSideConnect flag', async () => {
 		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
-
-		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
+		client2._setToken = () => Promise.resolve;
+		client2._setUser = () => Promise.resolve;
+		client2._setupConnection = () => () => Promise.resolve;
+		let error = '';
 
 		try {
 			await client2.connectUser({ id: 'user' }, 'fake token');
-		} catch (e) {}
+		} catch (e) {
+			error = e.message;
+		}
 
 		await client2.disconnect();
-		expect(warning).to.equal('');
-
-		console.warn = _warn;
+		expect(error).to.equal('');
 	});
 });
