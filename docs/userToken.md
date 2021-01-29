@@ -3,7 +3,7 @@
 ## Static token
 
 ```js
-const client = new StreamChat('api_key');
+const client = StreamChat.getInstance('api_key');
 client.connectUser({ id: 'vishal' }, 'user_token_string');
 ```
 
@@ -12,7 +12,7 @@ client.connectUser({ id: 'vishal' }, 'user_token_string');
 You can use this feature to use short-lived token within your app. When the token expires, the WS connection will get a new token from the Token Provider and reconnect.
 
 ```js
-const client = new StreamChat('api_key');
+const client = StreamChat.getInstance('api_key');
 client.connectUser({ id: 'vishal' }, async () => await fetchTokenFromApi());
 ```
 
