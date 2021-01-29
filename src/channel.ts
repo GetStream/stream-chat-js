@@ -1530,9 +1530,7 @@ export class Channel<
         break;
       case 'typing.stop':
         if (event.user?.id) {
-          const channelStateTypingClone = { ...channelState.typing };
-          delete channelStateTypingClone[event.user.id];
-          channelState.typing = channelStateTypingClone;
+          delete channelState.typing[event.user.id];
         }
         break;
       case 'message.read':
@@ -1555,9 +1553,7 @@ export class Channel<
         break;
       case 'user.watching.stop':
         if (event.user?.id) {
-          const channelStateWatchersClone = { ...channelState.watchers };
-          delete channelStateWatchersClone[event.user.id];
-          channelState.watchers = channelStateWatchersClone;
+          delete channelState.watchers[event.user.id];
         }
         break;
       case 'message.deleted':
@@ -1616,9 +1612,7 @@ export class Channel<
         break;
       case 'member.removed':
         if (event.user?.id) {
-          const membersClone = { ...channelState.members };
-          delete membersClone[event.user.id];
-          channelState.members = membersClone;
+          delete channelState.members[event.user.id];
         }
         break;
       case 'channel.updated':

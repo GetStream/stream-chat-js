@@ -218,9 +218,7 @@ export class ChannelState<
         // then in that case we remove thread related to this message from threads object.
         // This way we can ensure that we don't have any stale data in thread object
         // and consumer can refetch the replies.
-        const threadsClone = { ...this.threads };
-        delete threadsClone[message.id];
-        this.threads = threadsClone;
+        delete this.threads[message.id];
       }
 
       if (!this.last_message_at) {
@@ -676,9 +674,7 @@ export class ChannelState<
         typeof lastEvent.received_at === 'string' &&
         now.getTime() - new Date(lastEvent.received_at).getTime();
       if (since > 7000) {
-        const typingClone = { ...this.typing };
-        delete typingClone[userID];
-        this.typing = typingClone;
+        delete this.typing[userID];
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',
