@@ -1,5 +1,5 @@
 import chai from 'chai';
-import { ChannelState } from '../../src/channel_state';
+import { ChannelState, StreamChat, Channel } from '../../src';
 import { generateMsg } from './test-utils/generateMessage';
 
 const expect = chai.expect;
@@ -250,5 +250,66 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.pinnedMessages[0].id).to.be.equal('1');
 		expect(state.pinnedMessages[1].id).to.be.equal('3');
 		expect(state.pinnedMessages[2].id).to.be.equal('2');
+	});
+});
+
+describe('ChannelState reactions', () => {
+	const message = generateMsg();
+	let state;
+	beforeEach(() => {
+		const client = new StreamChat();
+		client.userID = 'observer';
+		state = new ChannelState(new Channel(client, 'live', 'stream', {}));
+		state.addMessageSorted(message);
+	});
+	it('Add one reaction', () => {
+		const newMessage = state.addReaction(
+			{
+				user_id: 'observer',
+				type: 'like',
+				score: 1,
+			},
+			message,
+		);
+		expect(newMessage.own_reactions.length).to.be.eq(1);
+	});
+	it('Add same reaction twice', () => {
+		let newMessage = state.addReaction(
+			{
+				user_id: 'observer',
+				type: 'like',
+				score: 1,
+			},
+			message,
+		);
+		newMessage = state.addReaction(
+			{
+				user_id: 'observer',
+				type: 'like',
+				score: 1,
+			},
+			newMessage,
+		);
+		expect(newMessage.own_reactions.length).to.be.eq(1);
+	});
+	it('Add two reactions', () => {
+		let newMessage = state.addReaction(
+			{
+				user_id: 'observer',
+				type: 'like',
+				score: 1,
+			},
+			message,
+		);
+		newMessage = state.addReaction(
+			{
+				user_id: 'user2',
+				type: 'like',
+				score: 4,
+			},
+			newMessage,
+		);
+		expect(newMessage.own_reactions.length).to.be.eq(1);
+		expect(newMessage.own_reactions[0].user_id).to.be.eq('observer');
 	});
 });
