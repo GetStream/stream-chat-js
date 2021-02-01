@@ -32,8 +32,9 @@ export class ChannelState<
     UserType
   >;
   watcher_count: number;
-  typing: {
-    [key: string]: Event<
+  typing: Record<
+    string,
+    Event<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -41,11 +42,9 @@ export class ChannelState<
       MessageType,
       ReactionType,
       UserType
-    >;
-  };
-  read: {
-    [key: string]: { last_read: Date; user: UserResponse<UserType> };
-  };
+    >
+  >;
+  read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
   messages: Array<
     ReturnType<
       ChannelState<
@@ -72,8 +71,9 @@ export class ChannelState<
       >['formatMessage']
     >
   >;
-  threads: {
-    [key: string]: Array<
+  threads: Record<
+    string,
+    Array<
       ReturnType<
         ChannelState<
           AttachmentType,
@@ -85,15 +85,11 @@ export class ChannelState<
           UserType
         >['formatMessage']
       >
-    >;
-  };
+    >
+  >;
   mutedUsers: Array<UserResponse<UserType>>;
-  watchers: {
-    [key: string]: UserResponse<UserType>;
-  };
-  members: {
-    [key: string]: ChannelMemberResponse<UserType>;
-  };
+  watchers: Record<string, UserResponse<UserType>>;
+  members: Record<string, ChannelMemberResponse<UserType>>;
   unreadCount: number;
   membership: ChannelMembership<UserType>;
   last_message_at: Date | null;
@@ -341,7 +337,7 @@ export class ChannelState<
           continue;
         }
 
-        thread.splice(i, 1, messageWithReaction);
+        thread[i] = messageWithReaction;
         this.threads[parent_id] = thread;
         break;
       }
@@ -398,12 +394,10 @@ export class ChannelState<
       newMessage.latest_reactions = [...latestReactions, reaction];
     }
 
-    const oldReactionCounts = newMessage.reaction_counts;
-    if (oldReactionCounts) {
-      const oldReactionType = oldReactionCounts[reaction.type];
-      oldReactionCounts[reaction.type] = oldReactionType ? oldReactionType + 1 : 1;
-      newMessage.reaction_counts = oldReactionCounts;
-    }
+    const oldReactionCounts = newMessage.reaction_counts || {};
+    const oldReactionType = oldReactionCounts[reaction.type];
+    oldReactionCounts[reaction.type] = oldReactionType ? oldReactionType + 1 : 1;
+    newMessage.reaction_counts = oldReactionCounts;
 
     return newMessage;
   }
@@ -482,7 +476,7 @@ export class ChannelState<
           messageWithReaction.reaction_counts = oldReactionCounts;
         }
 
-        thread.splice(i, 1, messageWithReaction);
+        thread[i] = messageWithReaction;
         this.threads[parent_id] = thread;
         break;
       }

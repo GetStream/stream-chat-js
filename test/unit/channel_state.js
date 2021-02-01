@@ -208,19 +208,6 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages[3].id).to.be.equal('0');
 	});
 
-	it('should return', async function () {
-		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
-
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z', parent_id: '0' }),
-		]);
-		expect(state.messages).to.have.length(1);
-		expect(state.threads['0']).to.have.length(1);
-	});
-
 	it('updates last_message_at correctly', async function () {
 		const state = new ChannelState();
 		expect(state.last_message_at).to.be.null;

@@ -943,7 +943,7 @@ export class Channel<
     // sort by pk desc
     messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
 
-    return messageSlice.length > 0 ? messageSlice[0] : undefined;
+    return messageSlice[0];
   }
 
   /**
@@ -1537,7 +1537,7 @@ export class Channel<
         if (event.user?.id) {
           channelState.read[event.user.id] = {
             last_read: event.received_at ? new Date(event.received_at) : new Date(),
-            user: { ...event.user },
+            user: event.user,
           };
 
           if (event.user?.id === this.getClient().user?.id) {
@@ -1582,8 +1582,8 @@ export class Channel<
           if (ownMessage && event.user?.id) {
             channelState.unreadCount = 0;
             channelState.read[event.user.id] = {
-              last_read: new Date(event.created_at || ''),
-              user: { ...event.user },
+              last_read: new Date(event.created_at as string),
+              user: event.user,
             };
           } else if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
