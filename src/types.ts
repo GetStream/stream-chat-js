@@ -31,6 +31,14 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type RequireOnlyTwo<T, Keys extends keyof T = keyof T> = Pick<
+  T,
+  Exclude<keyof T, Keys>
+> &
+  {
+    [K in Keys]-?: Required<Pick<T, K>> & RequireOnlyOne<Omit<T, K>>;
+  }[Keys];
+
 export type UnknownType = Record<string, unknown>;
 
 export type Unpacked<T> = T extends (infer U)[]
@@ -77,6 +85,7 @@ export type AppSettingsAPIResponse<
         url_enrichment?: boolean;
       }
     >;
+    auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
@@ -130,6 +139,8 @@ export type ChannelResponse<
   frozen: boolean;
   id: string;
   type: string;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
@@ -434,6 +445,9 @@ export type MessageResponse<
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
+  i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
+    language: TranslationLanguages;
+  };
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
@@ -635,6 +649,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  language?: TranslationLanguages;
   last_active?: string;
   online?: boolean;
   shadow_banned?: boolean;
@@ -1265,6 +1280,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  auto_translation_enabled?: boolean;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
@@ -1656,3 +1672,61 @@ export type User<UserType = UnknownType> = UserType & {
 };
 
 export type TypingStartEvent = Event;
+
+// should match the supportedLanguages here https://github.com/GetStream/chat/blob/master/translation/language.go
+export type TranslationLanguages =
+  | 'af'
+  | 'am'
+  | 'ar'
+  | 'az'
+  | 'bg'
+  | 'bn'
+  | 'bs'
+  | 'cs'
+  | 'da'
+  | 'de'
+  | 'el'
+  | 'en'
+  | 'es'
+  | 'es-MX'
+  | 'et'
+  | 'fa'
+  | 'fa-AF'
+  | 'fi'
+  | 'fr'
+  | 'fr-CA'
+  | 'ha'
+  | 'he'
+  | 'hi'
+  | 'hr'
+  | 'hu'
+  | 'id'
+  | 'it'
+  | 'ja'
+  | 'ka'
+  | 'ko'
+  | 'lv'
+  | 'ms'
+  | 'nl'
+  | 'no'
+  | 'pl'
+  | 'ps'
+  | 'pt'
+  | 'ro'
+  | 'ru'
+  | 'sk'
+  | 'sl'
+  | 'so'
+  | 'sq'
+  | 'sr'
+  | 'sv'
+  | 'sw'
+  | 'ta'
+  | 'th'
+  | 'tl'
+  | 'tr'
+  | 'uk'
+  | 'ur'
+  | 'vi'
+  | 'zh'
+  | 'zh-TW';
