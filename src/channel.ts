@@ -1536,7 +1536,8 @@ export class Channel<
       case 'message.read':
         if (event.user?.id) {
           channelState.read[event.user.id] = {
-            last_read: event.received_at ? new Date(event.received_at) : new Date(),
+            // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
+            last_read: event.received_at as Date,
             user: event.user,
           };
 
