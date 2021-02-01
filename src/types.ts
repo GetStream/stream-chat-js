@@ -506,7 +506,6 @@ export type OwnUserResponse<
   unread_channels: number;
   unread_count: number;
   invisible?: boolean;
-  language?: string;
   roles?: string[];
 };
 
@@ -649,7 +648,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
-  language?: TranslationLanguages;
+  language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
   shadow_banned?: boolean;
