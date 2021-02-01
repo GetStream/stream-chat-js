@@ -1673,7 +1673,6 @@ export type User<UserType = UnknownType> = UserType & {
 
 export type TypingStartEvent = Event;
 
-// should match the supportedLanguages here https://github.com/GetStream/chat/blob/master/translation/language.go
 export type TranslationLanguages =
   | 'af'
   | 'am'
