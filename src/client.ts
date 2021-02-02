@@ -1864,7 +1864,11 @@ export class StreamChat<
 
   async deleteUser(
     userID: string,
-    params?: { hard_delete?: boolean; mark_messages_deleted?: boolean },
+    params?: {
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
   ) {
     return await this.delete<
       APIResponse & {
@@ -1875,7 +1879,7 @@ export class StreamChat<
 
   async reactivateUser(
     userID: string,
-    options?: { name?: string; restore_messages?: boolean },
+    options?: { created_by_id?: string; name?: string; restore_messages?: boolean },
   ) {
     return await this.post<
       APIResponse & {
@@ -1886,7 +1890,10 @@ export class StreamChat<
     });
   }
 
-  async deactivateUser(userID: string, options?: { mark_messages_deleted?: boolean }) {
+  async deactivateUser(
+    userID: string,
+    options?: { created_by_id?: string; mark_messages_deleted?: boolean },
+  ) {
     return await this.post<APIResponse & { user: UserResponse<UserType> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       {
