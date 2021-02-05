@@ -395,29 +395,20 @@ export class Channel<
    *
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
-   * @param {string} [user_id] the id of the user (used only for server side request) default null
-   * @param {boolean} [enforce_unique] set true to overwrite existing reactions if any
+   * @param {{ enforce_unique?: boolean }} [options] Option object, {enforce_unique: true} to override any existing reaction
    *
    * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
-    user_id?: string,
-    enforce_unique?: boolean,
+    options?: { enforce_unique?: boolean },
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
     if (!reaction || Object.keys(reaction).length === 0) {
       throw Error(`Reaction object is missing`);
-    }
-    const body = {
-      reaction,
-      enforce_unique,
-    };
-    if (user_id != null) {
-      body.reaction = { ...reaction, user: { id: user_id } as UserResponse<UserType> };
     }
     return await this.getClient().post<
       ReactionAPIResponse<
@@ -428,7 +419,10 @@ export class Channel<
         ReactionType,
         UserType
       >
-    >(this.getClient().baseURL + `/messages/${messageID}/reaction`, body);
+    >(this.getClient().baseURL + `/messages/${messageID}/reaction`, {
+      reaction,
+      ...options,
+    });
   }
 
   /**
