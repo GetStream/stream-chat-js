@@ -31,14 +31,6 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
-export type RequireOnlyTwo<T, Keys extends keyof T = keyof T> = Pick<
-  T,
-  Exclude<keyof T, Keys>
-> &
-  {
-    [K in Keys]-?: Required<Pick<T, K>> & RequireOnlyOne<Omit<T, K>>;
-  }[Keys];
-
 export type UnknownType = Record<string, unknown>;
 
 export type Unpacked<T> = T extends (infer U)[]
