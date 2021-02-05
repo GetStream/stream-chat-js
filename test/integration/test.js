@@ -4,7 +4,6 @@ import https from 'https';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
-import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../../src';
 import { expectHTTPErrorCode, getTestClientWithWarmUp, createEventWaiter } from './utils';
 import fs from 'fs';
@@ -1559,7 +1558,7 @@ describe('Chat', () => {
 						expect(event.message.type).to.be.equal('deleted');
 						expect(event.hard_delete).to.be.undefined;
 						expect(channel.state.messages).to.be.deep.equal([
-							channel.state.messageToImmutable(event.message),
+							channel.state.formatMessage(event.message),
 						]);
 						done();
 					});
@@ -2163,7 +2162,7 @@ describe('Chat', () => {
 				eventChannel.on('typing.stop', (event) => {
 					// start, stop
 					expect(event.parent_id).to.be.equal(undefined);
-					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					expect(eventChannel.state.typing).to.deep.equal({});
 					done();
 				});
 
@@ -2192,14 +2191,14 @@ describe('Chat', () => {
 					if (!started) throw new Error('typing.start event failed');
 
 					expect(event.parent_id).to.be.equal(id);
-					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					expect(eventChannel.state.typing).to.deep.equal({});
 					clearTimeout(timeout);
 					done();
 				});
 
 				eventChannel.on('typing.start', (event) => {
 					expect(event.parent_id).to.be.equal(id);
-					expect(eventChannel.state.typing.asMutable()).to.not.be.empty;
+					expect(eventChannel.state.typing).to.not.be.empty;
 					started = true;
 				});
 
@@ -2302,7 +2301,7 @@ describe('Chat', () => {
 			const c = authClient.channel('twitch', 'state');
 			const message = { id: 1, text: 'my message' };
 			const message2 = { id: 2, text: 'my message 2' };
-			c.state.messages = Immutable([message, message2]);
+			c.state.messages = [message, message2];
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
 		});
@@ -2321,7 +2320,7 @@ describe('Chat', () => {
 				type: 'error',
 			};
 
-			c.state.messages = Immutable([message, message2, message3]);
+			c.state.messages = [message, message2, message3];
 			c.state.filterErrorMessages(message);
 			expect(c.state.messages.length).to.equal(2);
 		});

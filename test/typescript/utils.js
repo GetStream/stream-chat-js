@@ -13,8 +13,8 @@ module.exports = {
 		return await serverClient.updateUsers(users);
 	},
 	createUserToken: function createUserToken(userID) {
-		const c = new StreamChat(apiKey, apiSecret);
-		return c.createToken(userID);
+		const chat = new StreamChat(apiKey, apiSecret);
+		return chat.createToken(userID);
 	},
 	createTestChannel: async function createTestChannel(id, userID) {
 		const client = this.getTestClient(true);
@@ -58,11 +58,9 @@ module.exports = {
 		return client;
 	},
 	runAndLogPromise: function runAndLogPromise(promiseCallable) {
-		promiseCallable()
-			.then(() => {})
-			.catch((err) => {
-				console.warn('runAndLogPromise failed with error', err);
-			});
+		promiseCallable().catch((err) => {
+			console.warn('runAndLogPromise failed with error', err);
+		});
 	},
 	sleep: function sleep(ms) {
 		return new Promise((resolve) => {

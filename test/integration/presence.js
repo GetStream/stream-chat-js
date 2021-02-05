@@ -2,7 +2,6 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
 import {
 	createUserToken,
 	getTestClient,
