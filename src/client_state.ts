@@ -1,20 +1,17 @@
-import Immutable from 'seamless-immutable';
 import { UnknownType, UserResponse } from './types';
 
 /**
  * ClientState - A container class for the client state.
  */
 export class ClientState<UserType = UnknownType> {
-  users: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<UserResponse<UserType>>;
-  }>;
+  users: {
+    [key: string]: UserResponse<UserType>;
+  };
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor() {
     // show the status for a certain user...
     // ie online, offline etc
-    this.users = Immutable<{
-      [key: string]: Immutable.Immutable<UserResponse<UserType>>;
-    }>({});
+    this.users = {};
     // store which channels contain references to the specified user...
     this.userChannelReferences = {};
   }
@@ -27,7 +24,7 @@ export class ClientState<UserType = UnknownType> {
 
   updateUser(user?: UserResponse<UserType>) {
     if (user != null) {
-      this.users = this.users.set(user.id, Immutable(user));
+      this.users[user.id] = user;
     }
   }
 

@@ -649,7 +649,10 @@ describe('Unread on connect', function () {
 	it('tommaso likes one message', async function () {
 		const chan = serverSideClient.channel('messaging', cids[2]);
 		const r = await chan.query();
-		await chan.sendReaction(chan.state.messages[0].id, { type: 'love' }, tommasoID);
+		await chan.sendReaction(chan.state.messages[0].id, {
+			type: 'love',
+			user: { id: tommasoID },
+		});
 	});
 
 	it('thierry re-connects and receives unread_count=0', async function () {

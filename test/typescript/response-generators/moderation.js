@@ -18,7 +18,7 @@ async function banUsers() {
 	const evilUser = 'evil-user' + uuidv4();
 	await utils.createUsers([evilUser, user.id]);
 	return await client.banUser(evilUser, {
-		user_id: user.id,
+		banned_by_id: user.id,
 	});
 }
 
@@ -31,7 +31,7 @@ async function shadowBan() {
 	const evilUser = 'evil-shadow-user' + uuidv4();
 	await utils.createUsers([evilUser, user.id]);
 	return await client.banUser(evilUser, {
-		user_id: user.id,
+		banned_by_id: user.id,
 		shadow: true,
 	});
 }
