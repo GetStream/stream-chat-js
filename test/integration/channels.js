@@ -1241,7 +1241,7 @@ describe('hard delete messages', function () {
 		await channel.watch();
 
 		let resp = await channel.sendMessage({ text: 'hi', user_id: user });
-		await channel.sendReaction(resp.message.id, { type: 'love' }, user);
+		await channel.sendReaction(resp.message.id, { type: 'love', user: { id: user } });
 		resp = await ssclient.deleteMessage(resp.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 
