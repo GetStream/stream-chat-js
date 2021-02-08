@@ -1,4 +1,3 @@
-import SeamlessImmutable from 'seamless-immutable';
 import { AxiosRequestConfig } from 'axios';
 
 /**
@@ -78,6 +77,7 @@ export type AppSettingsAPIResponse<
         url_enrichment?: boolean;
       }
     >;
+    auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
@@ -131,6 +131,8 @@ export type ChannelResponse<
   frozen: boolean;
   id: string;
   type: string;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
@@ -364,31 +366,29 @@ export type GetRepliesAPIResponse<
   >[];
 };
 
-export type ImmutableMessageResponse<
+export type FormatMessageResponse<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SeamlessImmutable.Immutable<
-  Omit<
-    MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    'created_at' | 'updated_at' | 'status'
-  > & {
-    __html: string;
-    created_at: Date;
-    status: string;
-    updated_at: Date;
-  }
->;
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'created_at' | 'updated_at' | 'status'
+> & {
+  __html: string;
+  created_at: Date;
+  status: string;
+  updated_at: Date;
+};
 
 export type ListChannelResponse<
   CommandType extends string = LiteralStringForUnion
@@ -437,6 +437,9 @@ export type MessageResponse<
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
+  i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
+    language: TranslationLanguages;
+  };
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
@@ -495,7 +498,6 @@ export type OwnUserResponse<
   unread_channels: number;
   unread_count: number;
   invisible?: boolean;
-  language?: string;
   roles?: string[];
 };
 
@@ -638,6 +640,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
   shadow_banned?: boolean;
@@ -824,10 +827,10 @@ export type MuteUserOptions<UserType = UnknownType> = {
 };
 
 export type PaginationOptions = {
-  created_at_after?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_after_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_before?: string | Date | SeamlessImmutable.ImmutableDate;
-  created_at_before_or_equal?: string | Date | SeamlessImmutable.ImmutableDate;
+  created_at_after?: string | Date;
+  created_at_after_or_equal?: string | Date;
+  created_at_before?: string | Date;
+  created_at_before_or_equal?: string | Date;
   id_gt?: string;
   id_gte?: string;
   id_lt?: string;
@@ -1268,6 +1271,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  auto_translation_enabled?: boolean;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
@@ -1659,3 +1663,60 @@ export type User<UserType = UnknownType> = UserType & {
 };
 
 export type TypingStartEvent = Event;
+
+export type TranslationLanguages =
+  | 'af'
+  | 'am'
+  | 'ar'
+  | 'az'
+  | 'bg'
+  | 'bn'
+  | 'bs'
+  | 'cs'
+  | 'da'
+  | 'de'
+  | 'el'
+  | 'en'
+  | 'es'
+  | 'es-MX'
+  | 'et'
+  | 'fa'
+  | 'fa-AF'
+  | 'fi'
+  | 'fr'
+  | 'fr-CA'
+  | 'ha'
+  | 'he'
+  | 'hi'
+  | 'hr'
+  | 'hu'
+  | 'id'
+  | 'it'
+  | 'ja'
+  | 'ka'
+  | 'ko'
+  | 'lv'
+  | 'ms'
+  | 'nl'
+  | 'no'
+  | 'pl'
+  | 'ps'
+  | 'pt'
+  | 'ro'
+  | 'ru'
+  | 'sk'
+  | 'sl'
+  | 'so'
+  | 'sq'
+  | 'sr'
+  | 'sv'
+  | 'sw'
+  | 'ta'
+  | 'th'
+  | 'tl'
+  | 'tr'
+  | 'uk'
+  | 'ur'
+  | 'vi'
+  | 'zh'
+  | 'zh-TW';

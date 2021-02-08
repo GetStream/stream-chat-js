@@ -275,9 +275,9 @@ const executables = [
 	},
 	{
 		f: rg.lastMessage,
-		imports: ['Channel', 'Unpacked'],
+		imports: ['Channel', 'FormatMessageResponse', 'Unpacked'],
 		type:
-			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
+			"Omit<FormatMessageResponse<{}, { description?: string }, string & {}, {}, {}, {}>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
 	},
 	{
 		f: rg.listBlockLists,
@@ -610,7 +610,7 @@ const run = async () => {
 	);
 	imports = uniqueTypes.join(', ');
 
-	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '../..';`;
+	imports = `import { ${imports} } from '../..';`;
 	tsFileName = `${__dirname}/data.ts`;
 	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
 		if (err) {

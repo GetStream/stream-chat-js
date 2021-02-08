@@ -1,4 +1,3 @@
-import Immutable from 'seamless-immutable';
 import chai from 'chai';
 import { ChannelState } from '../../src/channel_state';
 import { generateMsg } from './test-utils/generateMessage';
@@ -39,7 +38,7 @@ describe('ChannelState addMessagesSorted', function () {
 	it('update a message in place 1', async function () {
 		const state = new ChannelState();
 		state.addMessagesSorted([generateMsg({ id: '0' })]);
-		state.addMessagesSorted([{ ...state.messages[0].asMutable(), text: 'update' }]);
+		state.addMessagesSorted([{ ...state.messages[0], text: 'update' }]);
 
 		expect(state.messages).to.have.length(1);
 		expect(state.messages[0].text).to.be.equal('update');
@@ -53,7 +52,7 @@ describe('ChannelState addMessagesSorted', function () {
 			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
 		]);
 
-		state.addMessagesSorted([{ ...state.messages[1].asMutable(), text: 'update' }]);
+		state.addMessagesSorted([{ ...state.messages[1], text: 'update' }]);
 
 		expect(state.messages).to.have.length(3);
 		expect(state.messages[1].text).to.be.equal('update');
@@ -71,15 +70,15 @@ describe('ChannelState addMessagesSorted', function () {
 			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
 		]);
 
-		state.addMessagesSorted([{ ...state.messages[0].asMutable(), text: 'update 0' }]);
+		state.addMessagesSorted([{ ...state.messages[0], text: 'update 0' }]);
 		expect(state.messages).to.have.length(4);
 		expect(state.messages[0].text).to.be.equal('update 0');
 
-		state.addMessagesSorted([{ ...state.messages[2].asMutable(), text: 'update 2' }]);
+		state.addMessagesSorted([{ ...state.messages[2], text: 'update 2' }]);
 		expect(state.messages).to.have.length(4);
 		expect(state.messages[2].text).to.be.equal('update 2');
 
-		state.addMessagesSorted([{ ...state.messages[3].asMutable(), text: 'update 3' }]);
+		state.addMessagesSorted([{ ...state.messages[3], text: 'update 3' }]);
 		expect(state.messages).to.have.length(4);
 		expect(state.messages[3].text).to.be.equal('update 3');
 	});
@@ -157,7 +156,7 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessageSorted(
 			{
-				...state.messages[0].asMutable(),
+				...state.messages[0],
 				created_at: '2020-01-01T00:00:00.044Z',
 				text: 'update 0',
 			},
@@ -183,7 +182,7 @@ describe('ChannelState addMessagesSorted', function () {
 		state.addMessagesSorted(
 			[
 				{
-					...state.messages[3].asMutable(),
+					...state.messages[3],
 					created_at: '2020-01-01T00:00:00.033Z',
 					text: 'update 3',
 				},
@@ -195,7 +194,7 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessageSorted(
 			{
-				...state.messages[0].asMutable(),
+				...state.messages[0],
 				created_at: '2020-01-01T00:00:00.044Z',
 				text: 'update 0',
 			},
@@ -207,26 +206,6 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages[1].id).to.be.equal('2');
 		expect(state.messages[2].id).to.be.equal('3');
 		expect(state.messages[3].id).to.be.equal('0');
-	});
-
-	it('should return Immutable', async function () {
-		const state = new ChannelState();
-		expect(Immutable.isImmutable(state.messages)).to.be.true;
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
-		expect(Immutable.isImmutable(state.messages)).to.be.true;
-		expect(Immutable.isImmutable(state.messages[0])).to.be.true;
-
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z', parent_id: '0' }),
-		]);
-		expect(Immutable.isImmutable(state.messages)).to.be.true;
-		expect(state.messages).to.have.length(1);
-		expect(state.threads['0']).to.have.length(1);
-		expect(Immutable.isImmutable(state.threads)).to.be.true;
-		expect(Immutable.isImmutable(state.threads['0'])).to.be.true;
-		expect(Immutable.isImmutable(state.threads['0'][0])).to.be.true;
 	});
 
 	it('updates last_message_at correctly', async function () {

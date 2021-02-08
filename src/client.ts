@@ -148,8 +148,8 @@ export class StreamChat<
   logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
    *
    * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
    * When false, user/consumer of this client will need to make sure all the channels present on UI by
@@ -321,7 +321,7 @@ export class StreamChat<
    *
    * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
    *
-   * **After the first call, the client configration will not change if the key or options parameters change**
+   * **After the first call, the client configuration will not change if the key or options parameters change**
    *
    * @param {string} key - the api key
    * @param {string} [secret] - the api secret
@@ -973,7 +973,6 @@ export class StreamChat<
           response = await this.axiosInstance.patch(url, data, requestConfig);
           break;
         case 'options':
-          // @ts-ignore
           response = await this.axiosInstance.options(url, requestConfig);
           break;
         default:
@@ -1279,14 +1278,14 @@ export class StreamChat<
     const refMap = this.state.userChannelReferences[user.id] || {};
     const refs = Object.keys(refMap);
     for (const channelID of refs) {
-      const c = this.activeChannels[channelID];
+      const channel = this.activeChannels[channelID];
       // search the members and watchers and update as needed...
-      if (c && c.state) {
-        if (c.state.members[user.id]) {
-          c.state.members = c.state.members.setIn([user.id, 'user'], user);
+      if (channel?.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
         }
-        if (c.state.watchers[user.id]) {
-          c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
         }
       }
     }
@@ -1864,7 +1863,11 @@ export class StreamChat<
 
   async deleteUser(
     userID: string,
-    params?: { hard_delete?: boolean; mark_messages_deleted?: boolean },
+    params?: {
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
   ) {
     return await this.delete<
       APIResponse & {
@@ -1875,7 +1878,7 @@ export class StreamChat<
 
   async reactivateUser(
     userID: string,
-    options?: { name?: string; restore_messages?: boolean },
+    options?: { created_by_id?: string; name?: string; restore_messages?: boolean },
   ) {
     return await this.post<
       APIResponse & {
@@ -1886,7 +1889,10 @@ export class StreamChat<
     });
   }
 
-  async deactivateUser(userID: string, options?: { mark_messages_deleted?: boolean }) {
+  async deactivateUser(
+    userID: string,
+    options?: { created_by_id?: string; mark_messages_deleted?: boolean },
+  ) {
     return await this.post<APIResponse & { user: UserResponse<UserType> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       {
