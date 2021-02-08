@@ -191,10 +191,14 @@ export class Channel<
    * sendMessage - Send a message to this channel
    *
    * @param {Message<AttachmentType, MessageType, UserType>} message The Message object
+   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
    *
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
+  async sendMessage(
+    message: Message<AttachmentType, MessageType, UserType>,
+    options?: { skip_push?: boolean },
+  ) {
     const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
         AttachmentType,
@@ -206,6 +210,7 @@ export class Channel<
       >
     >(this._channelURL() + '/message', {
       message,
+      ...options,
     });
 
     // Reset unreadCount to 0.
@@ -395,14 +400,14 @@ export class Channel<
    *
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
-   * @param {{ enforce_unique?: boolean }} [options] Option object, {enforce_unique: true} to override any existing reaction
+   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
    *
    * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
-    options?: { enforce_unique?: boolean },
+    options?: { enforce_unique?: boolean; skip_push?: boolean },
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -475,6 +480,7 @@ export class Channel<
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
    * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
+   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
@@ -482,6 +488,7 @@ export class Channel<
       | Partial<ChannelData<ChannelType>>
       | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
+    options?: { skip_push?: boolean },
   ) {
     // Strip out reserved names that will result in API errors.
     const reserved = [
@@ -511,6 +518,7 @@ export class Channel<
     >(this._channelURL(), {
       message: updateMessage,
       data: channelData,
+      ...options,
     });
     this.data = data.channel;
     return data;
