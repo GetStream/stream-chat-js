@@ -10,7 +10,7 @@ module.exports = {
 		for (const userID of userIDs) {
 			users.push({ id: userID, ...additionalInfo });
 		}
-		return await serverClient.updateUsers(users);
+		return await serverClient.upsertUsers(users);
 	},
 	createUserToken: function createUserToken(userID) {
 		const chat = new StreamChat(apiKey, apiSecret);

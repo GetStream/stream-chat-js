@@ -515,22 +515,6 @@ export class StreamChat<
     return this.setUserPromise;
   };
 
-  /**
-   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
-   *
-   * setUser - Set the current user and open a WebSocket connection
-   *
-   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
-   * @param {TokenOrProvider} userTokenOrProvider Token or provider
-   *
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
-   */
-  setUser = (
-    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-    userTokenOrProvider: TokenOrProvider,
-  ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
-    this.connectUser(user, userTokenOrProvider);
-
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
@@ -690,11 +674,6 @@ export class StreamChat<
 
     return this._setupConnection();
   };
-
-  /**
-   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
-   */
-  setAnonymousUser = () => this.connectAnonymousUser();
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -1765,19 +1744,6 @@ export class StreamChat<
   };
 
   /**
-   * @deprecated Please use upsertUser() function instead.
-   *
-   * updateUser - Update or Create the given user object
-   *
-   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   *
-   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-   */
-  async updateUser(userObject: UserResponse<UserType>) {
-    return await this.upsertUsers([userObject]);
-  }
-
-  /**
    * partialUpdateUser - Update the given user object
    *
    * @param {PartialUserUpdate<UserType>} partialUserObject which should contain id and any of "set" or "unset" params;
@@ -1823,19 +1789,6 @@ export class StreamChat<
    */
   upsertUser(userObject: UserResponse<UserType>) {
     return this.upsertUsers([userObject]);
-  }
-
-  /**
-   * @deprecated Please use upsertUsers() function instead.
-   *
-   * updateUsers - Batch update the list of users
-   *
-   * @param {UserResponse<UserType>[]} users list of users
-   *
-   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-   */
-  updateUsers(users: UserResponse<UserType>[]) {
-    return this.upsertUsers(users);
   }
 
   /**
@@ -2021,14 +1974,15 @@ export class StreamChat<
     });
   }
 
-  /** userMuteStatus - check if a user is muted or not, can be used after setUser() is called
+  /** userMuteStatus - check if a user is muted or not, can be used after connectUser() is called
    *
    * @param {string} targetID
    * @returns {boolean}
    */
   userMuteStatus(targetID: string) {
-    if (!this.user || !this.wsPromise)
-      throw new Error('Make sure to await setUser() first.');
+    if (!this.user || !this.wsPromise) {
+      throw new Error('Make sure to await connectUser() first.');
+    }
 
     for (let i = 0; i < this.mutedUsers.length; i += 1) {
       if (this.mutedUsers[i].target.id === targetID) return true;
@@ -2357,13 +2311,6 @@ export class StreamChat<
     >(this.baseURL + `/messages/${messageID}`);
   }
 
-  /**
-   * @deprecated Please use getUserAgent instead
-   */
-  _userAgent() {
-    return this.getUserAgent();
-  }
-
   getUserAgent() {
     return (
       this.userAgent ||
@@ -2401,7 +2348,7 @@ export class StreamChat<
       headers: {
         Authorization: token,
         'stream-auth-type': this.getAuthType(),
-        'x-stream-client': this._userAgent(),
+        'x-stream-client': this.getUserAgent(),
         ...options.headers,
       },
       ...options.config,
