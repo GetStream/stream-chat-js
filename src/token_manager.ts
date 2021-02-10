@@ -146,7 +146,7 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
     }
 
     throw new Error(
-      `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
+      `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`,
     );
   };
 
