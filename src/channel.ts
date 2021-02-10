@@ -1236,7 +1236,7 @@ export class Channel<
       // set the channel as active...
 
       const membersStr = state.members
-        .map((m) => m.user_id || m.user?.id)
+        .map((member) => member.user_id || member.user?.id)
         .sort()
         .join(',');
       const tempChannelCid = `${this.type}:!members-${membersStr}`;
