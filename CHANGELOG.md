@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## February 11, 2021 - 3.0.1
+
+- Add back some deprecated functions for convenience [#615](https://github.com/GetStream/stream-chat-js/pull/615)
+
 ## February 10, 2021 - 3.0.0
 
 ### BREAKING CHANGES
