@@ -795,7 +795,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: true,
 								},
 							});
@@ -828,7 +828,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: false,
 								},
 							});
@@ -1076,7 +1076,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: true,
 								},
 							}),
