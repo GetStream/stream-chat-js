@@ -8,7 +8,7 @@ async function deleteReaction() {
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
-	await channel.sendReaction(message.id, { type: 'love' }, johnID);
+	await channel.sendReaction(message.id, { type: 'love', user: { id: johnID } });
 
 	return await channel.deleteReaction(message.id, 'love', johnID);
 }
@@ -35,7 +35,7 @@ async function sendReaction() {
 	await channel.watch();
 	const { message } = await channel.sendMessage({ text: `Test message` });
 
-	return await channel.sendReaction(message.id, { type: 'love' }, johnID);
+	return await channel.sendReaction(message.id, { type: 'love', user: { id: johnID } });
 }
 
 module.exports = {

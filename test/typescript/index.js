@@ -424,10 +424,10 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
-		f: rg.setAnonymousUser,
+		f: rg.connectAnonymousUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setAnonymousUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectAnonymousUser']>>",
 	},
 	{
 		f: rg.setGuestUser,
@@ -436,10 +436,10 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setGuestUser']>>",
 	},
 	{
-		f: rg.setUser,
+		f: rg.connectUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectUser']>>",
 	},
 	{
 		f: rg.show,
@@ -557,10 +557,10 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updatePermission']>>",
 	},
 	{
-		f: rg.updateUsers,
+		f: rg.upsertUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { unique: string }>['updateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { unique: string }>['upsertUsers']>>",
 	},
 	{
 		f: rg.upsertUser,

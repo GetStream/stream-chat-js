@@ -108,13 +108,10 @@ describe('Reactions', () => {
 		const serverSide = getTestClient(true);
 		const serverSideChannel = serverSide.channel('livestream', channel.id);
 		// add a reaction
-		const reply = await serverSideChannel.sendReaction(
-			message.id,
-			{
-				type: 'love',
-			},
-			userID,
-		);
+		const reply = await serverSideChannel.sendReaction(message.id, {
+			type: 'love',
+			user: { id: userID },
+		});
 
 		expect(reply.message.text).to.equal(message.text);
 		expect(reply.reaction.user.id).to.equal(userID);
@@ -392,14 +389,18 @@ describe('Reactions', () => {
 	context('When using enforce_unique', () => {
 		it('Replace reactions', async () => {
 			const message = await getTestMessage('Replace reaction', channel);
-			await channel.sendReaction(message.id, { type: 'love' }, null);
-			await channel.sendReaction(message.id, { type: 'hate' }, null);
+			await channel.sendReaction(message.id, { type: 'love' });
+			await channel.sendReaction(message.id, { type: 'hate' });
 			let response = await reactionClient.getMessage(message.id);
 			expect(response.message.latest_reactions.length).to.eq(2);
 			expect(response.message.own_reactions.length).to.eq(2);
 			expect(response.message.reaction_counts.love).to.eq(1);
 			expect(response.message.reaction_counts.hate).to.eq(1);
-			await channel.sendReaction(message.id, { type: 'adore' }, null, true);
+			await channel.sendReaction(
+				message.id,
+				{ type: 'adore' },
+				{ enforce_unique: true },
+			);
 			response = await reactionClient.getMessage(message.id);
 			expect(response.message.latest_reactions.length).to.eq(1);
 			expect(response.message.own_reactions.length).to.eq(1);

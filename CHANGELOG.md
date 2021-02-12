@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## February 11, 2021 - 3.0.1
+
+- Add back some deprecated functions for convenience [#615](https://github.com/GetStream/stream-chat-js/pull/615)
+
+## February 10, 2021 - 3.0.0
+
+### BREAKING CHANGES
+
+- Removed `seamless-immutable` library completely for client/channel state management in favor of pure JS objects [#602](https://github.com/GetStream/stream-chat-js/pull/602). This will likely require some changes to frontend usage of these states with spread operators for deeply nested data updates
+- Changed channel state `messageToImmutable` function to `formatMessage` [#602](https://github.com/GetStream/stream-chat-js/pull/602)
+
+- `channel.sendReaction(messageID: string, reaction: Reaction, user_id?: string, enforce_unique?: boolean)` is changed to `channel.sendReaction(messageID: string, reaction: Reaction, options?: { enforce_unique?: boolean })`. the removed `user_id` parameter should be added to `reaction`.
+- `client.setUser()` function is removed in favor of `client.connectUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.setAnonymousUser()` function is removed in favor of `client.connectAnonymousUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.updateUser()` function is removed in favor of `client.upsertUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.updateUsers()` function is removed in favor of `client.upsertUsers()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client._userAgent()` function is removed in favor of `client.getUserAgent()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+
+### Fix
+
+- Added types for auto translations [#602](https://github.com/GetStream/stream-chat-js/pull/602)
+- Added missing options for gdpr endpoints [#609](https://github.com/GetStream/stream-chat-js/pull/609)
+
+### Chore
+
+- Upgrade Dependencies [#613](https://github.com/GetStream/stream-chat-js/pull/613)
+
 ## January 28, 2021 - 2.12.0
 
 ### Feature

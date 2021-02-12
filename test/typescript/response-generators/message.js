@@ -51,8 +51,8 @@ async function getReplies() {
 		instrument: 'saxophone',
 	};
 
-	await utils.getTestClient(true).updateUser(thierry);
-	await utils.getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
+	await utils.getTestClient(true).upsertUser(thierry);
+	await utils.getTestClient(true).upsertUser({ id: userID, instrument: 'guitar' });
 	const channel = serverAuthClient.channel('team', channelID, {
 		created_by: { id: thierry.id },
 		members: [userID, thierry.id],
@@ -107,7 +107,7 @@ async function translateMessage() {
 async function updateMessage() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const userID = 'tommaso-' + uuidv4();
-	await utils.getTestClient(true).updateUser({ id: userID });
+	await utils.getTestClient(true).upsertUser({ id: userID });
 	const channel = authClient.channel('messaging', `poppins-${uuidv4()}`, {
 		members: [userID],
 	});
