@@ -515,6 +515,18 @@ export class StreamChat<
     return this.setUserPromise;
   };
 
+  /**
+   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
+   *
+   * setUser - Set the current user and open a WebSocket connection
+   *
+   * @param {OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>} user Data about this user. IE {name: "john"}
+   * @param {TokenOrProvider} userTokenOrProvider Token or provider
+   *
+   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
+   */
+  setUser = this.connectUser;
+
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
@@ -674,6 +686,11 @@ export class StreamChat<
 
     return this._setupConnection();
   };
+
+  /**
+   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
+   */
+  setAnonymousUser = this.connectAnonymousUser;
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -1781,6 +1798,16 @@ export class StreamChat<
   }
 
   /**
+   * @deprecated Please use upsertUsers() function instead.
+   *
+   * updateUsers - Batch update the list of users
+   *
+   * @param {UserResponse<UserType>[]} users list of users
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+   */
+  updateUsers = this.upsertUsers;
+
+  /**
    * upsertUser - Update or Create the given user object
    *
    * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
@@ -1790,6 +1817,16 @@ export class StreamChat<
   upsertUser(userObject: UserResponse<UserType>) {
     return this.upsertUsers([userObject]);
   }
+
+  /**
+   * @deprecated Please use upsertUser() function instead.
+   *
+   * updateUser - Update or Create the given user object
+   *
+   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+   */
+  updateUser = this.upsertUser;
 
   /**
    * partialUpdateUsers - Batch partial update of users

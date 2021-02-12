@@ -795,7 +795,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: true,
 								},
 							});
@@ -814,7 +814,7 @@ describe('App configs', function () {
 								enabled: true,
 								development: true,
 								auth_type: 'certificate',
-								bundle_id: 'io.getstream.PushNotifTest',
+								bundle_id: 'io.stream.PushNotifTest',
 								host: 'https://api.development.push.apple.com',
 							});
 						});
@@ -828,7 +828,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: false,
 								},
 							});
@@ -847,7 +847,7 @@ describe('App configs', function () {
 								enabled: true,
 								development: false,
 								auth_type: 'certificate',
-								bundle_id: 'io.getstream.PushNotifTest',
+								bundle_id: 'io.stream.PushNotifTest',
 								host: 'https://api.push.apple.com',
 							});
 						});
@@ -1076,7 +1076,7 @@ describe('App configs', function () {
 									p12_cert: fs.readFileSync(
 										'./test/integration/push_test/stream-push-test.p12',
 									),
-									bundle_id: 'io.getstream.PushNotifTest',
+									bundle_id: 'io.stream.PushNotifTest',
 									development: true,
 								},
 							}),
