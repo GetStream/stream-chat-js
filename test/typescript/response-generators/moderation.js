@@ -109,7 +109,7 @@ async function flagMessage() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
 	await authClient.connectUser(thierry);
@@ -144,7 +144,7 @@ async function flagUser() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
 	await authClient.connectUser(thierry);
@@ -160,7 +160,7 @@ async function flagUser() {
 	const modUserID = uuidv4();
 
 	await utils.createUsers([modUserID]);
-	await serverAuthClient.updateUser(evil);
+	await serverAuthClient.upsertUser(evil);
 
 	return await authClient.flagUser(evilId);
 }
@@ -263,7 +263,7 @@ async function unflagMessage() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
 	await authClient.connectUser(thierry);
@@ -308,14 +308,14 @@ async function unflagUser() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
 	await authClient.connectUser(thierry);
 	const modUserID = uuidv4();
 
 	await utils.createUsers([modUserID]);
-	await serverAuthClient.updateUser(evil);
+	await serverAuthClient.upsertUser(evil);
 
 	await authClient.flagUser(evilId);
 

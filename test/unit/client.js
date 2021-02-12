@@ -75,7 +75,7 @@ describe('Client userMuteStatus', function () {
 		expect(client.mutedUsers).to.have.length(0);
 	});
 
-	it('should throw error if setUser is not called', function () {
+	it('should throw error if connectUser is not called', function () {
 		expect(() => client.userMuteStatus('')).to.throw();
 	});
 

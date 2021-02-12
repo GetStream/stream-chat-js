@@ -140,8 +140,11 @@ voidReturn = client.off('message.new', eventHandler);
 let userReturn: ConnectAPIResponse<ChannelType, CommandType, UserType>;
 userReturn = client.connectUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.connectUser({ id: 'john', phone: 2 }, async () => 'token');
+userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
+userReturn = client.setUser({ id: 'john', phone: 2 }, async () => 'token');
 
 userReturn = client.connectAnonymousUser();
+userReturn = client.setAnonymousUser();
 userReturn = client.setGuestUser({ id: 'steven' });
 
 type X = { x: string };

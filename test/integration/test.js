@@ -376,7 +376,7 @@ describe('Chat', () => {
 
 		describe('User is not set', () => {
 			it('device management does not work', async () => {
-				const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+				const errorMsg = `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`;
 				await expect(client.addDevice(deviceId, 'apn')).to.be.rejectedWith(
 					errorMsg,
 				);
@@ -839,7 +839,7 @@ describe('Chat', () => {
 			await chan.watch();
 			await client2.disconnect(5000);
 
-			const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+			const errorMsg = `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`;
 
 			let p = client2.addDevice('deviceID', 'apn');
 			await expect(p).to.be.rejectedWith(errorMsg);
