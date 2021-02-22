@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## February 17, 2021 - 3.1.0
+
+### Feature
+
+- `sendMessage` accepts a `skip_push` flag to skip sending push notifications [#608](https://github.com/GetStream/stream-chat-js/pull/608)
+
+### Fix
+
+- Sync `own_reactions` in the events [#606](https://github.com/GetStream/stream-chat-js/pull/606)
+- Missing user_id in channel instantion by members [#610](https://github.com/GetStream/stream-chat-js/pull/610)
+
 ## February 11, 2021 - 3.0.1
 
 - Add back some deprecated functions for convenience [#615](https://github.com/GetStream/stream-chat-js/pull/615)

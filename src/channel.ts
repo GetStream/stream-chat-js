@@ -1624,19 +1624,19 @@ export class Channel<
         }
         break;
       case 'reaction.new':
-        if (event.reaction) {
-          channelState.addReaction(event.reaction, event.message);
+        if (event.message && event.reaction) {
+          event.message = channelState.addReaction(event.reaction, event.message);
         }
         break;
       case 'reaction.deleted':
         if (event.reaction) {
-          channelState.removeReaction(event.reaction, event.message);
+          event.message = channelState.removeReaction(event.reaction, event.message);
         }
         break;
       case 'reaction.updated':
         if (event.reaction) {
           // assuming reaction.updated is only called if enforce_unique is true
-          channelState.addReaction(event.reaction, event.message, true);
+          event.message = channelState.addReaction(event.reaction, event.message, true);
         }
         break;
       case 'channel.hidden':

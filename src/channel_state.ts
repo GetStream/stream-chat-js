@@ -319,46 +319,17 @@ export class ChannelState<
     >,
     enforce_unique?: boolean,
   ) {
-    const { messages } = this;
     if (!message) return;
-    const { parent_id, show_in_channel } = message;
-
-    if (parent_id && this.threads[parent_id]) {
-      const thread = this.threads[parent_id];
-
-      for (let i = 0; i < thread.length; i++) {
-        const msg = thread[i];
-        const messageWithReaction = this._addReactionToMessage(
-          msg,
-          reaction,
-          enforce_unique,
-        );
-        if (!messageWithReaction) {
-          continue;
-        }
-
-        thread[i] = messageWithReaction;
-        this.threads[parent_id] = thread;
-        break;
-      }
-    }
-
-    if ((!show_in_channel && !parent_id) || show_in_channel) {
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const messageWithReaction = this._addReactionToMessage(
-          msg,
-          reaction,
-          enforce_unique,
-        );
-        if (!messageWithReaction) {
-          continue;
-        }
-
-        this.messages[i] = messageWithReaction;
-        break;
-      }
-    }
+    let messageWithReaction = message;
+    this._updateMessage(message, (msg) => {
+      const newMsg = this._addReactionToMessage(msg, reaction, enforce_unique);
+      messageWithReaction = {
+        ...messageWithReaction,
+        own_reactions: newMsg.own_reactions,
+      };
+      return newMsg;
+    });
+    return messageWithReaction;
   }
 
   _addReactionToMessage(
@@ -376,33 +347,22 @@ export class ChannelState<
     reaction: ReactionResponse<ReactionType, UserType>,
     enforce_unique?: boolean,
   ) {
-    const idMatch = !!message.id && message.id === reaction.message_id;
-
-    if (!idMatch) {
-      return false;
+    const newMessage = message;
+    if (enforce_unique) {
+      newMessage.own_reactions = [];
+    } else {
+      this._removeOwnReactionFromMessage(message, reaction);
     }
 
-    const newMessage = this._removeReactionFromMessage(message, reaction, enforce_unique);
-    if (this._channel.getClient().userID === reaction.user?.id) {
-      const ownReactions = newMessage.own_reactions;
-      if (ownReactions) {
-        newMessage.own_reactions = [...ownReactions, reaction];
-      }
+    newMessage.own_reactions = newMessage.own_reactions || [];
+    if (this._channel.getClient().userID === reaction.user_id) {
+      newMessage.own_reactions.push(reaction);
     }
-    const latestReactions = newMessage.latest_reactions;
-    if (latestReactions) {
-      newMessage.latest_reactions = [...latestReactions, reaction];
-    }
-
-    const oldReactionCounts = newMessage.reaction_counts || {};
-    const oldReactionType = oldReactionCounts[reaction.type];
-    oldReactionCounts[reaction.type] = oldReactionType ? oldReactionType + 1 : 1;
-    newMessage.reaction_counts = oldReactionCounts;
 
     return newMessage;
   }
 
-  _removeReactionFromMessage(
+  _removeOwnReactionFromMessage(
     message: ReturnType<
       ChannelState<
         AttachmentType,
@@ -415,32 +375,12 @@ export class ChannelState<
       >['formatMessage']
     >,
     reaction: ReactionResponse<ReactionType, UserType>,
-    enforce_unique?: boolean,
   ) {
-    const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
-      old.filter((item) =>
-        enforce_unique
-          ? item.user?.id !== reaction.user?.id
-          : item.type !== reaction.type || item.user?.id !== reaction.user?.id,
-      );
     if (message.own_reactions) {
-      message.own_reactions = filterReaction(message.own_reactions);
-    }
-    if (message.latest_reactions) {
-      message.latest_reactions = filterReaction(message.latest_reactions);
-    }
-    if (enforce_unique) {
-      const oldReaction = message.own_reactions?.find(
-        ({ type }) => type === reaction.type,
+      message.own_reactions = message.own_reactions.filter(
+        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
       );
-      if (oldReaction && message.reaction_counts) {
-        const oldReactionCount = message.reaction_counts[oldReaction.type];
-        message.reaction_counts[oldReaction.type] = oldReactionCount
-          ? oldReactionCount - 1
-          : 0;
-      }
     }
-    return message;
   }
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -455,50 +395,65 @@ export class ChannelState<
       UserType
     >,
   ) {
-    const { messages } = this;
     if (!message) return;
+    let messageWithReaction = message;
+    this._updateMessage(message, (msg) => {
+      this._removeOwnReactionFromMessage(msg, reaction);
+      messageWithReaction = {
+        ...messageWithReaction,
+        own_reactions: msg.own_reactions,
+      };
+      return msg;
+    });
+    return messageWithReaction;
+  }
+
+  /**
+   * Updates all instances of given message in channel state
+   * @param message
+   * @param updateFunc
+   */
+  _updateMessage(
+    message: { id?: string; parent_id?: string; show_in_channel?: boolean },
+    updateFunc: (
+      msg: ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['formatMessage']
+      >,
+    ) => ReturnType<
+      ChannelState<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >['formatMessage']
+    >,
+  ) {
     const { parent_id, show_in_channel } = message;
 
     if (parent_id && this.threads[parent_id]) {
       const thread = this.threads[parent_id];
-      for (let i = 0; i < thread.length; i++) {
-        const msg = thread[i];
-        const idMatch = !!msg.id && msg.id === reaction.message_id;
-
-        if (!idMatch) {
-          continue;
-        }
-        const messageWithReaction = this._removeReactionFromMessage(msg, reaction);
-        const oldReactionCounts = messageWithReaction.reaction_counts;
-        if (oldReactionCounts) {
-          const oldReactionType = oldReactionCounts[reaction.type];
-          oldReactionCounts[reaction.type] = oldReactionType ? oldReactionType - 1 : 0;
-          messageWithReaction.reaction_counts = oldReactionCounts;
-        }
-
-        thread[i] = messageWithReaction;
+      const msgIndex = thread.findIndex((msg) => msg.id === message.id);
+      if (msgIndex !== -1) {
+        thread[msgIndex] = updateFunc(thread[msgIndex]);
         this.threads[parent_id] = thread;
-        break;
       }
     }
+
     if ((!show_in_channel && !parent_id) || show_in_channel) {
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const idMatch = !!msg.id && msg.id === reaction.message_id;
-
-        if (!idMatch) {
-          continue;
-        }
-        const messageWithReaction = this._removeReactionFromMessage(msg, reaction);
-        const oldReactionCounts = messageWithReaction.reaction_counts;
-        if (oldReactionCounts) {
-          const oldReactionType = oldReactionCounts[reaction.type];
-          oldReactionCounts[reaction.type] = oldReactionType ? oldReactionType - 1 : 0;
-          messageWithReaction.reaction_counts = oldReactionCounts;
-        }
-
-        this.messages[i] = messageWithReaction;
-        break;
+      const msgIndex = this.messages.findIndex((msg) => msg.id === message.id);
+      if (msgIndex !== -1) {
+        this.messages[msgIndex] = updateFunc(this.messages[msgIndex]);
       }
     }
   }
