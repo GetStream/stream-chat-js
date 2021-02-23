@@ -538,17 +538,17 @@ export class ChannelState<
     if (!timestampChanged && message.id) {
       if (messageArr[left] && message.id === messageArr[left].id) {
         messageArr[left] = message;
-        return messageArr;
+        return [...messageArr];
       }
 
       if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
         messageArr[left - 1] = message;
-        return messageArr;
+        return [...messageArr];
       }
     }
 
     messageArr.splice(left, 0, message);
-    return messageArr;
+    return [...messageArr];
   }
 
   /**
