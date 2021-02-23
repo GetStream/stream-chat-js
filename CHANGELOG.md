@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## February 23, 2021 - 3.1.1
+
+### Fix
+
+- Channel state message list mutation [#619](https://github.com/GetStream/stream-chat-js/pull/619)
+
 ## February 17, 2021 - 3.1.0
 
 ### Feature
