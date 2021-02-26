@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## February 26, 2021 - 3.1.2
+
+### Fix
+
+- Fixed regression introduced in 3.1.0 causing `ChannelState.messages` not to update on incoming reaction events [#621](https://github.com/GetStream/stream-chat-js/pull/621)
+
 ## February 23, 2021 - 3.1.1
 
 ### Fix
