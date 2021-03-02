@@ -1,4 +1,3 @@
-import Immutable from 'seamless-immutable';
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution, normalizeQuerySort } from './utils';
@@ -28,6 +27,8 @@ import {
   MessageFilters,
   MuteChannelAPIResponse,
   PaginationOptions,
+  PartialUpdateChannel,
+  PartialUpdateChannelAPIResponse,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -66,7 +67,6 @@ export class Channel<
   data:
     | ChannelData<ChannelType>
     | ChannelResponse<ChannelType, CommandType, UserType>
-    | Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
     | undefined;
   _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
   cid: string;
@@ -192,10 +192,14 @@ export class Channel<
    * sendMessage - Send a message to this channel
    *
    * @param {Message<AttachmentType, MessageType, UserType>} message The Message object
+   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
    *
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendMessage(message: Message<AttachmentType, MessageType, UserType>) {
+  async sendMessage(
+    message: Message<AttachmentType, MessageType, UserType>,
+    options?: { skip_push?: boolean },
+  ) {
     const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
         AttachmentType,
@@ -207,6 +211,7 @@ export class Channel<
       >
     >(this._channelURL() + '/message', {
       message,
+      ...options,
     });
 
     // Reset unreadCount to 0.
@@ -396,26 +401,20 @@ export class Channel<
    *
    * @param {string} messageID the message id
    * @param {Reaction<ReactionType, UserType>} reaction the reaction object for instance {type: 'love'}
-   * @param {string} [user_id] the id of the user (used only for server side request) default null
+   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
    *
    * @return {Promise<ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendReaction(
     messageID: string,
     reaction: Reaction<ReactionType, UserType>,
-    user_id?: string,
+    options?: { enforce_unique?: boolean; skip_push?: boolean },
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
     if (!reaction || Object.keys(reaction).length === 0) {
       throw Error(`Reaction object is missing`);
-    }
-    const body = {
-      reaction,
-    };
-    if (user_id != null) {
-      body.reaction = { ...reaction, user: { id: user_id } as UserResponse<UserType> };
     }
     return await this.getClient().post<
       ReactionAPIResponse<
@@ -426,7 +425,10 @@ export class Channel<
         ReactionType,
         UserType
       >
-    >(this.getClient().baseURL + `/messages/${messageID}/reaction`, body);
+    >(this.getClient().baseURL + `/messages/${messageID}/reaction`, {
+      reaction,
+      ...options,
+    });
   }
 
   /**
@@ -479,16 +481,15 @@ export class Channel<
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
    * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
+   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
     channelData:
       | Partial<ChannelData<ChannelType>>
-      | Partial<ChannelResponse<ChannelType, CommandType, UserType>>
-      | Partial<
-          Immutable.Immutable<ChannelResponse<ChannelType, CommandType, UserType>>
-        > = {},
+      | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
+    options?: { skip_push?: boolean },
   ) {
     // Strip out reserved names that will result in API errors.
     const reserved = [
@@ -518,9 +519,23 @@ export class Channel<
     >(this._channelURL(), {
       message: updateMessage,
       data: channelData,
+      ...options,
     });
     this.data = data.channel;
     return data;
+  }
+
+  /**
+   * updatePartial - partial update channel properties
+   *
+   * @param {PartialUpdateChannel<ChannelType>} partial update request
+   *
+   * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
+   */
+  async updatePartial(update: PartialUpdateChannel<ChannelType>) {
+    return await this.getClient().patch<
+      PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
+    >(this._channelURL(), update);
   }
 
   /**
@@ -916,7 +931,7 @@ export class Channel<
   /**
    * lastMessage - return the last message, takes into account that last few messages might not be perfectly sorted
    *
-   * @return {Immutable.Immutable<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>> | undefined} Description
+   * @return {ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']> | undefined} Description
    */
   lastMessage() {
     // get last 5 messages, sort, return the latest
@@ -926,16 +941,12 @@ export class Channel<
       min = 0;
     }
     const max = this.state.messages.length + 1;
-    const messageSlice = this.state.messages.slice(min, max).asMutable();
+    const messageSlice = this.state.messages.slice(min, max);
 
     // sort by pk desc
     messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
 
-    let lastMessage;
-    if (messageSlice.length > 0) {
-      lastMessage = messageSlice[0];
-    }
-    return lastMessage;
+    return messageSlice[0];
   }
 
   /**
@@ -1115,7 +1126,7 @@ export class Channel<
 
   /**
    * lastRead - returns the last time the user marked the channel as read if the user never marked the channel as read, this will return null
-   * @return {Immutable.ImmutableDate | null | undefined}
+   * @return {Date | null | undefined}
    */
   lastRead() {
     this._checkInitialized();
@@ -1142,11 +1153,11 @@ export class Channel<
   /**
    * countUnread - Count of unread messages
    *
-   * @param {Date | Immutable.ImmutableDate | null} [lastRead] lastRead the time that the user read a message, defaults to current user's read state
+   * @param {Date | null} [lastRead] lastRead the time that the user read a message, defaults to current user's read state
    *
    * @return {number} Unread count
    */
-  countUnread(lastRead?: Date | Immutable.ImmutableDate | null) {
+  countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
 
     let count = 0;
@@ -1174,7 +1185,7 @@ export class Channel<
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
-        message.mentioned_users?.find((u) => u.id === userID)
+        message.mentioned_users?.some((user) => user.id === userID)
       ) {
         count++;
       }
@@ -1232,6 +1243,19 @@ export class Channel<
       this.id = state.channel.id;
       this.cid = state.channel.cid;
       // set the channel as active...
+
+      const membersStr = state.members
+        .map((member) => member.user_id || member.user?.id)
+        .sort()
+        .join(',');
+      const tempChannelCid = `${this.type}:!members-${membersStr}`;
+
+      if (tempChannelCid in this.getClient().activeChannels) {
+        // This gets set in `client.channel()` function, when channel is created
+        // using members, not id.
+        delete this.getClient().activeChannels[tempChannelCid];
+      }
+
       if (!(this.cid in this.getClient().activeChannels)) {
         this.getClient().activeChannels[this.cid] = this;
       }
@@ -1500,97 +1524,125 @@ export class Channel<
       },
     );
 
-    const s = channel.state;
+    const channelState = channel.state;
     switch (event.type) {
       case 'typing.start':
         if (event.user?.id) {
-          s.typing = s.typing.set(event.user.id, Immutable(event));
+          channelState.typing[event.user.id] = event;
         }
         break;
       case 'typing.stop':
         if (event.user?.id) {
-          s.typing = s.typing.without(event.user.id);
+          delete channelState.typing[event.user.id];
         }
         break;
       case 'message.read':
         if (event.user?.id) {
-          s.read = s.read.set(
-            event.user.id,
-            Immutable({ user: { ...event.user }, last_read: event.received_at }),
-          );
+          channelState.read[event.user.id] = {
+            // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
+            last_read: event.received_at as Date,
+            user: event.user,
+          };
 
           if (event.user?.id === this.getClient().user?.id) {
-            s.unreadCount = 0;
+            channelState.unreadCount = 0;
           }
         }
         break;
       case 'user.watching.start':
       case 'user.updated':
         if (event.user?.id) {
-          s.watchers = s.watchers.set(event.user.id, Immutable(event.user));
+          channelState.watchers[event.user.id] = event.user;
         }
         break;
       case 'user.watching.stop':
         if (event.user?.id) {
-          s.watchers = s.watchers.without(event.user.id);
+          delete channelState.watchers[event.user.id];
         }
         break;
       case 'message.deleted':
         if (event.message) {
-          if (event.hard_delete) s.removeMessage(event.message);
-          else s.addMessageSorted(event.message);
+          if (event.hard_delete) channelState.removeMessage(event.message);
+          else channelState.addMessageSorted(event.message);
+          if (event.message.pinned) {
+            channelState.removePinnedMessage(event.message);
+          }
         }
         break;
       case 'message.new':
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          s.addMessageSorted(event.message, ownMessage);
+          const isThreadMessage =
+            event.message.parent_id && !event.message.show_in_channel;
 
-          if (ownMessage) {
-            s.unreadCount = 0;
+          if (this.state.isUpToDate || isThreadMessage) {
+            channelState.addMessageSorted(event.message, ownMessage);
+          }
+          if (event.message.pinned) {
+            channelState.addPinnedMessage(event.message);
+          }
+
+          if (ownMessage && event.user?.id) {
+            channelState.unreadCount = 0;
+            channelState.read[event.user.id] = {
+              last_read: new Date(event.created_at as string),
+              user: event.user,
+            };
           } else if (this._countMessageAsUnread(event.message)) {
-            s.unreadCount = s.unreadCount + 1;
+            channelState.unreadCount = channelState.unreadCount + 1;
           }
         }
         break;
       case 'message.updated':
         if (event.message) {
-          s.addMessageSorted(event.message);
+          channelState.addMessageSorted(event.message);
+          if (event.message.pinned) {
+            channelState.addPinnedMessage(event.message);
+          } else {
+            channelState.removePinnedMessage(event.message);
+          }
         }
         break;
       case 'channel.truncated':
-        s.clearMessages();
+        channelState.clearMessages();
+        channelState.unreadCount = 0;
         break;
       case 'member.added':
       case 'member.updated':
         if (event.member?.user_id) {
-          s.members = s.members.set(event.member?.user_id, Immutable(event.member));
+          channelState.members[event.member.user_id] = event.member;
         }
         break;
       case 'member.removed':
         if (event.user?.id) {
-          s.members = s.members.without(event.user.id);
+          delete channelState.members[event.user.id];
         }
         break;
       case 'channel.updated':
         if (event.channel) {
-          channel.data = Immutable(event.channel);
+          channel.data = event.channel;
         }
         break;
       case 'reaction.new':
-        if (event.reaction) {
-          s.addReaction(event.reaction, event.message);
+        if (event.message && event.reaction) {
+          event.message = channelState.addReaction(event.reaction, event.message);
         }
         break;
       case 'reaction.deleted':
         if (event.reaction) {
-          s.removeReaction(event.reaction, event.message);
+          event.message = channelState.removeReaction(event.reaction, event.message);
+        }
+        break;
+      case 'reaction.updated':
+        if (event.reaction) {
+          // assuming reaction.updated is only called if enforce_unique is true
+          event.message = channelState.addReaction(event.reaction, event.message, true);
         }
         break;
       case 'channel.hidden':
         if (event.clear_history) {
-          s.clearMessages();
+          channelState.clearMessages();
         }
         break;
       default:
@@ -1662,39 +1714,35 @@ export class Channel<
       UserType
     >,
   ) {
+    const { state: clientState, user, userID } = this.getClient();
+
     // add the Users
     if (state.members) {
-      for (const m of state.members) {
-        if (m.user) {
-          this.getClient().state.updateUserReference(m.user, this.cid);
+      for (const member of state.members) {
+        if (member.user) {
+          clientState.updateUserReference(member.user, this.cid);
         }
       }
     }
 
-    this.state.membership = Immutable(state.membership ? state.membership : {});
+    this.state.membership = state.membership || {};
 
-    // TODO: CHECK WATCHERS TYPE!!!!!!
-    // if (state.watchers) {
-    //   for (const watcher of state.watchers) {
-    //     if (watcher) {
-    //       this.getClient().state.updateUserReference(watcher, this.cid);
-    //     }
-    //   }
-    // }
-
-    // immutable list of maps
     const messages = state.messages || [];
     if (!this.state.messages) {
-      this.state.messages = Immutable([]);
+      this.state.messages = [];
     }
     this.state.addMessagesSorted(messages, false, true);
-    this.state.watcher_count = state.watcher_count ? state.watcher_count : 0;
+    if (!this.state.pinnedMessages) {
+      this.state.pinnedMessages = [];
+    }
+    this.state.addPinnedMessages(state.pinned_messages || []);
+    this.state.watcher_count = state.watcher_count || 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
       for (const watcher of state.watchers) {
         if (watcher) {
-          this.getClient().state.updateUserReference(watcher, this.cid);
-          this.state.watchers = this.state.watchers.set(watcher.id, watcher);
+          clientState.updateUserReference(watcher, this.cid);
+          this.state.watchers[watcher.id] = watcher;
         }
       }
     }
@@ -1702,34 +1750,31 @@ export class Channel<
     // initialize read state to last message or current time if the channel is empty
     // if the user is a member, this value will be overwritten later on otherwise this ensures
     // that everything up to this point is not marked as unread
-    if (this.getClient().userID != null) {
-      const last_read =
-        this.state.last_message_at != null ? this.state.last_message_at : new Date();
-      const { user } = this.getClient();
+    if (userID != null) {
+      const last_read = this.state.last_message_at || new Date();
       if (user) {
-        this.state.read = this.state.read.set(user.id, {
-          user: this.getClient().user,
+        this.state.read[user.id] = {
+          user,
           last_read,
-        });
+        };
       }
     }
 
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        const parsedRead = Object.assign({ ...read });
-        parsedRead.last_read = new Date(read.last_read);
-        this.state.read = this.state.read.set(read.user.id, parsedRead);
-        if (read.user.id === this.getClient().user?.id) {
+        const parsedRead = { ...read, last_read: new Date(read.last_read) };
+        this.state.read[read.user.id] = parsedRead;
+        if (read.user.id === user?.id && typeof parsedRead.unread_messages === 'number') {
           this.state.unreadCount = parsedRead.unread_messages;
         }
       }
     }
 
     if (state.members) {
-      for (const m of state.members) {
-        if (m.user) {
-          this.state.members = this.state.members.set(m.user.id, m);
+      for (const member of state.members) {
+        if (member.user) {
+          this.state.members[member.user.id] = member;
         }
       }
     }

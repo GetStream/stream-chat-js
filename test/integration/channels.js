@@ -9,6 +9,8 @@ import {
 	getServerTestClient,
 	sleep,
 	createEventWaiter,
+	randomUnicodeString,
+	setupWebhook,
 } from './utils';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -87,72 +89,6 @@ describe('query by frozen', function () {
 	});
 });
 
-describe('Channels - Constructor', function () {
-	const client = getServerTestClient();
-
-	it('canonical form', function (done) {
-		const channel = client.channel('messaging', '123', { cool: true });
-		expect(channel.cid).to.eql('messaging:123');
-		expect(channel.id).to.eql('123');
-		expect(channel.data).to.eql({ cool: true });
-		done();
-	});
-
-	it('default options', function (done) {
-		const channel = client.channel('messaging', '123');
-		expect(channel.cid).to.eql('messaging:123');
-		expect(channel.id).to.eql('123');
-		done();
-	});
-
-	it('null ID no options', function (done) {
-		const channel = client.channel('messaging', null);
-		expect(channel.id).to.eq(undefined);
-		done();
-	});
-
-	it('undefined ID no options', function (done) {
-		const channel = client.channel('messaging', undefined);
-		expect(channel.id).to.eql(undefined);
-		expect(channel.data).to.eql({});
-		done();
-	});
-
-	it('short version with options', function (done) {
-		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
-		expect(channel.id).to.eql(undefined);
-		done();
-	});
-
-	it('null ID with options', function (done) {
-		const channel = client.channel('messaging', null, {
-			members: ['tommaso', 'thierry'],
-		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
-		expect(channel.id).to.eql(undefined);
-		done();
-	});
-
-	it('empty ID  with options', function (done) {
-		const channel = client.channel('messaging', '', {
-			members: ['tommaso', 'thierry'],
-		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
-		expect(channel.id).to.eql(undefined);
-		done();
-	});
-
-	it('empty ID  with options', function (done) {
-		const channel = client.channel('messaging', undefined, {
-			members: ['tommaso', 'thierry'],
-		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
-		expect(channel.id).to.eql(undefined);
-		done();
-	});
-});
-
 describe('Channels - Create', function () {
 	const johnID = `john-${uuidv4()}`;
 
@@ -188,6 +124,7 @@ describe('Channels - members', function () {
 
 	const tommasoClient = getTestClient();
 	const thierryClient = getTestClient();
+	const serverClient = getTestClient(true);
 
 	let tommasoChannel, thierryChannel;
 	const message = { text: 'nice little chat API' };
@@ -201,8 +138,8 @@ describe('Channels - members', function () {
 	let tommasoMessageID;
 
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 	});
 
 	it('tommaso creates a new channel', async function () {
@@ -324,7 +261,7 @@ describe('Channels - members', function () {
 	});
 
 	it('thierry gets promoted', async function () {
-		await getTestClient(true).updateUser({ id: thierryID, role: 'admin' });
+		await getTestClient(true).upsertUser({ id: thierryID, role: 'admin' });
 	});
 
 	it('correct member count', async function () {
@@ -423,6 +360,240 @@ describe('Channels - members', function () {
 					members: { $in: newMembers },
 				});
 				expect(resp.length).to.be.equal(0);
+			});
+
+			it('returns error if adding and removing same member in a single request', async () => {
+				const resp = await tommasoClient
+					.channel('messaging', { members: [tommasoID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					400,
+					thierryClient.post(
+						`${thierryClient.baseURL}/channels/messaging/${resp.channel.id}`,
+						{
+							remove_members: [thierryID],
+							add_members: [thierryID],
+						},
+					),
+				);
+			});
+		});
+
+		describe('Distinct channel manipulations', () => {
+			it('successfully joins back if the channel is distinct', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await thierryClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				const { members } = await thierryClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+				expect(members.length).to.be.eq(2);
+			});
+
+			it('fails to join back if the channel is not distinct', async () => {
+				const chanID = uuidv4();
+				const chan = await thierryClient.channel('messaging', chanID);
+				await chan.create();
+				await chan.addMembers([tommasoID, thierryID]);
+				// after self-remove, user is not able to join regular channel by himself
+				await tommasoClient
+					.channel('messaging', chanID)
+					.removeMembers([tommasoID]);
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient.channel('messaging', chanID).addMembers([tommasoID]),
+				);
+			});
+
+			it('fails to join foreign distinct channel', async () => {
+				const resp = await thierryClient
+					.channel('messaging', { members: [thierryID, newMembers[0]] })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					tommasoClient
+						.channel('messaging', resp.channel.id)
+						.addMembers([tommasoID]),
+				);
+			});
+			it('X leaves [X,Y] and creates the channel again', async () => {
+				// Case 1
+				// 1. X creates distinct channel [X,Y]
+				// 2. X sends a message
+				// 3. X leaves the channel
+				// 4. X creates distinct channel [X,Y]
+				// 5. X sends a message
+				// Expected behavior: X should be added back as a channel member and see all the messages
+				const userX = 'x-' + uuidv4();
+				const userY = 'y-' + uuidv4();
+				await createUsers([userX, userY]);
+				const clientX = getTestClient();
+				await clientX.connectUser({ id: userX }, createUserToken(userX));
+				const clientY = getTestClient();
+				await clientY.connectUser({ id: userY }, createUserToken(userY));
+
+				let channelX = clientX.channel('messaging', { members: [userX, userY] });
+				await channelX.create();
+				const channelCID = channelX.cid;
+				await channelX.sendMessage({ text: 'msg1' });
+				await channelX.removeMembers([userX]);
+				channelX = clientX.channel('messaging', { members: [userX, userY] });
+				const { members: membersX } = await channelX.create();
+				await channelX.sendMessage({ text: 'msg2' });
+				const { messages: messagesX } = await channelX.query({
+					messages: { limit: 2 },
+				});
+
+				expect(channelCID).to.be.equal(channelX.cid);
+				expect(membersX.length).to.be.equal(2);
+				expect(messagesX.length).to.be.equal(2);
+				expect(messagesX[0].text).to.be.equal('msg1');
+				expect(messagesX[1].text).to.be.equal('msg2');
+
+				// The same thing the other way around. When Y creates distinct channel, X should not be added back
+				// Case 2 (continuation from case 1)
+				// 1. Y creates distinct channel [X,Y] (receives existing channel)
+				// 2. Y sends a message
+				// 3. X leaves the channel
+				// 4. Y creates distinct channel [X,Y] (receives existing channel)
+				// 5. Y sends a message
+				// Expected behavior: Y should be able to interact with channel freely, but X will not be added back when Y recreates the channel
+				await channelX.removeMembers([userX]);
+				const channelY = clientY.channel('messaging', {
+					members: [userX, userY],
+				});
+				const { members: membersY } = await channelY.create();
+				await channelY.sendMessage({ text: 'msg3' });
+				const { messages: messagesY } = await channelY.query({
+					messages: { limit: 3 },
+				});
+
+				expect(channelY.cid).to.be.equal(channelX.cid);
+				expect(membersY.length).to.be.equal(1);
+				expect(messagesY.length).to.be.equal(3);
+				expect(messagesY[0].text).to.be.equal('msg1');
+				expect(messagesY[1].text).to.be.equal('msg2');
+				expect(messagesY[2].text).to.be.equal('msg3');
+			});
+		});
+
+		describe('when managing distinct channel members from server-side', () => {
+			it('successfully removes and adds back member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await serverClient
+					.channel('messaging', channel.id)
+					.removeMembers([thierryID]);
+				await serverClient
+					.channel('messaging', channel.id)
+					.addMembers([thierryID]);
+			});
+			it('fails to add foreign member', async () => {
+				const { channel } = await tommasoClient
+					.channel('messaging', { members: initialMembers })
+					.create();
+				await expectHTTPErrorCode(
+					403,
+					serverClient
+						.channel('messaging', channel.id)
+						.addMembers([newMembers[0]]),
+				);
+			});
+		});
+
+		describe('leave channel permissions', () => {
+			const minimalPermissions = [
+				{
+					action: 'Allow',
+					name: 'Channel member permissions',
+					resources: ['ReadChannel', 'CreateChannel'],
+					roles: ['channel_member'],
+					owner: false,
+					priority: 70,
+				},
+				{
+					action: 'Allow',
+					name: 'Users can create channels',
+					resources: ['CreateChannel'],
+					roles: ['user'],
+					owner: false,
+					priority: 60,
+				},
+				{
+					action: 'Deny',
+					name: 'deny all policy',
+					resources: ['*'],
+					roles: ['*'],
+					owner: false,
+					priority: 1,
+				},
+			];
+			let ssClient;
+			let client;
+			const user = uuidv4();
+			before(async () => {
+				ssClient = getTestClient(true);
+				client = await getTestClientForUser(user);
+			});
+			it('no permissions to leave', async () => {
+				const type = uuidv4();
+				await ssClient.createChannelType({
+					name: type,
+					permissions: minimalPermissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await expectHTTPErrorCode(403, channel.removeMembers([user]));
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
+			});
+			it('leave channel with RemoveOwnChannelMembership and UpdateChannelMembers', async () => {
+				const type = uuidv4();
+				const permissions = minimalPermissions;
+				permissions[0].resources = [
+					...permissions[0].resources,
+					'RemoveOwnChannelMembership',
+					'UpdateChannelMembers',
+				];
+				await ssClient.createChannelType({
+					name: type,
+					permissions,
+				});
+				const channel = client.channel(type, uuidv4(), { members: [user] });
+				await channel.create();
+				await channel.removeMembers([user]);
 			});
 		});
 	});
@@ -593,7 +764,7 @@ describe('Channels - Member limit', function () {
 	let channel;
 	let ssClient;
 	before(async () => {
-		ssClient = await getServerTestClient();
+		ssClient = getServerTestClient();
 		await createUsers([memberOne, memberTwo, memberThree]);
 		channel = ssClient.channel('messaging', uuidv4(), {
 			unique,
@@ -656,8 +827,8 @@ describe('Channels - Distinct channels', function () {
 
 	const unique = uuidv4();
 	before(async () => {
-		await tommasoClient.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient.connectUser({ id: thierryID }, thierryToken);
 		await createUsers([newMember]);
 	});
 
@@ -700,17 +871,9 @@ describe('Channels - Distinct channels', function () {
 
 	it('adding members to distinct channel should fail', async function () {
 		await expectHTTPErrorCode(
-			400,
+			403,
 			distinctChannel.addMembers([newMember]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
-		);
-	});
-
-	it('removing members from a distinct channel should fail', async function () {
-		await expectHTTPErrorCode(
-			400,
-			distinctChannel.removeMembers([tommasoID]),
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members"',
+			'StreamChat error code 17: UpdateChannel failed with error: "cannot add members to the distinct channel they don\'t belong to, please create a new distinct channel with the desired members"',
 		);
 	});
 });
@@ -1017,7 +1180,7 @@ describe('hard delete messages', function () {
 
 	before(async function () {
 		client = await getTestClientForUser(user);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 		channel = client.channel('messaging', channelID);
 		await channel.create();
 	});
@@ -1078,7 +1241,7 @@ describe('hard delete messages', function () {
 		await channel.watch();
 
 		let resp = await channel.sendMessage({ text: 'hi', user_id: user });
-		await channel.sendReaction(resp.message.id, { type: 'love' }, user);
+		await channel.sendReaction(resp.message.id, { type: 'love', user: { id: user } });
 		resp = await ssclient.deleteMessage(resp.message.id, true);
 		expect(resp.message.deleted_at).to.not.be.undefined;
 
@@ -1629,11 +1792,14 @@ describe('$ne operator', function () {
 	});
 });
 
-describe('query by $autocomplete operator on channels.name', function () {
-	let client;
-	let channel;
+describe('autocomplete and message search sanitization', function () {
+	let client, channel, filters;
 	const user = uuidv4();
+	const msgText =
+		'I would tell you a joke about a needle in a haystack, but I don’t think you’d see the point.';
+
 	before(async function () {
+		filters = { members: { $in: [user] } };
 		await createUsers([user]);
 		client = await getTestClientForUser(user);
 		channel = client.channel('messaging', uuidv4(), {
@@ -1641,6 +1807,9 @@ describe('query by $autocomplete operator on channels.name', function () {
 			name: uuidv4(),
 		});
 		await channel.create();
+		await channel.sendMessage({
+			text: msgText,
+		});
 	});
 
 	it('return 1 result', async function () {
@@ -1652,6 +1821,117 @@ describe('query by $autocomplete operator on channels.name', function () {
 		});
 		expect(resp.length).to.be.equal(1);
 		expect(resp[0].cid).to.be.equal(channel.cid);
+
+		const searchResp = await client.search(filters, 'needle in a haystack', {
+			limit: 2,
+			offset: 0,
+		});
+
+		expect(searchResp.results).to.have.lengthOf(1);
+		expect(searchResp.results[0].message).to.not.be.undefined;
+		expect(searchResp.results[0].message.text).to.equal(msgText);
+
+		const searchResp2 = await client.search(
+			filters,
+			'needle    in a  %#$$%! haystack',
+			{ limit: 2, offset: 0 },
+		);
+
+		expect(searchResp2.results).to.have.lengthOf(1);
+		expect(searchResp2.results[0].message).to.not.be.undefined;
+		expect(searchResp2.results[0].message.text).to.equal(msgText);
+	});
+
+	it('empty query should lead to a status 400 error', async () => {
+		let errors = 0;
+
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '',
+				},
+			});
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		try {
+			await client.search(filters, '', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
+	});
+
+	it('query with special symbols only should lead to a status 400 error', async () => {
+		let errors = 0;
+
+		try {
+			await client.queryChannels({
+				members: [user],
+				name: {
+					$autocomplete: '!@#$%!%&*()',
+				},
+			});
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		try {
+			await client.search(filters, '!@#$%!%&*()', { limit: 2, offset: 0 });
+		} catch (e) {
+			errors++;
+			expect(e.response).to.not.be.undefined;
+			expect(e.response.data).to.not.be.undefined;
+			expect(e.response.data.code).to.equal(4);
+			expect(e.response.data.StatusCode).to.equal(400);
+		}
+
+		expect(errors).to.equal(2);
+	});
+
+	it('query with random characters', async () => {
+		for (let i = 0; i < 10; i++) {
+			try {
+				await client.queryChannels({
+					members: [user],
+					name: {
+						$autocomplete: randomUnicodeString(24),
+					},
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+
+			try {
+				await client.search(filters, randomUnicodeString(24), {
+					limit: 2,
+					offset: 0,
+				});
+			} catch (e) {
+				expect(e.response).to.not.be.undefined;
+				expect(e.response.data).to.not.be.undefined;
+				expect(e.response.data.code).to.equal(4);
+				expect(e.response.data.StatusCode).to.equal(400);
+			}
+		}
 	});
 });
 
@@ -1666,7 +1946,7 @@ describe('unread counts on hard delete messages', function () {
 	before(async function () {
 		await createUsers([tommaso, thierry, nick]);
 		client = await getTestClientForUser(tommaso);
-		ssclient = await getTestClient(true);
+		ssclient = getTestClient(true);
 
 		channel = client.channel('messaging', uuidv4(), {
 			members: [tommaso, thierry, nick],
@@ -1738,8 +2018,24 @@ describe('unread counts on hard delete messages', function () {
 
 describe('channel message search', function () {
 	let authClient;
+	const userID = uuidv4();
 	before(async () => {
-		authClient = await getTestClientForUser(uuidv4());
+		authClient = await getTestClientForUser(userID);
+	});
+
+	it('No searchable fails', async () => {
+		const channelID = uuidv4();
+		// search is disabled for gaming
+		const channel = getServerTestClient().channel('gaming', channelID, {
+			created_by_id: userID,
+			members: [userID],
+		});
+		await channel.create();
+		await expectHTTPErrorCode(400, channel.search('missing'));
+		await expectHTTPErrorCode(
+			400,
+			authClient.channel('gaming', channelID).search('missing'),
+		);
 	});
 
 	it('Basic Query (old format)', async function () {
@@ -1811,6 +2107,51 @@ describe('channel message search', function () {
 
 		response = await channel.search({ type: { $in: ['reply', 'regular'] } });
 		expect(response.results.length).to.equal(2);
+	});
+
+	describe('search by mentioned users', () => {
+		const unique = uuidv4();
+		let channel;
+		const tommaso = uuidv4();
+		const thierry = uuidv4();
+
+		let mention;
+		before(async () => {
+			channel = authClient.channel('messaging', uuidv4(), {
+				unique,
+			});
+			await createUsers([tommaso, thierry]);
+			await channel.create();
+			await channel.sendMessage({ text: 'regular' });
+			mention = await channel.sendMessage({
+				text: 'mentions',
+				mentioned_users: [tommaso, thierry],
+			});
+		});
+
+		it('mentioned_users.id $contains tommaso', async () => {
+			const response = await channel.search({
+				'mentioned_users.id': { $contains: tommaso },
+			});
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.equal(mention.message.id);
+		});
+
+		it('mentioned_users.id invalid value type', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $contains: [tommaso] } }),
+				'StreamChat error code 4: Search failed with error: "field `mentioned_users.id` contains type array. expecting string"',
+			);
+		});
+
+		it('mentioned_users.id invalid operator', async () => {
+			await expectHTTPErrorCode(
+				400,
+				channel.search({ 'mentioned_users.id': { $eq: tommaso } }),
+				'StreamChat error code 4: Search failed with error: "mentioned_users.id only supports $contains operator"',
+			);
+		});
 	});
 
 	it('query message text and custom field', async function () {
@@ -1933,6 +2274,23 @@ describe('channel message search', function () {
 		expect(response.results.length).to.equal(1);
 		expect(response.results[0].message.id).to.equal(smResp.message.id);
 	});
+
+	it('message contains own_reactions', async function () {
+		// add a very special messsage
+		const channel = authClient.channel('messaging', uuidv4());
+		await channel.create();
+		const smResp = await channel.sendMessage({ text: 'awesome response' });
+
+		await channel.sendReaction(smResp.message.id, { type: 'like' });
+
+		const response = await channel.search(
+			{ id: smResp.message.id },
+			{ limit: 2, offset: 0 },
+		);
+		expect(response.results.length).to.equal(1);
+		expect(response.results[0].message.id).to.equal(smResp.message.id);
+		expect(response.results[0].message.own_reactions.length).to.equal(1);
+	});
 });
 
 describe('search on deleted channels', function () {
@@ -2001,7 +2359,7 @@ describe('update channel with reserved fields', function () {
 	let channel;
 	let client;
 	before(async function () {
-		client = await getServerTestClient();
+		client = getServerTestClient();
 
 		await client.createChannelType({
 			name: channelType,
@@ -2031,7 +2389,7 @@ describe('notification.channel_deleted', () => {
 	before(async () => {
 		const creator = 'creator' + uuidv4();
 		await createUsers([member, creator]);
-		const c = await getTestClient(true);
+		const c = getTestClient(true);
 
 		channel = c.channel('messaging', uuidv4(), {
 			created_by_id: creator,
@@ -2045,5 +2403,508 @@ describe('notification.channel_deleted', () => {
 		const waiter = createEventWaiter(memberClient, 'notification.channel_deleted');
 		await channel.delete();
 		await waiter;
+	});
+});
+
+describe('partial update channel', () => {
+	let channel;
+	let ssClient;
+	let ownerClient;
+	let modClient;
+	let memberClient;
+	const moderator = uuidv4();
+	const member = uuidv4();
+	const owner = uuidv4();
+
+	before(async () => {
+		ssClient = getServerTestClient();
+		ownerClient = await getTestClientForUser(owner);
+		modClient = await getTestClientForUser(moderator);
+		memberClient = await getTestClientForUser(member);
+		channel = ownerClient.channel('messaging', uuidv4(), {
+			members: [owner, moderator, member],
+			source: 'user',
+			source_detail: { user_id: 123 },
+			channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+		});
+		await channel.create();
+		await ssClient.channel(channel.type, channel.id).addModerators([moderator]);
+	});
+
+	it('change the source property', async () => {
+		const resp = await channel.updatePartial({ set: { source: 'system' } });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.eql({ user_id: 123 });
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('unset the source_detail', async () => {
+		const resp = await channel.updatePartial({ unset: ['source_detail'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Plants and Animals',
+			rating: 'pg',
+		});
+	});
+
+	it('set a nested property', async () => {
+		const resp = await channel.updatePartial({
+			set: { 'channel_detail.topic': 'Nature' },
+		});
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({
+			topic: 'Nature',
+			rating: 'pg',
+		});
+	});
+
+	it('unset a nested property', async () => {
+		const resp = await channel.updatePartial({ unset: ['channel_detail.topic'] });
+		expect(resp.channel.source).to.be.equal('system');
+		expect(resp.channel.source_detail).to.be.undefined;
+		expect(resp.channel.channel_detail).to.be.eql({ rating: 'pg' });
+	});
+
+	it.skip('partial update concurrently works', async () => {
+		// keep in mind that there is no way to ensure ordering...
+		const promises = [];
+		for (let i = 0; i < 3; i++) {
+			const field = 'field' + i.toString();
+			const update = { set: {} };
+			update.set[field] = field;
+			promises.push(channel.updatePartial(update));
+		}
+		await Promise.all(promises);
+
+		// expect all the fields to be present
+		const resp = await channel.query();
+		expect(resp.channel.field0).to.be.equal('field0');
+		expect(resp.channel.field1).to.be.equal('field1');
+		expect(resp.channel.field2).to.be.equal('field2');
+	});
+
+	it('moderators and server side can set slowmode field', async () => {
+		// moderators can set cooldown
+		let resp = await modClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 10 } });
+		expect(resp.channel.cooldown).to.be.equal(10);
+
+		// server side auth can set cooldown
+		resp = await ssClient
+			.channel(channel.type, channel.id)
+			.updatePartial({ set: { cooldown: 0 } });
+		expect(resp.channel.cooldown).to.be.undefined;
+	});
+
+	it('team cannot be updated by moderators', async () => {
+		await expectHTTPErrorCode(
+			403,
+			modClient
+				.channel(channel.type, channel.id)
+				.updatePartial({ set: { team: 'blue' } }),
+			'StreamChat error code 17: UpdateChannelPartial failed with error: "you are not allowed to update the field `team`"',
+		);
+	});
+
+	it('ensure that reserved fields cant be updated', async () => {
+		for (const field of ['updated_at', 'created_at', 'members', 'member_count']) {
+			const update = { set: {} };
+			update.set[field] = 0;
+			await expectHTTPErrorCode(
+				403,
+				modClient.channel(channel.type, channel.id).updatePartial(update),
+				'StreamChat error code 17: UpdateChannelPartial failed with error: "field `' +
+					field +
+					'` is reserved and cannot updated"',
+			);
+		}
+	});
+});
+
+describe('Quote messages', () => {
+	let client, channel, ruud, friend, firstMessage, secondMessage, messageWithQuote;
+
+	before(async () => {
+		ruud = 'ruud-' + uuidv4();
+		friend = 'friend-' + uuidv4();
+		await createUsers([ruud, friend]);
+		client = getServerTestClient();
+		channel = client.channel('messaging', uuidv4(), {
+			created_by_id: ruud,
+			members: [ruud, friend],
+		});
+		await channel.create();
+	});
+
+	after(async () => {
+		await channel.delete();
+		await client.deleteUser(ruud, { hard_delete: true });
+		await client.deleteUser(friend, { hard_delete: true });
+	});
+
+	describe('Ruud sends a message in the channel', () => {
+		it('is possible to create regular messages', async () => {
+			const res = await channel.sendMessage({
+				text: 'The one message to rule them all',
+				user_id: ruud,
+			});
+			const res2 = await channel.sendMessage({
+				text: 'The second message to rule all, except the first message',
+				user_id: ruud,
+			});
+			firstMessage = res.message;
+			secondMessage = res2.message;
+		});
+	});
+
+	describe('Friend replies to the message in a thread', () => {
+		let firstThreadReply;
+
+		it('is possible to reply to the message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first threaded reply',
+				user_id: friend,
+				parent_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.parent_id).to.equal(firstMessage.id);
+			expect(res.message.type).to.equal('reply');
+		});
+
+		it('should be possible to quote the message in a thread', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first thread reply that also quotes a message',
+				user_id: friend,
+				parent_id: firstMessage.id,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('reply');
+			expect(res.message.parent_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			firstThreadReply = res.message;
+		});
+
+		it('should be possible quote the regular reply in a thread', async () => {
+			const res = await channel.sendMessage({
+				text:
+					'The first thread reply that quotes another reply in the same thread',
+				user_id: friend,
+				parent_id: firstMessage.id,
+				quoted_message_id: firstThreadReply.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstThreadReply.id);
+			expect(res.message.quoted_message.id).to.equal(firstThreadReply.id);
+			expect(res.message.quoted_message.text).to.equal(firstThreadReply.text);
+			expect(res.message.type).to.equal('reply');
+			expect(res.message.parent_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+		});
+	});
+
+	describe('Friend quotes message', () => {
+		it('is possible to quote a message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first message that quotes a message',
+				user_id: friend,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.user).to.not.be.undefined;
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Friend changes the message they quoted', () => {
+		it('is possible to change a quoted_message_id', async () => {
+			const res = await client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: secondMessage.id,
+				},
+				friend,
+			);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is enriched with the changed quoted_message_id', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.id).to.equal(secondMessage.id);
+			expect(clm.quoted_message.text).to.equal(secondMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+		});
+
+		it('is possible to otherwise change a message that contains a quoted_message', async () => {
+			const msgText =
+				'The first message that quotes a message, now with changed text';
+
+			let messageUpdatedListenerRes;
+			const messageUpdatedListener = new Promise((res) => {
+				messageUpdatedListenerRes = res;
+			});
+
+			const webhook = await setupWebhook(
+				client,
+				'webhook_url',
+				(request, body, response) => {
+					const b = JSON.parse(body);
+					if (b.type === 'message.updated') {
+						messageUpdatedListenerRes(b);
+					}
+					response.writeHead(200);
+				},
+			);
+
+			const updateMessageReq = client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: msgText,
+				},
+				friend,
+			);
+
+			const [updatedEvent, res] = await Promise.all([
+				messageUpdatedListener,
+				updateMessageReq,
+			]);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.text).to.equal(msgText);
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(res.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+
+			expect(updatedEvent.message).to.not.be.undefined;
+			expect(updatedEvent.message.id).to.not.be.empty;
+			expect(updatedEvent.message.text).to.equal(msgText);
+			expect(updatedEvent.message.quoted_message).to.not.be.undefined;
+			expect(updatedEvent.message.quoted_message_id).to.equal(secondMessage.id);
+			expect(updatedEvent.message.quoted_message.id).to.equal(secondMessage.id);
+			expect(updatedEvent.message.quoted_message.text).to.equal(secondMessage.text);
+			expect(updatedEvent.message.type).to.equal('regular');
+			expect(updatedEvent.message.parent_id).to.be.undefined;
+			expect(updatedEvent.message.quoted_message.user).to.not.be.undefined;
+
+			await webhook.tearDown();
+		});
+
+		it('is possible to change the quoted_message_id back', async () => {
+			const res = await client.updateMessage(
+				{
+					id: messageWithQuote.id,
+					text: 'The first message that quotes a message',
+					quoted_message_id: firstMessage.id,
+				},
+				friend,
+			);
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+	});
+
+	describe("Ruud quotes the friend's message with the quoted message", () => {
+		let quoteQuotedMessage;
+
+		it('is possible to quote a message with a quoted message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The first message to quote a message with a quoted message',
+				user_id: friend,
+				quoted_message_id: messageWithQuote.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.empty;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(res.message.quoted_message.text).to.equal(messageWithQuote.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			quoteQuotedMessage = res.message;
+		});
+
+		it('the quoted message is enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(quoteQuotedMessage.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message.text).to.not.be.undefined;
+			expect(clm.quoted_message.text).to.equal(messageWithQuote.text);
+			// No nested quotes
+			expect(clm.quoted_message.quoted_message).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+		});
+	});
+
+	describe('Ruud and friend send 55 random messages each and try sending a message with a quoted message again', () => {
+		let messageWithQuote;
+
+		it('is possible to send random messages', async () => {
+			for (let i = 0; i < 55; i++) {
+				await channel.sendMessage({ text: uuidv4(), user_id: ruud });
+				await channel.sendMessage({ text: uuidv4(), user_id: friend });
+			}
+		});
+
+		it('is still possible to quote the first message', async () => {
+			const res = await channel.sendMessage({
+				text: 'The second quoted reply',
+				user_id: friend,
+				quoted_message_id: firstMessage.id,
+			});
+
+			expect(res.message).to.not.be.undefined;
+			expect(res.message.id).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.not.be.undefined;
+			expect(res.message.quoted_message).to.not.be.undefined;
+			expect(res.message.quoted_message_id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.id).to.equal(firstMessage.id);
+			expect(res.message.quoted_message.text).to.equal(firstMessage.text);
+			expect(res.message.type).to.equal('regular');
+			expect(res.message.parent_id).to.be.undefined;
+			expect(res.message.quoted_message.user).to.not.be.undefined;
+			messageWithQuote = res.message;
+		});
+
+		it('the quoted message is still properly enriched when querying the channel with its messages', async () => {
+			const chan = await client
+				.channel('messaging', channel.id)
+				.query({ state: true });
+			const clm = chan.messages.pop();
+			expect(clm).to.not.be.undefined;
+			expect(clm.id).to.equal(messageWithQuote.id);
+			expect(clm.quoted_message).to.not.be.undefined;
+			expect(clm.quoted_message_id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.id).to.equal(firstMessage.id);
+			expect(clm.quoted_message.text).to.equal(firstMessage.text);
+			expect(clm.type).to.equal('regular');
+			expect(clm.parent_id).to.be.undefined;
+			expect(clm.quoted_message.user).to.not.be.undefined;
+		});
+	});
+});
+
+describe('Channel - isUpToDate', async () => {
+	it('new message should skip state, if channel is not upToDate', async () => {
+		const userIdVish = 'vishal';
+		const userIdAmin = 'amin';
+		await createUsers([userIdVish, userIdAmin]);
+
+		const clientVish = await getTestClientForUser(userIdVish);
+		const channelId = uuidv4();
+		const channelVish = clientVish.channel('messaging', channelId, {
+			members: [userIdAmin, userIdVish],
+		});
+		await channelVish.watch();
+
+		const serverClient = getServerTestClient();
+		const channelAmin = serverClient.channel('messaging', channelId);
+
+		// First lets try with upToDate list.
+		let waiter = createEventWaiter(channelVish, 'message.new');
+		const { message: message1 } = await channelAmin.sendMessage({
+			text: uuidv4(),
+			user_id: userIdAmin,
+		});
+		await waiter;
+		expect(
+			channelVish.state.messages.findIndex((m) => m.id === message1.id),
+		).to.be.equal(0);
+
+		// Now lets check not upToDate list.
+		channelVish.state.setIsUpToDate(false);
+		waiter = createEventWaiter(channelVish, 'message.new');
+		const { message: message2 } = await channelAmin.sendMessage({
+			text: uuidv4(),
+			user_id: userIdAmin,
+		});
+		await waiter;
+		expect(
+			channelVish.state.messages.findIndex((m) => m.id === message2.id),
+		).to.be.equal(-1);
 	});
 });

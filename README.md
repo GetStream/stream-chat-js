@@ -60,7 +60,8 @@ type ChatEvent = { quitChannel?: boolean };
 type CustomCommands = 'imgur';
 
 // Instantiate a new client (server side)
-const client = new StreamChat<
+// you can also use `new StreamChat<T,T,...>()`
+const client = StreamChat.getInstance<
   ChatAttachment,
   ChatChannel,
   CustomCommands,
@@ -75,7 +76,7 @@ const client = new StreamChat<
  * Unused generics default to Record<string, unknown>
  * with the exception of Command which defaults to string & {}
  */
-const client = new StreamChat<
+const client = StreamChat.getInstance<
   {},
   ChatChannel,
   {},
@@ -138,13 +139,16 @@ Custom types are carried into all creation functions as well.
 
 ```typescript
 // Valid
-client.setUser({ id: 'testId', nickname: 'testUser', age: 3 }, 'TestToken');
-client.setUser({ id: 'testId', nickname: 'testUser', avatar: 'testAvatar' }, 'TestToken');
+client.connectUser({ id: 'testId', nickname: 'testUser', age: 3 }, 'TestToken');
+client.connectUser(
+  { id: 'testId', nickname: 'testUser', avatar: 'testAvatar' },
+  'TestToken',
+);
 
 // Invalid
-client.setUser({ id: 'testId' }, 'TestToken'); // Type ChatUser1 | ChatUser2 requires nickname for both types
-client.setUser({ id: 'testId', nickname: true }, 'TestToken'); // nickname must be a string
-client.setUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestToken'); // country does not exist on type ChatUser1 | ChatUser2
+client.connectUser({ id: 'testId' }, 'TestToken'); // Type ChatUser1 | ChatUser2 requires nickname for both types
+client.connectUser({ id: 'testId', nickname: true }, 'TestToken'); // nickname must be a string
+client.connectUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestToken'); // country does not exist on type ChatUser1 | ChatUser2
 ```
 
 ## More

@@ -14,8 +14,6 @@ const externalPackages = [
 	'axios',
 	'form-data',
 	'isomorphic-ws',
-	'seamless-immutable',
-	'uuid',
 	'base64-js',
 	/@babel\/runtime/,
 ];

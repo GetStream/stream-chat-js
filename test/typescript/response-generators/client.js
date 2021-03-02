@@ -10,7 +10,7 @@ async function addDevice() {
 
 async function connect() {
 	const authClient = await utils.getTestClient(true);
-	await authClient.setAnonymousUser();
+	await authClient.connectAnonymousUser();
 	return await authClient.connect();
 }
 
@@ -47,7 +47,7 @@ async function deleteCommand() {
 
 async function disconnect() {
 	const authClient = await utils.getTestClient(true);
-	await authClient.setAnonymousUser();
+	await authClient.connectAnonymousUser();
 	await authClient.connect();
 	return await authClient.disconnect();
 }
@@ -114,9 +114,9 @@ async function queryUsers() {
 	return await client.queryUsers({ nickname: { $eq: user2 } });
 }
 
-async function setAnonymousUser() {
+async function connectAnonymousUser() {
 	const authClient = await utils.getTestClient(true);
-	return await authClient.setAnonymousUser();
+	return await authClient.connectAnonymousUser();
 }
 
 async function setGuestUser() {
@@ -124,7 +124,7 @@ async function setGuestUser() {
 	return await authClient.setGuestUser({ id: 'steven' });
 }
 
-async function setUser() {
+async function connectUser() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
 	await utils.createUsers([user1, user2]);
@@ -133,7 +133,7 @@ async function setUser() {
 	await client1.muteUser(user2);
 
 	const authClient = await utils.getTestClient(false);
-	return authClient.setUser({ id: user1 }, utils.createUserToken(user1));
+	return authClient.connectUser({ id: user1 }, utils.createUserToken(user1));
 }
 
 async function sync() {
@@ -150,6 +150,15 @@ async function sync() {
 		[channel.cid],
 		new Date(Date.now() - 1000 * 60).toISOString(),
 	);
+}
+
+async function updateAppSettings() {
+	const authClient = await utils.getTestClient(true);
+	return await authClient.updateAppSettings({
+		custom_action_handler_url:
+			'https://example.com/webhooks/stream/custom-commands?type={type}',
+		enforce_unique_usernames: 'no',
+	});
 }
 
 async function updateCommand() {
@@ -183,9 +192,10 @@ module.exports = {
 	listCommands,
 	markAllRead,
 	queryUsers,
-	setAnonymousUser,
+	connectAnonymousUser,
 	setGuestUser,
-	setUser,
+	connectUser,
 	sync,
+	updateAppSettings,
 	updateCommand,
 };

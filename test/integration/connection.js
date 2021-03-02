@@ -261,7 +261,7 @@ describe('Connection and reconnect behaviour', function () {
 
 	it('Http request with expired token should reload token', async () => {
 		const client = getTestClient(false);
-		await client.setUser({ id: 'thierry' }, () =>
+		await client.connectUser({ id: 'thierry' }, () =>
 			createUserToken('thierry', Math.floor(Date.now() / 1000) + 1),
 		);
 

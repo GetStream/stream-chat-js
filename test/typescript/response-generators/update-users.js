@@ -46,7 +46,7 @@ async function partialUpdateUser() {
 	const userID = uuid4();
 	const unique = uuid4();
 
-	await client.updateUsers([
+	await client.upsertUsers([
 		{
 			id: userID,
 			unique,
@@ -72,7 +72,7 @@ async function partialUpdateUsers() {
 	const userID3 = uuid4();
 	const unique = uuid4();
 
-	await client.updateUsers([
+	await client.upsertUsers([
 		{
 			id: userID,
 			unique,
@@ -135,14 +135,14 @@ async function reactivateUser() {
 	return await client.reactivateUser(userID);
 }
 
-async function updateUsers() {
+async function upsertUsers() {
 	const client = utils.getServerTestClient();
 	const userID = uuid4();
 	const userID2 = uuid4();
 	const userID3 = uuid4();
 	const unique = uuid4();
 
-	return await client.updateUsers([
+	return await client.upsertUsers([
 		{
 			id: userID,
 			unique,
@@ -178,6 +178,6 @@ module.exports = {
 	partialUpdateUser,
 	partialUpdateUsers,
 	reactivateUser,
-	updateUsers,
+	upsertUsers,
 	upsertUser,
 };

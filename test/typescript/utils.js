@@ -10,11 +10,11 @@ module.exports = {
 		for (const userID of userIDs) {
 			users.push({ id: userID, ...additionalInfo });
 		}
-		return await serverClient.updateUsers(users);
+		return await serverClient.upsertUsers(users);
 	},
 	createUserToken: function createUserToken(userID) {
-		const c = new StreamChat(apiKey, apiSecret);
-		return c.createToken(userID);
+		const chat = new StreamChat(apiKey, apiSecret);
+		return chat.createToken(userID);
 	},
 	createTestChannel: async function createTestChannel(id, userID) {
 		const client = this.getTestClient(true);
@@ -38,11 +38,14 @@ module.exports = {
 		return this.getTestClient(true);
 	},
 	getTestClient: function getTestClient(serverSide) {
-		return new StreamChat(apiKey, serverSide ? apiSecret : null, { timeout: 8000 });
+		return new StreamChat(apiKey, serverSide ? apiSecret : null, {
+			timeout: 8000,
+			allowServerSideConnect: true,
+		});
 	},
 	getTestClientForUser: async function getTestClientForUser(userID, options = {}) {
 		const client = this.getTestClient(false);
-		const health = await client.setUser(
+		const health = await client.connectUser(
 			{ id: userID, ...options },
 			this.createUserToken(userID),
 		);
@@ -51,15 +54,13 @@ module.exports = {
 	},
 	getTestClientForUser2: function getTestClientForUser2(userID, options) {
 		const client = this.getTestClient(false);
-		client.setUser({ id: userID, ...options }, this.createUserToken(userID));
+		client.connectUser({ id: userID, ...options }, this.createUserToken(userID));
 		return client;
 	},
 	runAndLogPromise: function runAndLogPromise(promiseCallable) {
-		promiseCallable()
-			.then(() => {})
-			.catch((err) => {
-				console.warn('runAndLogPromise failed with error', err);
-			});
+		promiseCallable().catch((err) => {
+			console.warn('runAndLogPromise failed with error', err);
+		});
 	},
 	sleep: function sleep(ms) {
 		return new Promise((resolve) => {

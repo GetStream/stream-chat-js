@@ -2,7 +2,6 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
 import {
 	createUserToken,
 	getTestClient,
@@ -61,23 +60,23 @@ describe('Presence', function () {
 	});
 
 	describe('Set User and Disconnect', () => {
-		it('calling setUser twice should trigger an error', async function () {
+		it('calling connectUser twice should trigger an error', async function () {
 			const testClientP = await getTestClientForUser('jack');
 
-			const setUserAndThrow = () => {
-				testClientP.setUser({
+			const connectUserAndThrow = () => {
+				testClientP.connectUser({
 					id: 'jimmy',
 				});
 			};
 
-			expect(setUserAndThrow).to.throw(/setUser was called twice/);
+			expect(connectUserAndThrow).to.throw(/connectUser was called twice/);
 		});
 
 		it('login as a different user', async function () {
 			const testClientP = await getTestClientForUser('jones');
 
 			testClientP.disconnect(5000);
-			testClientP.setUser(
+			testClientP.connectUser(
 				{
 					id: 'jimmy',
 				},
@@ -134,7 +133,7 @@ describe('Presence', function () {
 			await b.create();
 			const results = [];
 			const eventPromise = new Promise((resolve) => {
-				b.on('all', (e) => {
+				const handler = (e) => {
 					results.push([e.watcher_count, e.user.id]);
 					expect(e.watcher_count).to.equal(b.state.watcher_count);
 					// expect to see thierry join, james join and james leave
@@ -147,7 +146,10 @@ describe('Presence', function () {
 						expect(results).to.deep.equal(expected);
 						resolve();
 					}
-				});
+				};
+
+				b.on('user.watching.start', handler);
+				b.on('user.watching.stop', handler);
 			});
 
 			// user1 starts watching
@@ -212,7 +214,7 @@ describe('Presence', function () {
 			const userID = `sarah123-${channel}`;
 
 			// create a channel where channel.members contains wendy
-			await getTestClient(true).updateUser({ id: userID });
+			await getTestClient(true).upsertUser({ id: userID });
 			const b = user1Client.channel('messaging', channel, {
 				members: ['sandra', userID, 'user1'],
 			});
@@ -362,7 +364,7 @@ describe('Watchers count', function () {
 
 	before(async function () {
 		await createUsers(users);
-		await client.setUser({ id: users[0] }, createUserToken(users[0]));
+		await client.connectUser({ id: users[0] }, createUserToken(users[0]));
 		channel = client.channel('messaging', channelID, {
 			members: users,
 		});
@@ -471,12 +473,12 @@ describe('Count Anonymous users', function () {
 
 	before(async () => {
 		await createUsers([admin]);
-		await client.setUser({ id: admin }, createUserToken(admin));
+		await client.connectUser({ id: admin }, createUserToken(admin));
 		channel = client.channel('livestream', channelID);
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
-			const client1 = await getTestClient(false);
-			await client1.setAnonymousUser();
+			const client1 = getTestClient(false);
+			await client1.connectAnonymousUser();
 			const channel1 = client1.channel('livestream', channelID);
 			clients[i] = { client: client1, channel: channel1 };
 		}
@@ -526,11 +528,11 @@ describe('Count Guest users using state', function () {
 
 	before(async () => {
 		await createUsers([admin]);
-		await client.setUser({ id: admin }, createUserToken(admin));
+		await client.connectUser({ id: admin }, createUserToken(admin));
 		channel = client.channel('livestream', channelID);
 		await channel.create();
 		for (let i = 0; i < nClients; i++) {
-			const client1 = await getTestClient(false);
+			const client1 = getTestClient(false);
 			await client1.setGuestUser({ id: uuidv4() });
 			const channel1 = client1.channel('livestream', channelID);
 			clients[i] = { client: client1, channel: channel1 };

@@ -20,7 +20,7 @@ describe('Sync endpoint', () => {
 	it('should not work if called before set user', async () => {
 		const client = getTestClient(false);
 		const id = uuidv4();
-		client.setUser({ id }, createUserToken(id));
+		client.connectUser({ id }, createUserToken(id));
 		const p = client.sync();
 		await expect(p).to.be.rejected;
 	});
@@ -46,7 +46,7 @@ describe('Sync endpoint', () => {
 
 	it('connect to red, blue and green channels and put some messages', async () => {
 		serverSideClient = getTestClient(true);
-		await serverSideClient.updateUser({ id: otherUserID });
+		await serverSideClient.upsertUser({ id: otherUserID });
 		blueChannel = serverSideClient.channel('messaging', `blue-${uuidv4()}`, {
 			created_by_id: otherUserID,
 			members: [userID, otherUserID],
@@ -101,11 +101,10 @@ describe('Sync endpoint', () => {
 
 	it('add a message reaction', async () => {
 		messageWithReaction = messages[1].message.id;
-		await blueChannel.sendReaction(
-			messageWithReaction,
-			{ type: 'like' },
-			otherUserID,
-		);
+		await blueChannel.sendReaction(messageWithReaction, {
+			type: 'like',
+			user: { id: userID },
+		});
 	});
 
 	it('hide the green channel for current user (via backend)', async () => {
@@ -115,7 +114,7 @@ describe('Sync endpoint', () => {
 	let syncReply;
 
 	it('sync should return a response', async () => {
-		await userClient.setUser({ id: userID }, createUserToken(userID));
+		await userClient.connectUser({ id: userID }, createUserToken(userID));
 		syncReply = await userClient.sync(
 			[blueChannel.cid, redChannel.cid, greenChannel.cid],
 			lastEventAt,
@@ -163,6 +162,7 @@ describe('Sync endpoint', () => {
 		expect(evts).to.have.length(1);
 		expect(evts[0].message.latest_reactions).to.have.length(1);
 		expect(evts[0].message.reaction_counts).to.eql({ like: 1 });
+		expect(evts[0].message.own_reactions.length).to.eql(1);
 		expect(evts[0].user).to.not.be.undefined;
 		expect(evts[0].message.user).to.not.be.undefined;
 	});

@@ -26,7 +26,7 @@ async function getTestMessage(text, channel) {
 	return data.message;
 }
 
-describe('Reactions', function () {
+describe('Reactions', () => {
 	let reactionClient;
 	let reactionClientServerSide;
 	let channel;
@@ -76,7 +76,7 @@ describe('Reactions', function () {
     - Verify that you cant add a reaction when reactions are disabled..
     */
 
-	it('Add a reaction', async function () {
+	it('Add a reaction', async () => {
 		// setup the test message
 		const message = await getTestMessage('Add a reaction', channel);
 		// add a reaction
@@ -101,20 +101,17 @@ describe('Reactions', function () {
 		expect(lastMessage.own_reactions).to.deep.equal([reply.reaction]);
 	});
 
-	it('Add a reaction server-side', async function () {
+	it('Add a reaction server-side', async () => {
 		// setup the test message
 		const message = await getTestMessage('Add a reaction', channel);
 
 		const serverSide = getTestClient(true);
 		const serverSideChannel = serverSide.channel('livestream', channel.id);
 		// add a reaction
-		const reply = await serverSideChannel.sendReaction(
-			message.id,
-			{
-				type: 'love',
-			},
-			userID,
-		);
+		const reply = await serverSideChannel.sendReaction(message.id, {
+			type: 'love',
+			user: { id: userID },
+		});
 
 		expect(reply.message.text).to.equal(message.text);
 		expect(reply.reaction.user.id).to.equal(userID);
@@ -131,7 +128,7 @@ describe('Reactions', function () {
 		expect(lastMessage.latest_reactions[0].user.id).to.eq(userID);
 	});
 
-	it('Size constraints', async function () {
+	it('Size constraints', async () => {
 		const message = await getTestMessage('Whatever bro', channel);
 		await expectHTTPErrorCode(
 			413,
@@ -142,7 +139,7 @@ describe('Reactions', function () {
 		);
 	});
 
-	it('Remove a reaction', async function () {
+	it('Remove a reaction', async () => {
 		// setup the test message
 		const message = await getTestMessage('Remove a reaction', channel);
 		// add a reaction
@@ -164,7 +161,7 @@ describe('Reactions', function () {
 		expect(lastMessage.own_reactions).to.deep.equal([]);
 	});
 
-	it('Remove a Reaction server side', async function () {
+	it('Remove a Reaction server side', async () => {
 		const channel = reactionClientServerSide.channel('livestream', 'reactions', {
 			created_by: serverSideUser,
 		});
@@ -199,7 +196,7 @@ describe('Reactions', function () {
 		expect(lastMessage.own_reactions).to.deep.equal([]);
 	});
 
-	it.skip('Many Reactions', async function () {
+	it('Many Reactions', async () => {
 		// setup the test message
 		const serverSide = getTestClient(true);
 		const sChannel = serverSide.channel('livestream', 'reactions');
@@ -207,7 +204,7 @@ describe('Reactions', function () {
 
 		// add 11 reactions from different users...
 		for (let i = 1; i <= 11; i++) {
-			await serverSide.updateUser({
+			await serverSide.upsertUser({
 				id: `user-${i}`,
 				name: `Many Reactions - user ${i}`,
 			});
@@ -235,7 +232,7 @@ describe('Reactions', function () {
 		expect(lastMessage.latest_reactions.length).to.equal(10);
 	});
 
-	it('React to a Chat message', async function () {
+	it('React to a Chat message', async () => {
 		const text = 'testing reactions';
 		const data = await channel.sendMessage({ text });
 		const messageID = data.message.id;
@@ -255,7 +252,7 @@ describe('Reactions', function () {
 		await channel.deleteReaction(messageID, reply.reaction.type);
 	});
 
-	it('List Reactions', async function () {
+	it('List Reactions', async () => {
 		// setup 10 reactions
 		const text = 'testing reactions list';
 		const data = await channel.sendMessage({ text });
@@ -271,7 +268,7 @@ describe('Reactions', function () {
 		expect(response.reactions.length).to.equal(3);
 	});
 
-	it('Reactions with colons and dots', async function () {
+	it('Reactions with colons and dots', async () => {
 		const data = await channel.sendMessage({ text: uuidv4() });
 		const messageID = data.message.id;
 		const reaction = await channel.sendReaction(messageID, {
@@ -280,7 +277,7 @@ describe('Reactions', function () {
 		await channel.deleteReaction(messageID, 'love:1.0');
 	});
 
-	it('Reactions disabled', async function () {
+	it('Reactions disabled', async () => {
 		const serverSide = getTestClient(true);
 		const user = { id: 'thierry' };
 		const disabledChannel = serverSide.channel(
@@ -309,10 +306,10 @@ describe('Reactions', function () {
 		);
 	});
 
-	context('When reaction score is present', function () {
+	context('When reaction score is present', () => {
 		let message, reply;
 
-		before(async function () {
+		before(async () => {
 			message = await getTestMessage('reaction with score', channel);
 			reply = await channel.sendReaction(message.id, {
 				type: 'love',
@@ -320,29 +317,29 @@ describe('Reactions', function () {
 			});
 		});
 
-		it('adds reaction to reaction_count', function () {
+		it('adds reaction to reaction_count', () => {
 			expect(reply.message.reaction_counts).to.deep.equal({ love: 1 });
 		});
 
-		it('adds reaction score to reaction_scores', function () {
+		it('adds reaction score to reaction_scores', () => {
 			expect(reply.message.reaction_scores).to.deep.equal({ love: 5 });
 		});
 
-		context('When there is also reaction without score', function () {
-			before(async function () {
+		context('When there is also reaction without score', () => {
+			before(async () => {
 				reply = await channel.sendReaction(message.id, {
 					type: 'love2',
 				});
 			});
 
-			it('adds new reaction to reaction_counts', function () {
+			it('adds new reaction to reaction_counts', () => {
 				expect(reply.message.reaction_counts).to.deep.equal({
 					love: 1,
 					love2: 1,
 				});
 			});
 
-			it('adds new reaction to reaction_scores with score=1', function () {
+			it('adds new reaction to reaction_scores with score=1', () => {
 				expect(reply.message.reaction_scores).to.deep.equal({
 					love: 5,
 					love2: 1,
@@ -350,22 +347,22 @@ describe('Reactions', function () {
 			});
 		});
 
-		context('When sending same reaction again with different score', function () {
-			before(async function () {
+		context('When sending same reaction again with different score', () => {
+			before(async () => {
 				reply = await channel.sendReaction(message.id, {
 					type: 'love2',
 					score: 10,
 				});
 			});
 
-			it("doesn't change reaction_counts", function () {
+			it("doesn't change reaction_counts", () => {
 				expect(reply.message.reaction_counts).to.deep.equal({
 					love: 1,
 					love2: 1,
 				});
 			});
 
-			it('set new score to reaction_scores', function () {
+			it('set new score to reaction_scores', () => {
 				expect(reply.message.reaction_scores).to.deep.equal({
 					love: 5,
 					love2: 10,
@@ -373,19 +370,41 @@ describe('Reactions', function () {
 			});
 		});
 
-		context('When removing reaction', function () {
-			before(async function () {
+		context('When removing reaction', () => {
+			before(async () => {
 				await channel.deleteReaction(message.id, 'love2');
 				reply = await reactionClient.getMessage(message.id);
 			});
 
-			it('removing it from reaction_counts', function () {
+			it('removing it from reaction_counts', () => {
 				expect(reply.message.reaction_counts).to.deep.equal({ love: 1 });
 			});
 
-			it('removing it from reaction_scores', function () {
+			it('removing it from reaction_scores', () => {
 				expect(reply.message.reaction_scores).to.deep.equal({ love: 5 });
 			});
+		});
+	});
+
+	context('When using enforce_unique', () => {
+		it('Replace reactions', async () => {
+			const message = await getTestMessage('Replace reaction', channel);
+			await channel.sendReaction(message.id, { type: 'love' });
+			await channel.sendReaction(message.id, { type: 'hate' });
+			let response = await reactionClient.getMessage(message.id);
+			expect(response.message.latest_reactions.length).to.eq(2);
+			expect(response.message.own_reactions.length).to.eq(2);
+			expect(response.message.reaction_counts.love).to.eq(1);
+			expect(response.message.reaction_counts.hate).to.eq(1);
+			await channel.sendReaction(
+				message.id,
+				{ type: 'adore' },
+				{ enforce_unique: true },
+			);
+			response = await reactionClient.getMessage(message.id);
+			expect(response.message.latest_reactions.length).to.eq(1);
+			expect(response.message.own_reactions.length).to.eq(1);
+			expect(response.message.reaction_counts.adore).to.eq(1);
 		});
 	});
 });

@@ -4,7 +4,6 @@ import https from 'https';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import chaiLike from 'chai-like';
-import Immutable from 'seamless-immutable';
 import { StreamChat, decodeBase64, encodeBase64 } from '../../src';
 import { expectHTTPErrorCode, getTestClientWithWarmUp, createEventWaiter } from './utils';
 import fs from 'fs';
@@ -64,10 +63,10 @@ describe('Chat', () => {
 			role: 'admin',
 		};
 
-		await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+		await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 		//	delete thierry.role;
 		// await isn't needed but makes testing a bit easier
-		await authClient.setUser(thierry);
+		await authClient.connectUser(thierry);
 
 		channel = authClient.channel('livestream', 'ninja', {
 			mysearchablefield: 'hi',
@@ -88,7 +87,7 @@ describe('Chat', () => {
 	describe('User Update Events', () => {
 		it('should trigger user update event', async () => {
 			const userID = uuidv4();
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: userID,
 				name: 'jack',
 				song: 'purple rain',
@@ -109,7 +108,7 @@ describe('Chat', () => {
 					expect(event.user.id).to.equal(userID);
 					resolve();
 				});
-				serverAuthClient.updateUser({
+				serverAuthClient.upsertUser({
 					id: userID,
 					name: 'jack',
 					song: 'welcome to the jungle',
@@ -123,12 +122,12 @@ describe('Chat', () => {
 			const authClient = getTestClient(true);
 			const serverAuthClient = getTestClient(true);
 
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: u1,
 				name: 'Awesome user',
 			});
 
-			await authClient.setUser({ id: u1 });
+			await authClient.connectUser({ id: u1 });
 
 			// subscribe to user presence
 			const response = await authClient.queryUsers(
@@ -147,7 +146,7 @@ describe('Chat', () => {
 					expect(authClient.user.name).equal('Not so awesome');
 					resolve();
 				});
-				serverAuthClient.updateUser({
+				serverAuthClient.upsertUser({
 					id: u1,
 					name: 'Not so awesome',
 				});
@@ -160,8 +159,8 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			const cPromise = client.setUser({ id: userID }, createUserToken(userID));
-			// watch a new channel before setUser completes
+			const cPromise = client.connectUser({ id: userID }, createUserToken(userID));
+			// watch a new channel before connectUser completes
 			const state = await client.channel('messaging', uuidv4()).watch();
 		});
 		it('reserved fields in user', async () => {
@@ -170,7 +169,7 @@ describe('Chat', () => {
 
 			await expectHTTPErrorCode(
 				400,
-				client.setUser(
+				client.connectUser(
 					{ id: userID, created_at: 'helloworld' },
 					createUserToken(userID),
 				),
@@ -237,11 +236,11 @@ describe('Chat', () => {
 			expect(client3.health.me.updated_at).to.equal(updatedAt);
 		});
 
-		it('Update/sync before calling setUser', async () => {
+		it('Update/sync before calling connectUser', async () => {
 			const userID = uuidv4();
 			const serverClient = getServerTestClient();
 
-			const updateResponse = await serverClient.updateUsers([
+			const updateResponse = await serverClient.upsertUsers([
 				{ id: userID, book: 'dune', role: 'admin' },
 			]);
 			const client = await getTestClientForUser(userID, 'test', { color: 'green' });
@@ -257,7 +256,7 @@ describe('Chat', () => {
 				'8qezxbbbn72p9rtda2uzvupkhvq6u7dmf637weppxgmadzty6g5p64g5nchgr2aaa';
 			const serverClient = new StreamChat(disabledKey, disabledSecret);
 			const userClient = new StreamChat(disabledKey);
-			const responsePromise = userClient.setUser(
+			const responsePromise = userClient.connectUser(
 				{ id: 'batman' },
 				serverClient.createToken('batman'),
 			);
@@ -266,19 +265,19 @@ describe('Chat', () => {
 			);
 		});
 
-		it('setUser and updateUsers flow', async () => {
+		it('connectUser and upsertUsers flow', async () => {
 			const userID = uuidv4();
 			const client = getTestClient(false);
 			const token = createUserToken(userID);
 			const serverClient = getServerTestClient();
 			// example for docs
-			const response = await client.setUser(
+			const response = await client.connectUser(
 				{ id: userID, role: 'admin', favorite_color: 'green' },
 				token,
 			);
 			// user object is now {id: userID, role: 'user', favorite_color: 'green'}
 			// note how you are not allowed to make the user admin via this endpoint
-			const updateResponse = await serverClient.updateUsers([
+			const updateResponse = await serverClient.upsertUsers([
 				{ id: userID, role: 'admin', book: 'dune' },
 			]);
 			// user object is now {id: userID, role: 'admin', book: 'dune'}
@@ -295,7 +294,7 @@ describe('Chat', () => {
 			const userID = uuidv4();
 			const client = getTestClient(false);
 			const token = createUserToken(userID);
-			await client.setUser({ id: userID }, token);
+			await client.connectUser({ id: userID }, token);
 
 			await client.wsConnection.disconnect(5000);
 			expect(client.wsConnection.isHealthy).to.equal(false);
@@ -319,8 +318,8 @@ describe('Chat', () => {
 				await serverClient.banUser(banned, { banned_by_id: admin.id });
 			});
 
-			it('returns banned field on setUser', async () => {
-				const response = await client.setUser(
+			it('returns banned field on connectUser', async () => {
+				const response = await client.connectUser(
 					{ id: banned, role: 'user', favorite_color: 'green' },
 					token,
 				);
@@ -361,7 +360,7 @@ describe('Chat', () => {
 			});
 
 			it('banned is set to false', async () => {
-				const response = await client.setUser(
+				const response = await client.connectUser(
 					{ id: banned, role: 'user', favorite_color: 'green' },
 					token,
 				);
@@ -377,7 +376,7 @@ describe('Chat', () => {
 
 		describe('User is not set', () => {
 			it('device management does not work', async () => {
-				const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+				const errorMsg = `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`;
 				await expect(client.addDevice(deviceId, 'apn')).to.be.rejectedWith(
 					errorMsg,
 				);
@@ -394,7 +393,7 @@ describe('Chat', () => {
 			const userId = uuidv4();
 
 			before(async () => {
-				await client.setUser({ id: userId }, createUserToken(userId));
+				await client.connectUser({ id: userId }, createUserToken(userId));
 			});
 
 			describe('Adding', () => {
@@ -479,6 +478,23 @@ describe('Chat', () => {
 	});
 
 	describe('Search', () => {
+		it('No searchable fails', async () => {
+			const userID = uuidv4();
+			const channelID = uuidv4();
+			// search is disabled for gaming
+			const channel = getServerTestClient().channel('gaming', channelID, {
+				created_by_id: userID,
+				members: [userID],
+			});
+			await channel.create();
+			await authClient.channel('gaming', channelID).sendMessage({ text: 'mine' });
+
+			await expectHTTPErrorCode(
+				400,
+				authClient.search({ type: 'gaming' }, 'mine', { limit: 2 }),
+			);
+		});
+
 		it('Basic Query (old format)', async () => {
 			const channelId = uuidv4();
 			// add a very special message
@@ -565,6 +581,41 @@ describe('Chat', () => {
 			const response = await authClient.search(channelFilters, messageFilters);
 			expect(response.results.length).to.equal(1);
 			expect(response.results[0].message.unique).to.be.undefined;
+		});
+
+		it('query messages by attachment type', async () => {
+			const authClientTommaso = getTestClient(true);
+			const userTommaso = { id: uuidv4(), name: 'Tommaso Barbugli' };
+
+			await serverAuthClient.upsertUser(userTommaso);
+			await authClientTommaso.connectUser(userTommaso);
+
+			const attachments = [
+				{
+					type: 'image',
+					image_url: 'https://some_url_for_image',
+				},
+			];
+
+			const channel = authClientTommaso.channel('messaging', uuidv4(), {
+				members: [userTommaso.id],
+			});
+			await channel.create();
+
+			const { message } = await channel.sendMessage({
+				text: 'Check my images',
+				attachments,
+			});
+
+			const channelFilters = { cid: { $in: [channel.cid] } };
+			const messageFilters = { 'attachments.type': { $in: ['image'] } };
+			const response = await authClientTommaso.search(
+				channelFilters,
+				messageFilters,
+			);
+			expect(response.results.length).to.equal(1);
+			expect(response.results[0].message.id).to.be.equal(message.id);
+			expect(response.results[0].message.channel.id).to.be.equal(channel.id);
 		});
 
 		it('query messages with empty text', async () => {
@@ -684,7 +735,7 @@ describe('Chat', () => {
 		});
 
 		it('Edit a user', async () => {
-			const response = await serverAuthClient.updateUser({
+			const response = await serverAuthClient.upsertUser({
 				id: 'tommaso',
 				name: 'Tommaso Barbugli',
 				role: 'admin',
@@ -716,7 +767,7 @@ describe('Chat', () => {
 		it('Token based auth', async () => {
 			const token = createUserToken('daenerys');
 			const client3 = getTestClient(true);
-			await client3.setUser(
+			await client3.connectUser(
 				{
 					id: 'daenerys',
 					name: 'Mother of dragons',
@@ -730,7 +781,7 @@ describe('Chat', () => {
 
 			const clientSide = getTestClient();
 			await expect(
-				clientSide.setUser(
+				clientSide.connectUser(
 					{
 						id: 'daenerys',
 						name: 'Mother of dragons',
@@ -742,7 +793,7 @@ describe('Chat', () => {
 
 		it('Secret based auth', async () => {
 			const client3 = new getTestClient(true);
-			await client3.setUser({
+			await client3.connectUser({
 				id: 'daenerys',
 				name: 'Mother of dragons',
 			});
@@ -751,7 +802,7 @@ describe('Chat', () => {
 		it('No secret and no token should raise a client error', async () => {
 			const client2 = getTestClient();
 			await expect(
-				client2.setUser({
+				client2.connectUser({
 					id: 'daenerys',
 					name: 'Mother of dragons',
 				}),
@@ -761,7 +812,7 @@ describe('Chat', () => {
 		it('Invalid user token', async () => {
 			const client2 = getTestClient();
 			await expect(
-				client2.setUser(
+				client2.connectUser(
 					{
 						id: 'daenerys',
 						name: 'Mother of dragons',
@@ -771,11 +822,11 @@ describe('Chat', () => {
 			).to.be.rejectedWith(Error);
 		});
 
-		it('Invalid secret should fail setUser', async () => {
+		it('Invalid secret should fail connectUser', async () => {
 			const client3 = new StreamChat('892s22ypvt6m', 'invalidsecret');
 			await expectHTTPErrorCode(
 				401,
-				client3.setUser({
+				client3.connectUser({
 					id: 'daenerys',
 					name: 'Mother of dragons',
 				}),
@@ -788,7 +839,7 @@ describe('Chat', () => {
 			await chan.watch();
 			await client2.disconnect(5000);
 
-			const errorMsg = `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`;
+			const errorMsg = `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`;
 
 			let p = client2.addDevice('deviceID', 'apn');
 			await expect(p).to.be.rejectedWith(errorMsg);
@@ -799,7 +850,7 @@ describe('Chat', () => {
 			);
 
 			const anonClient = getTestClient(false);
-			await anonClient.setAnonymousUser();
+			await anonClient.connectAnonymousUser();
 			await anonClient.disconnect(5000);
 
 			p = anonClient.addDevice('deviceID', 'apn');
@@ -836,7 +887,7 @@ describe('Chat', () => {
 			const token = authClient.createToken('johny');
 
 			const client3 = getTestClient();
-			await client3.setUser(
+			await client3.connectUser(
 				{
 					id: 'johny',
 					name: 'some random guy',
@@ -860,7 +911,7 @@ describe('Chat', () => {
 				first: 'Uhtred',
 			};
 
-			const response = await client.setUser(user, token);
+			const response = await client.connectUser(user, token);
 
 			const compareUser = (userResponse) => {
 				const expectedData = { role: 'user', ...user };
@@ -898,7 +949,7 @@ describe('Chat', () => {
 				'Thierry',
 			);
 			// TODO: update the user
-			authClient.setUser({ id: 'thierry', name: 't' }, 'myusertoken');
+			authClient.connectUser({ id: 'thierry', name: 't' }, 'myusertoken');
 			// verify the update propagates
 			expect(state.messages[state.messages.length - 1].user.name).to.equal('t');
 		});
@@ -962,7 +1013,7 @@ describe('Chat', () => {
 						resolve();
 					});
 
-					authClient.updateUser({
+					authClient.upsertUser({
 						id: user.id,
 						role: 'admin',
 						set: { test: 'true' },
@@ -1507,7 +1558,7 @@ describe('Chat', () => {
 						expect(event.message.type).to.be.equal('deleted');
 						expect(event.hard_delete).to.be.undefined;
 						expect(channel.state.messages).to.be.deep.equal([
-							channel.state.messageToImmutable(event.message),
+							channel.state.formatMessage(event.message),
 						]);
 						done();
 					});
@@ -1779,7 +1830,7 @@ describe('Chat', () => {
 					shadow_banned: false,
 				};
 
-				users[i] = (await serverAuthClient.updateUser(user)).users[username(i)];
+				users[i] = (await serverAuthClient.upsertUser(user)).users[username(i)];
 				userMap[username(i)] = users[i];
 			}
 		});
@@ -1880,7 +1931,7 @@ describe('Chat', () => {
 		});
 		it('Pagination on Members', async () => {
 			const id = uuidv4();
-			await serverAuthClient.updateUsers([
+			await serverAuthClient.upsertUsers([
 				{ id: 'wendy' },
 				{ id: 'helen' },
 				{ id: 'marty' },
@@ -2075,7 +2126,7 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			const userID = uuidv4();
 
-			client.setUser({ id: userID }, createUserToken(userID));
+			client.connectUser({ id: userID }, createUserToken(userID));
 			const channel = client.channel('messaging', uuidv4());
 			let result;
 			try {
@@ -2111,7 +2162,7 @@ describe('Chat', () => {
 				eventChannel.on('typing.stop', (event) => {
 					// start, stop
 					expect(event.parent_id).to.be.equal(undefined);
-					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					expect(eventChannel.state.typing).to.deep.equal({});
 					done();
 				});
 
@@ -2140,14 +2191,14 @@ describe('Chat', () => {
 					if (!started) throw new Error('typing.start event failed');
 
 					expect(event.parent_id).to.be.equal(id);
-					expect(eventChannel.state.typing.asMutable()).to.deep.equal({});
+					expect(eventChannel.state.typing).to.deep.equal({});
 					clearTimeout(timeout);
 					done();
 				});
 
 				eventChannel.on('typing.start', (event) => {
 					expect(event.parent_id).to.be.equal(id);
-					expect(eventChannel.state.typing.asMutable()).to.not.be.empty;
+					expect(eventChannel.state.typing).to.not.be.empty;
 					started = true;
 				});
 
@@ -2250,7 +2301,7 @@ describe('Chat', () => {
 			const c = authClient.channel('twitch', 'state');
 			const message = { id: 1, text: 'my message' };
 			const message2 = { id: 2, text: 'my message 2' };
-			c.state.messages = Immutable([message, message2]);
+			c.state.messages = [message, message2];
 			c.state.removeMessage(message);
 			expect(c.state.messages.length).to.equal(1);
 		});
@@ -2269,7 +2320,7 @@ describe('Chat', () => {
 				type: 'error',
 			};
 
-			c.state.messages = Immutable([message, message2, message3]);
+			c.state.messages = [message, message2, message3];
 			c.state.filterErrorMessages(message);
 			expect(c.state.messages.length).to.equal(2);
 		});
@@ -2286,10 +2337,10 @@ describe('Chat', () => {
 				created_by: { id: uuidv4() },
 			});
 			await c.create();
-			await serverAuthClient.updateUser({
+			await serverAuthClient.upsertUser({
 				id: userID,
 			});
-			await client.setUser({ id: userID }, createUserToken(userID));
+			await client.connectUser({ id: userID }, createUserToken(userID));
 			await client.channel('livestream', chanName).watch();
 		});
 
@@ -2361,6 +2412,94 @@ describe('Chat', () => {
 		});
 	});
 
+	describe('Custom events', () => {
+		let channel;
+		let client;
+		let serverChannel;
+		const channelID = uuidv4();
+		let client2;
+		let otherUserChannel;
+		const userID = uuidv4();
+		const otherUserID = uuidv4();
+
+		it('enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to a livestream channel', async () => {
+			client = await getTestClientForUser(userID);
+			client2 = await getTestClientForUser(otherUserID);
+
+			serverChannel = serverAuthClient.channel('livestream', channelID, {
+				created_by: { id: uuidv4() },
+			});
+
+			channel = client.channel('livestream', channelID);
+			await channel.watch();
+
+			otherUserChannel = client2.channel('livestream', channelID);
+			await otherUserChannel.watch();
+
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event');
+			await channel.sendEvent({ type: 'custom-event' });
+
+			const eventsReceived = await waiter;
+
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event');
+			expect(eventsReceived[0].user).to.not.be.undefined;
+			expect(eventsReceived[0].user.id).to.not.be.undefined;
+		});
+
+		it('send a custom event with custom data', async () => {
+			const waiter = createEventWaiter(otherUserChannel, 'custom-event-with-data');
+			await channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+
+			const eventsReceived = await waiter;
+			expect(eventsReceived).to.have.length(1);
+			expect(eventsReceived[0].type).to.eql('custom-event-with-data');
+			expect(eventsReceived[0].color).to.eql('red');
+		});
+
+		it('disable custom events for livestream', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: false,
+			});
+			const p = channel.sendEvent({ type: 'custom-event-with-data', color: 'red' });
+			await expect(p).to.be.rejectedWith(
+				'Channel type livestream does not support custom events',
+			);
+		});
+
+		it('re-enable custom events for livesteam', async () => {
+			await serverAuthClient.updateChannelType('livestream', {
+				custom_events: true,
+			});
+		});
+
+		it('send a custom event to messaging channel - permission checks', async () => {
+			let chan = serverAuthClient.channel('messaging', channelID, {
+				created_by: { id: uuidv4() },
+				members: [userID],
+			});
+			await chan.create();
+
+			chan = client.channel('messaging', channelID);
+			await chan.watch();
+			await chan.sendEvent({ type: 'custom-event' });
+
+			chan = client2.channel('messaging', channelID);
+			chan.initialized = true; // force event sending by changing internal state
+			const p = chan.sendEvent({ type: 'custom-event' });
+
+			await expect(p).to.be.rejectedWith(
+				`User '${otherUserID}' with role user is not allowed to access Resource SendCustomEvent on channel type messaging`,
+			);
+		});
+	});
+
 	describe('Anonymous users', () => {
 		let client;
 		let channel;
@@ -2370,7 +2509,7 @@ describe('Chat', () => {
 
 		it('Create an anonymous session', async () => {
 			client = getTestClient(false);
-			await client.setAnonymousUser();
+			await client.connectAnonymousUser();
 			serverChannel = serverAuthClient.channel('livestream', channelID, {
 				created_by: owner,
 			});
@@ -2423,7 +2562,7 @@ describe('Chat', () => {
 
 		before(async () => {
 			userClient = getTestClient(false);
-			await userClient.setUser(userData, createUserToken(userData.id));
+			await userClient.connectUser(userData, createUserToken(userData.id));
 			chan = userClient.channel('livestream', 'dnd');
 			await chan.watch();
 			await chan.watch();
@@ -2437,9 +2576,9 @@ describe('Chat', () => {
 			expect(response.members).to.not.be.undefined;
 		});
 
-		it('setUser should not remove custom fields', async () => {
+		it('connectUser should not remove custom fields', async () => {
 			userClient = getTestClient(false);
-			const response = await userClient.setUser(
+			const response = await userClient.connectUser(
 				{ id: userData.id, new_field: 'yes' },
 				createUserToken(userData.id),
 			);
@@ -2451,7 +2590,10 @@ describe('Chat', () => {
 			const client = getTestClient(false);
 			await expectHTTPErrorCode(
 				413,
-				client.setUser(oversizeUserData, createUserToken(oversizeUserData.id)),
+				client.connectUser(
+					oversizeUserData,
+					createUserToken(oversizeUserData.id),
+				),
 			);
 		});
 	});
@@ -2466,8 +2608,8 @@ describe('Chat', () => {
 		let message;
 
 		before(async () => {
-			serverClient = await getTestClient(true);
-			await serverClient.updateUser(thierry);
+			serverClient = getServerTestClient();
+			await serverClient.upsertUser(thierry);
 			channel = serverClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [thierry.id],
@@ -2488,9 +2630,10 @@ describe('Chat', () => {
 			expect(p).to.be.rejectedWith('message with id bad message not found');
 		});
 
-		it('servers side get a message should work', async () => {
+		it('server side get a message should work', async () => {
 			const r = await serverClient.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -2502,6 +2645,7 @@ describe('Chat', () => {
 			const client = await getTestClientForUser(thierry.id);
 			const r = await client.getMessage(message.id);
 			expect(r.message.channel.id).to.eq(channelID);
+			expect(r.message.channel.created_by.id).to.eq(thierry.id);
 			delete r.message.user.online;
 			delete r.message.user.last_active;
 			delete r.message.user.updated_at;
@@ -2529,8 +2673,8 @@ describe('Chat', () => {
 		let msg;
 
 		before(async () => {
-			await getTestClient(true).updateUser(thierry);
-			await getTestClient(true).updateUser({ id: userID, instrument: 'guitar' });
+			await getTestClient(true).upsertUser(thierry);
+			await getTestClient(true).upsertUser({ id: userID, instrument: 'guitar' });
 			channel = serverAuthClient.channel('team', channelID, {
 				created_by: { id: thierry.id },
 				members: [userID, thierry.id],
@@ -2589,7 +2733,7 @@ describe('Chat', () => {
 		});
 
 		it('should be possible to edit the list of mentioned users', async () => {
-			const client = await getTestClient(true);
+			const client = getTestClient(true);
 			const response = await client.updateMessage(
 				{ id: msg.id, text: msg.text, mentioned_users: [userID] },
 				thierry.id,
@@ -2768,7 +2912,7 @@ describe('Chat', () => {
 
 		before(async () => {
 			await createUsers([modUserID]);
-			await serverAuthClient.updateUser(evil);
+			await serverAuthClient.upsertUser(evil);
 		});
 
 		it('Ban', async () => {
@@ -3163,7 +3307,7 @@ describe('warm up', () => {
 		const baseUrl = 'https://chat-us-east-1.stream-io-api.com';
 		const client = getTestClient(true);
 		client.setBaseURL(baseUrl);
-		const health = await client.setUser({ id: user }, createUserToken(user));
+		const health = await client.connectUser({ id: user }, createUserToken(user));
 		client.health = health;
 		channel = await client.channel('messaging', uuidv4());
 
@@ -3173,7 +3317,7 @@ describe('warm up', () => {
 		// first client uses warmUp
 		const warmUpClient = getTestClientWithWarmUp();
 		warmUpClient.setBaseURL(baseUrl);
-		warmUpClient.health = await warmUpClient.setUser(
+		warmUpClient.health = await warmUpClient.connectUser(
 			{ id: user },
 			createUserToken(user),
 		);
@@ -3185,9 +3329,9 @@ describe('warm up', () => {
 		console.log('time taken with warm up ' + withWarmUpDur + ' milliseconds.');
 
 		// second client without warmUp
-		const noWarmUpClient = await getTestClient(false);
+		const noWarmUpClient = getTestClient(false);
 		noWarmUpClient.setBaseURL(baseUrl);
-		noWarmUpClient.health = await noWarmUpClient.setUser(
+		noWarmUpClient.health = await noWarmUpClient.connectUser(
 			{ id: user },
 			createUserToken(user),
 		);
@@ -3197,5 +3341,89 @@ describe('warm up', () => {
 		const withoutWarmUpDur = t1 - t0;
 		console.log('time taken without warm up ' + withoutWarmUpDur + ' milliseconds.');
 		expect(withWarmUpDur).to.be.lessThan(withoutWarmUpDur);
+	});
+});
+
+describe('paginate by message created_at', () => {
+	let channel;
+	let client;
+	const user = uuidv4();
+	const messages = [];
+	const messageID = (user, i) => {
+		return i.toString() + '-' + user;
+	};
+	before(async () => {
+		client = await getTestClientForUser(user);
+		channel = client.channel('messaging', uuidv4());
+		await channel.create();
+		for (let i = 1; i <= 10; i++) {
+			messages.push(
+				(
+					await channel.sendMessage({
+						text: user + i.toString(),
+						id: messageID(user, i),
+					})
+				).message,
+			);
+			await sleep(5);
+		}
+	});
+
+	it('invalid date should return an error', async () => {
+		await expect(
+			channel.query({
+				messages: { limit: 2, created_at_after: 'invalid' },
+			}),
+		).to.be.rejectedWith(
+			'StreamChat error code 4: GetOrCreateChannel failed with error: "expected date for field "messages.created_at_after" but got "invalid"',
+		);
+	});
+
+	it('created_at_after (message 5) should return message 6 to 7', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 6));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 7));
+	});
+
+	it('created_at_after_or_equal (message 5) should return message 5 to 6', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_after_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 5));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 6));
+	});
+
+	it('created_at_before (message_5) should return message 3 to 4', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 3));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 4));
+	});
+
+	it('created_at_before_or_equal (message_5) should return message 4 to 5', async () => {
+		const result = await channel.query({
+			messages: { limit: 2, created_at_before_or_equal: messages[4].created_at },
+		});
+		expect(result.messages.length).to.be.equal(2);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
+		expect(result.messages[1].id).to.be.equal(messageID(user, 5));
+	});
+
+	it('created_at_before (message_5) and created_at_after (message_3) should return message 4', async () => {
+		const result = await channel.query({
+			messages: {
+				limit: 2,
+				created_at_before: messages[4].created_at,
+				created_at_after: messages[2].created_at,
+			},
+		});
+		expect(result.messages.length).to.be.equal(1);
+		expect(result.messages[0].id).to.be.equal(messageID(user, 4));
 	});
 });

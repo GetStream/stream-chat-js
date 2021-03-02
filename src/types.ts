@@ -1,4 +1,3 @@
-import SeamlessImmutable from 'seamless-immutable';
 import { AxiosRequestConfig } from 'axios';
 
 /**
@@ -63,6 +62,7 @@ export type AppSettingsAPIResponse<
         commands?: CommandVariants<CommandType>[];
         connect_events?: boolean;
         created_at?: string;
+        custom_events?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -77,21 +77,28 @@ export type AppSettingsAPIResponse<
         url_enrichment?: boolean;
       }
     >;
+    auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: string;
+    file_upload_config?: FileUploadConfig;
     image_moderation_enabled?: boolean;
+    image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    sqs_key?: string;
+    sqs_secret?: string;
+    sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[];
@@ -124,6 +131,8 @@ export type ChannelResponse<
   frozen: boolean;
   id: string;
   type: string;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
@@ -150,6 +159,14 @@ export type ChannelAPIResponse<
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
   messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  pinned_messages: MessageResponse<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -215,9 +232,15 @@ export type CheckPushResponse = APIResponse & {
   rendered_firebase_template?: string;
 };
 
-export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<
-  CreatedAtUpdatedAt
-> & {
+export type CheckSQSResponse = APIResponse & {
+  status: string;
+  data?: {};
+  error?: string;
+};
+
+export type CommandResponse<
+  CommandType extends string = LiteralStringForUnion
+> = Partial<CreatedAtUpdatedAt> & {
   args?: string;
   description?: string;
   name?: CommandVariants<CommandType>;
@@ -348,31 +371,29 @@ export type GetRepliesAPIResponse<
   >[];
 };
 
-export type ImmutableMessageResponse<
+export type FormatMessageResponse<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SeamlessImmutable.Immutable<
-  Omit<
-    MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    'created_at' | 'updated_at' | 'status'
-  > & {
-    __html: string;
-    created_at: Date;
-    status: string;
-    updated_at: Date;
-  }
->;
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'created_at' | 'updated_at' | 'status'
+> & {
+  __html: string;
+  created_at: Date;
+  status: string;
+  updated_at: Date;
+};
 
 export type ListChannelResponse<
   CommandType extends string = LiteralStringForUnion
@@ -416,19 +437,38 @@ export type MessageResponse<
 > = MessageBase<AttachmentType, MessageType, UserType> & {
   args?: string;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  cid?: string;
   command?: string;
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
+  i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
+    language: TranslationLanguages;
+  };
   latest_reactions?: ReactionResponse<ReactionType, UserType>[];
   mentioned_users?: UserResponse<UserType>[];
   own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  pin_expires?: string | null;
+  pinned_at?: string | null;
+  pinned_by?: UserResponse<UserType> | null;
+  quoted_message?: Omit<
+    MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+    'quoted_message'
+  >;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
+  thread_participants?: UserResponse<UserType>[];
   type?: string;
   updated_at?: string;
 };
@@ -436,6 +476,7 @@ export type MessageResponse<
 export type MuteResponse<UserType = UnknownType> = {
   user: UserResponse<UserType>;
   created_at?: string;
+  expires?: string;
   target?: UserResponse<UserType>;
   updated_at?: string;
 };
@@ -462,7 +503,6 @@ export type OwnUserResponse<
   unread_channels: number;
   unread_count: number;
   invisible?: boolean;
-  language?: string;
   roles?: string[];
 };
 
@@ -575,6 +615,15 @@ export type UpdateChannelAPIResponse<
   >;
 };
 
+export type PartialUpdateChannelAPIResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  members: ChannelMemberResponse<UserType>[];
+};
+
 export type UpdateChannelResponse<
   CommandType extends string = LiteralStringForUnion
 > = APIResponse &
@@ -596,6 +645,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
   shadow_banned?: boolean;
@@ -678,11 +728,14 @@ export type ListCommandsResponse<
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  automod_thresholds?: ChannelConfigAutomodThresholds;
+  blocklist?: string;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
   commands?: CommandVariants<CommandType>[];
   connect_events?: boolean;
   connection_id?: string;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -779,6 +832,10 @@ export type MuteUserOptions<UserType = UnknownType> = {
 };
 
 export type PaginationOptions = {
+  created_at_after?: string | Date;
+  created_at_after_or_equal?: string | Date;
+  created_at_before?: string | Date;
+  created_at_before_or_equal?: string | Date;
   id_gt?: string;
   id_gte?: string;
   id_lt?: string;
@@ -793,8 +850,22 @@ export type SearchOptions = {
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
+  /**
+   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
+   */
+  allowServerSideConnect?: boolean;
   browser?: boolean;
   logger?: Logger;
+  /**
+   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
+   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
+   *
+   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
+   * When false, user/consumer of this client will need to make sure all the channels present on UI by
+   * manually calling queryChannels endpoint.
+   */
+  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
 };
 
@@ -860,6 +931,8 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  total_unread_count?: number;
+  unread_channels?: number;
   unread_count?: number;
   user?: UserResponse<UserType>;
   user_id?: string;
@@ -1203,13 +1276,27 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  auto_translation_enabled?: boolean;
+  custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
+  enforce_unique_usernames?: 'no' | 'app' | 'team';
+  // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
+  file_upload_config?: FileUploadConfig;
   firebase_config?: {
+    credentials_json: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
   };
+  image_moderation_enabled?: boolean;
+  image_upload_config?: FileUploadConfig;
+  push_config?: {
+    version?: string;
+  };
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
   webhook_url?: string;
 };
 
@@ -1257,11 +1344,18 @@ export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
 
 export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
 
+export type ChannelConfigAutomodThresholds = null | {
+  explicit?: { block?: number; flag?: number };
+  spam?: { block?: number; flag?: number };
+  toxic?: { block?: number; flag?: number };
+};
+
 export type ChannelConfigFields = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
+  custom_events?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1367,6 +1461,9 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 };
 
 export type DeviceFields = {
+  created_at: string;
+  disabled?: boolean;
+  disabled_reason?: string;
   id?: string;
   push_provider?: 'apn' | 'firebase';
 };
@@ -1377,7 +1474,15 @@ export type Field = {
   value?: string;
 };
 
+export type FileUploadConfig = {
+  allowed_file_extensions?: string[];
+  allowed_mime_types?: string[];
+  blocked_file_extensions?: string[];
+  blocked_mime_types?: string[];
+};
+
 export type FirebaseConfig = {
+  credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
@@ -1399,6 +1504,25 @@ export type Message<
   mentioned_users?: string[];
 };
 
+export type UpdatedMessage<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = Omit<
+  MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'mentioned_users'
+> & { mentioned_users?: string[] };
+
 export type MessageBase<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
@@ -1409,6 +1533,8 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  pinned?: boolean;
+  quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
   user?: UserResponse<UserType> | null;
@@ -1426,6 +1552,11 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
+};
+
+export type PartialUpdateChannel<ChannelType = UnknownType> = {
+  set?: Partial<ChannelResponse<ChannelType>>;
+  unset?: Array<keyof ChannelResponse<ChannelType>>;
 };
 
 export type PermissionAPIObject = {
@@ -1514,6 +1645,13 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  skipDevices?: boolean;
+};
+
+export type TestSQSDataInput = {
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_url?: string;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
@@ -1530,3 +1668,60 @@ export type User<UserType = UnknownType> = UserType & {
 };
 
 export type TypingStartEvent = Event;
+
+export type TranslationLanguages =
+  | 'af'
+  | 'am'
+  | 'ar'
+  | 'az'
+  | 'bg'
+  | 'bn'
+  | 'bs'
+  | 'cs'
+  | 'da'
+  | 'de'
+  | 'el'
+  | 'en'
+  | 'es'
+  | 'es-MX'
+  | 'et'
+  | 'fa'
+  | 'fa-AF'
+  | 'fi'
+  | 'fr'
+  | 'fr-CA'
+  | 'ha'
+  | 'he'
+  | 'hi'
+  | 'hr'
+  | 'hu'
+  | 'id'
+  | 'it'
+  | 'ja'
+  | 'ka'
+  | 'ko'
+  | 'lv'
+  | 'ms'
+  | 'nl'
+  | 'no'
+  | 'pl'
+  | 'ps'
+  | 'pt'
+  | 'ro'
+  | 'ru'
+  | 'sk'
+  | 'sl'
+  | 'so'
+  | 'sq'
+  | 'sr'
+  | 'sv'
+  | 'sw'
+  | 'ta'
+  | 'th'
+  | 'tl'
+  | 'tr'
+  | 'uk'
+  | 'ur'
+  | 'vi'
+  | 'zh'
+  | 'zh-TW';

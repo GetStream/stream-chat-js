@@ -45,7 +45,7 @@ describe('Member style server side', () => {
 		await createUsers(['thierry', 'tommaso']);
 	});
 	it('member based id server side', async () => {
-		const client = await getServerTestClient();
+		const client = getServerTestClient();
 		const c = client.channel('messaging', {
 			name: 'Founder Chat',
 			image: 'http://bit.ly/2O35mws',
@@ -143,7 +143,7 @@ describe('Member style channel init', () => {
 			});
 		});
 
-		const response = await nickChannel.acceptInvite({
+		let response = await nickChannel.acceptInvite({
 			message: { text: 'Nick accepted the chat invite.' },
 		});
 		await nickChannel.watch();
@@ -151,13 +151,13 @@ describe('Member style channel init', () => {
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_accepted_at).to.not.equal(null);
 		await notificationReceived;
-		// second time should fail...
-		await expectHTTPErrorCode(
-			400,
-			nickChannel.acceptInvite({
-				message: { text: 'Nick accepted the chat invite.' },
-			}),
-		);
+		// second time should be a noop
+		response = await nickChannel.acceptInvite({
+			message: { text: 'Nick accepted the chat invite.' },
+		});
+		expect(response.members[1].user.id).to.equal('nick');
+		expect(response.members[1].invite_accepted_at).to.not.equal(null);
+		expect(response.message).to.be.undefined;
 	});
 
 	it('Reject an invite', async () => {
@@ -184,13 +184,15 @@ describe('Member style channel init', () => {
 		});
 		await thierryChannel.watch();
 		await nickChannel.watch();
-		const response = await nickChannel.rejectInvite();
+		let response = await nickChannel.rejectInvite();
 		expect(response.members[1].user.id).to.equal('nick');
 		expect(response.members[1].invite_rejected_at).to.not.equal(null);
 		await inviteRejected;
 		await updateReceived;
-		// second time should fail...
-		await expectHTTPErrorCode(400, nickChannel.rejectInvite());
+		// second time should be a noop
+		response = await nickChannel.rejectInvite();
+		expect(response.members[1].user.id).to.equal('nick');
+		expect(response.members[1].invite_rejected_at).to.not.equal(null);
 	});
 });
 
@@ -258,7 +260,7 @@ describe('Query invites', function () {
 		});
 	});
 	it('Querying for invites with server side auth require an user to be set', async function () {
-		const ssClient = await getTestClient(true);
+		const ssClient = getTestClient(true);
 		const resp = ssClient.queryChannels({ invite: 'pending' });
 		expect(resp).to.be.rejectedWith(
 			'StreamChat error code 4: QueryChannels failed with error: "invite requires a valid user"',
@@ -276,7 +278,7 @@ describe('Query invites', function () {
 		expect(state.channel.id).to.be.equal(channelID);
 	});
 	it('Querying for invites with server side user should work if the user is provided', async function () {
-		const ssClient = await getTestClient(true);
+		const ssClient = getTestClient(true);
 		const resp = await ssClient.queryChannels(
 			{ invite: 'pending' },
 			{},
@@ -455,7 +457,7 @@ describe('update channel - invites', function () {
 		});
 		await distinctChannel.create();
 		await expect(distinctChannel.inviteMembers([invited])).to.be.rejectedWith(
-			'StreamChat error code 4: UpdateChannel failed with error: "cannot add or remove members in a distinct channel, please create a new distinct channel with the desired members',
+			'StreamChat error code 17: UpdateChannel failed with error: "cannot invite members to the distinct channel, please create a new distinct channel with the desired members"',
 		);
 	});
 
