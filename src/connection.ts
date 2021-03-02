@@ -211,7 +211,7 @@ export class StableWSConnection<
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
-    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
+    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
   };
 
   /**

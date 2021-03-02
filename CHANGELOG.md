@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## March 2, 2021 - 3.1.3
+
+### Chore
+
+- Change stream client header from `x-stream-client` to `X-Stream-Client` [#622](https://github.com/GetStream/stream-chat-js/pull/622)
+
+## February 26, 2021 - 3.1.2
+
+### Fix
+
+- Fixed regression introduced in 3.1.0 causing `ChannelState.messages` not to update on incoming reaction events [#621](https://github.com/GetStream/stream-chat-js/pull/621)
+
+## February 23, 2021 - 3.1.1
+
+### Fix
+
+- Channel state message list mutation [#619](https://github.com/GetStream/stream-chat-js/pull/619)
+
 ## February 17, 2021 - 3.1.0
 
 ### Feature

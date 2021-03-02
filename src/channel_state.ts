@@ -320,70 +320,49 @@ export class ChannelState<
     enforce_unique?: boolean,
   ) {
     if (!message) return;
-    let messageWithReaction = message;
+    const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      const newMsg = this._addReactionToMessage(msg, reaction, enforce_unique);
-      messageWithReaction = {
-        ...messageWithReaction,
-        own_reactions: newMsg.own_reactions,
-      };
-      return newMsg;
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
+        msg.own_reactions,
+        reaction,
+        enforce_unique,
+      );
+      return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
   }
 
-  _addReactionToMessage(
-    message: ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >,
+  _addOwnReactionToMessage(
+    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
     reaction: ReactionResponse<ReactionType, UserType>,
     enforce_unique?: boolean,
   ) {
-    const newMessage = message;
     if (enforce_unique) {
-      newMessage.own_reactions = [];
+      ownReactions = [];
     } else {
-      this._removeOwnReactionFromMessage(message, reaction);
+      ownReactions = this._removeOwnReactionFromMessage(ownReactions, reaction);
     }
 
-    newMessage.own_reactions = newMessage.own_reactions || [];
+    ownReactions = ownReactions || [];
     if (this._channel.getClient().userID === reaction.user_id) {
-      newMessage.own_reactions.push(reaction);
+      ownReactions.push(reaction);
     }
 
-    return newMessage;
+    return ownReactions;
   }
 
   _removeOwnReactionFromMessage(
-    message: ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >,
+    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
     reaction: ReactionResponse<ReactionType, UserType>,
   ) {
-    if (message.own_reactions) {
-      message.own_reactions = message.own_reactions.filter(
+    if (ownReactions) {
+      return ownReactions.filter(
         (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
       );
     }
+    return ownReactions;
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   removeReaction(
     reaction: ReactionResponse<ReactionType, UserType>,
     message?: MessageResponse<
@@ -396,14 +375,13 @@ export class ChannelState<
     >,
   ) {
     if (!message) return;
-    let messageWithReaction = message;
+    const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      this._removeOwnReactionFromMessage(msg, reaction);
-      messageWithReaction = {
-        ...messageWithReaction,
-        own_reactions: msg.own_reactions,
-      };
-      return msg;
+      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
+        msg.own_reactions,
+        reaction,
+      );
+      return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
   }
@@ -538,17 +516,17 @@ export class ChannelState<
     if (!timestampChanged && message.id) {
       if (messageArr[left] && message.id === messageArr[left].id) {
         messageArr[left] = message;
-        return messageArr;
+        return [...messageArr];
       }
 
       if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
         messageArr[left - 1] = message;
-        return messageArr;
+        return [...messageArr];
       }
     }
 
     messageArr.splice(left, 0, message);
-    return messageArr;
+    return [...messageArr];
   }
 
   /**

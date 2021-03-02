@@ -263,15 +263,17 @@ describe('ChannelState reactions', () => {
 		state.addMessageSorted(message);
 	});
 	it('Add one reaction', () => {
-		const newMessage = state.addReaction(
-			{
-				user_id: 'observer',
-				type: 'like',
-				score: 1,
-			},
-			message,
-		);
+		const reaction = {
+			user_id: 'observer',
+			type: 'like',
+			score: 1,
+		};
+		const msg = { ...message };
+		msg.latest_reactions.push(reaction);
+		const newMessage = state.addReaction(reaction, msg);
 		expect(newMessage.own_reactions.length).to.be.eq(1);
+		// validate the message got updated in channel state
+		expect(state.messages[0].latest_reactions.length).to.be.eq(1);
 	});
 	it('Add same reaction twice', () => {
 		let newMessage = state.addReaction(
