@@ -181,8 +181,8 @@ describe('Mark all read server-side', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 
 	before(async () => {
-		await serverSideClient.updateUser({ id: tommasoID });
-		await serverSideClient.updateUser({ id: thierryID });
+		await serverSideClient.upsertUser({ id: tommasoID });
+		await serverSideClient.upsertUser({ id: thierryID });
 
 		for (let i = 0; i < 5; i++) {
 			await serverSideClient
@@ -227,7 +227,7 @@ describe('Mark all read server-side', function () {
 
 	it('thierry connects and receives unread_count=5', async function () {
 		const thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -238,7 +238,7 @@ describe('Mark all read server-side', function () {
 
 	it('thierry checks unread counts via query channel', async function () {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		const channelStates = await thierryClient.queryChannels(
 			{ type: 'messaging', members: { $in: [thierryID] } },
 			{ last_message_at: 1 },
@@ -258,7 +258,7 @@ describe('Mark all read server-side', function () {
 
 	it('thierry connects and receives unread_count=0', async function () {
 		const thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -270,7 +270,7 @@ describe('Mark all read server-side', function () {
 
 	it('thierry checks unread counts via query channel', async function () {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		const channelStates = await thierryClient.queryChannels(
 			{ type: 'messaging', members: { $in: [thierryID] } },
 			{ last_message_at: 1 },
@@ -292,8 +292,8 @@ describe('Mark all read', function () {
 	const tommasoID = `tommaso-${uuidv4()}`;
 
 	before(async () => {
-		await serverSideClient.updateUser({ id: tommasoID });
-		await serverSideClient.updateUser({ id: thierryID });
+		await serverSideClient.upsertUser({ id: tommasoID });
+		await serverSideClient.upsertUser({ id: thierryID });
 
 		for (let i = 0; i < 5; i++) {
 			await serverSideClient
@@ -338,7 +338,7 @@ describe('Mark all read', function () {
 
 	it('thierry connects and receives unread_count=5', async function () {
 		const thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -350,7 +350,7 @@ describe('Mark all read', function () {
 
 	it('thierry checks unread counts via query channel', async function () {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		const channelStates = await thierryClient.queryChannels(
 			{ type: 'messaging', members: { $in: [thierryID] } },
 			{ last_message_at: 1 },
@@ -366,14 +366,14 @@ describe('Mark all read', function () {
 
 	it('thierry marks all as read', async function () {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		await thierryClient.markAllRead();
 		await thierryClient.disconnect(5000);
 	});
 
 	it('thierry connects and receives unread_count=0', async function () {
 		const thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -384,7 +384,7 @@ describe('Mark all read', function () {
 
 	it('thierry checks unread counts via query channel', async function () {
 		const thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		const channelStates = await thierryClient.queryChannels(
 			{ type: 'messaging', members: { $in: [thierryID] } },
 			{ last_message_at: 1 },
@@ -407,8 +407,8 @@ describe('Unread on connect', function () {
 	let thierryClient;
 
 	before(async () => {
-		await serverSideClient.updateUser({ id: tommasoID });
-		await serverSideClient.updateUser({ id: thierryID });
+		await serverSideClient.upsertUser({ id: tommasoID });
+		await serverSideClient.upsertUser({ id: thierryID });
 
 		for (let i = 0; i < 5; i++) {
 			await serverSideClient
@@ -469,7 +469,7 @@ describe('Unread on connect', function () {
 
 	it('thierry connects and receives unread_count=5', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -504,7 +504,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receive unread_count=4', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -514,7 +514,7 @@ describe('Unread on connect', function () {
 
 	it('thierry checks unread counts via query channel', async function () {
 		thierryClient = getTestClient(false);
-		await thierryClient.setUser({ id: thierryID }, createUserToken(thierryID));
+		await thierryClient.connectUser({ id: thierryID }, createUserToken(thierryID));
 		const channelStates = await thierryClient.queryChannels(
 			{ type: 'messaging', members: { $in: [thierryID] } },
 			{ last_message_at: 1 },
@@ -544,7 +544,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receives unread_count=104', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -569,7 +569,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receives unread_count=3', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -604,7 +604,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receives unread_count=2', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -618,7 +618,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receives unread_count=1', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -632,7 +632,7 @@ describe('Unread on connect', function () {
 
 	it('thierry re-connects and receives unread_count=0', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);
@@ -649,12 +649,15 @@ describe('Unread on connect', function () {
 	it('tommaso likes one message', async function () {
 		const chan = serverSideClient.channel('messaging', cids[2]);
 		const r = await chan.query();
-		await chan.sendReaction(chan.state.messages[0].id, { type: 'love' }, tommasoID);
+		await chan.sendReaction(chan.state.messages[0].id, {
+			type: 'love',
+			user: { id: tommasoID },
+		});
 	});
 
 	it('thierry re-connects and receives unread_count=0', async function () {
 		thierryClient = getTestClient(false);
-		const response = await thierryClient.setUser(
+		const response = await thierryClient.connectUser(
 			{ id: thierryID },
 			createUserToken(thierryID),
 		);

@@ -2,7 +2,6 @@
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import Immutable from 'seamless-immutable';
 import { StreamChat } from '../../src';
 import fs from 'fs';
 import {
@@ -69,7 +68,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 		const serverClient = getServerTestClient();
-		await serverClient.updateUsers([
+		await serverClient.upsertUsers([
 			{
 				id: userID,
 				unique,
@@ -152,7 +151,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 
-		await client.updateUsers([
+		await client.upsertUsers([
 			{
 				id: userID,
 				unique,
@@ -195,7 +194,7 @@ describe('Query Users', function () {
 		const userID3 = uuidv4();
 		const unique = uuidv4();
 
-		await client.updateUsers([
+		await client.upsertUsers([
 			{
 				id: userID,
 				unique,

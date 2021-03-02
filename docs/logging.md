@@ -5,7 +5,7 @@ You can use our logger functionality for the purpose of debugging.
 ## Non-server client
 
 ```js
-const client = new StreamChat('api_key', {
+const client = StreamChat.getInstance('api_key', {
   logger: (logLevel, message, extraData) => {
     console.log(message); // or any logging tool that you are using e.g. reactotron
   },
@@ -15,7 +15,7 @@ const client = new StreamChat('api_key', {
 ## Server side client
 
 ```js
-const client = new StreamChat(
+const client = StreamChat.getInstance(
   'api_key',
   'secret'
   {

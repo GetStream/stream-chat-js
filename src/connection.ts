@@ -94,7 +94,7 @@ export class StableWSConnection<
       StatusCode?: string | number;
     },
   ) => void;
-  resolvePromise?: (value?: WebSocket.MessageEvent) => void;
+  resolvePromise?: (value: WebSocket.MessageEvent) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
@@ -211,7 +211,7 @@ export class StableWSConnection<
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
-    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&x-stream-client=${this.userAgent}`;
+    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
   };
 
   /**
@@ -699,7 +699,7 @@ export class StableWSConnection<
    * @return {number} Duration to wait in milliseconds
    */
   _retryInterval = () => {
-    // try to reconnect in 0-5 seconds (random to spread out the load from failures)
+    // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
     const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
     const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
     return Math.floor(Math.random() * (max - min) + min);

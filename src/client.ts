@@ -105,6 +105,8 @@ export class StreamChat<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
+  private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
+
   _user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
   activeChannels: {
     [key: string]: Channel<
@@ -147,8 +149,8 @@ export class StreamChat<
   logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guarenteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't relie on js client for this.
+   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
+   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
    *
    * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
    * When false, user/consumer of this client will need to make sure all the channels present on UI by
@@ -172,6 +174,8 @@ export class StreamChat<
 
   /**
    * Initialize a client
+   *
+   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections**
    * @param {string} key - the api key
    * @param {string} [secret] - the api secret
    * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
@@ -313,6 +317,125 @@ export class StreamChat<
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
   }
 
+  /**
+   * Get a client instance
+   *
+   * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
+   *
+   * **After the first call, the client configuration will not change if the key or options parameters change**
+   *
+   * @param {string} key - the api key
+   * @param {string} [secret] - the api secret
+   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
+   * @param {boolean} [options.browser] - enforce the client to be in browser mode
+   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
+   * @param {Logger} [options.Logger] - custom logger
+   * @param {number} [options.timeout] - default to 3000
+   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * @example <caption>initialize the client in user mode</caption>
+   * StreamChat.getInstance('api_key')
+   * @example <caption>initialize the client in user mode with options</caption>
+   * StreamChat.getInstance('api_key', { timeout:5000 })
+   * @example <caption>secret is optional and only used in server side mode</caption>
+   * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
+   */
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    secret?: string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  public static getInstance<
+    AttachmentType extends UnknownType = UnknownType,
+    ChannelType extends UnknownType = UnknownType,
+    CommandType extends string = LiteralStringForUnion,
+    EventType extends UnknownType = UnknownType,
+    MessageType extends UnknownType = UnknownType,
+    ReactionType extends UnknownType = UnknownType,
+    UserType extends UnknownType = UnknownType
+  >(
+    key: string,
+    secretOrOptions?: StreamChatOptions | string,
+    options?: StreamChatOptions,
+  ): StreamChat<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  > {
+    if (!StreamChat._instance) {
+      if (typeof secretOrOptions === 'string') {
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions, options);
+      } else {
+        StreamChat._instance = new StreamChat<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >(key, secretOrOptions);
+      }
+    }
+
+    return StreamChat._instance as StreamChat<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+  }
+
   devToken(userID: string) {
     return DevToken(userID);
   }
@@ -347,6 +470,21 @@ export class StreamChat<
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
   ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
+    if (!user.id) {
+      throw new Error('The "id" field on the user is missing');
+    }
+
+    /**
+     * Calling connectUser multiple times is potentially the result of a  bad integration, however,
+     * If the user id remains the same we don't throw error
+     */
+    if (this.userID === user.id && this.setUserPromise) {
+      console.warn(
+        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
+      );
+      return this.setUserPromise;
+    }
+
     if (this.userID) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
@@ -364,23 +502,16 @@ export class StreamChat<
 
     // we generate the client id client side
     this.userID = user.id;
-
-    if (!this.userID) {
-      throw new Error('The "id" field on the user is missing');
-    }
+    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
     const wsPromise = this._setupConnection();
 
-    this.anonymous = false;
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise])
-      .then((result) => result[1]) // We only return connection promise;
-      .catch((e) => {
-        throw e;
-      });
+    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
+      (result) => result[1], // We only return connection promise;
+    );
 
     return this.setUserPromise;
   };
@@ -395,11 +526,7 @@ export class StreamChat<
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
-  setUser = (
-    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-    userTokenOrProvider: TokenOrProvider,
-  ): ConnectAPIResponse<ChannelType, CommandType, UserType> =>
-    this.connectUser(user, userTokenOrProvider);
+  setUser = this.connectUser;
 
   _setToken = (user: UserResponse<UserType>, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
@@ -564,7 +691,7 @@ export class StreamChat<
   /**
    * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
    */
-  setAnonymousUser = () => this.connectAnonymousUser();
+  setAnonymousUser = this.connectAnonymousUser;
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -843,7 +970,6 @@ export class StreamChat<
           response = await this.axiosInstance.patch(url, data, requestConfig);
           break;
         case 'options':
-          // @ts-ignore
           response = await this.axiosInstance.options(url, requestConfig);
           break;
         default:
@@ -1075,17 +1201,19 @@ export class StreamChat<
   ) => {
     const client = this;
     // gather and call the listeners
-    const listeners: Array<(
-      event: Event<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >,
-    ) => void> = [];
+    const listeners: Array<
+      (
+        event: Event<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >,
+      ) => void
+    > = [];
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
@@ -1147,14 +1275,14 @@ export class StreamChat<
     const refMap = this.state.userChannelReferences[user.id] || {};
     const refs = Object.keys(refMap);
     for (const channelID of refs) {
-      const c = this.activeChannels[channelID];
+      const channel = this.activeChannels[channelID];
       // search the members and watchers and update as needed...
-      if (c && c.state) {
-        if (c.state.members[user.id]) {
-          c.state.members = c.state.members.setIn([user.id, 'user'], user);
+      if (channel?.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
         }
-        if (c.state.watchers[user.id]) {
-          c.state.watchers = c.state.watchers.setIn([user.id, 'user'], user);
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
         }
       }
     }
@@ -1512,27 +1640,105 @@ export class StreamChat<
         UserType
       >(this, channelType, undefined, custom);
     }
+
     // support channel("messaging", {options})
     if (typeof channelIDOrCustom === 'object') {
-      return new Channel<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >(this, channelType, undefined, channelIDOrCustom);
+      return this.getChannelByMembers(channelType, channelIDOrCustom);
     }
 
-    if (typeof channelIDOrCustom === 'string' && ~channelIDOrCustom.indexOf(':')) {
-      throw Error(
-        `Invalid channel id ${channelIDOrCustom}, can't contain the : character`,
-      );
+    return this.getChannelById(channelType, channelIDOrCustom, custom);
+  }
+
+  /**
+   * It's a helper method for `client.channel()` method, used to create unique conversation or
+   * channel based on member list instead of id.
+   *
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
+   * means the same channel was already requested or created.
+   *
+   * Otherwise we create a new instance of Channel class and return it.
+   *
+   * @private
+   *
+   * @param {string} channelType The channel type
+   * @param {object} [custom]    Custom data to attach to the channel
+   *
+   * @return {channel} The channel object, initialize it using channel.watch()
+   */
+  getChannelByMembers = (channelType: string, custom: ChannelData<ChannelType>) => {
+    // Check if the channel already exists.
+    // Only allow 1 channel object per cid
+    const membersStr = [...(custom.members || [])].sort().join(',');
+    const tempCid = `${channelType}:!members-${membersStr}`;
+
+    if (!membersStr) {
+      throw Error('Please specify atleast one member when creating unique conversation');
+    }
+
+    // channel could exist in `activeChannels` list with either one of the following two keys:
+    // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
+    // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
+    //                        This is set when you create a channel, but haven't queried yet. After query,
+    //                        we will replace it with `cid`
+    for (const key in this.activeChannels) {
+      const channel = this.activeChannels[key];
+      if (key === tempCid) {
+        return channel;
+      }
+
+      if (key.indexOf(`${channelType}:!members-`) === 0) {
+        const membersStrInExistingChannel = Object.keys(channel.state.members)
+          .sort()
+          .join(',');
+        if (membersStrInExistingChannel === membersStr) {
+          return channel;
+        }
+      }
+    }
+
+    const channel = new Channel<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >(this, channelType, undefined, custom);
+
+    // For the time being set the key as membersStr, since we don't know the cid yet.
+    // In channel.query, we will replace it with 'cid'.
+    this.activeChannels[tempCid] = channel;
+    return channel;
+  };
+
+  /**
+   * Its a helper method for `client.channel()` method, used to channel given the id of channel.
+   *
+   * If the channel already exists in `activeChannels` list, then we simply return it, since that
+   * means the same channel was already requested or created.
+   *
+   * Otherwise we create a new instance of Channel class and return it.
+   *
+   * @private
+   *
+   * @param {string} channelType The channel type
+   * @param {string} [channelID] The channel ID
+   * @param {object} [custom]    Custom data to attach to the channel
+   *
+   * @return {channel} The channel object, initialize it using channel.watch()
+   */
+  getChannelById = (
+    channelType: string,
+    channelID: string,
+    custom: ChannelData<ChannelType>,
+  ) => {
+    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
+      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelIDOrCustom}`;
+    const cid = `${channelType}:${channelID}`;
     if (cid in this.activeChannels) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
@@ -1549,24 +1755,11 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType
-    >(this, channelType, channelIDOrCustom, custom);
+    >(this, channelType, channelID, custom);
     this.activeChannels[channel.cid] = channel;
 
     return channel;
-  }
-
-  /**
-   * @deprecated Please use upsertUser() function instead.
-   *
-   * updateUser - Update or Create the given user object
-   *
-   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   *
-   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
-   */
-  async updateUser(userObject: UserResponse<UserType>) {
-    return await this.upsertUsers([userObject]);
-  }
+  };
 
   /**
    * partialUpdateUser - Update the given user object
@@ -1606,6 +1799,16 @@ export class StreamChat<
   }
 
   /**
+   * @deprecated Please use upsertUsers() function instead.
+   *
+   * updateUsers - Batch update the list of users
+   *
+   * @param {UserResponse<UserType>[]} users list of users
+   * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
+   */
+  updateUsers = this.upsertUsers;
+
+  /**
    * upsertUser - Update or Create the given user object
    *
    * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
@@ -1617,17 +1820,14 @@ export class StreamChat<
   }
 
   /**
-   * @deprecated Please use upsertUsers() function instead.
+   * @deprecated Please use upsertUser() function instead.
    *
-   * updateUsers - Batch update the list of users
+   * updateUser - Update or Create the given user object
    *
-   * @param {UserResponse<UserType>[]} users list of users
-   *
+   * @param {UserResponse<UserType>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
    * @return {Promise<APIResponse & { users: { [key: string]: UserResponse<UserType> } }>}
    */
-  updateUsers(users: UserResponse<UserType>[]) {
-    return this.upsertUsers(users);
-  }
+  updateUser = this.upsertUser;
 
   /**
    * partialUpdateUsers - Batch partial update of users
@@ -1654,7 +1854,11 @@ export class StreamChat<
 
   async deleteUser(
     userID: string,
-    params?: { hard_delete?: boolean; mark_messages_deleted?: boolean },
+    params?: {
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
   ) {
     return await this.delete<
       APIResponse & {
@@ -1665,7 +1869,7 @@ export class StreamChat<
 
   async reactivateUser(
     userID: string,
-    options?: { name?: string; restore_messages?: boolean },
+    options?: { created_by_id?: string; name?: string; restore_messages?: boolean },
   ) {
     return await this.post<
       APIResponse & {
@@ -1676,7 +1880,10 @@ export class StreamChat<
     });
   }
 
-  async deactivateUser(userID: string, options?: { mark_messages_deleted?: boolean }) {
+  async deactivateUser(
+    userID: string,
+    options?: { created_by_id?: string; mark_messages_deleted?: boolean },
+  ) {
     return await this.post<APIResponse & { user: UserResponse<UserType> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       {
@@ -1805,14 +2012,15 @@ export class StreamChat<
     });
   }
 
-  /** userMuteStatus - check if a user is muted or not, can be used after setUser() is called
+  /** userMuteStatus - check if a user is muted or not, can be used after connectUser() is called
    *
    * @param {string} targetID
    * @returns {boolean}
    */
   userMuteStatus(targetID: string) {
-    if (!this.user || !this.wsPromise)
-      throw new Error('Make sure to await setUser() first.');
+    if (!this.user || !this.wsPromise) {
+      throw new Error('Make sure to await connectUser() first.');
+    }
 
     for (let i = 0; i < this.mutedUsers.length; i += 1) {
       if (this.mutedUsers[i].target.id === targetID) return true;
@@ -2181,13 +2389,6 @@ export class StreamChat<
     >(this.baseURL + `/messages/${messageID}`);
   }
 
-  /**
-   * @deprecated Please use getUserAgent instead
-   */
-  _userAgent() {
-    return this.getUserAgent();
-  }
-
   getUserAgent() {
     return (
       this.userAgent ||
@@ -2225,7 +2426,7 @@ export class StreamChat<
       headers: {
         Authorization: token,
         'stream-auth-type': this.getAuthType(),
-        'x-stream-client': this._userAgent(),
+        'X-Stream-Client': this.getUserAgent(),
         ...options.headers,
       },
       ...options.config,

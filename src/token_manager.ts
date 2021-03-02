@@ -119,7 +119,7 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
     // eslint-disable-next-line no-async-promise-executor
     this.loadTokenPromise = new Promise(async (resolve) => {
       if (this.type === 'static') {
-        return resolve(this.token);
+        return resolve(this.token as string);
       }
 
       if (this.tokenProvider && typeof this.tokenProvider !== 'string') {
@@ -146,7 +146,7 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
     }
 
     throw new Error(
-      `Both secret and user tokens are not set. Either client.setUser wasn't called or client.disconnect was called`,
+      `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`,
     );
   };
 

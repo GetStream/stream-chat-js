@@ -18,7 +18,7 @@ async function banUsers() {
 	const evilUser = 'evil-user' + uuidv4();
 	await utils.createUsers([evilUser, user.id]);
 	return await client.banUser(evilUser, {
-		user_id: user.id,
+		banned_by_id: user.id,
 	});
 }
 
@@ -31,7 +31,7 @@ async function shadowBan() {
 	const evilUser = 'evil-shadow-user' + uuidv4();
 	await utils.createUsers([evilUser, user.id]);
 	return await client.banUser(evilUser, {
-		user_id: user.id,
+		banned_by_id: user.id,
 		shadow: true,
 	});
 }
@@ -109,10 +109,10 @@ async function flagMessage() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
-	await authClient.setUser(thierry);
+	await authClient.connectUser(thierry);
 
 	const channel = authClient.channel('livestream', `ninja-${uuidv4()}`, {
 		mysearchablefield: 'hi',
@@ -144,10 +144,10 @@ async function flagUser() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
-	await authClient.setUser(thierry);
+	await authClient.connectUser(thierry);
 	const evilId = uuidv4();
 	const evil = {
 		id: evilId,
@@ -160,7 +160,7 @@ async function flagUser() {
 	const modUserID = uuidv4();
 
 	await utils.createUsers([modUserID]);
-	await serverAuthClient.updateUser(evil);
+	await serverAuthClient.upsertUser(evil);
 
 	return await authClient.flagUser(evilId);
 }
@@ -263,10 +263,10 @@ async function unflagMessage() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
-	await authClient.setUser(thierry);
+	await authClient.connectUser(thierry);
 
 	const channel = authClient.channel('livestream', `ninja-${uuidv4()}`, {
 		mysearchablefield: 'hi',
@@ -308,14 +308,14 @@ async function unflagUser() {
 		role: 'admin',
 	};
 
-	await serverAuthClient.updateUsers([thierry, tommaso, { id: 'thierry' }]);
+	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
 	//	delete thierry.role;
 	// await isn't needed but makes testing a bit easier
-	await authClient.setUser(thierry);
+	await authClient.connectUser(thierry);
 	const modUserID = uuidv4();
 
 	await utils.createUsers([modUserID]);
-	await serverAuthClient.updateUser(evil);
+	await serverAuthClient.upsertUser(evil);
 
 	await authClient.flagUser(evilId);
 

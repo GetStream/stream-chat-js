@@ -1,3 +1,91 @@
+# CHANGELOG
+
+## March 2, 2021 - 3.1.3
+
+### Chore
+
+- Change stream client header from `x-stream-client` to `X-Stream-Client` [#622](https://github.com/GetStream/stream-chat-js/pull/622)
+
+## February 26, 2021 - 3.1.2
+
+### Fix
+
+- Fixed regression introduced in 3.1.0 causing `ChannelState.messages` not to update on incoming reaction events [#621](https://github.com/GetStream/stream-chat-js/pull/621)
+
+## February 23, 2021 - 3.1.1
+
+### Fix
+
+- Channel state message list mutation [#619](https://github.com/GetStream/stream-chat-js/pull/619)
+
+## February 17, 2021 - 3.1.0
+
+### Feature
+
+- `sendMessage` accepts a `skip_push` flag to skip sending push notifications [#608](https://github.com/GetStream/stream-chat-js/pull/608)
+
+### Fix
+
+- Sync `own_reactions` in the events [#606](https://github.com/GetStream/stream-chat-js/pull/606)
+- Missing user_id in channel instantion by members [#610](https://github.com/GetStream/stream-chat-js/pull/610)
+
+## February 11, 2021 - 3.0.1
+
+- Add back some deprecated functions for convenience [#615](https://github.com/GetStream/stream-chat-js/pull/615)
+
+## February 10, 2021 - 3.0.0
+
+### BREAKING CHANGES
+
+- Removed `seamless-immutable` library completely for client/channel state management in favor of pure JS objects [#602](https://github.com/GetStream/stream-chat-js/pull/602). This will likely require some changes to frontend usage of these states with spread operators for deeply nested data updates
+- Changed channel state `messageToImmutable` function to `formatMessage` [#602](https://github.com/GetStream/stream-chat-js/pull/602)
+
+- `channel.sendReaction(messageID: string, reaction: Reaction, user_id?: string, enforce_unique?: boolean)` is changed to `channel.sendReaction(messageID: string, reaction: Reaction, options?: { enforce_unique?: boolean })`. the removed `user_id` parameter should be added to `reaction`.
+- `client.setUser()` function is removed in favor of `client.connectUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.setAnonymousUser()` function is removed in favor of `client.connectAnonymousUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.updateUser()` function is removed in favor of `client.upsertUser()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client.updateUsers()` function is removed in favor of `client.upsertUsers()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+- `client._userAgent()` function is removed in favor of `client.getUserAgent()` [#612](https://github.com/GetStream/stream-chat-js/pull/612)
+
+### Fix
+
+- Added types for auto translations [#602](https://github.com/GetStream/stream-chat-js/pull/602)
+- Added missing options for gdpr endpoints [#609](https://github.com/GetStream/stream-chat-js/pull/609)
+
+### Chore
+
+- Upgrade Dependencies [#613](https://github.com/GetStream/stream-chat-js/pull/613)
+
+## January 28, 2021 - 2.12.0
+
+### Feature
+
+- New `StreamClient.getInstance` function to be use instead of `new StreamClient()` [#599](https://github.com/GetStream/stream-chat-js/pull/599)
+- Types for file and image upload app configuration [#582](https://github.com/GetStream/stream-chat-js/pull/582)
+
+### Fix
+
+- Allow consecutive calls with warning to `client.connectUser` for the same user [#600](https://github.com/GetStream/stream-chat-js/pull/600)
+
+## January 21, 2021 - 2.11.5
+
+### Fix
+
+- Skip sorting channel members while instantiating a channel without id [#591](https://github.com/GetStream/stream-chat-js/pull/591)
+
+## January 20, 2021 - 2.11.4
+
+- Ensure uniqe channel per cid on client's activeChannel state [#586](https://github.com/GetStream/stream-chat-js/pull/586)
+
+## January 18, 2021 - 2.11.3
+
+- Added types for query by date parameters - [b249e0b](https://github.com/GetStream/stream-chat-js/commit/b249e0b02da9b6e1c3984586b7ab823de072dd4b)
+- Added missing type definitions around channel config - [9c3067f](https://github.com/GetStream/stream-chat-js/commit/9c3067f70efa9cad12233d10818b623efc00e1f6)
+
+## January 11, 2021 - 2.11.2
+
+- Add thread_participants to MessageResponse and correct pinned types [8e357a8](https://github.com/GetStream/stream-chat-js/commit/9d10998cc56c807e34e3131eccd8bf561c1ce822)
+
 ## January 4, 2021 - 2.11.1
 
 - Updated/fixed types on event object regarding unread counts. [36e2297](https://github.com/GetStream/stream-chat-js/commit/36e2297526682276c4e597fd171c27d115ba0bb6)

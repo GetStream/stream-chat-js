@@ -1,6 +1,10 @@
 name: Compressed Size
 
-on: [pull_request]
+on:
+  pull_request:
+    paths-ignore:
+      - 'test/**'
+      - '**.md'
 
 jobs:
   build:

@@ -101,7 +101,10 @@ describe('Sync endpoint', () => {
 
 	it('add a message reaction', async () => {
 		messageWithReaction = messages[1].message.id;
-		await blueChannel.sendReaction(messageWithReaction, { type: 'like' }, userID);
+		await blueChannel.sendReaction(messageWithReaction, {
+			type: 'like',
+			user: { id: userID },
+		});
 	});
 
 	it('hide the green channel for current user (via backend)', async () => {
@@ -111,7 +114,7 @@ describe('Sync endpoint', () => {
 	let syncReply;
 
 	it('sync should return a response', async () => {
-		await userClient.setUser({ id: userID }, createUserToken(userID));
+		await userClient.connectUser({ id: userID }, createUserToken(userID));
 		syncReply = await userClient.sync(
 			[blueChannel.cid, redChannel.cid, greenChannel.cid],
 			lastEventAt,

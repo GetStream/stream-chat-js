@@ -632,7 +632,7 @@ describe('Moderation', function () {
 		expect(response.mute.target.id).to.equal(user2);
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -662,7 +662,7 @@ describe('Moderation', function () {
 		expect(response.mute.target.id).to.equal(user2);
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -687,7 +687,7 @@ describe('Moderation', function () {
 			.sendMessage({ text: 'yototototo' });
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -718,7 +718,7 @@ describe('Moderation', function () {
 
 		// verify we return the right user mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -766,7 +766,7 @@ describe('mute channels', function () {
 
 		// verify we return the right channel mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -783,7 +783,7 @@ describe('mute channels', function () {
 			.sendMessage({ text: 'message to muted channel' });
 
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -833,7 +833,7 @@ describe('mute channels', function () {
 
 		// verify we return the right channel mute upon connect
 		const client = getTestClient(false);
-		const connectResponse = await client.setUser(
+		const connectResponse = await client.connectUser(
 			{ id: user1 },
 			createUserToken(user1),
 		);
@@ -963,7 +963,7 @@ describe('channel muteStatus', function () {
 		});
 	});
 
-	it('setUser populate internal mute state', async function () {
+	it('connectUser populate internal mute state', async function () {
 		const c = await getTestClientForUser(userID);
 		expect(c.health.me.channel_mutes.length).to.be.equal(1);
 		expect(c.health.me.channel_mutes[0].channel.cid).to.be.equal(channel.cid);

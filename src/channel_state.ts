@@ -1,4 +1,3 @@
-import Immutable from 'seamless-immutable';
 import { Channel } from './channel';
 import {
   ChannelMemberResponse,
@@ -33,23 +32,20 @@ export class ChannelState<
     UserType
   >;
   watcher_count: number;
-  typing: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<
-      Event<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >;
-  }>;
-  read: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<{ last_read: Date; user: UserResponse<UserType> }>;
-  }>;
-  messages: Immutable.ImmutableArray<
+  typing: Record<
+    string,
+    Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
+  >;
+  read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
+  messages: Array<
     ReturnType<
       ChannelState<
         AttachmentType,
@@ -59,11 +55,25 @@ export class ChannelState<
         MessageType,
         ReactionType,
         UserType
-      >['messageToImmutable']
+      >['formatMessage']
     >
   >;
-  threads: Immutable.ImmutableObject<{
-    [key: string]: Immutable.ImmutableArray<
+  pinnedMessages: Array<
+    ReturnType<
+      ChannelState<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >['formatMessage']
+    >
+  >;
+  threads: Record<
+    string,
+    Array<
       ReturnType<
         ChannelState<
           AttachmentType,
@@ -73,19 +83,15 @@ export class ChannelState<
           MessageType,
           ReactionType,
           UserType
-        >['messageToImmutable']
+        >['formatMessage']
       >
-    >;
-  }>;
-  mutedUsers: Immutable.ImmutableArray<UserResponse<UserType>>;
-  watchers: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<UserResponse<UserType>>;
-  }>;
-  members: Immutable.ImmutableObject<{
-    [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
-  }>;
+    >
+  >;
+  mutedUsers: Array<UserResponse<UserType>>;
+  watchers: Record<string, UserResponse<UserType>>;
+  members: Record<string, ChannelMemberResponse<UserType>>;
   unreadCount: number;
-  membership: Immutable.ImmutableObject<ChannelMembership<UserType>>;
+  membership: ChannelMembership<UserType>;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
@@ -107,50 +113,16 @@ export class ChannelState<
   ) {
     this._channel = channel;
     this.watcher_count = 0;
-    this.typing = Immutable<{
-      [key: string]: Immutable.Immutable<
-        Event<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
-      >;
-    }>({});
-    this.read = Immutable<{
-      [key: string]: Immutable.Immutable<{
-        last_read: Date;
-        user: UserResponse<UserType>;
-      }>;
-    }>({});
-    this.messages = Immutable([]);
-    this.threads = Immutable<{
-      [key: string]: Immutable.ImmutableArray<
-        ReturnType<
-          ChannelState<
-            AttachmentType,
-            ChannelType,
-            CommandType,
-            EventType,
-            MessageType,
-            ReactionType,
-            UserType
-          >['messageToImmutable']
-        >
-      >;
-    }>({});
+    this.typing = {};
+    this.read = {};
+    this.messages = [];
+    this.pinnedMessages = [];
+    this.threads = {};
     // a list of users to hide messages from
-    this.mutedUsers = Immutable([]);
-    this.watchers = Immutable<{
-      [key: string]: Immutable.Immutable<UserResponse<UserType>>;
-    }>({});
-    this.members = Immutable<{
-      [key: string]: Immutable.Immutable<ChannelMemberResponse<UserType>>;
-    }>({});
-    this.membership = Immutable<ChannelMembership<UserType>>({});
+    this.mutedUsers = [];
+    this.watchers = {};
+    this.members = {};
+    this.membership = {};
     this.unreadCount = 0;
     /**
      * Flag which indicates if channel state contain latest/recent messages or no.
@@ -187,13 +159,13 @@ export class ChannelState<
   }
 
   /**
-   * messageToImmutable - Takes the message object. Parses the dates, sets __html
-   * and sets the status to received if missing. Returns an immutable message object
+   * formatMessage - Takes the message object. Parses the dates, sets __html
+   * and sets the status to received if missing. Returns a message object
    *
-   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message an Immutable message object
+   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message a message object
    *
    */
-  messageToImmutable(
+  formatMessage(
     message: MessageResponse<
       AttachmentType,
       ChannelType,
@@ -203,14 +175,15 @@ export class ChannelState<
       UserType
     >,
   ) {
-    return Immutable({
+    return {
       ...message,
       __html: message.html,
       // parse the date..
+      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
       created_at: message.created_at ? new Date(message.created_at) : new Date(),
       updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
       status: message.status || 'received',
-    });
+    };
   }
 
   /**
@@ -234,14 +207,14 @@ export class ChannelState<
     initializing = false,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
-      const message = this.messageToImmutable(newMessages[i]);
+      const message = this.formatMessage(newMessages[i]);
 
       if (initializing && message.id && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
         // then in that case we remove thread related to this message from threads object.
         // This way we can ensure that we don't have any stale data in thread object
         // and consumer can refetch the replies.
-        this.threads = this.threads.without(message.id);
+        delete this.threads[message.id];
       }
 
       if (!this.last_message_at) {
@@ -262,11 +235,76 @@ export class ChannelState<
 
       // add to the thread if applicable..
       if (parentID) {
-        const thread = this.threads[parentID] || Immutable([]);
+        const thread = this.threads[parentID] || [];
         const threadMessages = this._addToMessageList(thread, message, timestampChanged);
-        this.threads = this.threads.set(parentID, threadMessages);
+        this.threads[parentID] = threadMessages;
       }
     }
+  }
+
+  /**
+   * addPinnedMessages - adds messages in pinnedMessages property
+   *
+   * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} pinnedMessages A list of pinned messages
+   *
+   */
+  addPinnedMessages(
+    pinnedMessages: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >[],
+  ) {
+    for (let i = 0; i < pinnedMessages.length; i += 1) {
+      this.addPinnedMessage(pinnedMessages[i]);
+    }
+  }
+
+  /**
+   * addPinnedMessage - adds message in pinnedMessages
+   *
+   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} pinnedMessage message to update
+   *
+   */
+  addPinnedMessage(
+    pinnedMessage: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    this.pinnedMessages = this._addToMessageList(
+      this.pinnedMessages,
+      this.formatMessage(pinnedMessage),
+      false,
+      'pinned_at',
+    );
+  }
+
+  /**
+   * removePinnedMessage - removes pinned message from pinnedMessages
+   *
+   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message message to remove
+   *
+   */
+  removePinnedMessage(
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
+    this.pinnedMessages = result;
   }
 
   addReaction(
@@ -281,128 +319,48 @@ export class ChannelState<
     >,
     enforce_unique?: boolean,
   ) {
-    const { messages } = this;
     if (!message) return;
-    const { parent_id, show_in_channel } = message;
-
-    if (parent_id && this.threads[parent_id]) {
-      const thread = this.threads[parent_id];
-
-      for (let i = 0; i < thread.length; i++) {
-        const msg = thread[i];
-        const messageWithReaction = this._addReactionToMessage(
-          msg,
-          reaction,
-          enforce_unique,
-        );
-        if (!messageWithReaction) {
-          continue;
-        }
-
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        this.threads = this.threads.set(parent_id, thread.set(i, messageWithReaction));
-        break;
-      }
-    }
-
-    if ((!show_in_channel && !parent_id) || show_in_channel) {
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const messageWithReaction = this._addReactionToMessage(
-          msg,
-          reaction,
-          enforce_unique,
-        );
-        if (!messageWithReaction) {
-          continue;
-        }
-
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        this.messages = messages.set(i, messageWithReaction);
-        break;
-      }
-    }
+    const messageWithReaction = message;
+    this._updateMessage(message, (msg) => {
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
+        msg.own_reactions,
+        reaction,
+        enforce_unique,
+      );
+      return this.formatMessage(messageWithReaction);
+    });
+    return messageWithReaction;
   }
 
-  _addReactionToMessage(
-    message: Immutable.Immutable<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['messageToImmutable']
-      >
-    >,
+  _addOwnReactionToMessage(
+    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
     reaction: ReactionResponse<ReactionType, UserType>,
     enforce_unique?: boolean,
   ) {
-    const idMatch = !!message.id && message.id === reaction.message_id;
-
-    if (!idMatch) {
-      return false;
-    }
-
-    let newMessage = this._removeReactionFromMessage(message, reaction, enforce_unique);
-    if (this._channel.getClient().userID === reaction.user?.id) {
-      newMessage = newMessage.update(
-        'own_reactions',
-        (old: ReactionResponse<ReactionType, UserType>[]) => old.concat([reaction]),
-      );
-    }
-    newMessage = newMessage.update(
-      'latest_reactions',
-      (old: ReactionResponse<ReactionType, UserType>[]) => old.concat([reaction]),
-    );
-
-    newMessage = newMessage.updateIn(['reaction_counts', reaction.type], (old: number) =>
-      old ? old + 1 : 1,
-    );
-
-    return newMessage;
-  }
-
-  _removeReactionFromMessage(
-    message: Immutable.Immutable<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['messageToImmutable']
-      >
-    >,
-    reaction: ReactionResponse<ReactionType, UserType>,
-    enforce_unique?: boolean,
-  ) {
-    const filterReaction = (old: ReactionResponse<ReactionType, UserType>[]) =>
-      old.filter((item) =>
-        enforce_unique
-          ? item.user?.id !== reaction.user?.id
-          : item.type !== reaction.type || item.user?.id !== reaction.user?.id,
-      );
-    let newMessage = message.update('own_reactions', filterReaction);
-    newMessage = newMessage.update('latest_reactions', filterReaction);
     if (enforce_unique) {
-      const oldReaction = message.own_reactions?.find(
-        ({ type }) => type === reaction.type,
-      );
-      if (oldReaction) {
-        newMessage = newMessage.updateIn(
-          ['reaction_counts', oldReaction.type],
-          (old: number) => (old ? old - 1 : 0),
-        );
-      }
+      ownReactions = [];
+    } else {
+      ownReactions = this._removeOwnReactionFromMessage(ownReactions, reaction);
     }
-    return newMessage;
+
+    ownReactions = ownReactions || [];
+    if (this._channel.getClient().userID === reaction.user_id) {
+      ownReactions.push(reaction);
+    }
+
+    return ownReactions;
+  }
+
+  _removeOwnReactionFromMessage(
+    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
+    reaction: ReactionResponse<ReactionType, UserType>,
+  ) {
+    if (ownReactions) {
+      return ownReactions.filter(
+        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
+      );
+    }
+    return ownReactions;
   }
 
   removeReaction(
@@ -416,47 +374,64 @@ export class ChannelState<
       UserType
     >,
   ) {
-    const { messages } = this;
     if (!message) return;
+    const messageWithReaction = message;
+    this._updateMessage(message, (msg) => {
+      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
+        msg.own_reactions,
+        reaction,
+      );
+      return this.formatMessage(messageWithReaction);
+    });
+    return messageWithReaction;
+  }
+
+  /**
+   * Updates all instances of given message in channel state
+   * @param message
+   * @param updateFunc
+   */
+  _updateMessage(
+    message: { id?: string; parent_id?: string; show_in_channel?: boolean },
+    updateFunc: (
+      msg: ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['formatMessage']
+      >,
+    ) => ReturnType<
+      ChannelState<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >['formatMessage']
+    >,
+  ) {
     const { parent_id, show_in_channel } = message;
 
     if (parent_id && this.threads[parent_id]) {
       const thread = this.threads[parent_id];
-      for (let i = 0; i < thread.length; i++) {
-        const msg = thread[i];
-        const idMatch = !!msg.id && msg.id === reaction.message_id;
-
-        if (!idMatch) {
-          continue;
-        }
-        let messageWithReaction = this._removeReactionFromMessage(msg, reaction);
-        messageWithReaction = messageWithReaction.updateIn(
-          ['reaction_counts', reaction.type],
-          (old: number) => (old ? old - 1 : 0),
-        );
-
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        this.threads = this.threads.set(parent_id, thread.set(i, messageWithReaction));
-        break;
+      const msgIndex = thread.findIndex((msg) => msg.id === message.id);
+      if (msgIndex !== -1) {
+        thread[msgIndex] = updateFunc(thread[msgIndex]);
+        this.threads[parent_id] = thread;
       }
     }
+
     if ((!show_in_channel && !parent_id) || show_in_channel) {
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const idMatch = !!msg.id && msg.id === reaction.message_id;
-
-        if (!idMatch) {
-          continue;
-        }
-        let messageWithReaction = this._removeReactionFromMessage(msg, reaction);
-        messageWithReaction = messageWithReaction.updateIn(
-          ['reaction_counts', reaction.type],
-          (old: number) => (old ? old - 1 : 0),
-        );
-
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        this.messages = messages.set(i, messageWithReaction);
-        break;
+      const msgIndex = this.messages.findIndex((msg) => msg.id === message.id);
+      if (msgIndex !== -1) {
+        this.messages[msgIndex] = updateFunc(this.messages[msgIndex]);
       }
     }
   }
@@ -476,13 +451,13 @@ export class ChannelState<
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
    *
-   * @param {Immutable.ImmutableArray<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>>} messages A list of messages
-   * @param {ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['messageToImmutable']>} newMessage The new message
+   * @param {Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>} messages A list of messages
+   * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   *
+   * @param {string} sortBy field name to use to sort the messages by
    */
   _addToMessageList(
-    messages: Immutable.ImmutableArray<
+    messages: Array<
       ReturnType<
         ChannelState<
           AttachmentType,
@@ -492,7 +467,7 @@ export class ChannelState<
           MessageType,
           ReactionType,
           UserType
-        >['messageToImmutable']
+        >['formatMessage']
       >
     >,
     message: ReturnType<
@@ -504,9 +479,10 @@ export class ChannelState<
         MessageType,
         ReactionType,
         UserType
-      >['messageToImmutable']
+      >['formatMessage']
     >,
     timestampChanged = false,
+    sortBy: 'pinned_at' | 'created_at' = 'created_at',
   ) {
     let messageArr = messages;
 
@@ -519,10 +495,10 @@ export class ChannelState<
     // for empty list just concat and return
     if (messageArr.length === 0) return messageArr.concat(message);
 
-    const messageTime = message.created_at.getTime();
+    const messageTime = (message[sortBy] as Date).getTime();
 
     // if message is newer than last item in the list concat and return
-    if (messageArr[messageArr.length - 1].created_at.getTime() < messageTime)
+    if ((messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime)
       return messageArr.concat(message);
 
     // find the closest index to push the new message
@@ -531,36 +507,26 @@ export class ChannelState<
     let right = messageArr.length - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if (messageArr[middle].created_at.getTime() <= messageTime) left = middle + 1;
+      if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime)
+        left = middle + 1;
       else right = middle - 1;
     }
 
     // message already exists and not filtered due to timestampChanged, update and return
     if (!timestampChanged && message.id) {
-      if (messageArr[left] && message.id === messageArr[left].id)
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        return messageArr.set(left, message);
+      if (messageArr[left] && message.id === messageArr[left].id) {
+        messageArr[left] = message;
+        return [...messageArr];
+      }
 
-      if (messageArr[left - 1] && message.id === messageArr[left - 1].id)
-        // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-        return messageArr.set(left - 1, message);
+      if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
+        messageArr[left - 1] = message;
+        return [...messageArr];
+      }
     }
 
-    const mutable = messageArr.asMutable() as Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['messageToImmutable']
-      >
-    >;
-    mutable.splice(left, 0, message);
-    return Immutable(mutable);
+    messageArr.splice(left, 0, message);
+    return [...messageArr];
   }
 
   /**
@@ -578,11 +544,7 @@ export class ChannelState<
         messageToRemove,
       );
 
-      // @ts-expect-error - ImmutableArray.set exists in the documentation but not in the DefinitelyTyped types
-      this.threads = this.threads[messageToRemove.parent_id].set(
-        messageToRemove.parent_id,
-        threadMessages,
-      );
+      this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
       const { removed, result: messages } = this.removeMessageFromArray(
@@ -597,7 +559,7 @@ export class ChannelState<
   }
 
   removeMessageFromArray = (
-    msgArray: Immutable.ImmutableArray<
+    msgArray: Array<
       ReturnType<
         ChannelState<
           AttachmentType,
@@ -607,7 +569,7 @@ export class ChannelState<
           MessageType,
           ReactionType,
           UserType
-        >['messageToImmutable']
+        >['formatMessage']
       >
     >,
     msg: { id: string; parent_id?: string },
@@ -639,17 +601,17 @@ export class ChannelState<
         typeof lastEvent.received_at === 'string' &&
         now.getTime() - new Date(lastEvent.received_at).getTime();
       if (since > 7000) {
-        this.typing = this.typing.without(userID);
+        delete this.typing[userID];
         this._channel.getClient().dispatchEvent({
+          cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
-          cid: this._channel.cid,
         } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
       }
     }
   }
 
   clearMessages() {
-    this.messages = Immutable([]);
+    this.messages = [];
   }
 }

@@ -1,6 +1,4 @@
 // basic sanity check
-import Immutable from 'seamless-immutable';
-
 import {
   StreamChat,
   Event,
@@ -80,6 +78,31 @@ const clientWithoutSecret: StreamChat<
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
+const singletonClient = StreamChat.getInstance<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+>(apiKey);
+
+const singletonClient1: StreamChat<
+  {},
+  ChannelType,
+  string & {},
+  {},
+  {},
+  {},
+  UserType
+> = StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
+
+const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<
+  {},
+  ChannelType
+>(apiKey, '', {});
+
 const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
 const authType: string = client.getAuthType();
@@ -104,6 +127,10 @@ const updateUsers: Promise<{
   users: { [key: string]: UserResponse<UserType> };
 }> = client.partialUpdateUsers([updateRequest]);
 
+const updateUsersWithSingletonClient: Promise<{
+  users: { [key: string]: UserResponse<UserType> };
+}> = singletonClient.partialUpdateUsers([updateRequest]);
+
 const eventHandler = (event: Event) => {};
 voidReturn = client.on(eventHandler);
 voidReturn = client.off(eventHandler);
@@ -111,9 +138,12 @@ voidReturn = client.on('message.new', eventHandler);
 voidReturn = client.off('message.new', eventHandler);
 
 let userReturn: ConnectAPIResponse<ChannelType, CommandType, UserType>;
+userReturn = client.connectUser({ id: 'john', phone: 2 }, devToken);
+userReturn = client.connectUser({ id: 'john', phone: 2 }, async () => 'token');
 userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.setUser({ id: 'john', phone: 2 }, async () => 'token');
 
+userReturn = client.connectAnonymousUser();
 userReturn = client.setAnonymousUser();
 userReturn = client.setGuestUser({ id: 'steven' });
 
@@ -197,14 +227,11 @@ const channelState: ChannelState<
   ReactionType,
   UserType
 > = channel.state;
-const chUser1: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
-  channelState.members.someUser12433222;
-const chUser2: Immutable.ImmutableObject<ChannelMemberResponse<UserType>> =
-  channelState.members.someUser124332221;
+const chUser1: ChannelMemberResponse<UserType> = channelState.members.someUser12433222;
+const chUser2: ChannelMemberResponse<UserType> = channelState.members.someUser124332221;
 
-const chUser3: Immutable.ImmutableObject<UserResponse<UserType>> =
-  channelState.read.someUserId.user;
-const typing: Immutable.ImmutableObject<Event<
+const chUser3: UserResponse<UserType> = channelState.read.someUserId.user;
+const typing: Event<
   AttachmentType,
   ChannelType,
   CommandType,
@@ -212,16 +239,18 @@ const typing: Immutable.ImmutableObject<Event<
   MessageType,
   ReactionType,
   UserType
->> = channelState.typing['someUserId'];
+> = channelState.typing['someUserId'];
 
-const acceptInvite: Promise<UpdateChannelAPIResponse<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
->> = channel.acceptInvite({});
+const acceptInvite: Promise<
+  UpdateChannelAPIResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >
+> = channel.acceptInvite({});
 
 voidReturn = channel.on(eventHandler);
 voidReturn = channel.off(eventHandler);

@@ -232,6 +232,12 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getMessagesById']>>",
 	},
 	{
+		f: rg.getMessageWithReply,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['getMessage']>>",
+	},
+	{
 		f: rg.getPermission,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -269,9 +275,9 @@ const executables = [
 	},
 	{
 		f: rg.lastMessage,
-		imports: ['Channel', 'Unpacked'],
+		imports: ['Channel', 'FormatMessageResponse', 'Unpacked'],
 		type:
-			"Omit<ReturnType<ImmutableObject<Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['lastMessage']>>>['asMutable']>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }",
+			"Omit<FormatMessageResponse<{}, { description?: string }, string & {}, {}, {}, {}>, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string } | undefined",
 	},
 	{
 		f: rg.listBlockLists,
@@ -385,7 +391,7 @@ const executables = [
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendAction']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendAction']>>",
 	},
 	{
 		f: rg.sendFile,
@@ -403,7 +409,7 @@ const executables = [
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendMessage']>>",
+			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, { testString?: string }>['sendMessage']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
@@ -418,10 +424,10 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
-		f: rg.setAnonymousUser,
+		f: rg.connectAnonymousUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setAnonymousUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectAnonymousUser']>>",
 	},
 	{
 		f: rg.setGuestUser,
@@ -430,10 +436,10 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setGuestUser']>>",
 	},
 	{
-		f: rg.setUser,
+		f: rg.connectUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectUser']>>",
 	},
 	{
 		f: rg.show,
@@ -542,7 +548,7 @@ const executables = [
 		f: rg.updateMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updateMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { testString?: string }>['updateMessage']>>",
 	},
 	{
 		f: rg.updatePermission,
@@ -551,10 +557,10 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['updatePermission']>>",
 	},
 	{
-		f: rg.updateUsers,
+		f: rg.upsertUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { unique: string }>['updateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { unique: string }>['upsertUsers']>>",
 	},
 	{
 		f: rg.upsertUser,
@@ -604,7 +610,7 @@ const run = async () => {
 	);
 	imports = uniqueTypes.join(', ');
 
-	imports = `import { ImmutableObject } from 'seamless-immutable';\n\nimport { ${imports} } from '../..';`;
+	imports = `import { ${imports} } from '../..';`;
 	tsFileName = `${__dirname}/data.ts`;
 	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
 		if (err) {

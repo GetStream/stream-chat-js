@@ -57,8 +57,8 @@ describe('ban user by ip', () => {
 
 	before(async () => {
 		await createUsers([adminUser.id]);
-		await tommasoClient1.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient1.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient1.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient1.connectUser({ id: thierryID }, thierryToken);
 	});
 
 	it('tommaso and thierry create channels', async () => {
@@ -98,8 +98,8 @@ describe('ban user by ip', () => {
 	});
 
 	it('tommaso and thierry switch IP addresses', async () => {
-		await tommasoClient2.setUser({ id: tommasoID }, tommasoToken);
-		await thierryClient2.setUser({ id: thierryID }, thierryToken);
+		await tommasoClient2.connectUser({ id: tommasoID }, tommasoToken);
+		await thierryClient2.connectUser({ id: thierryID }, thierryToken);
 		await tommasoClient2.channel('messaging', tommasoChannelId).watch();
 		await thierryClient2.channel('messaging', thierryChannelId).watch();
 	});
