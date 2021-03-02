@@ -2385,7 +2385,7 @@ export class StreamChat<
       headers: {
         Authorization: token,
         'stream-auth-type': this.getAuthType(),
-        'x-stream-client': this.getUserAgent(),
+        'X-Stream-Client': this.getUserAgent(),
         ...options.headers,
       },
       ...options.config,
