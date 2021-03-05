@@ -1790,5 +1790,6 @@ export class Channel<
     );
 
     this.disconnected = true;
+    this.state.setIsUpToDate(false);
   }
 }
