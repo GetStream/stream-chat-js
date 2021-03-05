@@ -667,6 +667,41 @@ export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   user_id?: string;
 };
 
+export type QueryBannedUsersResponse = APIResponse & {
+  bans?: BanResponse[];
+};
+
+export type BanResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  user: UserResponse<UserType>;
+  banned_by?: UserResponse<UserType>;
+  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  expires?: string | Date;
+  ip_ban?: boolean;
+  reason?: string;
+  timeout?: number;
+};
+
+export type BannedFilters = {
+  banned_by_id?: string;
+  channel_cid?: string;
+  created_at?: string;
+  reason?: string;
+  user_id?: string;
+};
+
+export type QueryBannedUsersPaginationOptions = {
+  created_at_after?: string | Date;
+  created_at_after_or_equal?: string | Date;
+  created_at_before?: string | Date;
+  created_at_before_or_equal?: string | Date;
+  limit?: number;
+  offset?: number;
+};
+
 export type ChannelOptions = {
   last_message_ids?: { [key: string]: string };
   limit?: number;
@@ -1225,6 +1260,8 @@ export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
+
+export type BannedSort = Array<{ created_at: AscDesc }>;
 
 export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>

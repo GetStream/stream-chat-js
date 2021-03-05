@@ -88,7 +88,11 @@ import {
   UserFilters,
   UserOptions,
   UserResponse,
+  BannedFilters,
   UserSort,
+  QueryBannedUsersPaginationOptions,
+  QueryBannedUsersResponse,
+  BannedSort,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1382,6 +1386,33 @@ export class StreamChat<
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * queryBannedUsers - Query user bans
+   *
+   * @param {BannedFilters} filterConditions MongoDB style filter conditions
+   * @param {BannedSort} sort Sort options [{created_at: 1}].
+   * @param {QueryBannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<QueryBannedUsersResponse>} Ban Query Response
+   */
+  async queryBannedUsers(
+    filterConditions: BannedFilters = {},
+    sort: BannedSort = [],
+    options: QueryBannedUsersPaginationOptions = {},
+  ) {
+    // Return a list of user bans
+    return await this.get<QueryBannedUsersResponse>(
+      this.baseURL + '/query_banned_users',
+      {
+        payload: {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
   }
 
   /**
