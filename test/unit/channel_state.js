@@ -1,6 +1,10 @@
 import chai from 'chai';
 import { ChannelState, StreamChat, Channel } from '../../src';
 import { generateMsg } from './test-utils/generateMessage';
+import { generateChannel } from './test-utils/generateChannel';
+import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
+import { getClientWithUser } from './test-utils/getClient';
+import { v4 as uuidv4 } from 'uuid';
 
 const expect = chai.expect;
 
@@ -313,5 +317,32 @@ describe('ChannelState reactions', () => {
 		);
 		expect(newMessage.own_reactions.length).to.be.eq(1);
 		expect(newMessage.own_reactions[0].user_id).to.be.eq('observer');
+	});
+});
+
+describe('ChannelState isUpToDate', () => {
+	it('isUpToDate flag should be set to false, when watcher is disconnected', async () => {
+		const chatClient = await getClientWithUser();
+		const channelId = uuidv4();
+		const mockedChannelResponse = generateChannel({
+			channel: {
+				id: channelId,
+			},
+		});
+
+		// to mock the channel.watch call
+		chatClient.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		const channel = chatClient.channel('messaging', channelId);
+
+		await channel.watch();
+		// This is a responsibility of application layer to set the flag, depending
+		// on what state is queried - most recent or some older.
+		channel.state.setIsUpToDate(true);
+
+		expect(channel.state.isUpToDate).to.be.eq(true);
+
+		await channel._disconnect();
+		expect(channel.state.isUpToDate).to.be.eq(false);
 	});
 });
