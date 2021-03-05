@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## March 5, 2021 - 3.1.4
+
+### Fix
+
+- Clear (set to false) `isUpToDate` false, when channel watcher is disconnected [#624](https://github.com/GetStream/stream-chat-js/pull/624)
+
 ## March 2, 2021 - 3.1.3
 
 ### Chore
