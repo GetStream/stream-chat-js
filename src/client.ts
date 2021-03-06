@@ -448,10 +448,21 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws');
   }
 
+  /**
+   * Disconnects the websocket connection, without removing the user set on client.
+   *
+   * This is mainly useful on mobile side. You can only receive push notifications
+   * if you don't have active websocket connection.
+   * So when your app goes to background, you can call `client.disconnectWebsocket`.
+   * And when app comes back to foreground, call `client.reconnectWebsocket`
+   */
   disconnectWebsocket = () => {
     this.wsConnection?.disconnect();
   };
 
+  /**
+   * Reconnects the websocket connection, with current user.
+   */
   reconnectWebsocket = () => {
     this._setupConnection();
   };
