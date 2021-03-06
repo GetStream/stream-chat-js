@@ -448,6 +448,14 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws');
   }
 
+  disconnectWebsocket = () => {
+    this.wsConnection?.disconnect();
+  };
+
+  reconnectWebsocket = () => {
+    this._setupConnection();
+  };
+
   _setupConnection = () => {
     this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
