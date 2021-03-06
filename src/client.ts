@@ -455,7 +455,7 @@ export class StreamChat<
     return this.wsPromise;
   };
 
-  _hasConnectionID = () => Boolean(this.connectionID);
+  _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -1234,7 +1234,7 @@ export class StreamChat<
         tags: ['connection'],
       },
     );
-    this.connectionID = this.wsConnection?.connectionID;
+
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
       this.logger(
@@ -1335,7 +1335,6 @@ export class StreamChat<
       });
     }
 
-    this.connectionID = this.wsConnection.connectionID;
     return handshake;
   }
 
@@ -2380,7 +2379,7 @@ export class StreamChat<
         user_id: this.userID,
         ...options.params,
         api_key: this.key,
-        connection_id: this.connectionID,
+        connection_id: this.wsConnection?.connectionID,
       },
       headers: {
         Authorization: token,
