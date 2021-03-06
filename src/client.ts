@@ -456,7 +456,14 @@ export class StreamChat<
    * So when your app goes to background, you can call `client.disconnectWebsocket`.
    * And when app comes back to foreground, call `client.reconnectWebsocket`
    */
-  disconnectWebsocket = () => this.wsConnection?.disconnect();
+  disconnectWebsocket = () => {
+    for (const cid in this.activeChannels) {
+      const channel = this.activeChannels[cid];
+      channel.state.setIsUpToDate(false);
+    }
+
+    return this.wsConnection?.disconnect();
+  };
 
   /**
    * Reconnects the websocket connection, with current user.
