@@ -1395,7 +1395,7 @@ export class StreamChat<
    * @param {BannedSort} sort Sort options [{created_at: 1}].
    * @param {QueryBannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
    *
-   * @return {Promise<QueryBannedUsersResponse>} Ban Query Response
+   * @return {Promise<QueryBannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
    */
   async queryBannedUsers(
     filterConditions: BannedFilters = {},
