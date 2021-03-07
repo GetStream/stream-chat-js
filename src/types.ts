@@ -1273,7 +1273,8 @@ export type UserSort<UserType = UnknownType> =
 
 export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
   | ChannelSort<ChannelType>
-  | UserSort<UserType>;
+  | UserSort<UserType>
+  | BannedSort;
 
 /**
  * Base Types

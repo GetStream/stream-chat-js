@@ -1408,7 +1408,7 @@ export class StreamChat<
       {
         payload: {
           filter_conditions: filterConditions,
-          sort,
+          sort: normalizeQuerySort(sort),
           ...options,
         },
       },
