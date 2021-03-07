@@ -1403,12 +1403,12 @@ export class StreamChat<
     options: QueryBannedUsersPaginationOptions = {},
   ) {
     // Return a list of user bans
-    return await this.get<QueryBannedUsersResponse>(
+    return await this.get<QueryBannedUsersResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/query_banned_users',
       {
         payload: {
           filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
+          sort,
           ...options,
         },
       },

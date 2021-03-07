@@ -667,8 +667,12 @@ export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   user_id?: string;
 };
 
-export type QueryBannedUsersResponse = APIResponse & {
-  bans?: BanResponse[];
+export type QueryBannedUsersResponse<
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType = UnknownType
+> = APIResponse & {
+  bans?: BanResponse<ChannelType, CommandType, UserType>[];
 };
 
 export type BanResponse<
