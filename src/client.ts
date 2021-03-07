@@ -23,6 +23,10 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BannedUsersFilters,
+  BannedUsersPaginationOptions,
+  BannedUsersResponse,
+  BannedUsersSort,
   BanUserOptions,
   BlockList,
   BlockListResponse,
@@ -88,11 +92,7 @@ import {
   UserFilters,
   UserOptions,
   UserResponse,
-  BannedFilters,
   UserSort,
-  QueryBannedUsersPaginationOptions,
-  QueryBannedUsersResponse,
-  BannedSort,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1391,19 +1391,19 @@ export class StreamChat<
   /**
    * queryBannedUsers - Query user bans
    *
-   * @param {BannedFilters} filterConditions MongoDB style filter conditions
-   * @param {BannedSort} sort Sort options [{created_at: 1}].
-   * @param {QueryBannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
+   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
+   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
    *
-   * @return {Promise<QueryBannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
+   * @return {Promise<BannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
    */
   async queryBannedUsers(
-    filterConditions: BannedFilters = {},
-    sort: BannedSort = [],
-    options: QueryBannedUsersPaginationOptions = {},
+    filterConditions: BannedUsersFilters = {},
+    sort: BannedUsersSort = [],
+    options: BannedUsersPaginationOptions = {},
   ) {
     // Return a list of user bans
-    return await this.get<QueryBannedUsersResponse<ChannelType, CommandType, UserType>>(
+    return await this.get<BannedUsersResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/query_banned_users',
       {
         payload: {

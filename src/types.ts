@@ -106,6 +106,22 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type BannedUsersResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = APIResponse & {
+  bans?: Array<{
+    user: UserResponse<UserType>;
+    banned_by?: UserResponse<UserType>;
+    channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+    expires?: string | Date;
+    ip_ban?: boolean;
+    reason?: string;
+    timeout?: number;
+  }>;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   updated_at?: string;
@@ -651,6 +667,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  * Option Types
  */
 
+export type BannedUsersPaginationOptions = Omit<
+  PaginationOptions,
+  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
+>;
+
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   banned_by?: UserResponse<UserType>;
   banned_by_id?: string;
@@ -665,45 +686,6 @@ export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
    * @deprecated please use banned_by_id
    */
   user_id?: string;
-};
-
-export type QueryBannedUsersResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
-> = APIResponse & {
-  bans?: BanResponse<ChannelType, CommandType, UserType>[];
-};
-
-export type BanResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
-> = APIResponse & {
-  user: UserResponse<UserType>;
-  banned_by?: UserResponse<UserType>;
-  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
-  expires?: string | Date;
-  ip_ban?: boolean;
-  reason?: string;
-  timeout?: number;
-};
-
-export type BannedFilters = {
-  banned_by_id?: string;
-  channel_cid?: string;
-  created_at?: string;
-  reason?: string;
-  user_id?: string;
-};
-
-export type QueryBannedUsersPaginationOptions = {
-  created_at_after?: string | Date;
-  created_at_after_or_equal?: string | Date;
-  created_at_before?: string | Date;
-  created_at_before_or_equal?: string | Date;
-  limit?: number;
-  offset?: number;
 };
 
 export type ChannelOptions = {
@@ -1043,6 +1025,36 @@ export type EventTypes =
 
 export type AscDesc = 1 | -1;
 
+export type BannedUsersFilterOptions = {
+  banned_by_id?: string;
+  channel_cid?: string;
+  created_at?: string;
+  reason?: string;
+  user_id?: string;
+};
+
+export type BannedUsersFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['channel_cid']>;
+  } & {
+    reason?:
+      | RequireOnlyOne<
+          {
+            $autocomplete?: BannedUsersFilterOptions['reason'];
+          } & QueryFilter<BannedUsersFilterOptions['reason']>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['reason']>;
+  } & {
+      [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
+        | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
+        | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
+    }
+>;
+
 export type ChannelFilters<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -1247,6 +1259,10 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
+export type BannedUsersSort =
+  | Sort<{ created_at: string }>
+  | Array<Sort<{ created_at: string }>>;
+
 export type ChannelSort<ChannelType = UnknownType> =
   | ChannelSortBase<ChannelType>
   | Array<ChannelSortBase<ChannelType>>;
@@ -1265,16 +1281,14 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type BannedSort = Array<{ created_at: AscDesc }>;
-
 export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
 export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | BannedUsersSort
   | ChannelSort<ChannelType>
-  | UserSort<UserType>
-  | BannedSort;
+  | UserSort<UserType>;
 
 /**
  * Base Types
