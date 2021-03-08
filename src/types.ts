@@ -115,7 +115,7 @@ export type BannedUsersResponse<
     user: UserResponse<UserType>;
     banned_by?: UserResponse<UserType>;
     channel?: ChannelResponse<ChannelType, CommandType, UserType>;
-    expires?: string | Date;
+    expires?: string;
     ip_ban?: boolean;
     reason?: string;
     timeout?: number;
