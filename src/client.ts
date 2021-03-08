@@ -130,7 +130,6 @@ export class StreamChat<
   clientID?: string;
   configs: Configs<CommandType>;
   connecting?: boolean;
-  connectionEstablishedCount?: number;
   connectionID?: string;
   failures?: number;
   key: string;
@@ -453,38 +452,47 @@ export class StreamChat<
   }
 
   /**
-   * Disconnects the websocket connection, without removing the user set on client.
-   * client.disconnectWebsocket will not trigger default auto-retry mechanism for reconnection. You need
-   * to call client.reconnectWebsocket to reconnect to websocket.
+   * @private
    *
-   * This is mainly useful on mobile side. You can only receive push notifications
-   * if you don't have active websocket connection.
-   * So when your app goes to background, you can call `client.disconnectWebsocket`.
-   * And when app comes back to foreground, call `client.reconnectWebsocket`.
-   *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   * Creates a new websocket connection with current user.
    */
-  disconnectWebsocket = (timeout?: number) => {
-    for (const cid in this.activeChannels) {
-      const channel = this.activeChannels[cid];
-      channel.state.setIsUpToDate(false);
-    }
-
-    return this.wsConnection?.disconnect(timeout);
-  };
-
-  /**
-   * Reconnects the websocket connection, with current user.
-   */
-  reconnectWebsocket = () => this._setupConnection();
-
   _setupConnection = () => {
     this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
   };
+
+  /**
+   * Disconnects the websocket connection, without removing the user set on client.
+   * client.disconnectUser will not trigger default auto-retry mechanism for reconnection. You need
+   * to call client.reconnectUser to reconnect to websocket.
+   *
+   * This is mainly useful on mobile side. You can only receive push notifications
+   * if you don't have active websocket connection.
+   * So when your app goes to background, you can call `client.disconnectUser`.
+   * And when app comes back to foreground, call `client.reconnectUser`.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   */
+  disconnectUser = (timeout?: number) => {
+    if (this.cleaningIntervalRef != null) {
+      clearInterval(this.cleaningIntervalRef);
+      this.cleaningIntervalRef = undefined;
+    }
+
+    for (const channel of Object.values(this.activeChannels)) {
+      channel._disconnect();
+    }
+
+    return this.wsConnection?.disconnect(timeout);
+  };
+
+  /**
+   * Reconnects the current user.
+   */
+  reconnectUser = this._setupConnection;
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
@@ -659,7 +667,7 @@ export class StreamChat<
    * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  disconnectUser(timeout?: number) {
+  disconnect(timeout?: number) {
     this.logger('info', 'client:disconnect() - Disconnecting the client', {
       tags: ['connection', 'client'],
     });
@@ -668,18 +676,8 @@ export class StreamChat<
     delete this._user;
     delete this.userID;
 
-    if (this.cleaningIntervalRef != null) {
-      clearInterval(this.cleaningIntervalRef);
-      this.cleaningIntervalRef = undefined;
-    }
-
     this.anonymous = false;
 
-    this.connectionEstablishedCount = 0;
-
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
-    }
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
@@ -688,18 +686,9 @@ export class StreamChat<
     this.tokenManager.reset();
 
     // close the WS connection
-    this.disconnectWebsocket(timeout);
+    this.disconnectUser(timeout);
 
     return Promise.resolve();
-  }
-
-  /**
-   * @deprecated Please use `disconnectUser` instead.
-   *
-   * Disconnects the websocket and removes the user from client.
-   */
-  disconnect(timeout?: number) {
-    return this.disconnectUser(timeout);
   }
 
   /**
