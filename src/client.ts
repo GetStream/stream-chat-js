@@ -23,6 +23,10 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BannedUsersFilters,
+  BannedUsersPaginationOptions,
+  BannedUsersResponse,
+  BannedUsersSort,
   BanUserOptions,
   BlockList,
   BlockListResponse,
@@ -1403,6 +1407,33 @@ export class StreamChat<
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * queryBannedUsers - Query user bans
+   *
+   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
+   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
+   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<BannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
+   */
+  async queryBannedUsers(
+    filterConditions: BannedUsersFilters = {},
+    sort: BannedUsersSort = [],
+    options: BannedUsersPaginationOptions = {},
+  ) {
+    // Return a list of user bans
+    return await this.get<BannedUsersResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/query_banned_users',
+      {
+        payload: {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
   }
 
   /**
