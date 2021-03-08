@@ -1598,14 +1598,15 @@ export class StreamChat<
    *
    * @param {object} params The params for the call. If none of the params are set, all limits for all platforms are returned.
    */
-  async getRateLimits(params: {
+  async getRateLimits(params?: {
     android?: boolean;
     endpoints?: string[];
     ios?: boolean;
     serverSide?: boolean;
     web?: boolean;
   }) {
-    const { serverSide, web, android, ios, endpoints } = params;
+    const { serverSide, web, android, ios, endpoints } = params || {};
+
     return await this.get<APIResponse & GetRateLimitsResponse>(
       this.baseURL + '/rate_limits',
       {
