@@ -1598,7 +1598,7 @@ export class StreamChat<
    * Only available server-side.
    *
    * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
-   * @returns {Promise<APIResponse & GetRateLimitsResponse>}
+   * @returns {Promise<GetRateLimitsResponse>}
    */
   async getRateLimits(params?: {
     android?: boolean;
@@ -1608,7 +1608,7 @@ export class StreamChat<
     web?: boolean;
   }) {
     const { serverSide, web, android, ios, endpoints } = params || {};
-    return this.get<APIResponse & GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
+    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
       server_side: serverSide,
       web,
       android,

@@ -1870,7 +1870,7 @@ export type RateLimitsInfo = {
 
 export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
-export type GetRateLimitsResponse = {
+export type GetRateLimitsResponse = APIResponse & {
   android?: RateLimitsMap;
   ios?: RateLimitsMap;
   server_side?: RateLimitsMap;
