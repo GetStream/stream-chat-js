@@ -114,6 +114,20 @@ async function queryUsers() {
 	return await client.queryUsers({ nickname: { $eq: user2 } });
 }
 
+async function queryBannedUsers() {
+	const authClient = await utils.getTestClient(true);
+	const user = {
+		id: uuidv4(),
+	};
+	const evilUser = 'evil-user' + uuidv4();
+	await utils.createUsers([evilUser, user.id]);
+	await authClient.banUser(evilUser, {
+		banned_by_id: user.id,
+		reason: 'because',
+	});
+	return await authClient.queryBannedUsers({ reason: 'because' }, { created_at: 1 });
+}
+
 async function connectAnonymousUser() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.connectAnonymousUser();
@@ -195,6 +209,7 @@ module.exports = {
 	connectAnonymousUser,
 	setGuestUser,
 	connectUser,
+	queryBannedUsers,
 	sync,
 	updateAppSettings,
 	updateCommand,

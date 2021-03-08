@@ -106,6 +106,22 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type BannedUsersResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = APIResponse & {
+  bans?: Array<{
+    user: UserResponse<UserType>;
+    banned_by?: UserResponse<UserType>;
+    channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+    expires?: string;
+    ip_ban?: boolean;
+    reason?: string;
+    timeout?: number;
+  }>;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   updated_at?: string;
@@ -651,6 +667,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  * Option Types
  */
 
+export type BannedUsersPaginationOptions = Omit<
+  PaginationOptions,
+  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
+>;
+
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   banned_by?: UserResponse<UserType>;
   banned_by_id?: string;
@@ -1004,6 +1025,36 @@ export type EventTypes =
 
 export type AscDesc = 1 | -1;
 
+export type BannedUsersFilterOptions = {
+  banned_by_id?: string;
+  channel_cid?: string;
+  created_at?: string;
+  reason?: string;
+  user_id?: string;
+};
+
+export type BannedUsersFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['channel_cid']>;
+  } & {
+    reason?:
+      | RequireOnlyOne<
+          {
+            $autocomplete?: BannedUsersFilterOptions['reason'];
+          } & QueryFilter<BannedUsersFilterOptions['reason']>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['reason']>;
+  } & {
+      [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
+        | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
+        | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
+    }
+>;
+
 export type ChannelFilters<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -1208,6 +1259,10 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
+export type BannedUsersSort =
+  | Sort<{ created_at: string }>
+  | Array<Sort<{ created_at: string }>>;
+
 export type ChannelSort<ChannelType = UnknownType> =
   | ChannelSortBase<ChannelType>
   | Array<ChannelSortBase<ChannelType>>;
@@ -1231,6 +1286,7 @@ export type UserSort<UserType = UnknownType> =
   | Array<Sort<UserResponse<UserType>>>;
 
 export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | BannedUsersSort
   | ChannelSort<ChannelType>
   | UserSort<UserType>;
 
