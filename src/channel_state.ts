@@ -392,7 +392,12 @@ export class ChannelState<
    * @param updateFunc
    */
   _updateMessage(
-    message: { id?: string; parent_id?: string; show_in_channel?: boolean },
+    message: {
+      id?: string;
+      parent_id?: string;
+      pinned?: boolean;
+      show_in_channel?: boolean;
+    },
     updateFunc: (
       msg: ReturnType<
         ChannelState<
@@ -417,7 +422,7 @@ export class ChannelState<
       >['formatMessage']
     >,
   ) {
-    const { parent_id, show_in_channel } = message;
+    const { parent_id, show_in_channel, pinned } = message;
 
     if (parent_id && this.threads[parent_id]) {
       const thread = this.threads[parent_id];
@@ -432,6 +437,13 @@ export class ChannelState<
       const msgIndex = this.messages.findIndex((msg) => msg.id === message.id);
       if (msgIndex !== -1) {
         this.messages[msgIndex] = updateFunc(this.messages[msgIndex]);
+      }
+    }
+
+    if (pinned) {
+      const msgIndex = this.pinnedMessages.findIndex((msg) => msg.id === message.id);
+      if (msgIndex !== -1) {
+        this.pinnedMessages[msgIndex] = updateFunc(this.pinnedMessages[msgIndex]);
       }
     }
   }
