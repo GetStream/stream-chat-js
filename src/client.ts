@@ -48,7 +48,7 @@ import {
   CustomPermissionOptions,
   DeleteCommandResponse,
   Device,
-  EndpointNames,
+  EndpointName,
   Event,
   EventHandler,
   ExportChannelRequest,
@@ -1602,7 +1602,7 @@ export class StreamChat<
    */
   async getRateLimits(params?: {
     android?: boolean;
-    endpoints?: EndpointNames[];
+    endpoints?: EndpointName[];
     ios?: boolean;
     serverSide?: boolean;
     web?: boolean;

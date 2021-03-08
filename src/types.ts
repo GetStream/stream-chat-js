@@ -1777,7 +1777,7 @@ export type TranslationLanguages =
   | 'zh'
   | 'zh-TW';
 
-export type EndpointNames =
+export type EndpointName =
   | 'Connect'
   | 'DeleteFile'
   | 'DeleteImage'
@@ -1868,7 +1868,7 @@ export type RateLimitsInfo = {
   reset: number;
 };
 
-export type RateLimitsMap = Record<EndpointNames, RateLimitsInfo>;
+export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
 export type GetRateLimitsResponse = {
   android?: RateLimitsMap;
