@@ -125,7 +125,7 @@ async function queryBannedUsers() {
 		banned_by_id: user.id,
 		reason: 'because',
 	});
-	return await authClient.queryBannedUsers({ reason: 'because' }, { sort: 1 });
+	return await authClient.queryBannedUsers({ reason: 'because' }, { created_at: 1 });
 }
 
 async function connectAnonymousUser() {
