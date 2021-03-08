@@ -57,6 +57,7 @@ import {
   FlagUserResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
   LiteralStringForUnion,
@@ -1204,19 +1205,17 @@ export class StreamChat<
   ) => {
     const client = this;
     // gather and call the listeners
-    const listeners: Array<
-      (
-        event: Event<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >,
-      ) => void
-    > = [];
+    const listeners: Array<(
+      event: Event<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >,
+    ) => void> = [];
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
@@ -1589,6 +1588,32 @@ export class StreamChat<
       id,
       ...(userID ? { user_id: userID } : {}),
     });
+  }
+
+  /**
+   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
+   * Only available server-side.
+   *
+   * @param {object} params The params for the call. If none of the params are set, all limits for all platforms are returned.
+   */
+  async getRateLimits(params: {
+    android?: boolean;
+    endpoints?: string[];
+    ios?: boolean;
+    serverSide?: boolean;
+    web?: boolean;
+  }) {
+    const { serverSide, web, android, ios, endpoints } = params;
+    return await this.get<APIResponse & GetRateLimitsResponse>(
+      this.baseURL + '/rate_limits',
+      {
+        serverSide,
+        web,
+        android,
+        ios,
+        endpoints,
+      },
+    );
   }
 
   _addChannelConfig(

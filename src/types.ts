@@ -1776,3 +1776,20 @@ export type TranslationLanguages =
   | 'vi'
   | 'zh'
   | 'zh-TW';
+
+export type RateLimitsInfo = {
+  limit: number;
+  remaining: number;
+  reset: number;
+};
+
+export type RateLimitsMap = {
+  [key: string]: RateLimitsInfo;
+};
+
+export type GetRateLimitsResponse = {
+  android?: RateLimitsMap;
+  ios?: RateLimitsMap;
+  server_side?: RateLimitsMap;
+  web?: RateLimitsMap;
+};
