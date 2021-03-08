@@ -1610,7 +1610,7 @@ export class StreamChat<
     return await this.get<APIResponse & GetRateLimitsResponse>(
       this.baseURL + '/rate_limits',
       {
-        serverSide,
+        server_side: serverSide,
         web,
         android,
         ios,
