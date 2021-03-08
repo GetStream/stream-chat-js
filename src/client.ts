@@ -1598,7 +1598,7 @@ export class StreamChat<
    * Only available server-side.
    *
    * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
-   * @returns {APIResponse & GetRateLimitsResponse}
+   * @returns {Promise<APIResponse & GetRateLimitsResponse>}
    */
   async getRateLimits(params?: {
     android?: boolean;
