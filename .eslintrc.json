@@ -11,7 +11,7 @@
     "eslint:recommended",
     "plugin:sonarjs/recommended",
     "plugin:@typescript-eslint/recommended",
-    "prettier/@typescript-eslint"
+    "prettier"
   ],
   "rules": {
     "@typescript-eslint/ban-ts-comment": 0,
