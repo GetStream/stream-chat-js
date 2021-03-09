@@ -7,6 +7,6 @@
 
 ## Description of the changes, What, Why and How?
 
-
 ## Changelog
-- 
+
+-
