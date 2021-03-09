@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## March 9, 2021 - 3.4.0
+
+QueryMembers - Added support for pagination by user_id [0c41232](https://github.com/GetStream/stream-chat-js/commit/0c412321bc4de81b123574041e0abadf89f235df)
+
 ## March 9, 2021 - 3.3.0
 
 ### Feature
