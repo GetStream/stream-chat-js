@@ -67,6 +67,7 @@ export type AppSettingsAPIResponse<
         message_retention?: string;
         mutes?: boolean;
         name?: string;
+        push_notifications?: boolean;
         reactions?: boolean;
         read_events?: boolean;
         replies?: boolean;
@@ -757,6 +758,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   mutes?: boolean;
   name?: string;
   permissions?: PermissionObject[];
+  push_notifications?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
@@ -1420,6 +1422,7 @@ export type ChannelConfigFields = {
   message_retention?: string;
   mutes?: boolean;
   name?: string;
+  push_notifications?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
