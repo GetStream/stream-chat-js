@@ -48,6 +48,7 @@ import {
   CustomPermissionOptions,
   DeleteCommandResponse,
   Device,
+  EndpointName,
   Event,
   EventHandler,
   ExportChannelRequest,
@@ -57,6 +58,7 @@ import {
   FlagUserResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
   LiteralStringForUnion,
@@ -1613,6 +1615,30 @@ export class StreamChat<
     return await this.delete<APIResponse>(this.baseURL + '/devices', {
       id,
       ...(userID ? { user_id: userID } : {}),
+    });
+  }
+
+  /**
+   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
+   * Only available server-side.
+   *
+   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
+   * @returns {Promise<GetRateLimitsResponse>}
+   */
+  async getRateLimits(params?: {
+    android?: boolean;
+    endpoints?: EndpointName[];
+    ios?: boolean;
+    serverSide?: boolean;
+    web?: boolean;
+  }) {
+    const { serverSide, web, android, ios, endpoints } = params || {};
+    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
+      server_side: serverSide,
+      web,
+      android,
+      ios,
+      endpoints,
     });
   }
 
