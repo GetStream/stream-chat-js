@@ -106,6 +106,22 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type BannedUsersResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = APIResponse & {
+  bans?: Array<{
+    user: UserResponse<UserType>;
+    banned_by?: UserResponse<UserType>;
+    channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+    expires?: string;
+    ip_ban?: boolean;
+    reason?: string;
+    timeout?: number;
+  }>;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   updated_at?: string;
@@ -651,6 +667,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  * Option Types
  */
 
+export type BannedUsersPaginationOptions = Omit<
+  PaginationOptions,
+  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
+>;
+
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   banned_by?: UserResponse<UserType>;
   banned_by_id?: string;
@@ -1005,6 +1026,36 @@ export type EventTypes =
 
 export type AscDesc = 1 | -1;
 
+export type BannedUsersFilterOptions = {
+  banned_by_id?: string;
+  channel_cid?: string;
+  created_at?: string;
+  reason?: string;
+  user_id?: string;
+};
+
+export type BannedUsersFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['channel_cid']>;
+  } & {
+    reason?:
+      | RequireOnlyOne<
+          {
+            $autocomplete?: BannedUsersFilterOptions['reason'];
+          } & QueryFilter<BannedUsersFilterOptions['reason']>
+        >
+      | PrimitiveFilter<BannedUsersFilterOptions['reason']>;
+  } & {
+      [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
+        | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
+        | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
+    }
+>;
+
 export type ChannelFilters<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -1209,6 +1260,10 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
  * Sort Types
  */
 
+export type BannedUsersSort =
+  | Sort<{ created_at: string }>
+  | Array<Sort<{ created_at: string }>>;
+
 export type ChannelSort<ChannelType = UnknownType> =
   | ChannelSortBase<ChannelType>
   | Array<ChannelSortBase<ChannelType>>;
@@ -1232,6 +1287,7 @@ export type UserSort<UserType = UnknownType> =
   | Array<Sort<UserResponse<UserType>>>;
 
 export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+  | BannedUsersSort
   | ChannelSort<ChannelType>
   | UserSort<UserType>;
 
@@ -1721,3 +1777,103 @@ export type TranslationLanguages =
   | 'vi'
   | 'zh'
   | 'zh-TW';
+
+export type EndpointName =
+  | 'Connect'
+  | 'DeleteFile'
+  | 'DeleteImage'
+  | 'DeleteMessage'
+  | 'DeleteUser'
+  | 'DeactivateUser'
+  | 'ExportUser'
+  | 'DeleteReaction'
+  | 'UpdateChannel'
+  | 'UpdateChannelPartial'
+  | 'UpdateMessage'
+  | 'GetMessage'
+  | 'GetManyMessages'
+  | 'UpdateUsers'
+  | 'UpdateUsersPartial'
+  | 'CreateGuest'
+  | 'GetOrCreateChannel'
+  | 'StopWatchingChannel'
+  | 'QueryChannels'
+  | 'Search'
+  | 'QueryUsers'
+  | 'QueryMembers'
+  | 'QueryBannedUsers'
+  | 'GetReactions'
+  | 'GetReplies'
+  | 'Ban'
+  | 'Unban'
+  | 'Mute'
+  | 'MuteChannel'
+  | 'UnmuteChannel'
+  | 'UnmuteUser'
+  | 'RunMessageAction'
+  | 'SendEvent'
+  | 'MarkRead'
+  | 'MarkAllRead'
+  | 'SendMessage'
+  | 'ImportChannelMessages'
+  | 'UploadFile'
+  | 'UploadImage'
+  | 'UpdateApp'
+  | 'GetApp'
+  | 'CreateDevice'
+  | 'DeleteDevice'
+  | 'SendReaction'
+  | 'Flag'
+  | 'Unflag'
+  | 'CreateChannelType'
+  | 'DeleteChannel'
+  | 'DeleteChannelType'
+  | 'GetChannelType'
+  | 'ListChannelTypes'
+  | 'ListDevices'
+  | 'TruncateChannel'
+  | 'UpdateChannelType'
+  | 'CheckPush'
+  | 'PrivateSubmitModeration'
+  | 'ReactivateUser'
+  | 'HideChannel'
+  | 'ShowChannel'
+  | 'CreateCustomPermission'
+  | 'UpdateCustomPermission'
+  | 'GetCustomPermission'
+  | 'DeleteCustomPermission'
+  | 'ListCustomPermission'
+  | 'CreateCustomRole'
+  | 'DeleteCustomRole'
+  | 'ListCustomRole'
+  | 'Sync'
+  | 'TranslateMessage'
+  | 'CreateCommand'
+  | 'GetCommand'
+  | 'UpdateCommand'
+  | 'DeleteCommand'
+  | 'ListCommands'
+  | 'CreateBlockList'
+  | 'UpdateBlockList'
+  | 'GetBlockList'
+  | 'ListBlockLists'
+  | 'DeleteBlockList'
+  | 'ExportChannels'
+  | 'GetExportChannelsStatus'
+  | 'CheckSQS'
+  | 'GetRateLimits';
+
+export type RateLimitsInfo = {
+  limit: number;
+  remaining: number;
+  reset: number;
+};
+
+export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
+
+export type GetRateLimitsResponse = APIResponse & {
+  android?: RateLimitsMap;
+  ios?: RateLimitsMap;
+  server_side?: RateLimitsMap;
+  web?: RateLimitsMap;
+};

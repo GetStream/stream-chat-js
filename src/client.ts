@@ -23,6 +23,10 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BannedUsersFilters,
+  BannedUsersPaginationOptions,
+  BannedUsersResponse,
+  BannedUsersSort,
   BanUserOptions,
   BlockList,
   BlockListResponse,
@@ -44,6 +48,7 @@ import {
   CustomPermissionOptions,
   DeleteCommandResponse,
   Device,
+  EndpointName,
   Event,
   EventHandler,
   ExportChannelRequest,
@@ -53,6 +58,7 @@ import {
   FlagUserResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
   LiteralStringForUnion,
@@ -1385,6 +1391,33 @@ export class StreamChat<
   }
 
   /**
+   * queryBannedUsers - Query user bans
+   *
+   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
+   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
+   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<BannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
+   */
+  async queryBannedUsers(
+    filterConditions: BannedUsersFilters = {},
+    sort: BannedUsersSort = [],
+    options: BannedUsersPaginationOptions = {},
+  ) {
+    // Return a list of user bans
+    return await this.get<BannedUsersResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/query_banned_users',
+      {
+        payload: {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
+  }
+
+  /**
    * queryChannels - Query channels
    *
    * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions object MongoDB style filters
@@ -1557,6 +1590,30 @@ export class StreamChat<
     return await this.delete<APIResponse>(this.baseURL + '/devices', {
       id,
       ...(userID ? { user_id: userID } : {}),
+    });
+  }
+
+  /**
+   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
+   * Only available server-side.
+   *
+   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
+   * @returns {Promise<GetRateLimitsResponse>}
+   */
+  async getRateLimits(params?: {
+    android?: boolean;
+    endpoints?: EndpointName[];
+    ios?: boolean;
+    serverSide?: boolean;
+    web?: boolean;
+  }) {
+    const { serverSide, web, android, ios, endpoints } = params || {};
+    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
+      server_side: serverSide,
+      web,
+      android,
+      ios,
+      endpoints,
     });
   }
 
