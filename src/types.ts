@@ -861,6 +861,15 @@ export type PaginationOptions = {
   offset?: number;
 };
 
+export type QueryMembersOptions = {
+  limit?: number;
+  offset?: number;
+  user_id_gt?: string;
+  user_id_gte?: string;
+  user_id_lt?: string;
+  user_id_lte?: string;
+};
+
 export type SearchOptions = {
   limit?: number;
   offset?: number;

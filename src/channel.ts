@@ -28,6 +28,7 @@ import {
   PaginationOptions,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
+  QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -369,7 +370,7 @@ export class Channel<
   async queryMembers(
     filterConditions: UserFilters<UserType>,
     sort: UserSort<UserType> = [],
-    options: { limit?: number; offset?: number } = {},
+    options: QueryMembersOptions = {},
   ) {
     let id: string | undefined;
     const type = this.type;
