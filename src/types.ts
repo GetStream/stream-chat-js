@@ -1785,3 +1785,103 @@ export type TranslationLanguages =
   | 'vi'
   | 'zh'
   | 'zh-TW';
+
+export type EndpointName =
+  | 'Connect'
+  | 'DeleteFile'
+  | 'DeleteImage'
+  | 'DeleteMessage'
+  | 'DeleteUser'
+  | 'DeactivateUser'
+  | 'ExportUser'
+  | 'DeleteReaction'
+  | 'UpdateChannel'
+  | 'UpdateChannelPartial'
+  | 'UpdateMessage'
+  | 'GetMessage'
+  | 'GetManyMessages'
+  | 'UpdateUsers'
+  | 'UpdateUsersPartial'
+  | 'CreateGuest'
+  | 'GetOrCreateChannel'
+  | 'StopWatchingChannel'
+  | 'QueryChannels'
+  | 'Search'
+  | 'QueryUsers'
+  | 'QueryMembers'
+  | 'QueryBannedUsers'
+  | 'GetReactions'
+  | 'GetReplies'
+  | 'Ban'
+  | 'Unban'
+  | 'Mute'
+  | 'MuteChannel'
+  | 'UnmuteChannel'
+  | 'UnmuteUser'
+  | 'RunMessageAction'
+  | 'SendEvent'
+  | 'MarkRead'
+  | 'MarkAllRead'
+  | 'SendMessage'
+  | 'ImportChannelMessages'
+  | 'UploadFile'
+  | 'UploadImage'
+  | 'UpdateApp'
+  | 'GetApp'
+  | 'CreateDevice'
+  | 'DeleteDevice'
+  | 'SendReaction'
+  | 'Flag'
+  | 'Unflag'
+  | 'CreateChannelType'
+  | 'DeleteChannel'
+  | 'DeleteChannelType'
+  | 'GetChannelType'
+  | 'ListChannelTypes'
+  | 'ListDevices'
+  | 'TruncateChannel'
+  | 'UpdateChannelType'
+  | 'CheckPush'
+  | 'PrivateSubmitModeration'
+  | 'ReactivateUser'
+  | 'HideChannel'
+  | 'ShowChannel'
+  | 'CreateCustomPermission'
+  | 'UpdateCustomPermission'
+  | 'GetCustomPermission'
+  | 'DeleteCustomPermission'
+  | 'ListCustomPermission'
+  | 'CreateCustomRole'
+  | 'DeleteCustomRole'
+  | 'ListCustomRole'
+  | 'Sync'
+  | 'TranslateMessage'
+  | 'CreateCommand'
+  | 'GetCommand'
+  | 'UpdateCommand'
+  | 'DeleteCommand'
+  | 'ListCommands'
+  | 'CreateBlockList'
+  | 'UpdateBlockList'
+  | 'GetBlockList'
+  | 'ListBlockLists'
+  | 'DeleteBlockList'
+  | 'ExportChannels'
+  | 'GetExportChannelsStatus'
+  | 'CheckSQS'
+  | 'GetRateLimits';
+
+export type RateLimitsInfo = {
+  limit: number;
+  remaining: number;
+  reset: number;
+};
+
+export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
+
+export type GetRateLimitsResponse = APIResponse & {
+  android?: RateLimitsMap;
+  ios?: RateLimitsMap;
+  server_side?: RateLimitsMap;
+  web?: RateLimitsMap;
+};
