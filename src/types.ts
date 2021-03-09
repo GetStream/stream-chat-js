@@ -67,6 +67,7 @@ export type AppSettingsAPIResponse<
         message_retention?: string;
         mutes?: boolean;
         name?: string;
+        push_notifications?: boolean;
         reactions?: boolean;
         read_events?: boolean;
         replies?: boolean;
@@ -375,6 +376,13 @@ export type GetMultipleMessagesAPIResponse<
     ReactionType,
     UserType
   >[];
+};
+
+export type GetRateLimitsResponse = APIResponse & {
+  android?: RateLimitsMap;
+  ios?: RateLimitsMap;
+  server_side?: RateLimitsMap;
+  web?: RateLimitsMap;
 };
 
 export type GetReactionsAPIResponse<
@@ -760,6 +768,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   mutes?: boolean;
   name?: string;
   permissions?: PermissionObject[];
+  push_notifications?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
@@ -852,6 +861,15 @@ export type PaginationOptions = {
   id_lte?: string;
   limit?: number;
   offset?: number;
+};
+
+export type QueryMembersOptions = {
+  limit?: number;
+  offset?: number;
+  user_id_gt?: string;
+  user_id_gte?: string;
+  user_id_lt?: string;
+  user_id_lte?: string;
 };
 
 export type SearchOptions = {
@@ -1404,6 +1422,7 @@ export type ChannelConfigFields = {
   message_retention?: string;
   mutes?: boolean;
   name?: string;
+  push_notifications?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
@@ -1512,6 +1531,91 @@ export type DeviceFields = {
   push_provider?: 'apn' | 'firebase';
 };
 
+export type EndpointName =
+  | 'Connect'
+  | 'DeleteFile'
+  | 'DeleteImage'
+  | 'DeleteMessage'
+  | 'DeleteUser'
+  | 'DeactivateUser'
+  | 'ExportUser'
+  | 'DeleteReaction'
+  | 'UpdateChannel'
+  | 'UpdateChannelPartial'
+  | 'UpdateMessage'
+  | 'GetMessage'
+  | 'GetManyMessages'
+  | 'UpdateUsers'
+  | 'UpdateUsersPartial'
+  | 'CreateGuest'
+  | 'GetOrCreateChannel'
+  | 'StopWatchingChannel'
+  | 'QueryChannels'
+  | 'Search'
+  | 'QueryUsers'
+  | 'QueryMembers'
+  | 'QueryBannedUsers'
+  | 'GetReactions'
+  | 'GetReplies'
+  | 'Ban'
+  | 'Unban'
+  | 'Mute'
+  | 'MuteChannel'
+  | 'UnmuteChannel'
+  | 'UnmuteUser'
+  | 'RunMessageAction'
+  | 'SendEvent'
+  | 'MarkRead'
+  | 'MarkAllRead'
+  | 'SendMessage'
+  | 'ImportChannelMessages'
+  | 'UploadFile'
+  | 'UploadImage'
+  | 'UpdateApp'
+  | 'GetApp'
+  | 'CreateDevice'
+  | 'DeleteDevice'
+  | 'SendReaction'
+  | 'Flag'
+  | 'Unflag'
+  | 'CreateChannelType'
+  | 'DeleteChannel'
+  | 'DeleteChannelType'
+  | 'GetChannelType'
+  | 'ListChannelTypes'
+  | 'ListDevices'
+  | 'TruncateChannel'
+  | 'UpdateChannelType'
+  | 'CheckPush'
+  | 'PrivateSubmitModeration'
+  | 'ReactivateUser'
+  | 'HideChannel'
+  | 'ShowChannel'
+  | 'CreateCustomPermission'
+  | 'UpdateCustomPermission'
+  | 'GetCustomPermission'
+  | 'DeleteCustomPermission'
+  | 'ListCustomPermission'
+  | 'CreateCustomRole'
+  | 'DeleteCustomRole'
+  | 'ListCustomRole'
+  | 'Sync'
+  | 'TranslateMessage'
+  | 'CreateCommand'
+  | 'GetCommand'
+  | 'UpdateCommand'
+  | 'DeleteCommand'
+  | 'ListCommands'
+  | 'CreateBlockList'
+  | 'UpdateBlockList'
+  | 'GetBlockList'
+  | 'ListBlockLists'
+  | 'DeleteBlockList'
+  | 'ExportChannels'
+  | 'GetExportChannelsStatus'
+  | 'CheckSQS'
+  | 'GetRateLimits';
+
 export type ExportChannelRequest = {
   id: string;
   type: string;
@@ -1618,6 +1722,14 @@ export type Policy = {
   roles?: string[];
   updated_at?: string;
 };
+
+export type RateLimitsInfo = {
+  limit: number;
+  remaining: number;
+  reset: number;
+};
+
+export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
 export type Reaction<
   ReactionType = UnknownType,
