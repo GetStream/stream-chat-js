@@ -1613,7 +1613,7 @@ export class StreamChat<
       web,
       android,
       ios,
-      endpoints,
+      endpoints: endpoints ? endpoints.join(',') : undefined,
     });
   }
 
