@@ -540,7 +540,7 @@ export class StreamChat<
   /**
    * Disconnects the websocket connection, without removing the user set on client.
    * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
-   * to call client.reconnectUser to reconnect to websocket.
+   * to call client.openConnection to reconnect to websocket.
    *
    * This is mainly useful on mobile side. You can only receive push notifications
    * if you don't have active websocket connection.
@@ -560,13 +560,35 @@ export class StreamChat<
       channel._disconnect();
     }
 
-    return this.wsConnection?.disconnect(timeout);
+    if (!this.wsConnection) {
+      return Promise.resolve();
+    }
+
+    return this.wsConnection.disconnect(timeout);
   };
 
   /**
-   * Reconnects the current user.
+   * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
    */
-  openConnection = () => {
+  openConnection = async () => {
+    if (!this.userID) {
+      throw Error(
+        'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
+      );
+    }
+
+    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+      this.logger(
+        'info',
+        'client:openConnection() - openConnection called twice, healthy connection already exists',
+        {
+          tags: ['connection', 'client'],
+        },
+      );
+
+      return Promise.resolve();
+    }
+
     this.clientID = `${this.userID}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
@@ -692,7 +714,7 @@ export class StreamChat<
     this.tokenManager.reset();
 
     // close the WS connection
-    return await closePromise;
+    return closePromise;
   };
 
   /**
