@@ -1,8 +1,7 @@
 # Stream Chat JS
 
+[![NPM](https://img.shields.io/npm/v/stream-chat.svg)](https://www.npmjs.com/package/stream-chat)
 [![Actions Status](https://github.com/GetStream/stream-chat-js/workflows/build/badge.svg)](https://github.com/GetStream/stream-chat-js/actions)
-
-[![NPM](https://nodei.co/npm/stream-chat.png)](https://www.npmjs.com/package/stream-chat)
 
 stream-chat-js is the official JavaScript client for Stream Chat, a service for building chat applications.
 
@@ -161,8 +160,7 @@ client.connectUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestT
 Note that you need 2FA enabled on NPM, publishing with Yarn gives error, use NPM directly for this:
 
 ```bash
-npm version bug
-npm publish
+npm version patch|minor|major
 ```
 
 ## Contributing

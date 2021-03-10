@@ -132,7 +132,6 @@ export class StreamChat<
   clientID?: string;
   configs: Configs<CommandType>;
   connecting?: boolean;
-  connectionEstablishedCount?: number;
   connectionID?: string;
   failures?: number;
   key: string;
@@ -454,14 +453,7 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws');
   }
 
-  _setupConnection = () => {
-    this.clientID = `${this.userID}--${randomId()}`;
-    this.wsPromise = this.connect();
-    this._startCleaning();
-    return this.wsPromise;
-  };
-
-  _hasConnectionID = () => Boolean(this.connectionID);
+  _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -512,7 +504,7 @@ export class StreamChat<
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
-    const wsPromise = this._setupConnection();
+    const wsPromise = this.openConnection();
 
     this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
       (result) => result[1], // We only return connection promise;
@@ -544,6 +536,72 @@ export class StreamChat<
     // this one is actually used for requests...
     this._user = { ...user };
   }
+
+  /**
+   * Disconnects the websocket connection, without removing the user set on client.
+   * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
+   * to call client.openConnection to reconnect to websocket.
+   *
+   * This is mainly useful on mobile side. You can only receive push notifications
+   * if you don't have active websocket connection.
+   * So when your app goes to background, you can call `client.closeConnection`.
+   * And when app comes back to foreground, call `client.openConnection`.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   */
+  closeConnection = (timeout?: number) => {
+    if (this.cleaningIntervalRef != null) {
+      clearInterval(this.cleaningIntervalRef);
+      this.cleaningIntervalRef = undefined;
+    }
+
+    for (const channel of Object.values(this.activeChannels)) {
+      channel._disconnect();
+    }
+
+    if (!this.wsConnection) {
+      return Promise.resolve();
+    }
+
+    return this.wsConnection.disconnect(timeout);
+  };
+
+  /**
+   * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
+   */
+  openConnection = async () => {
+    if (!this.userID) {
+      throw Error(
+        'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
+      );
+    }
+
+    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+      this.logger(
+        'info',
+        'client:openConnection() - openConnection called twice, healthy connection already exists',
+        {
+          tags: ['connection', 'client'],
+        },
+      );
+
+      return Promise.resolve();
+    }
+
+    this.clientID = `${this.userID}--${randomId()}`;
+    this.wsPromise = this.connect();
+    this._startCleaning();
+    return this.wsPromise;
+  };
+
+  /**
+   * @deprecated Please use client.openConnction instead.
+   * @private
+   *
+   * Creates a new websocket connection with current user.
+   */
+  _setupConnection = this.openConnection;
 
   /**
 	 * updateAppSettings - updates application settings
@@ -629,29 +687,25 @@ export class StreamChat<
   }
 
   /**
-   * disconnect - closes the WS connection
+   * Disconnects the websocket and removes the user from client.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  disconnect(timeout?: number) {
+  disconnectUser = async (timeout?: number) => {
     this.logger('info', 'client:disconnect() - Disconnecting the client', {
       tags: ['connection', 'client'],
     });
+
     // remove the user specific fields
     delete this.user;
     delete this._user;
     delete this.userID;
 
-    if (this.cleaningIntervalRef != null) {
-      clearInterval(this.cleaningIntervalRef);
-      this.cleaningIntervalRef = undefined;
-    }
-
     this.anonymous = false;
 
-    this.connectionEstablishedCount = 0;
+    const closePromise = this.closeConnection(timeout);
 
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
-    }
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
@@ -660,12 +714,16 @@ export class StreamChat<
     this.tokenManager.reset();
 
     // close the WS connection
-    if (this.wsConnection) {
-      return this.wsConnection.disconnect(timeout);
-    }
+    return closePromise;
+  };
 
-    return Promise.resolve();
-  }
+  /**
+   *
+   * @deprecated Please use client.disconnectUser instead.
+   *
+   * Disconnects the websocket and removes the user from client.
+   */
+  disconnect = this.disconnectUser;
 
   /**
    * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
@@ -1240,7 +1298,7 @@ export class StreamChat<
         tags: ['connection'],
       },
     );
-    this.connectionID = this.wsConnection?.connectionID;
+
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
       this.logger(
@@ -1293,6 +1351,9 @@ export class StreamChat<
     }
   }
 
+  /**
+   * @private
+   */
   async connect() {
     this.connecting = true;
     const client = this;
@@ -1341,7 +1402,6 @@ export class StreamChat<
       });
     }
 
-    this.connectionID = this.wsConnection.connectionID;
     return handshake;
   }
 
@@ -2437,7 +2497,7 @@ export class StreamChat<
         user_id: this.userID,
         ...options.params,
         api_key: this.key,
-        connection_id: this.connectionID,
+        connection_id: this.wsConnection?.connectionID,
       },
       headers: {
         Authorization: token,

@@ -11,7 +11,7 @@ function isMapStringCallback<T, U>(
   arrayOrString: string | T[],
   callback: MapGenericCallback<T, U> | MapStringCallback<U>,
 ): callback is MapStringCallback<U> {
-  return callback && isString(arrayOrString);
+  return !!callback && isString(arrayOrString);
 }
 
 // source - https://github.com/beatgammit/base64-js/blob/master/test/convert.js#L72

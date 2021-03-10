@@ -49,7 +49,7 @@ async function disconnect() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.connectAnonymousUser();
 	await authClient.connect();
-	return await authClient.disconnect();
+	return await authClient.disconnectUser();
 }
 
 async function getAppSettings() {
