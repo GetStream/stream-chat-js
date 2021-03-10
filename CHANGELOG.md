@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## March 10, 2021 - 3.5.0
+
+- Deprecated `client.disconnect`. A new method has been introduced as alias - `client.disconnectUser`
+- Introduced following two methods on client:
+
+  - client.openConnection - establish a ws connection on current client.
+  - client.closeConnection - close the ws connection on current client, doesn't remove user
+
+- Moved call to `setHealth(true)`, (which marks the connection as healthy) to only after you receive first event on websocket.
+  Please check the description of PR [#626](https://github.com/GetStream/stream-chat-js/pull/626) for details.
+
 ## March 9, 2021 - 3.4.0
 
 QueryMembers - Added support for pagination by user_id [0c41232](https://github.com/GetStream/stream-chat-js/commit/0c412321bc4de81b123574041e0abadf89f235df)
