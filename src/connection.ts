@@ -319,6 +319,7 @@ export class StableWSConnection<
 
     if (response) {
       this.connectionID = response.connection_id;
+
       return response;
     }
 
@@ -470,13 +471,11 @@ export class StableWSConnection<
 
   onopen = (wsID: number) => {
     if (this.wsID !== wsID) return;
+
     this.logger('info', 'connection:onopen() - onopen callback', {
       tags: ['connection'],
       wsID,
     });
-
-    // set healthy..
-    this._setHealth(true);
   };
 
   onmessage = (wsID: number, event: WebSocket.MessageEvent) => {
@@ -492,6 +491,8 @@ export class StableWSConnection<
         return;
       } else {
         this.resolvePromise?.(event);
+        // set healthy..
+        this._setHealth(true);
       }
     }
 

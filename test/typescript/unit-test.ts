@@ -110,7 +110,7 @@ const authType: string = client.getAuthType();
 voidReturn = client.setBaseURL('https://chat-us-east-1.stream-io-api.com/');
 const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
 const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
-voidPromise = client.disconnect();
+voidPromise = client.disconnectUser();
 
 const updateRequest: PartialUserUpdate<UserType> = {
   id: 'vishal',

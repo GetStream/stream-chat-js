@@ -33,7 +33,7 @@ describe('StreamChat getInstance', () => {
 
 	it('should throw error if connectUser called twice on an instance', async () => {
 		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
-		client1._setupConnection = () => Promise.resolve();
+		client1.openConnection = () => Promise.resolve();
 		client1._setToken = () => Promise.resolve();
 
 		await client1.connectUser({ id: 'vishal' }, 'token');
@@ -45,13 +45,13 @@ describe('StreamChat getInstance', () => {
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
 		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
-		client1._setupConnection = () => Promise.resolve('_setupConnection');
+		client1.openConnection = () => Promise.resolve('openConnection');
 		client1._setToken = () => Promise.resolve();
 
 		await client1.connectUser({ id: 'Amin' }, 'token');
 		const client2 = StreamChat.getInstance('key2');
 		const connection = await client2.connectUser({ id: 'Amin' }, 'token');
-		expect(connection).to.equal('_setupConnection');
+		expect(connection).to.equal('openConnection');
 	});
 });
 
@@ -119,7 +119,7 @@ describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
 		client = new StreamChat('', { allowServerSideConnect: true });
-		client._setupConnection = () => Promise.resolve('_setupConnection');
+		client.openConnection = () => Promise.resolve('openConnection');
 		client._setToken = () => Promise.resolve('_setToken');
 	});
 
@@ -134,7 +134,7 @@ describe('Client connectUser', () => {
 		expect(promise).to.be.a('promise');
 
 		const resolved = await promise;
-		expect(resolved).to.equal('_setupConnection');
+		expect(resolved).to.equal('openConnection');
 	});
 
 	it('should throw error if connectUser called twice on the client with different user', async () => {
@@ -154,12 +154,12 @@ describe('Client connectUser', () => {
 
 	it('should work for a second call with different user after disconnecting from first user', async () => {
 		const connection1 = await client.connectUser({ id: 'vishal' }, 'token');
-		expect(connection1).to.equal('_setupConnection');
+		expect(connection1).to.equal('openConnection');
 
-		await client.disconnect();
+		await client.disconnectUser();
 
 		const connection = await client.connectUser({ id: 'amin' }, 'token');
-		expect(connection).to.equal('_setupConnection');
+		expect(connection).to.equal('openConnection');
 	});
 });
 
@@ -180,7 +180,7 @@ describe('Detect node environment', () => {
 			await client.connectUser({ id: 'user' }, 'fake token');
 		} catch (e) {}
 
-		await client.disconnect();
+		await client.disconnectUser();
 		expect(warning).to.equal(
 			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
 		);
