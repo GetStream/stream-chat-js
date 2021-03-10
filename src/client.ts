@@ -453,49 +453,6 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws');
   }
 
-  /**
-   * @private
-   *
-   * Creates a new websocket connection with current user.
-   */
-  _setupConnection = () => {
-    this.clientID = `${this.userID}--${randomId()}`;
-    this.wsPromise = this.connect();
-    this._startCleaning();
-    return this.wsPromise;
-  };
-
-  /**
-   * Disconnects the websocket connection, without removing the user set on client.
-   * client.disconnectUser will not trigger default auto-retry mechanism for reconnection. You need
-   * to call client.reconnectUser to reconnect to websocket.
-   *
-   * This is mainly useful on mobile side. You can only receive push notifications
-   * if you don't have active websocket connection.
-   * So when your app goes to background, you can call `client.disconnectUser`.
-   * And when app comes back to foreground, call `client.reconnectUser`.
-   *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-   */
-  disconnectUser = (timeout?: number) => {
-    if (this.cleaningIntervalRef != null) {
-      clearInterval(this.cleaningIntervalRef);
-      this.cleaningIntervalRef = undefined;
-    }
-
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
-    }
-
-    return this.wsConnection?.disconnect(timeout);
-  };
-
-  /**
-   * Reconnects the current user.
-   */
-  reconnectUser = this._setupConnection;
-
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
   /**
@@ -547,7 +504,7 @@ export class StreamChat<
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
-    const wsPromise = this._setupConnection();
+    const wsPromise = this.openConnection();
 
     this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
       (result) => result[1], // We only return connection promise;
@@ -579,6 +536,50 @@ export class StreamChat<
     // this one is actually used for requests...
     this._user = { ...user };
   }
+
+  /**
+   * Disconnects the websocket connection, without removing the user set on client.
+   * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
+   * to call client.reconnectUser to reconnect to websocket.
+   *
+   * This is mainly useful on mobile side. You can only receive push notifications
+   * if you don't have active websocket connection.
+   * So when your app goes to background, you can call `client.closeConnection`.
+   * And when app comes back to foreground, call `client.openConnection`.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   */
+  closeConnection = (timeout?: number) => {
+    if (this.cleaningIntervalRef != null) {
+      clearInterval(this.cleaningIntervalRef);
+      this.cleaningIntervalRef = undefined;
+    }
+
+    for (const channel of Object.values(this.activeChannels)) {
+      channel._disconnect();
+    }
+
+    return this.wsConnection?.disconnect(timeout);
+  };
+
+  /**
+   * Reconnects the current user.
+   */
+  openConnection = () => {
+    this.clientID = `${this.userID}--${randomId()}`;
+    this.wsPromise = this.connect();
+    this._startCleaning();
+    return this.wsPromise;
+  };
+
+  /**
+   * @deprecated Please use client.openConnction instead.
+   * @private
+   *
+   * Creates a new websocket connection with current user.
+   */
+  _setupConnection = this.openConnection;
 
   /**
 	 * updateAppSettings - updates application settings
@@ -669,16 +670,19 @@ export class StreamChat<
    * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  disconnect(timeout?: number) {
+  disconnectUser = (timeout?: number) => {
     this.logger('info', 'client:disconnect() - Disconnecting the client', {
       tags: ['connection', 'client'],
     });
+
     // remove the user specific fields
     delete this.user;
     delete this._user;
     delete this.userID;
 
     this.anonymous = false;
+
+    const closePromise = this.closeConnection(timeout);
 
     // ensure we no longer return inactive channels
     this.activeChannels = {};
@@ -688,10 +692,16 @@ export class StreamChat<
     this.tokenManager.reset();
 
     // close the WS connection
-    this.disconnectUser(timeout);
+    return closePromise;
+  };
 
-    return Promise.resolve();
-  }
+  /**
+   *
+   * @deprecated Please use client.disconnectUser instead.
+   *
+   * Disconnects the websocket and removes the user from client.
+   */
+  disconnect = this.disconnectUser;
 
   /**
    * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
