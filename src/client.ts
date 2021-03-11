@@ -556,10 +556,6 @@ export class StreamChat<
       this.cleaningIntervalRef = undefined;
     }
 
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
-    }
-
     if (!this.wsConnection) {
       return Promise.resolve();
     }
@@ -705,6 +701,10 @@ export class StreamChat<
     this.anonymous = false;
 
     const closePromise = this.closeConnection(timeout);
+
+    for (const channel of Object.values(this.activeChannels)) {
+      channel._disconnect();
+    }
 
     // ensure we no longer return inactive channels
     this.activeChannels = {};
