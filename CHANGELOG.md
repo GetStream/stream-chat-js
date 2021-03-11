@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## March 11, 2021 - 3.5.1
+
+Remove call to `channel._disconnect` from client.closeConnection. For end user this will fix the issue - `You can't use a channel after client.disconnect() was called` [#639](https://github.com/GetStream/stream-chat-js/pull/639)
+
 ## March 10, 2021 - 3.5.0
 
 - Deprecated `client.disconnect`. A new method has been introduced as alias - `client.disconnectUser`
