@@ -53,6 +53,13 @@ describe('StreamChat getInstance', () => {
 		const connection = await client2.connectUser({ id: 'Amin' }, 'token');
 		expect(connection).to.equal('openConnection');
 	});
+
+	it('should set base url correctly', async () => {
+		const baseURL = 'http://example.com';
+		const client = StreamChat.getInstance('key3', { baseURL });
+
+		expect(client.baseURL).to.equal(baseURL);
+	});
 });
 
 describe('Client userMuteStatus', function () {
