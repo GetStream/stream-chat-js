@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## March 15, 2021 - 3.6.0
+
+- Add support to set `baseURL` from `options` [#644](https://github.com/GetStream/stream-chat-js/pull/639)
+  - `StreamChat.getInstance('key', { baseURL })`
+
 ## March 11, 2021 - 3.5.1
 
 Remove call to `channel._disconnect` from client.closeConnection. For end user this will fix the issue - `You can't use a channel after client.disconnect() was called` [#639](https://github.com/GetStream/stream-chat-js/pull/639)
