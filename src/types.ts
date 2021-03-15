@@ -882,6 +882,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
    */
   allowServerSideConnect?: boolean;
+  /**
+   * Base url to use for API
+   * such as https://chat-proxy-dublin.stream-io-api.com
+   */
+  baseURL?: string;
   browser?: boolean;
   logger?: Logger;
   /**
