@@ -2,6 +2,7 @@ import { Channel } from './channel';
 import {
   ChannelMemberResponse,
   ChannelMembership,
+  FormatMessageResponse,
   Event,
   LiteralStringForUnion,
   MessageResponse,
@@ -174,9 +175,19 @@ export class ChannelState<
       ReactionType,
       UserType
     >,
-  ) {
+  ): FormatMessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > {
     return {
       ...message,
+      /**
+       * @deprecated please use `html`
+       */
       __html: message.html,
       // parse the date..
       pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
