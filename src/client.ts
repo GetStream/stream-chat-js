@@ -2391,6 +2391,7 @@ export class StreamChat<
       | 'type'
       | 'updated_at'
       | 'user'
+      | '__html'
     > = [
       'command',
       'created_at',
@@ -2402,6 +2403,7 @@ export class StreamChat<
       'type',
       'updated_at',
       'user',
+      '__html',
     ];
 
     reservedMessageFields.forEach(function (item) {
