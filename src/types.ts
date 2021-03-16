@@ -330,21 +330,15 @@ export type FormatMessageResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = Omit<
-  MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >,
-  'created_at' | 'updated_at' | 'status'
-> & {
-  __html: string;
-  created_at: Date;
-  status: string;
-  updated_at: Date;
-};
+  MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>,
+  'created_at' | 'pinned_at' | 'updated_at' | 'status'
+> &
+  MessageType & {
+    created_at: Date;
+    pinned_at: Date | null;
+    status: string;
+    updated_at: Date;
+  };
 
 export type GetChannelTypeResponse<
   CommandType extends string = LiteralStringForUnion
