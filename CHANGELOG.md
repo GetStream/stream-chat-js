@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## March 17, 2021 - 3.6.2
+
+- Added extra check in `client.updateMessage` to make sure we don't send `mentions_users` as array of user objects. If yes, then convert it
+  to array of userIds (which is what API expects) [#647](https://github.com/GetStream/stream-chat-js/pull/647)
+
 ## March 16, 2021 - 3.6.1
 
 - `message.__html` type is deprecated in favor of `message.html` [#646](https://github.com/GetStream/stream-chat-js/pull/646)
