@@ -35,4 +35,4 @@ jobs:
 
       - name: Run API type definition tests
         if: matrix.node == 14
-        run: yarn test-types
+        run: yarn build && yarn test-types
