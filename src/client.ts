@@ -2422,24 +2422,15 @@ export class StreamChat<
 
     /**
      * Server always expects mentioned_users to be array of string. We are adding extra check, just in case
-     * SDK missed this conversation.
+     * SDK missed this conversion.
      */
     if (
       Array.isArray(clonedMessage.mentioned_users) &&
       !isString(clonedMessage.mentioned_users[0])
     ) {
-      /**
-       * We need to typecast mentioned_users first to unknown, to let typescript know that further typecasting is intentional.
-       *
-       * Error raised by ts:
-       * ```
-       * Conversion of type 'string[]' to type 'UserResponse<UserType>[]' may be a mistake because neither
-       * type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first
-       * ```
-       */
       clonedMessage.mentioned_users = ((clonedMessage.mentioned_users as unknown) as Array<
         UserResponse<UserType>
-      >)?.map((mu) => mu.id);
+      >)?.map((mu) => ((mu as unknown) as UserResponse).id);
     }
 
     return await this.post<
