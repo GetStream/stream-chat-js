@@ -245,7 +245,7 @@ export class StreamChat<
 
     this.axiosInstance = axios.create(this.options);
 
-    this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
+    this.setBaseURL(this.options.baseURL || 'https://chat-us-east-1.stream-io-api.com');
 
     if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
@@ -2391,6 +2391,7 @@ export class StreamChat<
       | 'type'
       | 'updated_at'
       | 'user'
+      | '__html'
     > = [
       'command',
       'created_at',
@@ -2402,6 +2403,7 @@ export class StreamChat<
       'type',
       'updated_at',
       'user',
+      '__html',
     ];
 
     reservedMessageFields.forEach(function (item) {

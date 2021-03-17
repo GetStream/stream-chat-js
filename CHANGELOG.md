@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## March 16, 2021 - 3.6.1
+
+- `message.__html` type is deprecated in favor of `message.html` [#646](https://github.com/GetStream/stream-chat-js/pull/646)
+- `message.__html` is ignored `updateMessage` function [#645](https://github.com/GetStream/stream-chat-js/pull/645)
+
+## March 15, 2021 - 3.6.0
+
+- Add support to set `baseURL` from `options` [#644](https://github.com/GetStream/stream-chat-js/pull/644)
+  - `StreamChat.getInstance('key', { baseURL })`
+
 ## March 11, 2021 - 3.5.1
 
 Remove call to `channel._disconnect` from client.closeConnection. For end user this will fix the issue - `You can't use a channel after client.disconnect() was called` [#639](https://github.com/GetStream/stream-chat-js/pull/639)
