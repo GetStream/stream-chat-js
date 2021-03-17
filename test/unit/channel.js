@@ -1,12 +1,14 @@
 import chai from 'chai';
-import { Channel } from '../../src/channel';
-import { StreamChat } from '../../src/client';
 import { v4 as uuidv4 } from 'uuid';
-import { generateMsg } from './test-utils/generateMessage';
+
+import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
+import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
-import { generateChannel } from './test-utils/generateChannel';
+
+import { StreamChat } from '../../src/client';
+import { Channel } from '../../src/channel';
 
 const expect = chai.expect;
 

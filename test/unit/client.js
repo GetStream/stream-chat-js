@@ -1,4 +1,8 @@
 import chai from 'chai';
+
+import { generateMsg } from './test-utils/generateMessage';
+import { getClientWithUser } from './test-utils/getClient';
+
 import { StreamChat } from '../../src/client';
 
 const expect = chai.expect;
@@ -205,5 +209,55 @@ describe('Detect node environment', () => {
 		expect(warning).to.equal('');
 
 		console.warn = _warn;
+	});
+});
+
+describe.only('updateMessage should ensure sanity of `mentioned_users`', () => {
+	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
+		const client = await getClientWithUser();
+		client.post = (url, config) => {
+			expect(typeof config.message.mentioned_users[0]).to.be.equal('string');
+			expect(config.message.mentioned_users[0]).to.be.equal('uthred');
+		};
+		await client.updateMessage(
+			generateMsg({
+				mentioned_users: [
+					{
+						id: 'uthred',
+						name: 'Uthred Of Bebbanburg',
+					},
+				],
+			}),
+		);
+
+		await client.updateMessage(
+			generateMsg({
+				mentioned_users: ['uthred'],
+			}),
+		);
+	});
+
+	it('should allow empty mentioned_users', async () => {
+		const client = await getClientWithUser();
+		client.post = (url, config) => {
+			expect(config.message.mentioned_users[0]).to.be.equal(undefined);
+		};
+
+		await client.updateMessage(
+			generateMsg({
+				mentioned_users: [],
+			}),
+		);
+
+		client.post = (url, config) => {
+			expect(config.message.mentioned_users).to.be.equal(undefined);
+		};
+
+		await client.updateMessage(
+			generateMsg({
+				text: 'test message',
+				mentioned_users: undefined,
+			}),
+		);
 	});
 });
