@@ -2428,9 +2428,9 @@ export class StreamChat<
       Array.isArray(clonedMessage.mentioned_users) &&
       !isString(clonedMessage.mentioned_users[0])
     ) {
-      clonedMessage.mentioned_users = ((clonedMessage.mentioned_users as unknown) as Array<
-        UserResponse<UserType>
-      >)?.map((mu) => ((mu as unknown) as UserResponse).id);
+      clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
+        (mu) => ((mu as unknown) as UserResponse).id,
+      );
     }
 
     return await this.post<

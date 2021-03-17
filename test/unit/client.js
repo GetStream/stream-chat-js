@@ -219,7 +219,7 @@ describe('Detect node environment', () => {
 	});
 });
 
-describe.only('updateMessage should ensure sanity of `mentioned_users`', () => {
+describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
 		const client = await getClientWithUser();
 		client.post = (url, config) => {
