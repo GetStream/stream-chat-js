@@ -1436,6 +1436,12 @@ export class Channel<
 
     return {
       unsubscribe: () => {
+        this._client.logger(
+          'info',
+          `Removing listener for ${key} event from channel ${this.cid}`,
+          { tags: ['event', 'channel'], channel: this },
+        );
+
         this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
     };
