@@ -5,6 +5,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
+import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { StreamChat } from '../../src/client';
@@ -394,5 +395,22 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		await channelVish_copy2.watch();
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+});
+
+describe.only('event subscription and unsubscription', () => {
+	it('channel.on should return unsubscribe handler', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+
+		const { unsubscribe: unsubscribe1 } = channel.on('message.new', () => {});
+		const { unsubscribe: unsubscribe2 } = channel.on(() => {});
+
+		expect(Object.values(channel.listeners).length).to.be.equal(2);
+
+		unsubscribe1();
+		expect(channel.listeners['message.new'].length).to.be.equal(0);
+		unsubscribe2();
+		expect(channel.listeners['all'].length).to.be.equal(0);
 	});
 });

@@ -1380,7 +1380,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void;
+  ): { unsubscribe: () => void };
   on(
     callback: EventHandler<
       AttachmentType,
@@ -1391,7 +1391,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void;
+  ): { unsubscribe: () => void };
   on(
     callbackOrString:
       | EventHandler<
@@ -1413,7 +1413,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void {
+  ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
@@ -1433,6 +1433,12 @@ export class Channel<
     );
 
     this.listeners[key].push(callback);
+
+    return {
+      unsubscribe: () => {
+        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+      },
+    };
   }
 
   /**
