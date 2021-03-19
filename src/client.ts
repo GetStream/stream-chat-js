@@ -887,6 +887,10 @@ export class StreamChat<
     this.listeners[key].push(callback);
     return {
       unsubscribe: () => {
+        this.logger('info', `Removing listener for ${key} event`, {
+          tags: ['event', 'client'],
+        });
+
         this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
     };
