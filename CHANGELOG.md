@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## March 19, 2021 - 3.7.0
+
+- Receive unsubscribe handler from `channel.on` [1ae1fca](https://github.com/GetStream/stream-chat-js/commit/1ae1fca10e5db251c549ce5b50ec19ff5ea617e2)
+
+```js
+const eventHandler = (e) => {
+  /** handle event here */
+};
+const { unsubscribe } = channel.on(eventHandler);
+
+// When you want to remove listener:
+unsubscribe();
+```
+
 ## March 17, 2021 - 3.6.2
 
 - Added extra check in `client.updateMessage` to make sure we don't send `mentions_users` as array of user objects. If yes, then convert it
