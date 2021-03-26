@@ -236,7 +236,7 @@ export class StreamChat<
       ...inputOptions,
     };
 
-    if (this.node) {
+    if (this.node && !this.options.httpsAgent) {
       this.options.httpsAgent = new https.Agent({
         keepAlive: true,
         keepAliveMsecs: 3000,
