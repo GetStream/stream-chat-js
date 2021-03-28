@@ -398,7 +398,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 	});
 });
 
-describe.only('event subscription and unsubscription', () => {
+describe('event subscription and unsubscription', () => {
 	it('channel.on should return unsubscribe handler', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
