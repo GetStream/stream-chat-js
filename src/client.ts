@@ -30,6 +30,8 @@ import {
   BanUserOptions,
   BlockList,
   BlockListResponse,
+  Campaign,
+  CampaignData,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -78,6 +80,8 @@ import {
   SearchAPIResponse,
   SearchOptions,
   SearchPayload,
+  Segment,
+  SegmentData,
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
@@ -1268,19 +1272,17 @@ export class StreamChat<
   ) => {
     const client = this;
     // gather and call the listeners
-    const listeners: Array<
-      (
-        event: Event<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >,
-      ) => void
-    > = [];
+    const listeners: Array<(
+      event: Event<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        EventType,
+        MessageType,
+        ReactionType,
+        UserType
+      >,
+    ) => void> = [];
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
@@ -1679,6 +1681,106 @@ export class StreamChat<
       ios,
       endpoints: endpoints ? endpoints.join(',') : undefined,
     });
+  }
+
+  async createSegment(params: SegmentData) {
+    const { segment } = await this.post<{ segment: Segment }>(
+      this.baseURL + `/segments`,
+      params,
+    );
+    return segment;
+  }
+
+  async getSegment(id: string) {
+    const { segment } = await this.get<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+    );
+    return segment;
+  }
+
+  async listSegments() {
+    const { segments } = await this.get<{ segments: Segment[] }>(
+      this.baseURL + `/segments`,
+    );
+    return segments;
+  }
+
+  async updateSegment(id: string, params: Partial<SegmentData>) {
+    const { segment } = await this.put<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+      params,
+    );
+    return segment;
+  }
+
+  async deleteSegment(id: string) {
+    return this.delete<{}>(this.baseURL + `/segments/${id}`);
+  }
+
+  async createCampaign(params: CampaignData) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns`,
+      params,
+    );
+    return campaign;
+  }
+
+  async getCampaign(id: string) {
+    const { campaign } = await this.get<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+    );
+    return campaign;
+  }
+
+  async listCampaigns() {
+    const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
+      this.baseURL + `/campaigns`,
+    );
+    return campaigns;
+  }
+
+  async updateCampaign(id: string, params: Partial<CampaignData>) {
+    const { campaign } = await this.put<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+      params,
+    );
+    return campaign;
+  }
+
+  async deleteCampaign(id: string) {
+    return this.delete<{}>(this.baseURL + `/campaigns/${id}`);
+  }
+
+  async scheduleCampaign(id: string, params: { sendAt: number }) {
+    const { sendAt } = params;
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/schedule`,
+      { send_at: sendAt },
+    );
+    return campaign;
+  }
+
+  async stopCampaign(id: string) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/stop`,
+    );
+    return campaign;
+  }
+
+  async resumeCampaign(id: string) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/resume`,
+    );
+    return campaign;
+  }
+
+  async testCampaign(id: string, params: { users: string[] }) {
+    const { users } = params;
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/test`,
+      { users },
+    );
+    return campaign;
   }
 
   _addChannelConfig(
