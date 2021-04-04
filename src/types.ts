@@ -484,7 +484,7 @@ export type MessageResponse<
   silent?: boolean;
   status?: string;
   thread_participants?: UserResponse<UserType>[];
-  type?: string;
+  type?: MessageLabel;
   updated_at?: string;
 };
 
@@ -1675,6 +1675,14 @@ export type MessageBase<
   user?: UserResponse<UserType> | null;
   user_id?: string;
 };
+
+export type MessageLabel =
+  | 'deleted'
+  | 'ephemeral'
+  | 'error'
+  | 'regular'
+  | 'reply'
+  | 'system';
 
 export type Mute<UserType = UnknownType> = {
   created_at: string;

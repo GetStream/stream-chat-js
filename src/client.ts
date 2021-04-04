@@ -685,7 +685,7 @@ export class StreamChat<
   /**
    * Disconnects the websocket and removes the user from client.
    *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
   disconnectUser = async (timeout?: number) => {
