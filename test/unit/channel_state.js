@@ -348,3 +348,40 @@ describe('ChannelState isUpToDate', () => {
 		expect(channel.state.isUpToDate).to.be.eq(false);
 	});
 });
+
+describe('ChannelState clean', () => {
+	let client;
+	let channel;
+	beforeEach(() => {
+		client = new StreamChat();
+		client.userID = 'observer';
+		channel = new Channel(client, 'live', 'stream', {});
+		client.activeChannels[channel.cid] = channel;
+	});
+
+	it('should remove any stale typing events with either string or Date received_at', async () => {
+		// string received_at
+		client.dispatchEvent({
+			cid: channel.cid,
+			type: 'typing.start',
+			user: { id: 'other' },
+			received_at: new Date(Date.now() - 10000).toISOString(),
+		});
+		expect(channel.state.typing['other']).not.to.be.undefined;
+
+		channel.state.clean();
+		expect(channel.state.typing['other']).to.be.undefined;
+
+		// Date received_at
+		client.dispatchEvent({
+			cid: channel.cid,
+			type: 'typing.start',
+			user: { id: 'other' },
+			received_at: new Date(Date.now() - 10000),
+		});
+		expect(channel.state.typing['other']).not.to.be.undefined;
+
+		channel.state.clean();
+		expect(channel.state.typing['other']).to.be.undefined;
+	});
+});
