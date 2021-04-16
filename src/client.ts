@@ -450,8 +450,9 @@ export class StreamChat<
 
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
-    this.wsBaseURL = this.baseURL.replace('http', 'ws');
-    this.wsBaseURL = this.baseURL.replace(':3030', ':8800');
+    this.wsBaseURL = this.baseURL
+      .replace('http', 'ws')
+      .replace(':3030', ':8800');
   }
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
