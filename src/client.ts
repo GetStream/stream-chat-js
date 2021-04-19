@@ -2650,6 +2650,20 @@ export class StreamChat<
     });
   }
 
+  /**
+   * sendUserCustomEvent - Send a custom event to a user
+   *
+   * @param {string} userID target user id
+   * @param {Event<EventType, UserType>} event for example {type: 'friendship-request'}
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async sendUserCustomEvent(userID: string, event: Event<EventType, UserType>) {
+    return await this.post<APIResponse>(`${this.baseURL}/users/${userID}/event`, {
+      event,
+    });
+  }
+
   createBlockList(blockList: BlockList) {
     return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
