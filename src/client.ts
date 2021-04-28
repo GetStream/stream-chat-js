@@ -1191,9 +1191,15 @@ export class StreamChat<
     }
   };
 
+  /**
+   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @private
+   */
   _updateUserReferences = this._updateMemberWatcherReferences;
 
   /**
+   * @private
+   *
    * Updates the messages from the currently active channels that contain this user,
    * with updated user object.
    *
@@ -1215,6 +1221,8 @@ export class StreamChat<
   };
 
   /**
+   * @private
+   *
    * Deletes the messages from the currently active channels that contain this user
    *
    * If hardDelete is true, all the content of message will be stripped down.
@@ -1237,6 +1245,8 @@ export class StreamChat<
   };
 
   /**
+   * @private
+   *
    * Handle following user related events:
    * - user.presence.changed
    * - user.updated

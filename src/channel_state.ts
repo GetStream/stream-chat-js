@@ -615,6 +615,15 @@ export class ChannelState<
     return { removed: result.length < msgArray.length, result };
   };
 
+  /**
+   * @private
+   *
+   * Updates the `message.user` property on messages from given user,
+   * and returns the updates messages array
+   *
+   * @param messages
+   * @param user
+   */
   _updateUserMessages = (
     messages: Array<
       ReturnType<
@@ -657,6 +666,15 @@ export class ChannelState<
     this.pinnedMessages = this._updateUserMessages(this.pinnedMessages, user);
   };
 
+  /**
+   * @private
+   *
+   * Marks messages from given user as deleted, and returns updated message list
+   *
+   * @param messages
+   * @param user
+   * @param hardDelete
+   */
   _deleteUserMessages = (
     messages: Array<
       ReturnType<
