@@ -164,7 +164,15 @@ const file: Promise<SendFileAPIResponse> = client.sendFile(
 );
 
 const type: EventTypes = 'user.updated';
-const event = {
+const event: Event<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  EventType,
+  MessageType,
+  ReactionType,
+  UserType
+> = {
   type,
   cid: 'channelid',
   message: {

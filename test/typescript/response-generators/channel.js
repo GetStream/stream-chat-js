@@ -222,7 +222,6 @@ async function updateChannelFromOriginal() {
 	await channel.watch();
 	await channel.update({
 		...channel.data,
-		frozen: true,
 		description: 'Updating original data',
 	});
 	return await channel.update({
