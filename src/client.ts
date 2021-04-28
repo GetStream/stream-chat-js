@@ -1172,14 +1172,13 @@ export class StreamChat<
   /**
    * Updates the members and watchers of the currently active channels that contain this user
    *
-   * @param user
+   * @param {UserResponse<UserType>} user
    */
   _updateMemberWatcherReferences = (user: UserResponse<UserType>) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
-    for (const channelID of refs) {
+    for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      // search the members and watchers and update as needed...
+      /** search the members and watchers and update as needed... */
       if (channel?.state) {
         if (channel.state.members[user.id]) {
           channel.state.members[user.id].user = user;
@@ -1203,17 +1202,16 @@ export class StreamChat<
    * Updates the messages from the currently active channels that contain this user,
    * with updated user object.
    *
-   * @param user
+   * @param {UserResponse<UserType>} user
    */
   _updateUserMessageReferences = (user: UserResponse<UserType>) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
 
-    for (const channelID of refs) {
+    for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
       const state = channel.state;
 
-      // update the messages from this user.
+      /** update the messages from this user. */
       if (state) {
         state?.updateUserMessages(user);
       }
@@ -1228,18 +1226,17 @@ export class StreamChat<
    * If hardDelete is true, all the content of message will be stripped down.
    * Otherwise, only 'message.type' will be set as 'deleted'.
    *
-   * @param user
-   * @param hardDelete
+   * @param {UserResponse<UserType>} user
+   * @param {boolean} hardDelete
    */
   _deleteUserMessageReference = (user: UserResponse<UserType>, hardDelete = false) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
 
-    for (const channelID of refs) {
+    for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
       const state = channel.state;
 
-      // deleted the messages from this user.
+      /** deleted the messages from this user. */
       state?.deleteUserMessages(user, hardDelete);
     }
   };
@@ -1252,7 +1249,7 @@ export class StreamChat<
    * - user.updated
    * - user.deleted
    *
-   * @param event
+   * @param {Event} event
    */
   _handleUserEvent = (
     event: Event<
@@ -1269,14 +1266,14 @@ export class StreamChat<
       return;
     }
 
-    // update the client.state with any changes to users
+    /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
       if (event.user?.id === this.userID) {
         this.user = this.user && { ...this.user, ...event.user };
-        // Updating only available properties in _user object.
+        /** Updating only available properties in _user object. */
         Object.keys(event.user).forEach((key) => {
           if (this._user && key in this._user) {
-            // @ts-expect-error
+            /** @ts-expect-error */
             this._user[key] = event.user[key];
           }
         });
