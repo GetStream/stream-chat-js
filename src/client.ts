@@ -236,7 +236,7 @@ export class StreamChat<
       ...inputOptions,
     };
 
-    if (this.node) {
+    if (this.node && !this.options.httpsAgent) {
       this.options.httpsAgent = new https.Agent({
         keepAlive: true,
         keepAliveMsecs: 3000,
@@ -450,7 +450,7 @@ export class StreamChat<
 
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
-    this.wsBaseURL = this.baseURL.replace('http', 'ws');
+    this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
@@ -685,7 +685,7 @@ export class StreamChat<
   /**
    * Disconnects the websocket and removes the user from client.
    *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
   disconnectUser = async (timeout?: number) => {
