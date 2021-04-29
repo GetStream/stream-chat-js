@@ -1212,9 +1212,7 @@ export class StreamChat<
       const state = channel.state;
 
       /** update the messages from this user. */
-      if (state) {
-        state?.updateUserMessages(user);
-      }
+      state?.updateUserMessages(user);
     }
   };
 
@@ -1288,6 +1286,7 @@ export class StreamChat<
 
     if (
       event.type === 'user.deleted' &&
+      event.user.deleted_at &&
       (event.mark_messages_deleted || event.hard_delete)
     ) {
       this._deleteUserMessageReference(event.user, event.hard_delete);

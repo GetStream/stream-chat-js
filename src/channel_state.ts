@@ -616,108 +616,14 @@ export class ChannelState<
   };
 
   /**
-   * @private
-   *
-   * Updates the `message.user` property on messages from given user,
-   * and returns the updates messages array
-   *
-   * @param {Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>} messages
-   * @param {UserResponse<UserType>} user
-   */
-  _updateUserMessages = (
-    messages: Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >
-    >,
-    user: UserResponse<UserType>,
-  ) =>
-    messages.map((m) => {
-      if (m.user?.id !== user.id) {
-        return m;
-      }
-
-      return {
-        ...m,
-        user,
-      };
-    });
-
-  /**
    * Updates the message.user property with updated user object, for messages.
    *
    * @param {UserResponse<UserType>} user
    */
   updateUserMessages = (user: UserResponse<UserType>) => {
-    this.messages = this._updateUserMessages(this.messages, user);
-
-    for (const parentId in this.threads) {
-      this.threads[parentId] = this._updateUserMessages(this.threads[parentId], user);
-    }
-
-    this.pinnedMessages = this._updateUserMessages(this.pinnedMessages, user);
-  };
-
-  /**
-   * @private
-   *
-   * Marks messages from given user as deleted, and returns updated message list
-   *
-   * @param {Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>} messages
-   * @param {UserResponse<UserType>} user
-   * @param {boolean} hardDelete
-   */
-  _deleteUserMessages = (
-    messages: Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >
-    >,
-    user: UserResponse<UserType>,
-    hardDelete = false,
-  ) =>
-    messages.map((m) => {
-      if (m.user?.id !== user.id) {
-        return m;
-      }
-
-      if (hardDelete) {
-        /**
-         * In case of hard delete, we need to strip down all text, html,
-         * attachments and all the custom properties on message
-         */
-        return ({
-          cid: m.cid,
-          created_at: m.created_at,
-          deleted_at: user.deleted_at,
-          id: m.id,
-          latest_reactions: [],
-          mentioned_users: [],
-          own_reactions: [],
-          parent_id: m.parent_id,
-          reply_count: m.reply_count,
-          status: m.status,
-          thread_participants: m.thread_participants,
-          type: 'deleted',
-          updated_at: m.updated_at,
-          user: m.user,
-        } as unknown) as ReturnType<
+    const _updateUserMessages = (
+      messages: Array<
+        ReturnType<
           ChannelState<
             AttachmentType,
             ChannelType,
@@ -727,15 +633,26 @@ export class ChannelState<
             ReactionType,
             UserType
           >['formatMessage']
-        >;
-      } else {
-        return {
-          ...m,
-          type: 'deleted',
-          deleted_at: user.deleted_at,
-        };
+        >
+      >,
+      user: UserResponse<UserType>,
+    ) => {
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        if (m.user?.id === user.id) {
+          messages[i] = { ...m, user };
+        }
       }
-    });
+    };
+
+    _updateUserMessages(this.messages, user);
+
+    for (const parentId in this.threads) {
+      _updateUserMessages(this.threads[parentId], user);
+    }
+
+    _updateUserMessages(this.pinnedMessages, user);
+  };
 
   /**
    * Marks the messages as deleted, from deleted user.
@@ -744,21 +661,77 @@ export class ChannelState<
    * @param {boolean} hardDelete
    */
   deleteUserMessages = (user: UserResponse<UserType>, hardDelete = false) => {
-    if (!user.deleted_at) {
-      return;
-    }
+    const _deleteUserMessages = (
+      messages: Array<
+        ReturnType<
+          ChannelState<
+            AttachmentType,
+            ChannelType,
+            CommandType,
+            EventType,
+            MessageType,
+            ReactionType,
+            UserType
+          >['formatMessage']
+        >
+      >,
+      user: UserResponse<UserType>,
+      hardDelete = false,
+    ) => {
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        if (m.user?.id !== user.id) {
+          continue;
+        }
 
-    this.messages = this._deleteUserMessages(this.messages, user, hardDelete);
+        if (hardDelete) {
+          /**
+           * In case of hard delete, we need to strip down all text, html,
+           * attachments and all the custom properties on message
+           */
+          messages[i] = ({
+            cid: m.cid,
+            created_at: m.created_at,
+            deleted_at: user.deleted_at,
+            id: m.id,
+            latest_reactions: [],
+            mentioned_users: [],
+            own_reactions: [],
+            parent_id: m.parent_id,
+            reply_count: m.reply_count,
+            status: m.status,
+            thread_participants: m.thread_participants,
+            type: 'deleted',
+            updated_at: m.updated_at,
+            user: m.user,
+          } as unknown) as ReturnType<
+            ChannelState<
+              AttachmentType,
+              ChannelType,
+              CommandType,
+              EventType,
+              MessageType,
+              ReactionType,
+              UserType
+            >['formatMessage']
+          >;
+        } else {
+          messages[i] = {
+            ...m,
+            type: 'deleted',
+            deleted_at: user.deleted_at,
+          };
+        }
+      }
+    };
+
+    _deleteUserMessages(this.messages, user, hardDelete);
 
     for (const parentId in this.threads) {
-      this.threads[parentId] = this._deleteUserMessages(
-        this.threads[parentId],
-        user,
-        hardDelete,
-      );
+      _deleteUserMessages(this.threads[parentId], user, hardDelete);
     }
 
-    this.pinnedMessages = this._deleteUserMessages(this.pinnedMessages, user, hardDelete);
+    _deleteUserMessages(this.pinnedMessages, user, hardDelete);
   };
 
   /**
