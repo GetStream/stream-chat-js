@@ -140,6 +140,7 @@ export type ChannelResponse<
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
+  cooldown?: number;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
