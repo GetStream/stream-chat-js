@@ -91,6 +91,7 @@ import {
   UpdateCommandResponse,
   UpdatedMessage,
   UpdateMessageAPIResponse,
+  UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
@@ -2740,6 +2741,21 @@ export class StreamChat<
     >(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
+    });
+  }
+
+  /**
+   * sendUserCustomEvent - Send a custom event to a user
+   *
+   * @param {string} targetUserID target user id
+   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
+    return await this.post<APIResponse>(`${this.baseURL}/users/${targetUserID}/event`, {
+      target_user_id: targetUserID,
+      event,
     });
   }
 
