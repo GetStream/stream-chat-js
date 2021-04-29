@@ -83,7 +83,7 @@ export type AppSettingsAPIResponse<
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
-    enforce_unique_usernames?: string;
+    enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
@@ -140,6 +140,7 @@ export type ChannelResponse<
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
+  cooldown?: number;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
@@ -950,6 +951,8 @@ export type Event<
   clear_history?: boolean;
   connection_id?: string;
   created_at?: string;
+  hard_delete?: boolean;
+  mark_messages_deleted?: boolean;
   me?: OwnUserResponse<ChannelType, CommandType, UserType>;
   member?: ChannelMemberResponse<UserType>;
   message?: MessageResponse<
