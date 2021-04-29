@@ -1039,6 +1039,10 @@ export type Event<
       AllowNarrowingEvents
     >;
 
+export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
+  type: string;
+};
+
 export type EventHandler<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
