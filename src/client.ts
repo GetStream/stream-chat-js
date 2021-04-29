@@ -51,6 +51,7 @@ import {
   EndpointName,
   Event,
   EventHandler,
+  EventTypes,
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
@@ -95,6 +96,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  ConnectionRecovered,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -145,7 +147,9 @@ export class StreamChat<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          'all',
+          true
         >,
       ) => void
     >;
@@ -817,7 +821,7 @@ export class StreamChat<
    *
    * @return {{ unsubscribe: () => void }} Description
    */
-  on(
+  on<AllowNarrowingEvents extends boolean = false>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -825,11 +829,13 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void };
-  on(
-    eventType: string,
+  on<EvType extends EventTypes>(
+    eventType: EvType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -837,10 +843,12 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      true
     >,
   ): { unsubscribe: () => void };
-  on(
+  on<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -849,9 +857,11 @@ export class StreamChat<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          EvType,
+          AllowNarrowingEvents
         >
-      | string,
+      | EvType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -859,25 +869,29 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EvType) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
-    const callback = callbackOrNothing
+    const callback = ((callbackOrNothing
       ? callbackOrNothing
-      : (callbackOrString as EventHandler<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >);
+      : callbackOrString) as unknown) as EventHandler<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType,
+      'all',
+      true
+    >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -900,7 +914,7 @@ export class StreamChat<
    * off - Remove the event handler
    *
    */
-  off(
+  off<AllowNarrowingEvents extends boolean = false>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -908,11 +922,13 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      AllowNarrowingEvents
     >,
   ): void;
-  off(
-    eventType: string,
+  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+    eventType: EvType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -920,10 +936,12 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ): void;
-  off(
+  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -932,9 +950,11 @@ export class StreamChat<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          EvType,
+          AllowNarrowingEvents
         >
-      | string,
+      | EvType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -942,17 +962,18 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType
     >,
-  ) {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+  ): void {
+    const key = callbackOrNothing ? (callbackOrString as EvType) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
     const callback = callbackOrNothing
       ? callbackOrNothing
-      : (callbackOrString as EventHandler<
+      : ((callbackOrString as unknown) as EventHandler<
           AttachmentType,
           ChannelType,
           CommandType,
@@ -1125,7 +1146,10 @@ export class StreamChat<
     return data;
   }
 
-  dispatchEvent = (
+  dispatchEvent = <
+    AllowNarrowingEvents extends boolean = false,
+    EvType extends EventTypes = 'all'
+  >(
     event: Event<
       AttachmentType,
       ChannelType,
@@ -1133,23 +1157,36 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ) => {
+    const typedInternalEvent = event as Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType,
+      'all',
+      true
+    >;
     // client event handlers
-    this._handleClientEvent(event);
+    this._handleClientEvent(typedInternalEvent);
 
     // channel event handlers
-    const cid = event.cid;
+    const cid = (typedInternalEvent as { cid?: string }).cid;
     const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
-      channel._handleChannelEvent(event);
+      channel._handleChannelEvent(typedInternalEvent);
     }
 
-    this._callClientListeners(event);
+    this._callClientListeners(typedInternalEvent);
 
     if (channel) {
-      channel._callChannelListeners(event);
+      channel._callChannelListeners(typedInternalEvent);
     }
   };
 
@@ -1163,10 +1200,12 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      true
     >;
     event.received_at = new Date();
-    this.dispatchEvent(event);
+    this.dispatchEvent<true>(event);
   };
 
   _handleClientEvent(
@@ -1177,7 +1216,9 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      true
     >,
   ) {
     const client = this;
@@ -1192,8 +1233,8 @@ export class StreamChat<
 
     // update the client.state with any changes to users
     if (
-      event.user &&
-      (event.type === 'user.presence.changed' || event.type === 'user.updated')
+      (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
+      event.user
     ) {
       if (event.user?.id === this.userID) {
         this.user = this.user && { ...this.user, ...event.user };
@@ -1215,7 +1256,7 @@ export class StreamChat<
       client.mutedUsers = event.me.mutes;
     }
 
-    if (event.channel && event.type === 'notification.message_new') {
+    if (event.type === 'notification.message_new' && event.channel) {
       this.configs[event.channel.type] = event.channel.config;
     }
 
@@ -1263,7 +1304,9 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      true
     >,
   ) => {
     const client = this;
@@ -1277,7 +1320,9 @@ export class StreamChat<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          'all',
+          true
         >,
       ) => void
     > = [];
@@ -1321,13 +1366,13 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
-      this.dispatchEvent({
+      this.dispatchEvent<true>({
         type: 'connection.recovered',
-      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+      } as ConnectionRecovered);
     } else {
-      this.dispatchEvent({
+      this.dispatchEvent<true>({
         type: 'connection.recovered',
-      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+      } as ConnectionRecovered);
     }
 
     this.wsPromise = Promise.resolve();
@@ -2641,7 +2686,9 @@ export class StreamChat<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          'all',
+          true
         >[];
       }
     >(`${this.baseURL}/sync`, {

@@ -3,12 +3,13 @@ import {
   ChannelMemberResponse,
   ChannelMembership,
   FormatMessageResponse,
-  Event,
   LiteralStringForUnion,
   MessageResponse,
   ReactionResponse,
   UnknownType,
   UserResponse,
+  TypingStartEvent,
+  TypingStopEvent,
 } from './types';
 
 /**
@@ -33,18 +34,8 @@ export class ChannelState<
     UserType
   >;
   watcher_count: number;
-  typing: Record<
-    string,
-    Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
-  >;
+  // Todo can this be stop as well?
+  typing: Record<string, TypingStartEvent<EventType, UserType>>;
   read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
   messages: Array<
     ReturnType<
@@ -626,11 +617,11 @@ export class ChannelState<
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
         delete this.typing[userID];
-        this._channel.getClient().dispatchEvent({
+        this._channel.getClient().dispatchEvent<true>({
           cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
-        } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+        } as TypingStopEvent<EventType, UserType>);
       }
     }
   }
