@@ -264,7 +264,8 @@ export type EventAPIResponse<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
+  AllowNarrowingEvents extends boolean = false
 > = APIResponse & {
   event: Event<
     AttachmentType,
@@ -273,7 +274,9 @@ export type EventAPIResponse<
     EventType,
     MessageType,
     ReactionType,
-    UserType
+    UserType,
+    'all',
+    AllowNarrowingEvents
   >;
 };
 

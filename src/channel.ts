@@ -34,6 +34,8 @@ import {
   SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
+  TypingStartEvent,
+  TypingStopEvent,
   UnknownType,
   UpdateChannelAPIResponse,
   UserFilters,
@@ -71,7 +73,7 @@ export class Channel<
   _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
   cid: string;
   listeners: {
-    [key: string]: (
+    [key: string]: Array<
       | string
       | EventHandler<
           AttachmentType,
@@ -80,9 +82,11 @@ export class Channel<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          'all',
+          true
         >
-    )[];
+    >;
   };
   state: ChannelState<
     AttachmentType,
@@ -265,7 +269,10 @@ export class Channel<
    *
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendEvent(
+  async sendEvent<
+    AllowNarrowingEvents extends boolean = false,
+    EvType extends EventTypes = 'all'
+  >(
     event: Event<
       AttachmentType,
       ChannelType,
@@ -273,7 +280,9 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ) {
     this._checkInitialized();
@@ -907,7 +916,7 @@ export class Channel<
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
-      } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+      } as TypingStartEvent<EventType, UserType>);
     }
   }
 
@@ -925,7 +934,7 @@ export class Channel<
     await this.sendEvent({
       type: 'typing.stop',
       parent_id,
-    } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+    } as TypingStopEvent<EventType, UserType>);
   }
 
   /**
@@ -1369,8 +1378,7 @@ export class Channel<
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
    */
-  on(
-    eventType: EventTypes,
+  on<AllowNarrowingEvents extends boolean = false>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1378,10 +1386,13 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void };
-  on(
+  on<EvType extends EventTypes>(
+    eventType: EvType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1389,10 +1400,12 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      true
     >,
   ): { unsubscribe: () => void };
-  on(
+  on<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1401,9 +1414,11 @@ export class Channel<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          EvType,
+          AllowNarrowingEvents
         >
-      | EventTypes,
+      | EvType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1411,15 +1426,29 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = (callbackOrNothing ? callbackOrString : 'all') as EvType;
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
+    const callback = (callbackOrNothing ? callbackOrNothing : callbackOrString) as
+      | EvType
+      | EventHandler<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType,
+          'all',
+          true
+        >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -1431,8 +1460,7 @@ export class Channel<
         channel: this,
       },
     );
-
-    this.listeners[key].push(callback);
+    this.listeners[key]?.push(callback);
 
     return {
       unsubscribe: () => {
@@ -1442,7 +1470,7 @@ export class Channel<
           { tags: ['event', 'channel'], channel: this },
         );
 
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        this.listeners[key] = this.listeners[key]?.filter((el) => el !== callback);
       },
     };
   }
@@ -1451,8 +1479,7 @@ export class Channel<
    * off - Remove the event handler
    *
    */
-  off(
-    eventType: EventTypes,
+  off<AllowNarrowingEvents extends boolean = false>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1460,10 +1487,13 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      AllowNarrowingEvents
     >,
   ): void;
-  off(
+  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+    eventType: EvType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1471,10 +1501,12 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType,
+      AllowNarrowingEvents
     >,
   ): void;
-  off(
+  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1483,9 +1515,11 @@ export class Channel<
           EventType,
           MessageType,
           ReactionType,
-          UserType
+          UserType,
+          EvType,
+          AllowNarrowingEvents
         >
-      | EventTypes,
+      | EvType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1493,7 +1527,8 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      EvType
     >,
   ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
@@ -1523,7 +1558,9 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      true
     >,
   ) {
     const channel = this;
@@ -1674,7 +1711,9 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType
+      UserType,
+      'all',
+      true
     >,
   ) => {
     const channel = this;
