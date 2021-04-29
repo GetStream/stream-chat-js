@@ -748,7 +748,7 @@ export class ChannelState<
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
         delete this.typing[userID];
-        this._channel.getClient().dispatchEvent<true>({
+        this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
