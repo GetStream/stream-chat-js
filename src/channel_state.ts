@@ -220,6 +220,17 @@ export class ChannelState<
     for (let i = 0; i < newMessages.length; i += 1) {
       const message = this.formatMessage(newMessages[i]);
 
+      if (message.user && this._channel?.cid) {
+        /**
+         * Store the reference to user for this channel, so that when we have to
+         * handle updates to user, we can use the reference map, to determine which
+         * channels need to be updated with updated user object.
+         */
+        this._channel
+          .getClient()
+          .state.updateUserReference(message.user, this._channel.cid);
+      }
+
       if (initializing && message.id && this.threads[message.id]) {
         // If we are initializing the state of channel (e.g., in case of connection recovery),
         // then in that case we remove thread related to this message from threads object.
@@ -603,6 +614,126 @@ export class ChannelState<
 
     return { removed: result.length < msgArray.length, result };
   };
+
+  /**
+   * Updates the message.user property with updated user object, for messages.
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  updateUserMessages = (user: UserResponse<UserType>) => {
+    const _updateUserMessages = (
+      messages: Array<
+        ReturnType<
+          ChannelState<
+            AttachmentType,
+            ChannelType,
+            CommandType,
+            EventType,
+            MessageType,
+            ReactionType,
+            UserType
+          >['formatMessage']
+        >
+      >,
+      user: UserResponse<UserType>,
+    ) => {
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        if (m.user?.id === user.id) {
+          messages[i] = { ...m, user };
+        }
+      }
+    };
+
+    _updateUserMessages(this.messages, user);
+
+    for (const parentId in this.threads) {
+      _updateUserMessages(this.threads[parentId], user);
+    }
+
+    _updateUserMessages(this.pinnedMessages, user);
+  };
+
+  /**
+   * Marks the messages as deleted, from deleted user.
+   *
+   * @param {UserResponse<UserType>} user
+   * @param {boolean} hardDelete
+   */
+  deleteUserMessages = (user: UserResponse<UserType>, hardDelete = false) => {
+    const _deleteUserMessages = (
+      messages: Array<
+        ReturnType<
+          ChannelState<
+            AttachmentType,
+            ChannelType,
+            CommandType,
+            EventType,
+            MessageType,
+            ReactionType,
+            UserType
+          >['formatMessage']
+        >
+      >,
+      user: UserResponse<UserType>,
+      hardDelete = false,
+    ) => {
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        if (m.user?.id !== user.id) {
+          continue;
+        }
+
+        if (hardDelete) {
+          /**
+           * In case of hard delete, we need to strip down all text, html,
+           * attachments and all the custom properties on message
+           */
+          messages[i] = ({
+            cid: m.cid,
+            created_at: m.created_at,
+            deleted_at: user.deleted_at,
+            id: m.id,
+            latest_reactions: [],
+            mentioned_users: [],
+            own_reactions: [],
+            parent_id: m.parent_id,
+            reply_count: m.reply_count,
+            status: m.status,
+            thread_participants: m.thread_participants,
+            type: 'deleted',
+            updated_at: m.updated_at,
+            user: m.user,
+          } as unknown) as ReturnType<
+            ChannelState<
+              AttachmentType,
+              ChannelType,
+              CommandType,
+              EventType,
+              MessageType,
+              ReactionType,
+              UserType
+            >['formatMessage']
+          >;
+        } else {
+          messages[i] = {
+            ...m,
+            type: 'deleted',
+            deleted_at: user.deleted_at,
+          };
+        }
+      }
+    };
+
+    _deleteUserMessages(this.messages, user, hardDelete);
+
+    for (const parentId in this.threads) {
+      _deleteUserMessages(this.threads[parentId], user, hardDelete);
+    }
+
+    _deleteUserMessages(this.pinnedMessages, user, hardDelete);
+  };
+
   /**
    * filterErrorMessages - Removes error messages from the channel state.
    *

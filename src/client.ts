@@ -1169,6 +1169,130 @@ export class StreamChat<
     this.dispatchEvent(event);
   };
 
+  /**
+   * Updates the members and watchers of the currently active channels that contain this user
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateMemberWatcherReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      /** search the members and watchers and update as needed... */
+      if (channel?.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
+        }
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
+        }
+      }
+    }
+  };
+
+  /**
+   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @private
+   */
+  _updateUserReferences = this._updateMemberWatcherReferences;
+
+  /**
+   * @private
+   *
+   * Updates the messages from the currently active channels that contain this user,
+   * with updated user object.
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateUserMessageReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** update the messages from this user. */
+      state?.updateUserMessages(user);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Deletes the messages from the currently active channels that contain this user
+   *
+   * If hardDelete is true, all the content of message will be stripped down.
+   * Otherwise, only 'message.type' will be set as 'deleted'.
+   *
+   * @param {UserResponse<UserType>} user
+   * @param {boolean} hardDelete
+   */
+  _deleteUserMessageReference = (user: UserResponse<UserType>, hardDelete = false) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** deleted the messages from this user. */
+      state?.deleteUserMessages(user, hardDelete);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Handle following user related events:
+   * - user.presence.changed
+   * - user.updated
+   * - user.deleted
+   *
+   * @param {Event} event
+   */
+  _handleUserEvent = (
+    event: Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) => {
+    if (!event.user) {
+      return;
+    }
+
+    /** update the client.state with any changes to users */
+    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+      if (event.user?.id === this.userID) {
+        this.user = this.user && { ...this.user, ...event.user };
+        /** Updating only available properties in _user object. */
+        Object.keys(event.user).forEach((key) => {
+          if (this._user && key in this._user) {
+            /** @ts-expect-error */
+            this._user[key] = event.user[key];
+          }
+        });
+      }
+      this.state.updateUser(event.user);
+      this._updateMemberWatcherReferences(event.user);
+    }
+
+    if (event.type === 'user.updated') {
+      this._updateUserMessageReferences(event.user);
+    }
+
+    if (
+      event.type === 'user.deleted' &&
+      event.user.deleted_at &&
+      (event.mark_messages_deleted || event.hard_delete)
+    ) {
+      this._deleteUserMessageReference(event.user, event.hard_delete);
+    }
+  };
+
   _handleClientEvent(
     event: Event<
       AttachmentType,
@@ -1190,24 +1314,14 @@ export class StreamChat<
       },
     );
 
-    // update the client.state with any changes to users
     if (
-      event.user &&
-      (event.type === 'user.presence.changed' || event.type === 'user.updated')
+      event.type === 'user.presence.changed' ||
+      event.type === 'user.updated' ||
+      event.type === 'user.deleted'
     ) {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        // Updating only available properties in _user object.
-        Object.keys(event.user).forEach(function (key) {
-          if (client._user && key in client._user) {
-            // @ts-expect-error
-            client._user[key] = event.user[key];
-          }
-        });
-      }
-      client.state.updateUser(event.user);
-      client._updateUserReferences(event.user);
+      this._handleUserEvent(event);
     }
+
     if (event.type === 'health.check' && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
@@ -1333,27 +1447,6 @@ export class StreamChat<
     this.wsPromise = Promise.resolve();
     this.setUserPromise = Promise.resolve();
   };
-
-  /*
-	_updateUserReferences updates the members and watchers of the currently active channels
-	that contain this user
-	*/
-  _updateUserReferences(user: UserResponse<UserType>) {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
-    for (const channelID of refs) {
-      const channel = this.activeChannels[channelID];
-      // search the members and watchers and update as needed...
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-      }
-    }
-  }
 
   /**
    * @private

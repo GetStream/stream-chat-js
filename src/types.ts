@@ -140,6 +140,7 @@ export type ChannelResponse<
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
+  cooldown?: number;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
@@ -950,6 +951,8 @@ export type Event<
   clear_history?: boolean;
   connection_id?: string;
   created_at?: string;
+  hard_delete?: boolean;
+  mark_messages_deleted?: boolean;
   me?: OwnUserResponse<ChannelType, CommandType, UserType>;
   member?: ChannelMemberResponse<UserType>;
   message?: MessageResponse<
