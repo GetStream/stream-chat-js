@@ -83,7 +83,7 @@ export type AppSettingsAPIResponse<
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
-    enforce_unique_usernames?: string;
+    enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
