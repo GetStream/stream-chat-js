@@ -275,7 +275,6 @@ export type EventAPIResponse<
     MessageType,
     ReactionType,
     UserType,
-    'all',
     AllowNarrowingEvents
   >;
 };

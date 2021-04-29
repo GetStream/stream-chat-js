@@ -984,8 +984,8 @@ type AllEvents<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  AllowNarrowingEvents extends boolean = false
+  AllowNarrowingEvents extends boolean = false,
+  UserType extends UnknownType = UnknownType
 > = AllowNarrowingEvents extends true
   ? EventUnion<
       AttachmentType,
@@ -1016,8 +1016,8 @@ export type Event<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  SpecificType extends EventTypes = 'all',
-  AllowNarrowingEvents extends boolean = false
+  AllowNarrowingEvents extends boolean = false,
+  SpecificType extends EventTypes = 'all'
 > = SpecificType extends Exclude<EventTypes, 'all'>
   ? EventMap<
       AttachmentType,
@@ -1035,8 +1035,8 @@ export type Event<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      AllowNarrowingEvents
+      AllowNarrowingEvents,
+      UserType
     >;
 
 export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
@@ -1051,8 +1051,8 @@ export type EventHandler<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  SpecificType extends EventTypes = 'all',
-  AllowNarrowingEvents extends boolean = false
+  AllowNarrowingEvents extends boolean = false,
+  SpecificType extends EventTypes = 'all'
 > = (
   event: Event<
     AttachmentType,
@@ -1062,7 +1062,7 @@ export type EventHandler<
     MessageType,
     ReactionType,
     UserType,
-    SpecificType,
-    AllowNarrowingEvents
+    AllowNarrowingEvents,
+    SpecificType
   >,
 ) => void;

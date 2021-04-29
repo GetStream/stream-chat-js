@@ -83,7 +83,6 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          'all',
           true
         >
     >;
@@ -269,11 +268,9 @@ export class Channel<
    *
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendEvent<
-    AllowNarrowingEvents extends boolean = false,
-    EvType extends EventTypes = 'all'
-  >(
-    event: Event<
+  async sendEvent<EvType extends EventTypes = 'all'>(
+    // ts cant extract the type from the parameter obj if you dont use this hack
+    event: { type: EvType } & Event<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -281,8 +278,8 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      EvType,
-      AllowNarrowingEvents
+      true,
+      EvType
     >,
   ) {
     this._checkInitialized();
@@ -1387,7 +1384,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      'all',
       AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void };
@@ -1401,8 +1397,8 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      EvType,
-      true
+      true,
+      EvType
     >,
   ): { unsubscribe: () => void };
   on<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
@@ -1415,8 +1411,8 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          EvType,
-          AllowNarrowingEvents
+          AllowNarrowingEvents,
+          EvType
         >
       | EvType,
     callbackOrNothing?: EventHandler<
@@ -1427,8 +1423,8 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      EvType,
-      AllowNarrowingEvents
+      AllowNarrowingEvents,
+      EvType
     >,
   ): { unsubscribe: () => void } {
     const key = (callbackOrNothing ? callbackOrString : 'all') as EvType;
@@ -1446,7 +1442,6 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          'all',
           true
         >;
     if (!(key in this.listeners)) {
@@ -1488,7 +1483,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      'all',
       AllowNarrowingEvents
     >,
   ): void;
@@ -1502,8 +1496,8 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      EvType,
-      AllowNarrowingEvents
+      AllowNarrowingEvents,
+      EvType
     >,
   ): void;
   off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
@@ -1516,8 +1510,8 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          EvType,
-          AllowNarrowingEvents
+          AllowNarrowingEvents,
+          EvType
         >
       | EvType,
     callbackOrNothing?: EventHandler<
@@ -1528,6 +1522,7 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
+      true,
       EvType
     >,
   ): void {
@@ -1559,7 +1554,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      'all',
       true
     >,
   ) {
@@ -1712,7 +1706,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      'all',
       true
     >,
   ) => {
