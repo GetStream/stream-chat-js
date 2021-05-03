@@ -28,7 +28,9 @@ type Constructor<
   apiKey: string;
   authType: 'anonymous' | 'jwt';
   clientID: string;
-  eventCallback: (event: ConnectionChangeEvent) => void;
+  eventCallback: <AllowNarrowingEvents extends boolean = false>(
+    event: ConnectionChangeEvent<AllowNarrowingEvents>,
+  ) => void;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (

@@ -15,8 +15,9 @@ import { LiteralStringForUnion, ChannelMute } from './base';
  * Event Types
  */
 
-export type ConnectionChangeEvent = {
-  type: 'connection.changed';
+// Needed because of edge case where we used to export 'ConnectionChangeEvent type so users may already be using it
+export type ConnectionChangeEvent<AllowNarrowingEvents extends boolean = false> = {
+  type: AllowNarrowingEvents extends true ? 'connection.changed' : EventTypes;
   online?: boolean;
   received_at?: string | Date;
   watcher_count?: number;
@@ -820,7 +821,7 @@ type EventMap<
     UserType
   >;
   'channel.visible': ChannelVisibleEvent<EventType, UserType>;
-  'connection.changed': ConnectionChangeEvent;
+  'connection.changed': ConnectionChangeEvent<true>;
   'connection.recovered': ConnectionRecovered;
   'health.check': HealthEvent<ChannelType, CommandType, EventType, UserType>;
   'member.added': MemberAddedEvent<EventType, UserType>;
@@ -977,17 +978,17 @@ type EventUnion<
   UserType
 >];
 
-type AllEvents<
+type EventUnionOrSpecific<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  AllowNarrowingEvents extends boolean = false,
-  UserType extends UnknownType = UnknownType
-> = AllowNarrowingEvents extends true
-  ? EventUnion<
+  UserType extends UnknownType = UnknownType,
+  SpecificType extends EventTypes = 'all'
+> = SpecificType extends Exclude<EventTypes, 'all'>
+  ? EventMap<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -995,8 +996,8 @@ type AllEvents<
       MessageType,
       ReactionType,
       UserType
-    >
-  : EventIntersection<
+    >[SpecificType]
+  : EventUnion<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -1018,8 +1019,8 @@ export type Event<
   UserType extends UnknownType = UnknownType,
   AllowNarrowingEvents extends boolean = false,
   SpecificType extends EventTypes = 'all'
-> = SpecificType extends Exclude<EventTypes, 'all'>
-  ? EventMap<
+> = AllowNarrowingEvents extends false
+  ? EventIntersection<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -1027,16 +1028,16 @@ export type Event<
       MessageType,
       ReactionType,
       UserType
-    >[SpecificType]
-  : AllEvents<
+    >
+  : EventUnionOrSpecific<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      AllowNarrowingEvents,
-      UserType
+      UserType,
+      SpecificType
     >;
 
 export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
