@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [10, 12, 14]
+        node: [10, 12, 14, 16]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2-beta
@@ -27,12 +27,12 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Lint
-        if: matrix.node == 14
+        if: matrix.node == 16
         run: yarn lint
 
       - name: Unit tests
         run: yarn run test-unit
 
       - name: Run API type definition tests
-        if: matrix.node == 14
+        if: matrix.node == 16
         run: yarn test-types
