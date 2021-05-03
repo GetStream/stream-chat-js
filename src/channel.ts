@@ -268,9 +268,8 @@ export class Channel<
    *
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendEvent<EvType extends EventTypes = 'all'>(
-    // ts cant extract the type from the parameter obj if you dont use this hack
-    event: { type: EvType } & Event<
+  async sendEvent<AllowNarrowingEvents extends boolean = false>(
+    event: Event<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -278,8 +277,7 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      true,
-      EvType
+      AllowNarrowingEvents
     >,
   ) {
     this._checkInitialized();
@@ -1387,7 +1385,7 @@ export class Channel<
       AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void };
-  on<EvType extends EventTypes>(
+  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     eventType: EvType,
     callback: EventHandler<
       AttachmentType,
@@ -1397,11 +1395,11 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      true,
+      AllowNarrowingEvents,
       EvType
     >,
   ): { unsubscribe: () => void };
-  on<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1486,7 +1484,7 @@ export class Channel<
       AllowNarrowingEvents
     >,
   ): void;
-  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     eventType: EvType,
     callback: EventHandler<
       AttachmentType,
@@ -1500,7 +1498,7 @@ export class Channel<
       EvType
     >,
   ): void;
-  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,

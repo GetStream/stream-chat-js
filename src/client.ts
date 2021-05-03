@@ -833,7 +833,7 @@ export class StreamChat<
       AllowNarrowingEvents
     >,
   ): { unsubscribe: () => void };
-  on<EvType extends EventTypes>(
+  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     eventType: EvType,
     callback: EventHandler<
       AttachmentType,
@@ -843,11 +843,11 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true,
+      AllowNarrowingEvents,
       EvType
     >,
   ): { unsubscribe: () => void };
-  on<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -924,7 +924,7 @@ export class StreamChat<
       AllowNarrowingEvents
     >,
   ): void;
-  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     eventType: EvType,
     callback: EventHandler<
       AttachmentType,
@@ -938,7 +938,7 @@ export class StreamChat<
       EvType
     >,
   ): void;
-  off<EvType extends EventTypes, AllowNarrowingEvents extends boolean = false>(
+  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1143,9 +1143,8 @@ export class StreamChat<
     }
     return data;
   }
-  dispatchEvent = <EvType extends EventTypes = 'all'>(
-    // ts cant extract the type from the parameter obj if you dont use this hack
-    event: { type: EvType } & Event<
+  dispatchEvent = <AllowNarrowingEvents extends boolean = false>(
+    event: Event<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -1153,8 +1152,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true,
-      EvType
+      AllowNarrowingEvents
     >,
   ) => {
     const typedInternalEvent = event as Event<
@@ -1198,7 +1196,7 @@ export class StreamChat<
       true
     >;
     event.received_at = new Date();
-    this.dispatchEvent(event);
+    this.dispatchEvent<true>(event);
   };
 
   /**
@@ -1471,11 +1469,11 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
-      this.dispatchEvent<'connection.recovered'>({
+      this.dispatchEvent<true>({
         type: 'connection.recovered',
       });
     } else {
-      this.dispatchEvent<'connection.recovered'>({
+      this.dispatchEvent<true>({
         type: 'connection.recovered',
       });
     }
@@ -1518,7 +1516,9 @@ export class StreamChat<
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
+      eventCallback: this.dispatchEvent as <AllowNarrowingEvents extends boolean = false>(
+        event: ConnectionChangeEvent<AllowNarrowingEvents>,
+      ) => void,
       logger: this.logger,
     });
 
