@@ -16,8 +16,10 @@ import { LiteralStringForUnion, ChannelMute } from './base';
  */
 
 // Needed because of edge case where we used to export 'ConnectionChangeEvent type so users may already be using it
-export type ConnectionChangeEvent<AllowNarrowingEvents extends boolean = false> = {
-  type: AllowNarrowingEvents extends true ? 'connection.changed' : EventTypes;
+export type ConnectionChangeEvent<
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+> = {
+  type: TypeGroupingStrategy extends 'union' ? 'connection.changed' : EventTypes;
   online?: boolean;
   received_at?: string | Date;
   watcher_count?: number;
@@ -704,7 +706,31 @@ export type UserUpdatedEvent<
     type: 'user.updated';
   };
 
-export type EventIntersection<
+/**
+ * Internal temporary type parameter used to enable/disable new union type for events. Defaults to 'deprecated_intersection'.
+ *
+ *
+ * @example
+ * // Event type should be narrowed to `ChannelCreatedEvent`
+ * client.on<'union'>((event) => {
+ *   if(event.type === 'channel.created') {
+ *     console.log(event.user);
+ *   }
+ * })
+ *
+ * @desc This is part of the migration steps for the new union type for events:
+ * 1. Release it with its default value set to 'deprecated_intersection', avoiding breaking changes and allowing
+ *    users to use the new union type by using this flag
+ * 2. Release it with its default value set to 'union',  forcing users who are still using the old version to
+ *    manually set the 'deprecated_intersection' flag
+ * 3. Remove this type parameter entirely, allowing only the events union type to exist
+ */
+export type _TypeGroupingStrategies = 'union' | 'deprecated_intersection';
+
+/**
+ * @deprecated This is being deprecated and will eventually be removed
+ */
+type EventIntersection<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -775,7 +801,7 @@ type EventMap<
     UserType
   >;
   'channel.visible': ChannelVisibleEvent<ChannelType, CommandType, EventType, UserType>;
-  'connection.changed': ConnectionChangeEvent<true>;
+  'connection.changed': ConnectionChangeEvent<'union'>;
   'connection.recovered': ConnectionRecovered;
   'health.check': HealthEvent<ChannelType, CommandType, EventType, UserType>;
   'member.added': MemberAddedEvent<ChannelType, CommandType, EventType, UserType>;
@@ -975,8 +1001,8 @@ type EventUnionOrSpecific<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  SpecificType extends EventTypes = 'all'
-> = SpecificType extends Exclude<EventTypes, 'all'>
+  SpecificEventType extends EventTypes = 'all'
+> = SpecificEventType extends Exclude<EventTypes, 'all'>
   ? EventMap<
       AttachmentType,
       ChannelType,
@@ -985,7 +1011,7 @@ type EventUnionOrSpecific<
       MessageType,
       ReactionType,
       UserType
-    >[SpecificType]
+    >[SpecificEventType]
   : EventUnion<
       AttachmentType,
       ChannelType,
@@ -1006,9 +1032,9 @@ export type Event<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  AllowNarrowingEvents extends boolean = false,
-  SpecificType extends EventTypes = 'all'
-> = AllowNarrowingEvents extends false
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+  SpecificEventType extends EventTypes = 'all'
+> = TypeGroupingStrategy extends 'deprecated_intersection'
   ? EventIntersection<
       AttachmentType,
       ChannelType,
@@ -1026,7 +1052,7 @@ export type Event<
       MessageType,
       ReactionType,
       UserType,
-      SpecificType
+      SpecificEventType
     >;
 
 export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
@@ -1041,8 +1067,8 @@ export type EventHandler<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  AllowNarrowingEvents extends boolean = false,
-  SpecificType extends EventTypes = 'all'
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+  SpecificEventType extends EventTypes = 'all'
 > = (
   event: Event<
     AttachmentType,
@@ -1052,7 +1078,7 @@ export type EventHandler<
     MessageType,
     ReactionType,
     UserType,
-    AllowNarrowingEvents,
-    SpecificType
+    TypeGroupingStrategy,
+    SpecificEventType
   >,
 ) => void;

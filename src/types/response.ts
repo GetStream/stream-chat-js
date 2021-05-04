@@ -33,7 +33,7 @@ import {
   UpdateCommandOptions,
 } from './option';
 
-import { Event } from './event';
+import { Event, _TypeGroupingStrategies } from './event';
 
 /**
  * Response Types
@@ -266,7 +266,7 @@ export type EventAPIResponse<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  AllowNarrowingEvents extends boolean = false
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
 > = APIResponse & {
   event: Event<
     AttachmentType,
@@ -276,7 +276,7 @@ export type EventAPIResponse<
     MessageType,
     ReactionType,
     UserType,
-    AllowNarrowingEvents
+    TypeGroupingStrategy
   >;
 };
 

@@ -97,6 +97,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  _TypeGroupingStrategies,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -148,7 +149,7 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          true,
+          'union',
           'all'
         >,
       ) => void
@@ -821,7 +822,7 @@ export class StreamChat<
    *
    * @return {{ unsubscribe: () => void }} Description
    */
-  on<AllowNarrowingEvents extends boolean = false>(
+  on<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -830,11 +831,14 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ): { unsubscribe: () => void };
-  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
-    eventType: EvType,
+  on<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
+    eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -843,11 +847,14 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): { unsubscribe: () => void };
-  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
+  on<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -857,10 +864,10 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          AllowNarrowingEvents,
-          EvType
+          TypeGroupingStrategy,
+          SpecificEventType
         >
-      | EvType,
+      | SpecificEventType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -869,11 +876,11 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as EvType) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as SpecificEventType) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
@@ -888,7 +895,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -912,7 +919,7 @@ export class StreamChat<
    * off - Remove the event handler
    *
    */
-  off<AllowNarrowingEvents extends boolean = false>(
+  off<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -921,11 +928,14 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ): void;
-  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
-    eventType: EvType,
+  off<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
+    eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -934,11 +944,14 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): void;
-  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
+  off<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -948,10 +961,10 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          AllowNarrowingEvents,
-          EvType
+          TypeGroupingStrategy,
+          SpecificEventType
         >
-      | EvType,
+      | SpecificEventType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -960,11 +973,11 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true,
-      EvType
+      'union',
+      SpecificEventType
     >,
   ): void {
-    const key = callbackOrNothing ? (callbackOrString as EvType) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as SpecificEventType) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
@@ -1143,7 +1156,9 @@ export class StreamChat<
     }
     return data;
   }
-  dispatchEvent = <AllowNarrowingEvents extends boolean = false>(
+  dispatchEvent = <
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+  >(
     event: Event<
       AttachmentType,
       ChannelType,
@@ -1152,7 +1167,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ) => {
     const typedInternalEvent = event as Event<
@@ -1163,7 +1178,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >;
     // client event handlers
     this._handleClientEvent(typedInternalEvent);
@@ -1193,10 +1208,10 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >;
     event.received_at = new Date();
-    this.dispatchEvent<true>(event);
+    this.dispatchEvent<'union'>(event);
   };
 
   /**
@@ -1332,7 +1347,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true,
+      'union',
       'all'
     >,
   ) {
@@ -1410,7 +1425,7 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >,
   ) => {
     const client = this;
@@ -1425,7 +1440,7 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          true
+          'union'
         >,
       ) => void
     > = [];
@@ -1469,11 +1484,11 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
-      this.dispatchEvent<true>({
+      this.dispatchEvent<'union'>({
         type: 'connection.recovered',
       });
     } else {
-      this.dispatchEvent<true>({
+      this.dispatchEvent<'union'>({
         type: 'connection.recovered',
       });
     }
@@ -1516,8 +1531,10 @@ export class StreamChat<
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent as <AllowNarrowingEvents extends boolean = false>(
-        event: ConnectionChangeEvent<AllowNarrowingEvents>,
+      eventCallback: this.dispatchEvent as <
+        TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+      >(
+        event: ConnectionChangeEvent<TypeGroupingStrategy>,
       ) => void,
       logger: this.logger,
     });
@@ -2771,7 +2788,7 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          true
+          'union'
         >[];
       }
     >(`${this.baseURL}/sync`, {
