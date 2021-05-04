@@ -1,13 +1,11 @@
-import { UserResponse, ChannelResponse, MessageResponse } from './response';
-
 import { LiteralStringForUnion } from './base';
-
+import { ChannelResponse, MessageResponse, UserResponse } from './response';
 import {
-  UnknownType,
-  RequireAtLeastOne,
-  RequireOnlyOne,
   ArrayOneOrMore,
   ArrayTwoOrMore,
+  RequireAtLeastOne,
+  RequireOnlyOne,
+  UnknownType,
 } from './util';
 
 /**
