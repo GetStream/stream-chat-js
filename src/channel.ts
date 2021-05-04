@@ -12,7 +12,7 @@ import {
   ChannelQueryOptions,
   ChannelResponse,
   DeleteChannelAPIResponse,
-  Event,
+  StreamEvent,
   EventAPIResponse,
   EventHandler,
   EventTypes,
@@ -41,7 +41,6 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
-  _TypeGroupingStrategies,
 } from './types';
 
 /**
@@ -83,8 +82,7 @@ export class Channel<
           EventType,
           MessageType,
           ReactionType,
-          UserType,
-          'union'
+          UserType
         >
     >;
   };
@@ -269,18 +267,15 @@ export class Channel<
    *
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendEvent<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-  >(
-    event: Event<
+  async sendEvent(
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ) {
     this._checkInitialized();
@@ -914,7 +909,7 @@ export class Channel<
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
-      } as TypingStartEvent<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+      } as TypingStartEvent<ChannelType, CommandType, EventType, UserType>);
     }
   }
 
@@ -1376,7 +1371,7 @@ export class Channel<
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
    */
-  on<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
+  on(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1384,14 +1379,10 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ): { unsubscribe: () => void };
-  on<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  on<SpecificEventType extends EventTypes = 'all'>(
     eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
@@ -1401,14 +1392,10 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): { unsubscribe: () => void };
-  on<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  on<SpecificEventType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1418,7 +1405,6 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          TypeGroupingStrategy,
           SpecificEventType
         >
       | SpecificEventType,
@@ -1430,7 +1416,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): { unsubscribe: () => void } {
@@ -1448,8 +1433,7 @@ export class Channel<
           EventType,
           MessageType,
           ReactionType,
-          UserType,
-          'union'
+          UserType
         >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -1481,7 +1465,7 @@ export class Channel<
    * off - Remove the event handler
    *
    */
-  off<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
+  off(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1489,14 +1473,10 @@ export class Channel<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ): void;
-  off<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  off<SpecificEventType extends EventTypes = 'all'>(
     eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
@@ -1506,14 +1486,10 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): void;
-  off<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  off<SpecificEventType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1523,7 +1499,6 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          TypeGroupingStrategy,
           SpecificEventType
         >
       | SpecificEventType,
@@ -1535,7 +1510,6 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      'union',
       SpecificEventType
     >,
   ): void {
@@ -1559,15 +1533,14 @@ export class Channel<
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(
-    event: Event<
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union'
+      UserType
     >,
   ) {
     const channel = this;
@@ -1711,15 +1684,14 @@ export class Channel<
   }
 
   _callChannelListeners = (
-    event: Event<
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union'
+      UserType
     >,
   ) => {
     const channel = this;

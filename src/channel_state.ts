@@ -34,19 +34,7 @@ export class ChannelState<
     UserType
   >;
   watcher_count: number;
-  // Todo can this be stop as well?
-  typing: Record<
-    string,
-    TypingStartEvent<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
-  >;
+  typing: Record<string, TypingStartEvent<ChannelType, CommandType, EventType, UserType>>;
   read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
   messages: Array<
     ReturnType<

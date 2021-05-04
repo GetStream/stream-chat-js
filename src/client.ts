@@ -40,7 +40,7 @@ import {
   CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
-  ConnectionChangeEvent,
+  ConnectionChangedEvent,
   CreateChannelOptions,
   CreateChannelResponse,
   CreateCommandOptions,
@@ -49,7 +49,7 @@ import {
   DeleteCommandResponse,
   Device,
   EndpointName,
-  Event,
+  StreamEvent,
   EventHandler,
   EventTypes,
   ExportChannelRequest,
@@ -97,7 +97,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  _TypeGroupingStrategies,
+  EventUser,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -141,16 +141,14 @@ export class StreamChat<
   listeners: {
     [key: string]: Array<
       (
-        event: Event<
+        event: StreamEvent<
           AttachmentType,
           ChannelType,
           CommandType,
           EventType,
           MessageType,
           ReactionType,
-          UserType,
-          'union',
-          'all'
+          UserType
         >,
       ) => void
     >;
@@ -822,7 +820,7 @@ export class StreamChat<
    *
    * @return {{ unsubscribe: () => void }} Description
    */
-  on<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
+  on(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -830,14 +828,10 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ): { unsubscribe: () => void };
-  on<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  on<SpecificEventType extends EventTypes = 'all'>(
     eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
@@ -847,14 +841,10 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): { unsubscribe: () => void };
-  on<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  on<SpecificEventType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -864,7 +854,6 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          TypeGroupingStrategy,
           SpecificEventType
         >
       | SpecificEventType,
@@ -876,7 +865,6 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): { unsubscribe: () => void } {
@@ -894,8 +882,7 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union'
+      UserType
     >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -919,7 +906,7 @@ export class StreamChat<
    * off - Remove the event handler
    *
    */
-  off<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
+  off(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -927,14 +914,10 @@ export class StreamChat<
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ): void;
-  off<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  off<SpecificEventType extends EventTypes = 'all'>(
     eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
@@ -944,14 +927,10 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      TypeGroupingStrategy,
       SpecificEventType
     >,
   ): void;
-  off<
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-    SpecificEventType extends EventTypes = 'all'
-  >(
+  off<SpecificEventType extends EventTypes = 'all'>(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -961,7 +940,6 @@ export class StreamChat<
           MessageType,
           ReactionType,
           UserType,
-          TypeGroupingStrategy,
           SpecificEventType
         >
       | SpecificEventType,
@@ -973,7 +951,6 @@ export class StreamChat<
       MessageType,
       ReactionType,
       UserType,
-      'union',
       SpecificEventType
     >,
   ): void {
@@ -1156,62 +1133,48 @@ export class StreamChat<
     }
     return data;
   }
-  dispatchEvent = <
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-  >(
-    event: Event<
+  dispatchEvent = (
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      TypeGroupingStrategy
+      UserType
     >,
   ) => {
-    const typedInternalEvent = event as Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType,
-      'union'
-    >;
     // client event handlers
-    this._handleClientEvent(typedInternalEvent);
+    this._handleClientEvent(event);
 
     // channel event handlers
-    const cid = (typedInternalEvent as { cid?: string }).cid;
+    const cid = (event as { cid?: string }).cid;
     const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
-      channel._handleChannelEvent(typedInternalEvent);
+      channel._handleChannelEvent(event);
     }
 
-    this._callClientListeners(typedInternalEvent);
+    this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(typedInternalEvent);
+      channel._callChannelListeners(event);
     }
   };
 
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
     // dispatch the event to the channel listeners
     const jsonString = messageEvent.data as string;
-    const event = JSON.parse(jsonString) as Event<
+    const event = JSON.parse(jsonString) as StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union'
+      UserType
     >;
     event.received_at = new Date();
-    this.dispatchEvent<'union'>(event);
+    this.dispatchEvent(event);
   };
 
   /**
@@ -1295,7 +1258,7 @@ export class StreamChat<
    * @param {Event} event
    */
   _handleUserEvent = (
-    event: Event<
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -1305,7 +1268,7 @@ export class StreamChat<
       UserType
     >,
   ) => {
-    if (!event.user) {
+    if (!(event as { user?: EventUser }).user) {
       return;
     }
 
@@ -1339,16 +1302,14 @@ export class StreamChat<
   };
 
   _handleClientEvent(
-    event: Event<
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union',
-      'all'
+      UserType
     >,
   ) {
     const client = this;
@@ -1417,30 +1378,28 @@ export class StreamChat<
   }
 
   _callClientListeners = (
-    event: Event<
+    event: StreamEvent<
       AttachmentType,
       ChannelType,
       CommandType,
       EventType,
       MessageType,
       ReactionType,
-      UserType,
-      'union'
+      UserType
     >,
   ) => {
     const client = this;
     // gather and call the listeners
     const listeners: Array<
       (
-        event: Event<
+        event: StreamEvent<
           AttachmentType,
           ChannelType,
           CommandType,
           EventType,
           MessageType,
           ReactionType,
-          UserType,
-          'union'
+          UserType
         >,
       ) => void
     > = [];
@@ -1484,11 +1443,11 @@ export class StreamChat<
         tags: ['connection', 'client'],
       });
 
-      this.dispatchEvent<'union'>({
+      this.dispatchEvent({
         type: 'connection.recovered',
       });
     } else {
-      this.dispatchEvent<'union'>({
+      this.dispatchEvent({
         type: 'connection.recovered',
       });
     }
@@ -1531,11 +1490,7 @@ export class StreamChat<
       apiKey: this.key,
       recoverCallback: this.recoverState,
       messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent as <
-        TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-      >(
-        event: ConnectionChangeEvent<TypeGroupingStrategy>,
-      ) => void,
+      eventCallback: this.dispatchEvent as (event: ConnectionChangedEvent) => void,
       logger: this.logger,
     });
 
@@ -2780,15 +2735,14 @@ export class StreamChat<
   sync(channel_cids: string[], last_sync_at: string) {
     return this.post<
       APIResponse & {
-        events: Event<
+        events: StreamEvent<
           AttachmentType,
           ChannelType,
           CommandType,
           EventType,
           MessageType,
           ReactionType,
-          UserType,
-          'union'
+          UserType
         >[];
       }
     >(`${this.baseURL}/sync`, {

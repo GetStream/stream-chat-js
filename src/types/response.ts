@@ -24,7 +24,7 @@ import {
   TranslationLanguages,
   User,
 } from './base';
-import { Event, _TypeGroupingStrategies } from './event';
+import { StreamEvent } from './event';
 import {
   CreateChannelOptions,
   CreateCommandOptions,
@@ -262,18 +262,16 @@ export type EventAPIResponse<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+  UserType extends UnknownType = UnknownType
 > = APIResponse & {
-  event: Event<
+  event: StreamEvent<
     AttachmentType,
     ChannelType,
     CommandType,
     EventType,
     MessageType,
     ReactionType,
-    UserType,
-    TypeGroupingStrategy
+    UserType
   >;
 };
 

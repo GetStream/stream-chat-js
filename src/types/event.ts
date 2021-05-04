@@ -10,37 +10,16 @@ import {
 import { UnknownType } from './util';
 
 /**
- * Internal temporary type parameter used to enable/disable new union type for events. Defaults to 'deprecated_intersection'.
- *
- *
- * @example
- * // Event type should be narrowed to `ChannelCreatedEvent`
- * client.on<'union'>((event) => {
- *   if(event.type === 'channel.created') {
- *     console.log(event.user);
- *   }
- * })
- *
- * @desc This is part of the migration steps for the new union type for events:
- * 1. Release it with its default value set to 'deprecated_intersection', avoiding breaking changes and allowing
- *    users to use the new union type by using this flag
- * 2. Release it with its default value set to 'union',  forcing users who are still using the old version to
- *    manually set the 'deprecated_intersection' flag
- * 3. Remove this type parameter entirely, allowing only the events union type to exist
- */
-export type _TypeGroupingStrategies = 'union' | 'deprecated_intersection';
-
-/**
  * Event base types
  */
 
 type ChatEvent = {
-  created_at: string;
+  created_at?: string;
   received_at?: string | Date;
   watcher_count?: number;
 };
 
-type EventChannel<
+export type EventChannel<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
@@ -50,11 +29,11 @@ type EventChannel<
   channel_type: string;
 };
 
-type EventMember<UserType extends UnknownType = UnknownType> = {
+export type EventMember<UserType extends UnknownType = UnknownType> = {
   member: ChannelMemberResponse<UserType>;
 };
 
-type EventMessage<
+export type EventMessage<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -72,7 +51,7 @@ type EventMessage<
   >;
 };
 
-type EventOwnUser<
+export type EventOwnUser<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
@@ -80,14 +59,14 @@ type EventOwnUser<
   me: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
 
-type EventReaction<
+export type EventReaction<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = {
   reaction: ReactionResponse<ReactionType, UserType>;
 };
 
-type EventUser<UserType extends UnknownType = UnknownType> = {
+export type EventUser<UserType extends UnknownType = UnknownType> = {
   user: UserResponse<UserType>;
 };
 
@@ -135,7 +114,7 @@ export type ChannelHiddenEvent<
     type: 'channel.hidden';
   };
 
-export type ChannelMuteEvent<
+export type ChannelMutedEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
@@ -160,7 +139,7 @@ export type ChannelTruncatedEvent<
     type: 'channel.truncated';
   };
 
-export type ChannelUnmuteEvent<
+export type ChannelUnmutedEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
@@ -210,23 +189,20 @@ export type ChannelVisibleEvent<
     type: 'channel.visible';
   };
 
-// Needed because of edge case where we used to export 'ConnectionChangeEvent type so users may already be using it
-export type ConnectionChangeEvent<
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-> = {
-  type: TypeGroupingStrategy extends 'union' ? 'connection.changed' : EventTypes;
+export type ConnectionChangedEvent = {
+  type: 'connection.changed';
   online?: boolean;
   received_at?: string | Date;
   watcher_count?: number;
 };
 
-export type ConnectionRecovered = {
+export type ConnectionRecoveredEvent = {
   type: 'connection.recovered';
   received_at?: string | Date;
   watcher_count?: number;
 };
 
-export type HealthEvent<
+export type HealthCheckEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
@@ -336,7 +312,7 @@ export type MessageUpdatedEvent<
     type: 'message.updated';
   };
 
-export type NewMessageEvent<
+export type MessageNewEvent<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -568,7 +544,7 @@ export type ReactionNewEvent<
     type: 'reaction.new';
   };
 
-export type ReactionUpdateEvent<
+export type ReactionUpdatedEvent<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -592,17 +568,10 @@ export type ReactionUpdateEvent<
     type: 'reaction.updated';
   };
 
-// keeping unused params for backwards compatibility
 export type TypingStartEvent<
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  MessageType extends UnknownType = UnknownType,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
@@ -676,7 +645,7 @@ export type UserPresenceChangedEvent<
     type: 'user.presence.changed';
   };
 
-export type UserStartWatchingEvent<
+export type UserWatchingStartEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   EventType extends UnknownType = UnknownType,
@@ -691,7 +660,7 @@ export type UserStartWatchingEvent<
     type: 'user.watching.start';
   };
 
-export type UserStopWatchingEvent<
+export type UserWatchingStopEvent<
   EventType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = EventType &
@@ -737,37 +706,6 @@ export type UserUpdatedEvent<
  * Event grouping types
  */
 
-export type Event<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-  SpecificEventType extends EventTypes = 'all'
-> = TypeGroupingStrategy extends 'deprecated_intersection'
-  ? EventIntersection<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
-  : EventUnionOrSpecific<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType,
-      SpecificEventType
-    >;
-
 export type EventHandler<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
@@ -776,10 +714,9 @@ export type EventHandler<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType,
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
   SpecificEventType extends EventTypes = 'all'
 > = (
-  event: Event<
+  event: StreamEvent<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -787,54 +724,9 @@ export type EventHandler<
     MessageType,
     ReactionType,
     UserType,
-    TypeGroupingStrategy,
     SpecificEventType
   >,
 ) => void;
-
-/**
- * @deprecated This is being deprecated and will eventually be removed
- */
-type EventIntersection<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = EventType & {
-  type: EventTypes;
-  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
-  channel_id?: string;
-  channel_type?: string;
-  cid?: string;
-  clear_history?: boolean;
-  connection_id?: string;
-  created_at?: string;
-  hard_delete?: boolean;
-  mark_messages_deleted?: boolean;
-  me?: OwnUserResponse<ChannelType, CommandType, UserType>;
-  member?: ChannelMemberResponse<UserType>;
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
-  online?: boolean;
-  parent_id?: string;
-  reaction?: ReactionResponse<ReactionType, UserType>;
-  received_at?: string | Date;
-  total_unread_count?: number;
-  unread_channels?: number;
-  unread_count?: number;
-  user?: UserResponse<UserType>;
-  user_id?: string;
-  watcher_count?: number;
-};
 
 type EventMap<
   AttachmentType extends UnknownType = UnknownType,
@@ -848,14 +740,14 @@ type EventMap<
   'channel.created': ChannelCreatedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.deleted': ChannelDeletedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.hidden': ChannelHiddenEvent<ChannelType, CommandType, EventType, UserType>;
-  'channel.muted': ChannelMuteEvent<ChannelType, CommandType, EventType, UserType>;
+  'channel.muted': ChannelMutedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.truncated': ChannelTruncatedEvent<
     ChannelType,
     CommandType,
     EventType,
     UserType
   >;
-  'channel.unmuted': ChannelUnmuteEvent<ChannelType, CommandType, EventType, UserType>;
+  'channel.unmuted': ChannelUnmutedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.updated': ChannelUpdatedEvent<
     AttachmentType,
     ChannelType,
@@ -866,9 +758,9 @@ type EventMap<
     UserType
   >;
   'channel.visible': ChannelVisibleEvent<ChannelType, CommandType, EventType, UserType>;
-  'connection.changed': ConnectionChangeEvent<'union'>;
-  'connection.recovered': ConnectionRecovered;
-  'health.check': HealthEvent<ChannelType, CommandType, EventType, UserType>;
+  'connection.changed': ConnectionChangedEvent;
+  'connection.recovered': ConnectionRecoveredEvent;
+  'health.check': HealthCheckEvent<ChannelType, CommandType, EventType, UserType>;
   'member.added': MemberAddedEvent<ChannelType, CommandType, EventType, UserType>;
   'member.removed': MemberRemovedEvent<ChannelType, CommandType, EventType, UserType>;
   'member.updated': MemberUpdatedEvent<ChannelType, CommandType, EventType, UserType>;
@@ -881,7 +773,7 @@ type EventMap<
     ReactionType,
     UserType
   >;
-  'message.new': NewMessageEvent<
+  'message.new': MessageNewEvent<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -987,7 +879,7 @@ type EventMap<
     ReactionType,
     UserType
   >;
-  'reaction.updated': ReactionUpdateEvent<
+  'reaction.updated': ReactionUpdatedEvent<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -996,15 +888,7 @@ type EventMap<
     ReactionType,
     UserType
   >;
-  'typing.start': TypingStartEvent<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  'typing.start': TypingStartEvent<ChannelType, CommandType, EventType, UserType>;
   'typing.stop': TypingStopEvent<ChannelType, CommandType, EventType, UserType>;
   'user.banned': UserBannedEvent<ChannelType, CommandType, EventType, UserType>;
   'user.deleted': UserDeletedEvent<EventType, UserType>;
@@ -1013,13 +897,13 @@ type EventMap<
   'user.unbanned': UserUnbannedEvent<ChannelType, CommandType, EventType, UserType>;
   'user.unmuted': UserUnmutedEvent<EventType, UserType>;
   'user.updated': UserUpdatedEvent<EventType, UserType>;
-  'user.watching.start': UserStartWatchingEvent<
+  'user.watching.start': UserWatchingStartEvent<
     ChannelType,
     CommandType,
     EventType,
     UserType
   >;
-  'user.watching.stop': UserStopWatchingEvent<EventType, UserType>;
+  'user.watching.stop': UserWatchingStopEvent<EventType, UserType>;
 };
 
 export type EventTypes = keyof EventMap | 'all';
@@ -1060,7 +944,7 @@ type EventUnion<
   UserType
 >];
 
-type EventUnionOrSpecific<
+export type StreamEvent<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
