@@ -97,7 +97,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  EventUser,
+  EventWithUser,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1268,7 +1268,7 @@ export class StreamChat<
       UserType
     >,
   ) => {
-    if (!(event as { user?: EventUser }).user) {
+    if (!(event as EventWithUser).user) {
       return;
     }
 

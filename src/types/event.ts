@@ -19,7 +19,7 @@ type ChatEvent = {
   watcher_count?: number;
 };
 
-export type EventChannel<
+export type EventWithChannel<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
@@ -29,11 +29,11 @@ export type EventChannel<
   channel_type: string;
 };
 
-export type EventMember<UserType extends UnknownType = UnknownType> = {
+export type EventWithMember<UserType extends UnknownType = UnknownType> = {
   member: ChannelMemberResponse<UserType>;
 };
 
-export type EventMessage<
+export type EventWithMessage<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -41,7 +41,7 @@ export type EventMessage<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = {
-  message?: MessageResponse<
+  message: MessageResponse<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -51,7 +51,7 @@ export type EventMessage<
   >;
 };
 
-export type EventOwnUser<
+export type EventWithMe<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
@@ -59,14 +59,14 @@ export type EventOwnUser<
   me: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
 
-export type EventReaction<
+export type EventWithReaction<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = {
   reaction: ReactionResponse<ReactionType, UserType>;
 };
 
-export type EventUser<UserType extends UnknownType = UnknownType> = {
+export type EventWithUser<UserType extends UnknownType = UnknownType> = {
   user: UserResponse<UserType>;
 };
 
@@ -81,8 +81,8 @@ export type ChannelCreatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'channel.created';
   };
@@ -94,8 +94,8 @@ export type ChannelDeletedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  Partial<EventUser<UserType>> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  Partial<EventWithUser<UserType>> & {
     cid: string;
     type: 'channel.deleted';
   };
@@ -107,8 +107,8 @@ export type ChannelHiddenEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     cid: string;
     clear_history: boolean;
     type: 'channel.hidden';
@@ -121,7 +121,7 @@ export type ChannelMutedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     channel_mute: ChannelMute<ChannelType, CommandType, UserType>;
     type: 'channel.muted';
   };
@@ -133,8 +133,8 @@ export type ChannelTruncatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  Partial<EventUser<UserType>> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  Partial<EventWithUser<UserType>> & {
     cid: string;
     type: 'channel.truncated';
   };
@@ -146,7 +146,7 @@ export type ChannelUnmutedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     channel_mute: ChannelMute<ChannelType, CommandType, UserType>;
     type: 'channel.unmuted';
   };
@@ -161,10 +161,10 @@ export type ChannelUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  Partial<EventUser<UserType>> &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  Partial<EventWithUser<UserType>> &
   Partial<
-    EventMessage<
+    EventWithMessage<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -184,8 +184,8 @@ export type ChannelVisibleEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     type: 'channel.visible';
   };
 
@@ -209,7 +209,7 @@ export type HealthCheckEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventOwnUser<ChannelType, CommandType, UserType> & {
+  EventWithMe<ChannelType, CommandType, UserType> & {
     connection_id: string;
     type: 'health.check';
   };
@@ -221,9 +221,9 @@ export type MemberAddedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     type: 'member.added';
   };
 
@@ -235,8 +235,8 @@ export type MemberRemovedEvent<
 > = EventType &
   EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     type: 'member.removed';
   };
 
@@ -248,9 +248,9 @@ export type MemberUpdatedEvent<
 > = EventType &
   EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     type: 'member.updated';
   };
 
@@ -264,9 +264,9 @@ export type MessageDeletedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  Partial<EventUser<UserType>> &
-  EventMessage<
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  Partial<EventWithUser<UserType>> &
+  EventWithMessage<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -284,8 +284,8 @@ export type MessageReadEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     type: 'message.read';
   };
 
@@ -299,9 +299,9 @@ export type MessageUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMessage<
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMessage<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -322,9 +322,9 @@ export type MessageNewEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMessage<
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMessage<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -345,9 +345,9 @@ export type NotificationAddedToChannelEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.added_to_channel';
   };
@@ -359,7 +359,7 @@ export type NotificationChannelDeletedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> & {
     cid: string;
     type: 'notification.channel_deleted';
   };
@@ -371,7 +371,7 @@ export type NotificationChannelMutesUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventOwnUser<ChannelType, CommandType, UserType> & {
+  EventWithMe<ChannelType, CommandType, UserType> & {
     type: 'notification.channel_mutes_updated';
   };
 
@@ -382,9 +382,9 @@ export type NotificationChannelTruncatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.channel_truncated';
   };
@@ -396,9 +396,9 @@ export type NotificationInviteAcceptedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.invite_accepted';
   };
@@ -410,9 +410,9 @@ export type NotificationInvitedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.invited';
   };
@@ -424,9 +424,9 @@ export type NotificationInviteRejectedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.invite_rejected';
   };
@@ -438,8 +438,8 @@ export type NotificationMarkReadEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  Partial<EventChannel<ChannelType, CommandType, UserType>> &
-  EventUser<UserType> & {
+  Partial<EventWithChannel<ChannelType, CommandType, UserType>> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'notification.mark_read';
     total_unread_count?: number;
@@ -456,8 +456,8 @@ export type NotificationMessageNewEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventMessage<
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithMessage<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -478,7 +478,7 @@ export type NotificationMutesUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventOwnUser<ChannelType, CommandType, UserType> & {
+  EventWithMe<ChannelType, CommandType, UserType> & {
     type: 'notification.mutes_updated';
   };
 
@@ -489,9 +489,9 @@ export type NotificationRemovedFromChannelEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMember<UserType> & {
     cid: string;
     type: 'notification.removed_from_channel';
   };
@@ -506,17 +506,19 @@ export type ReactionDeletedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMessage<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  Partial<
+    EventWithMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
   > &
-  EventReaction<ReactionType, UserType> & {
+  EventWithReaction<ReactionType, UserType> & {
     type: 'reaction.deleted';
   };
 
@@ -530,17 +532,19 @@ export type ReactionNewEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMessage<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  Partial<
+    EventWithMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
   > &
-  EventReaction<ReactionType, UserType> & {
+  EventWithReaction<ReactionType, UserType> & {
     type: 'reaction.new';
   };
 
@@ -554,17 +558,19 @@ export type ReactionUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMessage<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  Partial<
+    EventWithMessage<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
   > &
-  EventReaction<ReactionType, UserType> & {
+  EventWithReaction<ReactionType, UserType> & {
     type: 'reaction.updated';
   };
 
@@ -575,8 +581,8 @@ export type TypingStartEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'typing.start';
     parent_id?: string;
@@ -589,8 +595,8 @@ export type TypingStopEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> & {
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'typing.stop';
     parent_id?: string;
@@ -603,8 +609,8 @@ export type UserBannedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  Partial<EventChannel<ChannelType, CommandType, UserType>> &
-  EventUser<UserType> & {
+  Partial<EventWithChannel<ChannelType, CommandType, UserType>> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'user.banned';
     expiration?: Date;
@@ -619,7 +625,7 @@ export type UserDeletedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     type: 'user.deleted';
     hard_delete?: boolean;
     mark_messages_deleted?: boolean;
@@ -631,7 +637,7 @@ export type UserMutedEvent<
 > = EventType &
   EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     target_user: UserResponse<UserType>;
     type: 'user.muted';
   };
@@ -641,7 +647,7 @@ export type UserPresenceChangedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     type: 'user.presence.changed';
   };
 
@@ -652,8 +658,8 @@ export type UserWatchingStartEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  Partial<EventChannel<ChannelType, CommandType, UserType>> &
-  EventUser<UserType> & {
+  Partial<EventWithChannel<ChannelType, CommandType, UserType>> &
+  EventWithUser<UserType> & {
     channel_id: string;
     channel_type: string;
     cid: string;
@@ -665,7 +671,7 @@ export type UserWatchingStopEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     cid: string;
     type: 'user.watching.stop';
   };
@@ -677,8 +683,8 @@ export type UserUnbannedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  Partial<EventChannel<ChannelType, CommandType, UserType>> &
-  EventUser<UserType> & {
+  Partial<EventWithChannel<ChannelType, CommandType, UserType>> &
+  EventWithUser<UserType> & {
     cid: string;
     type: 'user.unbanned';
   };
@@ -688,7 +694,7 @@ export type UserUnmutedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     target_user: UserResponse<UserType>;
     type: 'user.unmuted';
   };
@@ -698,7 +704,7 @@ export type UserUpdatedEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventUser<UserType> & {
+  EventWithUser<UserType> & {
     type: 'user.updated';
   };
 
