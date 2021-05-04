@@ -114,6 +114,18 @@ export type ChannelHiddenEvent<
     type: 'channel.hidden';
   };
 
+export type ChannelMaxStreakChangedEvent<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> & {
+    type: 'channel.max_streak_changed';
+  };
+
 export type ChannelMutedEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -277,6 +289,29 @@ export type MessageDeletedEvent<
     type: 'message.deleted';
   };
 
+export type MessageFlaggedEvent<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  Partial<EventWithUser<UserType>> &
+  EventWithMessage<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
+    type: 'message.flagged';
+  };
+
 export type MessageReadEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -287,6 +322,29 @@ export type MessageReadEvent<
   EventWithChannel<ChannelType, CommandType, UserType> &
   EventWithUser<UserType> & {
     type: 'message.read';
+  };
+
+export type MessageUnflaggedEvent<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMessage<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
+    type: 'message.unflagged';
   };
 
 export type MessageUpdatedEvent<
@@ -620,6 +678,15 @@ export type UserCustomEvent<EventType extends UnknownType = UnknownType> = Event
   type: string;
 };
 
+export type UserDeactivatedEvent<
+  EventType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithUser<UserType> & {
+    type: 'user.deactivated';
+  };
+
 export type UserDeletedEvent<
   EventType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
@@ -629,6 +696,29 @@ export type UserDeletedEvent<
     type: 'user.deleted';
     hard_delete?: boolean;
     mark_messages_deleted?: boolean;
+  };
+
+export type UserFlaggedEvent<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMessage<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
+    type: 'user.flagged';
   };
 
 export type UserMutedEvent<
@@ -649,6 +739,15 @@ export type UserPresenceChangedEvent<
   ChatEvent &
   EventWithUser<UserType> & {
     type: 'user.presence.changed';
+  };
+
+export type UserReactivatedEvent<
+  EventType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithUser<UserType> & {
+    type: 'user.reactivated';
   };
 
 export type UserWatchingStartEvent<
@@ -687,6 +786,29 @@ export type UserUnbannedEvent<
   EventWithUser<UserType> & {
     cid: string;
     type: 'user.unbanned';
+  };
+
+export type UserUnflaggedEvent<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventWithChannel<ChannelType, CommandType, UserType> &
+  EventWithUser<UserType> &
+  EventWithMessage<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > & {
+    type: 'user.unflagged';
   };
 
 export type UserUnmutedEvent<
@@ -746,6 +868,12 @@ type EventMap<
   'channel.created': ChannelCreatedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.deleted': ChannelDeletedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.hidden': ChannelHiddenEvent<ChannelType, CommandType, EventType, UserType>;
+  'channel.max_streak_changed': ChannelMaxStreakChangedEvent<
+    ChannelType,
+    CommandType,
+    EventType,
+    UserType
+  >;
   'channel.muted': ChannelMutedEvent<ChannelType, CommandType, EventType, UserType>;
   'channel.truncated': ChannelTruncatedEvent<
     ChannelType,
@@ -779,6 +907,15 @@ type EventMap<
     ReactionType,
     UserType
   >;
+  'message.flagged': MessageFlaggedEvent<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   'message.new': MessageNewEvent<
     AttachmentType,
     ChannelType,
@@ -789,6 +926,15 @@ type EventMap<
     UserType
   >;
   'message.read': MessageReadEvent<ChannelType, CommandType, EventType, UserType>;
+  'message.unflagged': MessageUnflaggedEvent<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   'message.updated': MessageUpdatedEvent<
     AttachmentType,
     ChannelType,
@@ -897,10 +1043,30 @@ type EventMap<
   'typing.start': TypingStartEvent<ChannelType, CommandType, EventType, UserType>;
   'typing.stop': TypingStopEvent<ChannelType, CommandType, EventType, UserType>;
   'user.banned': UserBannedEvent<ChannelType, CommandType, EventType, UserType>;
+  'user.deactivated': UserDeactivatedEvent<EventType, UserType>;
   'user.deleted': UserDeletedEvent<EventType, UserType>;
+  'user.flagged': UserFlaggedEvent<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   'user.muted': UserMutedEvent<EventType, UserType>;
   'user.presence.changed': UserPresenceChangedEvent<EventType, UserType>;
+  'user.reactivated': UserReactivatedEvent<EventType, UserType>;
   'user.unbanned': UserUnbannedEvent<ChannelType, CommandType, EventType, UserType>;
+  'user.unflagged': UserUnflaggedEvent<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   'user.unmuted': UserUnmutedEvent<EventType, UserType>;
   'user.updated': UserUpdatedEvent<EventType, UserType>;
   'user.watching.start': UserWatchingStartEvent<
