@@ -1,15 +1,12 @@
-import {
-  UserResponse,
-  ChannelResponse,
-  MessageResponse,
-  CommandResponse,
-  OwnUserResponse,
-} from './response';
-
-import { SearchOptions } from './option';
-
 import { ChannelFilters, MessageFilters } from './filter';
-
+import { SearchOptions } from './option';
+import {
+  ChannelResponse,
+  CommandResponse,
+  MessageResponse,
+  OwnUserResponse,
+  UserResponse,
+} from './response';
 import { UnknownType } from './util';
 
 /**

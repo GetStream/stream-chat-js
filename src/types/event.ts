@@ -1,44 +1,43 @@
+import { ChannelMute, LiteralStringForUnion } from './base';
 import {
-  UserResponse,
+  ChannelMemberResponse,
   ChannelResponse,
   MessageResponse,
   OwnUserResponse,
-  ChannelMemberResponse,
   ReactionResponse,
+  UserResponse,
 } from './response';
-
 import { UnknownType } from './util';
 
-import { LiteralStringForUnion, ChannelMute } from './base';
+/**
+ * Internal temporary type parameter used to enable/disable new union type for events. Defaults to 'deprecated_intersection'.
+ *
+ *
+ * @example
+ * // Event type should be narrowed to `ChannelCreatedEvent`
+ * client.on<'union'>((event) => {
+ *   if(event.type === 'channel.created') {
+ *     console.log(event.user);
+ *   }
+ * })
+ *
+ * @desc This is part of the migration steps for the new union type for events:
+ * 1. Release it with its default value set to 'deprecated_intersection', avoiding breaking changes and allowing
+ *    users to use the new union type by using this flag
+ * 2. Release it with its default value set to 'union',  forcing users who are still using the old version to
+ *    manually set the 'deprecated_intersection' flag
+ * 3. Remove this type parameter entirely, allowing only the events union type to exist
+ */
+export type _TypeGroupingStrategies = 'union' | 'deprecated_intersection';
 
 /**
- * Event Types
+ * Event base types
  */
-
-// Needed because of edge case where we used to export 'ConnectionChangeEvent type so users may already be using it
-export type ConnectionChangeEvent<
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-> = {
-  type: TypeGroupingStrategy extends 'union' ? 'connection.changed' : EventTypes;
-  online?: boolean;
-  received_at?: string | Date;
-  watcher_count?: number;
-};
-
-export type ConnectionRecovered = {
-  type: 'connection.recovered';
-  received_at?: string | Date;
-  watcher_count?: number;
-};
 
 type ChatEvent = {
   created_at: string;
   received_at?: string | Date;
   watcher_count?: number;
-};
-
-type EventUser<UserType extends UnknownType = UnknownType> = {
-  user: UserResponse<UserType>;
 };
 
 type EventChannel<
@@ -49,6 +48,10 @@ type EventChannel<
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   channel_id: string;
   channel_type: string;
+};
+
+type EventMember<UserType extends UnknownType = UnknownType> = {
+  member: ChannelMemberResponse<UserType>;
 };
 
 type EventMessage<
@@ -69,17 +72,6 @@ type EventMessage<
   >;
 };
 
-type EventReaction<
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = {
-  reaction: ReactionResponse<ReactionType, UserType>;
-};
-
-type EventMember<UserType extends UnknownType = UnknownType> = {
-  member: ChannelMemberResponse<UserType>;
-};
-
 type EventOwnUser<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -87,6 +79,21 @@ type EventOwnUser<
 > = {
   me: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
+
+type EventReaction<
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  reaction: ReactionResponse<ReactionType, UserType>;
+};
+
+type EventUser<UserType extends UnknownType = UnknownType> = {
+  user: UserResponse<UserType>;
+};
+
+/**
+ * Event Types
+ */
 
 export type ChannelCreatedEvent<
   ChannelType extends UnknownType = UnknownType,
@@ -202,6 +209,22 @@ export type ChannelVisibleEvent<
   EventUser<UserType> & {
     type: 'channel.visible';
   };
+
+// Needed because of edge case where we used to export 'ConnectionChangeEvent type so users may already be using it
+export type ConnectionChangeEvent<
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+> = {
+  type: TypeGroupingStrategy extends 'union' ? 'connection.changed' : EventTypes;
+  online?: boolean;
+  received_at?: string | Date;
+  watcher_count?: number;
+};
+
+export type ConnectionRecovered = {
+  type: 'connection.recovered';
+  received_at?: string | Date;
+  watcher_count?: number;
+};
 
 export type HealthEvent<
   ChannelType extends UnknownType = UnknownType,
@@ -404,20 +427,6 @@ export type NotificationInviteAcceptedEvent<
     type: 'notification.invite_accepted';
   };
 
-export type NotificationInviteRejectedEvent<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = EventType &
-  ChatEvent &
-  EventChannel<ChannelType, CommandType, UserType> &
-  EventUser<UserType> &
-  EventMember<UserType> & {
-    cid: string;
-    type: 'notification.invite_rejected';
-  };
-
 export type NotificationInvitedEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -430,6 +439,20 @@ export type NotificationInvitedEvent<
   EventMember<UserType> & {
     cid: string;
     type: 'notification.invited';
+  };
+
+export type NotificationInviteRejectedEvent<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = EventType &
+  ChatEvent &
+  EventChannel<ChannelType, CommandType, UserType> &
+  EventUser<UserType> &
+  EventMember<UserType> & {
+    cid: string;
+    type: 'notification.invite_rejected';
   };
 
 export type NotificationMarkReadEvent<
@@ -618,6 +641,10 @@ export type UserBannedEvent<
     expiration?: Date;
   };
 
+export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
+  type: string;
+};
+
 export type UserDeletedEvent<
   EventType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
@@ -707,25 +734,63 @@ export type UserUpdatedEvent<
   };
 
 /**
- * Internal temporary type parameter used to enable/disable new union type for events. Defaults to 'deprecated_intersection'.
- *
- *
- * @example
- * // Event type should be narrowed to `ChannelCreatedEvent`
- * client.on<'union'>((event) => {
- *   if(event.type === 'channel.created') {
- *     console.log(event.user);
- *   }
- * })
- *
- * @desc This is part of the migration steps for the new union type for events:
- * 1. Release it with its default value set to 'deprecated_intersection', avoiding breaking changes and allowing
- *    users to use the new union type by using this flag
- * 2. Release it with its default value set to 'union',  forcing users who are still using the old version to
- *    manually set the 'deprecated_intersection' flag
- * 3. Remove this type parameter entirely, allowing only the events union type to exist
+ * Event grouping types
  */
-export type _TypeGroupingStrategies = 'union' | 'deprecated_intersection';
+
+export type Event<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType,
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+  SpecificEventType extends EventTypes = 'all'
+> = TypeGroupingStrategy extends 'deprecated_intersection'
+  ? EventIntersection<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
+  : EventUnionOrSpecific<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType,
+      SpecificEventType
+    >;
+
+export type EventHandler<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType,
+  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+  SpecificEventType extends EventTypes = 'all'
+> = (
+  event: Event<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType,
+    TypeGroupingStrategy,
+    SpecificEventType
+  >,
+) => void;
 
 /**
  * @deprecated This is being deprecated and will eventually be removed
@@ -957,6 +1022,8 @@ type EventMap<
   'user.watching.stop': UserStopWatchingEvent<EventType, UserType>;
 };
 
+export type EventTypes = keyof EventMap | 'all';
+
 type EventUnion<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
@@ -1021,64 +1088,3 @@ type EventUnionOrSpecific<
       ReactionType,
       UserType
     >;
-
-export type EventTypes = keyof EventMap | 'all';
-
-export type Event<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-  SpecificEventType extends EventTypes = 'all'
-> = TypeGroupingStrategy extends 'deprecated_intersection'
-  ? EventIntersection<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
-  : EventUnionOrSpecific<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType,
-      SpecificEventType
-    >;
-
-export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
-  type: string;
-};
-
-export type EventHandler<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType,
-  TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
-  SpecificEventType extends EventTypes = 'all'
-> = (
-  event: Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType,
-    TypeGroupingStrategy,
-    SpecificEventType
-  >,
-) => void;

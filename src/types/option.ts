@@ -1,18 +1,16 @@
 import { AxiosRequestConfig } from 'axios';
 
 import {
-  LiteralStringForUnion,
   ChannelConfigAutomod,
   ChannelConfigAutomodBehavior,
-  CommandVariants,
-  Resource,
-  PermissionObject,
   ChannelConfigAutomodThresholds,
+  CommandVariants,
+  LiteralStringForUnion,
   Logger,
+  PermissionObject,
+  Resource,
 } from './base';
-
-import { UserResponse, ChannelResponse, MessageResponse } from './response';
-
+import { ChannelResponse, MessageResponse, UserResponse } from './response';
 import { UnknownType } from './util';
 
 /**
