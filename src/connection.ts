@@ -3,13 +3,12 @@ import { chatCodes, sleep } from './utils';
 import { TokenManager } from './token_manager';
 import {
   ConnectAPIResponse,
-  ConnectionChangeEvent,
+  ConnectionChangedEvent,
   ConnectionOpen,
   LiteralStringForUnion,
   Logger,
   UnknownType,
   UserResponse,
-  _TypeGroupingStrategies,
 } from './types';
 
 // Type guards to check WebSocket error type
@@ -29,11 +28,7 @@ type Constructor<
   apiKey: string;
   authType: 'anonymous' | 'jwt';
   clientID: string;
-  eventCallback: <
-    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
-  >(
-    event: ConnectionChangeEvent<TypeGroupingStrategy>,
-  ) => void;
+  eventCallback: (event: ConnectionChangedEvent) => void;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (

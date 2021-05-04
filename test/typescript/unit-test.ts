@@ -1,7 +1,7 @@
 // basic sanity check
 import {
   StreamChat,
-  Event,
+  StreamEvent,
   Deny,
   AnyRole,
   Allow,
@@ -131,7 +131,7 @@ const updateUsersWithSingletonClient: Promise<{
   users: { [key: string]: UserResponse<UserType> };
 }> = singletonClient.partialUpdateUsers([updateRequest]);
 
-const eventHandler = (event: Event) => {};
+const eventHandler = (event: StreamEvent) => {};
 voidReturn = client.on(eventHandler);
 voidReturn = client.off(eventHandler);
 voidReturn = client.on('message.new', eventHandler);
@@ -164,7 +164,7 @@ const file: Promise<SendFileAPIResponse> = client.sendFile(
 );
 
 const type: EventTypes = 'user.updated';
-const event: Event<
+const event: StreamEvent<
   AttachmentType,
   ChannelType,
   CommandType,
@@ -239,7 +239,7 @@ const chUser1: ChannelMemberResponse<UserType> = channelState.members.someUser12
 const chUser2: ChannelMemberResponse<UserType> = channelState.members.someUser124332221;
 
 const chUser3: UserResponse<UserType> = channelState.read.someUserId.user;
-const typing: Event<
+const typing: StreamEvent<
   AttachmentType,
   ChannelType,
   CommandType,
