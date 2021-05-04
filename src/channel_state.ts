@@ -35,7 +35,18 @@ export class ChannelState<
   >;
   watcher_count: number;
   // Todo can this be stop as well?
-  typing: Record<string, TypingStartEvent<EventType, UserType>>;
+  typing: Record<
+    string,
+    TypingStartEvent<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
+  >;
   read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
   messages: Array<
     ReturnType<
@@ -752,7 +763,7 @@ export class ChannelState<
           cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
-        } as TypingStopEvent<EventType, UserType>);
+        } as TypingStopEvent<ChannelType, CommandType, EventType, UserType>);
       }
     }
   }
