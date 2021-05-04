@@ -9,6 +9,7 @@ import {
   Logger,
   UnknownType,
   UserResponse,
+  _TypeGroupingStrategies,
 } from './types';
 
 // Type guards to check WebSocket error type
@@ -28,8 +29,10 @@ type Constructor<
   apiKey: string;
   authType: 'anonymous' | 'jwt';
   clientID: string;
-  eventCallback: <AllowNarrowingEvents extends boolean = false>(
-    event: ConnectionChangeEvent<AllowNarrowingEvents>,
+  eventCallback: <
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+  >(
+    event: ConnectionChangeEvent<TypeGroupingStrategy>,
   ) => void;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;

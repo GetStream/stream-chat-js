@@ -41,6 +41,7 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
+  _TypeGroupingStrategies,
 } from './types';
 
 /**
@@ -83,7 +84,7 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          true
+          'union'
         >
     >;
   };
@@ -268,7 +269,9 @@ export class Channel<
    *
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
-  async sendEvent<AllowNarrowingEvents extends boolean = false>(
+  async sendEvent<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'
+  >(
     event: Event<
       AttachmentType,
       ChannelType,
@@ -277,7 +280,7 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ) {
     this._checkInitialized();
@@ -1373,7 +1376,7 @@ export class Channel<
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} [callbackOrNothing] The callback to call
    */
-  on<AllowNarrowingEvents extends boolean = false>(
+  on<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1382,11 +1385,14 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ): { unsubscribe: () => void };
-  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
-    eventType: EvType,
+  on<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
+    eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1395,11 +1401,14 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): { unsubscribe: () => void };
-  on<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
+  on<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1409,10 +1418,10 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          AllowNarrowingEvents,
-          EvType
+          TypeGroupingStrategy,
+          SpecificEventType
         >
-      | EvType,
+      | SpecificEventType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1421,17 +1430,17 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): { unsubscribe: () => void } {
-    const key = (callbackOrNothing ? callbackOrString : 'all') as EvType;
+    const key = (callbackOrNothing ? callbackOrString : 'all') as SpecificEventType;
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
     const callback = (callbackOrNothing ? callbackOrNothing : callbackOrString) as
-      | EvType
+      | SpecificEventType
       | EventHandler<
           AttachmentType,
           ChannelType,
@@ -1440,7 +1449,7 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          true
+          'union'
         >;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -1472,7 +1481,7 @@ export class Channel<
    * off - Remove the event handler
    *
    */
-  off<AllowNarrowingEvents extends boolean = false>(
+  off<TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection'>(
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1481,11 +1490,14 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents
+      TypeGroupingStrategy
     >,
   ): void;
-  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
-    eventType: EvType,
+  off<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
+    eventType: SpecificEventType,
     callback: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1494,11 +1506,14 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      AllowNarrowingEvents,
-      EvType
+      TypeGroupingStrategy,
+      SpecificEventType
     >,
   ): void;
-  off<AllowNarrowingEvents extends boolean = false, EvType extends EventTypes = 'all'>(
+  off<
+    TypeGroupingStrategy extends _TypeGroupingStrategies = 'deprecated_intersection',
+    SpecificEventType extends EventTypes = 'all'
+  >(
     callbackOrString:
       | EventHandler<
           AttachmentType,
@@ -1508,10 +1523,10 @@ export class Channel<
           MessageType,
           ReactionType,
           UserType,
-          AllowNarrowingEvents,
-          EvType
+          TypeGroupingStrategy,
+          SpecificEventType
         >
-      | EvType,
+      | SpecificEventType,
     callbackOrNothing?: EventHandler<
       AttachmentType,
       ChannelType,
@@ -1520,8 +1535,8 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      true,
-      EvType
+      'union',
+      SpecificEventType
     >,
   ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
@@ -1552,7 +1567,7 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >,
   ) {
     const channel = this;
@@ -1704,7 +1719,7 @@ export class Channel<
       MessageType,
       ReactionType,
       UserType,
-      true
+      'union'
     >,
   ) => {
     const channel = this;
