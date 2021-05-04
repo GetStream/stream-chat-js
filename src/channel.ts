@@ -911,7 +911,7 @@ export class Channel<
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
-      } as TypingStartEvent<EventType, UserType>);
+      } as TypingStartEvent<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
     }
   }
 
@@ -929,7 +929,7 @@ export class Channel<
     await this.sendEvent({
       type: 'typing.stop',
       parent_id,
-    } as TypingStopEvent<EventType, UserType>);
+    } as TypingStopEvent<ChannelType, CommandType, EventType, UserType>);
   }
 
   /**
