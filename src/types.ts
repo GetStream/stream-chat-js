@@ -4,6 +4,8 @@ import { AxiosRequestConfig } from 'axios';
  * Utility Types
  */
 
+export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<T>;
+
 export type ArrayOneOrMore<T> = {
   0: T;
 } & Array<T>;
@@ -1235,8 +1237,9 @@ export type MessageReadEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventWithChannel<ChannelType, CommandType, UserType> &
+  Optional<EventWithChannel<ChannelType, CommandType, UserType>, 'channel'> &
   EventWithUser<UserType> & {
+    cid: string;
     type: 'message.read';
   };
 
@@ -1296,7 +1299,7 @@ export type MessageNewEvent<
   UserType extends UnknownType = UnknownType
 > = EventType &
   ChatEvent &
-  EventWithChannel<ChannelType, CommandType, UserType> &
+  Optional<EventWithChannel<ChannelType, CommandType, UserType>, 'channel'> &
   EventWithUser<UserType> &
   EventWithMessage<
     AttachmentType,
