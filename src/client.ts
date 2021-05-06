@@ -635,6 +635,66 @@ export class StreamChat<
   }
 
   /**
+   * Revokes all tokens upto current timestamp on application level
+   */
+  async revokeTokens(since?: Date | string) {
+    if (since === undefined) {
+      since = new Date().toISOString();
+    }
+    if (since instanceof Date) {
+      since = since.toISOString();
+    }
+    return await this.updateAppSettings({
+      revoke_tokens_issued_before: since,
+    });
+  }
+
+  /**
+   * Revokes token for a user
+   */
+  async revokeUserToken(userID: string, since?: Date | string) {
+    if (since === undefined) {
+      since = new Date().toISOString();
+    }
+
+    if (since instanceof Date) {
+      since = since.toISOString();
+    }
+
+    return await this.partialUpdateUser({
+      id: userID,
+      set: <Partial<UserResponse<UserType>>>{
+        revoke_tokens_issued_before: since,
+      },
+    });
+  }
+
+  /**
+   * Revokes tokens for a list of users
+   */
+  async revokeUsersToken(userIDs: string[], since?: Date | string) {
+    if (since === undefined) {
+      since = new Date().toISOString();
+    }
+
+    if (since instanceof Date) {
+      since = since.toISOString();
+    }
+
+    const users: PartialUserUpdate<UserType>[] = [];
+    for (const userID in userIDs) {
+      users.push({
+        id: userID,
+        set: <Partial<UserResponse<UserType>>>{
+          revoke_tokens_issued_before: since,
+        },
+      });
+    }
+
+    return await this.partialUpdateUsers(users);
+  }
+
+  /**
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
@@ -797,11 +857,13 @@ export class StreamChat<
     if (this.secret == null) {
       throw Error(`tokens can only be created server-side using the API Secret`);
     }
-    const extra: { exp?: number } = {};
+    const extra: { exp?: number; iat?: number } = {};
 
     if (exp) {
       extra.exp = exp;
     }
+
+    extra.iat = Math.round(new Date().getTime() / 1000);
 
     return JWTUserToken(this.secret, userID, extra, {});
   }

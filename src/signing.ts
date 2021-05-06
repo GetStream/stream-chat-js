@@ -37,7 +37,7 @@ export function JWTUserToken(
   }
 
   const opts: SignOptions = Object.assign(
-    { algorithm: 'HS256', noTimestamp: true },
+    { algorithm: 'HS256', noTimestamp: false },
     jwtOptions,
   );
   return jwt.sign(payload, apiSecret, opts);
