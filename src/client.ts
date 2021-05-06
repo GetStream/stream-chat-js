@@ -863,7 +863,8 @@ export class StreamChat<
       extra.exp = exp;
     }
 
-    extra.iat = Math.round(new Date().getTime() / 1000);
+    // add iat claim for token revocation
+    extra.iat = Math.round(new Date().getTime() / 1000) - 1;
 
     return JWTUserToken(this.secret, userID, extra, {});
   }
