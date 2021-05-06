@@ -853,7 +853,7 @@ export class StreamChat<
    *
    * @return {string} Returns a token
    */
-  createToken(userID: string, exp?: number) {
+  createToken(userID: string, exp?: number, iat?: number) {
     if (this.secret == null) {
       throw Error(`tokens can only be created server-side using the API Secret`);
     }
@@ -864,7 +864,9 @@ export class StreamChat<
     }
 
     // add iat claim for token revocation
-    extra.iat = Math.round(new Date().getTime() / 1000) - 1;
+    if (iat) {
+      extra.iat = iat;
+    }
 
     return JWTUserToken(this.secret, userID, extra, {});
   }
