@@ -637,13 +637,21 @@ export class StreamChat<
   /**
    * Revokes all tokens upto current timestamp on application level
    */
-  async revokeTokens(since?: Date | string) {
+  async revokeTokens(since?: Date | string | null) {
     if (since === undefined) {
       since = new Date().toISOString();
     }
+
     if (since instanceof Date) {
       since = since.toISOString();
     }
+
+    if (since === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
+    }
+
     return await this.updateAppSettings({
       revoke_tokens_issued_before: since,
     });
@@ -652,13 +660,19 @@ export class StreamChat<
   /**
    * Revokes token for a user
    */
-  async revokeUserToken(userID: string, since?: Date | string) {
+  async revokeUserToken(userID: string, since?: Date | string | null) {
     if (since === undefined) {
       since = new Date().toISOString();
     }
 
     if (since instanceof Date) {
       since = since.toISOString();
+    }
+
+    if (since === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
     }
 
     return await this.partialUpdateUser({
@@ -679,6 +693,12 @@ export class StreamChat<
 
     if (since instanceof Date) {
       since = since.toISOString();
+    }
+
+    if (since === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
     }
 
     const users: PartialUserUpdate<UserType>[] = [];

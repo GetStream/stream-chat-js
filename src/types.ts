@@ -1371,7 +1371,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
-  revoke_tokens_issued_before?: string;
+  revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
