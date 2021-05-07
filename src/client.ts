@@ -702,7 +702,7 @@ export class StreamChat<
     }
 
     const users: PartialUserUpdate<UserType>[] = [];
-    for (const userID in userIDs) {
+    for (const userID of userIDs) {
       users.push({
         id: userID,
         set: <Partial<UserResponse<UserType>>>{
