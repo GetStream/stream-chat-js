@@ -54,6 +54,9 @@ import {
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
+  MessageFlagsFilters,
+  MessageFlagsPaginationOptions,
+  MessageFlagsResponse,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -1569,6 +1572,30 @@ export class StreamChat<
         payload: {
           filter_conditions: filterConditions,
           sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
+  }
+
+  /**
+   * queryMessageFlags - Query message flags
+   *
+   * @param {MessageFlagsFilters} filterConditions filter conditions
+   * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<MessageFlagsResponse<ChannelType, CommandType, UserType>>} Message Flags Response
+   */
+  async queryMessageFlags(
+    filterConditions: MessageFlagsFilters = {},
+    options: MessageFlagsPaginationOptions = {},
+  ) {
+    // Return a list of user bans
+    return await this.get<MessageFlagsResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/query_message_flags',
+      {
+        payload: {
+          filter_conditions: filterConditions,
           ...options,
         },
       },

@@ -107,6 +107,35 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type MessageFlagsResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType
+> = APIResponse & {
+  flags?: Array<{
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+    user: UserResponse<UserType>;
+    approved_at?: string;
+    created_at?: string;
+    created_by_automod?: boolean;
+    moderation_result?: {};
+    rejected_at?: string;
+    reviewed_at?: string;
+    reviewed_by?: UserResponse<UserType>;
+    updated_at?: string;
+  }>;
+};
+
 export type BannedUsersResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -699,6 +728,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  * Option Types
  */
 
+export type MessageFlagsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
 export type BannedUsersPaginationOptions = Omit<
   PaginationOptions,
   'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
@@ -1048,6 +1082,12 @@ export type EventTypes =
  */
 
 export type AscDesc = 1 | -1;
+
+export type MessageFlagsFilters = {
+  channel_cid?: string;
+  is_reviewed?: boolean;
+  user_id?: string;
+};
 
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
