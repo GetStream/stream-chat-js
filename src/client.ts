@@ -77,7 +77,11 @@ import {
   ReactionResponse,
   SearchAPIResponse,
   SearchOptions,
-  SearchPayload,
+  SearchV1Payload,
+  SearchV2Options,
+  SearchV2APIResponse,
+  SearchV2Payload,
+  SearchMessageSort,
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
@@ -1671,7 +1675,7 @@ export class StreamChat<
     options: SearchOptions = {},
   ) {
     // Return a list of channels
-    const payload: SearchPayload<
+    const payload: SearchV1Payload<
       AttachmentType,
       ChannelType,
       CommandType,
@@ -1703,6 +1707,69 @@ export class StreamChat<
         UserType
       >
     >(this.baseURL + '/search', {
+      payload,
+    });
+  }
+
+  /**
+   * search v2 - Query messages
+   *
+   * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions MongoDB style filter conditions
+   * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string} query search query or object MongoDB style filters
+   * @param {SearchV2Options} [options] Option object, {user_id: 'tommaso'}
+   *
+   * @return {Promise<SearchV2APIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
+   */
+  async searchv2(
+    filterConditions: ChannelFilters<ChannelType, CommandType, UserType>,
+    query:
+      | string
+      | MessageFilters<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          MessageType,
+          ReactionType,
+          UserType
+        >,
+    sort: SearchMessageSort = [],
+    options: SearchV2Options = {},
+  ) {
+    // Return a list of channels
+    const payload: SearchV2Payload<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    > = {
+      filter_conditions: filterConditions,
+      ...options,
+    };
+    if (typeof query === 'string') {
+      payload.query = query;
+    } else if (typeof query === 'object') {
+      payload.message_filter_conditions = query;
+    } else {
+      throw Error(`Invalid type ${typeof query} for query parameter`);
+    }
+
+    payload.sort = normalizeQuerySort(sort);
+
+    // Make sure we wait for the connect promise if there is a pending one
+    await this.setUserPromise;
+
+    return await this.get<
+      SearchV2APIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + '/search/v2', {
       payload,
     });
   }

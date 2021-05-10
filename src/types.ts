@@ -592,6 +592,31 @@ export type SearchAPIResponse<
   }[];
 };
 
+export type SearchV2APIResponse<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = SearchAPIResponse<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  MessageType,
+  ReactionType,
+  UserType
+> & {
+  next?: string;
+  previous?: string;
+  results_warning?: SearchWarning;
+};
+
+export type SearchWarning = {
+  channel_search_cids: string[];
+  channel_search_count: number;
+  warning_description: string;
+};
 export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
@@ -870,6 +895,11 @@ export type QueryMembersOptions = {
 export type SearchOptions = {
   limit?: number;
   offset?: number;
+};
+
+export type SearchV2Options = {
+  limit?: number;
+  next?: string;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
@@ -1309,10 +1339,20 @@ export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
+export type SearchRelevanceSort = { relevance?: AscDesc };
+
+export type SearchMessageSortBase =
+  | SearchRelevanceSort
+  | Sort<Message>
+  | { [field: string]: AscDesc };
+
+export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
+
 export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
   | BannedUsersSort
   | ChannelSort<ChannelType>
-  | UserSort<UserType>;
+  | UserSort<UserType>
+  | SearchMessageSort;
 
 /**
  * Base Types
@@ -1620,7 +1660,8 @@ export type EndpointName =
   | 'ExportChannels'
   | 'GetExportChannelsStatus'
   | 'CheckSQS'
-  | 'GetRateLimits';
+  | 'GetRateLimits'
+  | 'SearchV2';
 
 export type ExportChannelRequest = {
   id: string;
@@ -1776,14 +1817,14 @@ export type Resource =
   | 'UpdateUser'
   | 'UploadAttachment';
 
-export type SearchPayload<
+type BaseSearchPayload<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SearchOptions & {
+> = {
   client_id?: string;
   connection_id?: string;
   filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
@@ -1797,6 +1838,44 @@ export type SearchPayload<
   >;
   query?: string;
 };
+export type SearchV1Payload<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = BaseSearchPayload<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  MessageType,
+  ReactionType,
+  UserType
+> &
+  SearchOptions;
+
+export type SearchV2Payload<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
+> = BaseSearchPayload<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  MessageType,
+  ReactionType,
+  UserType
+> &
+  SearchV2Options & {
+    sort?: Array<{
+      direction: AscDesc;
+      field: string | number;
+    }>;
+  };
 
 export type TestPushDataInput = {
   apnTemplate?: string;
