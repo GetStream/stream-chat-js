@@ -635,41 +635,41 @@ export class StreamChat<
   }
 
   /**
-   * Revokes all tokens upto current timestamp on application level
+   * Revokes all tokens on application level issued before given time
    */
-  async revokeTokens(since?: Date | string | null) {
-    if (since === undefined) {
-      since = new Date().toISOString();
+  async revokeTokens(before?: Date | string | null) {
+    if (before === undefined) {
+      before = new Date().toISOString();
     }
 
-    if (since instanceof Date) {
-      since = since.toISOString();
+    if (before instanceof Date) {
+      before = before.toISOString();
     }
 
-    if (since === '') {
+    if (before === '') {
       throw new Error(
         "Don't pass blank string for since, use null instead if resetting the token revoke",
       );
     }
 
     return await this.updateAppSettings({
-      revoke_tokens_issued_before: since,
+      revoke_tokens_issued_before: before,
     });
   }
 
   /**
-   * Revokes token for a user
+   * Revokes token for a user issued before given time
    */
-  async revokeUserToken(userID: string, since?: Date | string | null) {
-    if (since === undefined) {
-      since = new Date().toISOString();
+  async revokeUserToken(userID: string, before?: Date | string | null) {
+    if (before === undefined) {
+      before = new Date().toISOString();
     }
 
-    if (since instanceof Date) {
-      since = since.toISOString();
+    if (before instanceof Date) {
+      before = before.toISOString();
     }
 
-    if (since === '') {
+    if (before === '') {
       throw new Error(
         "Don't pass blank string for since, use null instead if resetting the token revoke",
       );
@@ -678,24 +678,24 @@ export class StreamChat<
     return await this.partialUpdateUser({
       id: userID,
       set: <Partial<UserResponse<UserType>>>{
-        revoke_tokens_issued_before: since,
+        revoke_tokens_issued_before: before,
       },
     });
   }
 
   /**
-   * Revokes tokens for a list of users
+   * Revokes tokens for a list of users issued before given time
    */
-  async revokeUsersToken(userIDs: string[], since?: Date | string) {
-    if (since === undefined) {
-      since = new Date().toISOString();
+  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
+    if (before === undefined) {
+      before = new Date().toISOString();
     }
 
-    if (since instanceof Date) {
-      since = since.toISOString();
+    if (before instanceof Date) {
+      before = before.toISOString();
     }
 
-    if (since === '') {
+    if (before === '') {
       throw new Error(
         "Don't pass blank string for since, use null instead if resetting the token revoke",
       );
@@ -706,7 +706,7 @@ export class StreamChat<
       users.push({
         id: userID,
         set: <Partial<UserResponse<UserType>>>{
-          revoke_tokens_issued_before: since,
+          revoke_tokens_issued_before: before,
         },
       });
     }
