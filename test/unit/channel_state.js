@@ -1,6 +1,13 @@
 import chai from 'chai';
-import { ChannelState, StreamChat, Channel } from '../../src';
+import { v4 as uuidv4 } from 'uuid';
+
+import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
+import { generateUser } from './test-utils/generateUser';
+import { getClientWithUser } from './test-utils/getClient';
+import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
+
+import { ChannelState, StreamChat, Channel } from '../../src';
 
 const expect = chai.expect;
 
@@ -313,5 +320,173 @@ describe('ChannelState reactions', () => {
 		);
 		expect(newMessage.own_reactions.length).to.be.eq(1);
 		expect(newMessage.own_reactions[0].user_id).to.be.eq('observer');
+	});
+});
+
+describe('ChannelState isUpToDate', () => {
+	it('isUpToDate flag should be set to false, when watcher is disconnected', async () => {
+		const chatClient = await getClientWithUser();
+		const channelId = uuidv4();
+		const mockedChannelResponse = generateChannel({
+			channel: {
+				id: channelId,
+			},
+		});
+
+		// to mock the channel.watch call
+		chatClient.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		const channel = chatClient.channel('messaging', channelId);
+
+		await channel.watch();
+		// This is a responsibility of application layer to set the flag, depending
+		// on what state is queried - most recent or some older.
+		channel.state.setIsUpToDate(true);
+
+		expect(channel.state.isUpToDate).to.be.eq(true);
+
+		await channel._disconnect();
+		expect(channel.state.isUpToDate).to.be.eq(false);
+	});
+});
+
+describe('ChannelState clean', () => {
+	let client;
+	let channel;
+	beforeEach(() => {
+		client = new StreamChat();
+		client.userID = 'observer';
+		channel = new Channel(client, 'live', 'stream', {});
+		client.activeChannels[channel.cid] = channel;
+	});
+
+	it('should remove any stale typing events with either string or Date received_at', async () => {
+		// string received_at
+		client.dispatchEvent({
+			cid: channel.cid,
+			type: 'typing.start',
+			user: { id: 'other' },
+			received_at: new Date(Date.now() - 10000).toISOString(),
+		});
+		expect(channel.state.typing['other']).not.to.be.undefined;
+
+		channel.state.clean();
+		expect(channel.state.typing['other']).to.be.undefined;
+
+		// Date received_at
+		client.dispatchEvent({
+			cid: channel.cid,
+			type: 'typing.start',
+			user: { id: 'other' },
+			received_at: new Date(Date.now() - 10000),
+		});
+		expect(channel.state.typing['other']).not.to.be.undefined;
+
+		channel.state.clean();
+		expect(channel.state.typing['other']).to.be.undefined;
+	});
+});
+
+describe('deleteUserMessages', () => {
+	it('should remove content of messages from given user, when hardDelete is true', () => {
+		const state = new ChannelState();
+		const user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({ user: user1 });
+		const m2u1 = generateMsg({ user: user1 });
+		const m1u2 = generateMsg({ user: user2 });
+		const m2u2 = generateMsg({ user: user2 });
+
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+
+		expect(state.messages).to.have.length(4);
+
+		state.deleteUserMessages(user1, true);
+
+		expect(state.messages).to.have.length(4);
+
+		expect(state.messages[0].type).to.be.equal('deleted');
+		expect(state.messages[0].text).to.be.equal(undefined);
+		expect(state.messages[0].html).to.be.equal(undefined);
+
+		expect(state.messages[1].type).to.be.equal('deleted');
+		expect(state.messages[1].text).to.be.equal(undefined);
+		expect(state.messages[1].html).to.be.equal(undefined);
+
+		expect(state.messages[2].type).to.be.equal('regular');
+		expect(state.messages[2].text).to.be.equal(m1u2.text);
+		expect(state.messages[2].html).to.be.equal(m1u2.html);
+
+		expect(state.messages[3].type).to.be.equal('regular');
+		expect(state.messages[3].text).to.be.equal(m2u2.text);
+		expect(state.messages[3].html).to.be.equal(m2u2.html);
+	});
+	it('should mark messages from given user as deleted, when hardDelete is false', () => {
+		const state = new ChannelState();
+
+		const user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({ user: user1 });
+		const m2u1 = generateMsg({ user: user1 });
+		const m1u2 = generateMsg({ user: user2 });
+		const m2u2 = generateMsg({ user: user2 });
+
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+		expect(state.messages).to.have.length(4);
+
+		state.deleteUserMessages(user1);
+
+		expect(state.messages).to.have.length(4);
+
+		expect(state.messages[0].type).to.be.equal('deleted');
+		expect(state.messages[0].text).to.be.equal(m1u1.text);
+		expect(state.messages[0].html).to.be.equal(m1u1.html);
+
+		expect(state.messages[1].type).to.be.equal('deleted');
+		expect(state.messages[1].text).to.be.equal(m2u1.text);
+		expect(state.messages[1].html).to.be.equal(m2u1.html);
+
+		expect(state.messages[2].type).to.be.equal('regular');
+		expect(state.messages[2].text).to.be.equal(m1u2.text);
+		expect(state.messages[2].html).to.be.equal(m1u2.html);
+
+		expect(state.messages[3].type).to.be.equal('regular');
+		expect(state.messages[3].text).to.be.equal(m2u2.text);
+		expect(state.messages[3].html).to.be.equal(m2u2.html);
+	});
+});
+
+describe('updateUserMessages', () => {
+	it('should update user property of messages from given user', () => {
+		const state = new ChannelState();
+		let user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({ user: user1 });
+		const m2u1 = generateMsg({ user: user1 });
+		const m1u2 = generateMsg({ user: user2 });
+		const m2u2 = generateMsg({ user: user2 });
+
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+
+		expect(state.messages).to.have.length(4);
+
+		const user1NewName = uuidv4();
+		user1 = {
+			...user1,
+			name: user1NewName,
+		};
+
+		state.updateUserMessages(user1, true);
+
+		expect(state.messages).to.have.length(4);
+
+		expect(state.messages[0].user.name).to.be.equal(user1NewName);
+		expect(state.messages[1].user.name).to.be.equal(user1NewName);
+
+		expect(state.messages[2].user.name).to.be.equal(user2.name);
+		expect(state.messages[3].user.name).to.be.equal(user2.name);
 	});
 });

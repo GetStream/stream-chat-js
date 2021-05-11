@@ -351,6 +351,13 @@ const executables = [
 		type:
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['query']>>",
 	},
+	// TODO: Add this back in when queryBannedUsers is deployed to all shards for testing
+	// {
+	// 	f: rg.queryBannedUsers,
+	// 	imports: ['StreamChat', 'Unpacked'],
+	// 	type:
+	// 		"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['queryBannedUsers']>>",
+	// },
 	{
 		f: rg.queryMembers,
 		imports: ['Channel', 'Unpacked'],

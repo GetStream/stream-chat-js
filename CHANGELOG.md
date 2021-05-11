@@ -1,5 +1,98 @@
 # CHANGELOG
 
+## May 3, 2021 - 3.9.0
+
+### Feature
+
+- New endpoint to send custom user events [#664](https://github.com/GetStream/stream-chat-js/pull/664)
+- Support Node v16 [#671](https://github.com/GetStream/stream-chat-js/pull/671)
+
+## March 29, 2021 - 3.8.0
+
+- Better handling of user.deleted and user.updated events [6eddf39](https://github.com/GetStream/stream-chat-js/commit/6eddf39487d6073a9b7654712f51772c893d8dc6)
+  - When `user.deleted` event is received, mark messages from corresponding user as deleted.
+  - When `user.updated` event is received, update references of corresponding user in messages.
+- Bug with with ChannelState.clean function [28581fd](https://github.com/GetStream/stream-chat-js/commit/28581fd9fae0f3cf761ac0cf785910cea476c61c)
+- Allow overriding of https agent on StreamChat [f18e397](https://github.com/GetStream/stream-chat-js/commit/f18e3974caa2b384d52beca10f25d34c726969e8)
+  ```js
+    const client = StreamChat.getInstance(apiKey, {
+      httpsAgent: new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 6000,
+      });
+    })
+  ```
+- Updated following types
+  - `AppSettingsAPIResponse.enforce_unique_usernames` [497220c](https://github.com/GetStream/stream-chat-js/commit/497220c9b32acbb9e8a4efc7a24e9eafbce06e71)
+  - `MessageLabel` [7897e23](https://github.com/GetStream/stream-chat-js/commit/7897e239037bdc97a1066ca446d6a1bf4b7c4967)
+
+## March 19, 2021 - 3.7.0
+
+- Receive unsubscribe handler from `channel.on` [1ae1fca](https://github.com/GetStream/stream-chat-js/commit/1ae1fca10e5db251c549ce5b50ec19ff5ea617e2)
+
+```js
+const eventHandler = (e) => {
+  /** handle event here */
+};
+const { unsubscribe } = channel.on(eventHandler);
+
+// When you want to remove listener:
+unsubscribe();
+```
+
+## March 17, 2021 - 3.6.2
+
+- Added extra check in `client.updateMessage` to make sure we don't send `mentions_users` as array of user objects. If yes, then convert it
+  to array of userIds (which is what API expects) [#647](https://github.com/GetStream/stream-chat-js/pull/647)
+
+## March 16, 2021 - 3.6.1
+
+- `message.__html` type is deprecated in favor of `message.html` [#646](https://github.com/GetStream/stream-chat-js/pull/646)
+- `message.__html` is ignored `updateMessage` function [#645](https://github.com/GetStream/stream-chat-js/pull/645)
+
+## March 15, 2021 - 3.6.0
+
+- Add support to set `baseURL` from `options` [#644](https://github.com/GetStream/stream-chat-js/pull/644)
+  - `StreamChat.getInstance('key', { baseURL })`
+
+## March 11, 2021 - 3.5.1
+
+Remove call to `channel._disconnect` from client.closeConnection. For end user this will fix the issue - `You can't use a channel after client.disconnect() was called` [#639](https://github.com/GetStream/stream-chat-js/pull/639)
+
+## March 10, 2021 - 3.5.0
+
+- Deprecated `client.disconnect`. A new method has been introduced as alias - `client.disconnectUser`
+- Introduced following two methods on client:
+
+  - client.openConnection - establish a ws connection on current client.
+  - client.closeConnection - close the ws connection on current client, doesn't remove user
+
+- Moved call to `setHealth(true)`, (which marks the connection as healthy) to only after you receive first event on websocket.
+  Please check the description of PR [#626](https://github.com/GetStream/stream-chat-js/pull/626) for details.
+
+## March 9, 2021 - 3.4.0
+
+QueryMembers - Added support for pagination by user_id [0c41232](https://github.com/GetStream/stream-chat-js/commit/0c412321bc4de81b123574041e0abadf89f235df)
+
+## March 9, 2021 - 3.3.0
+
+### Feature
+
+- Added the `Client.getRateLimits` function to retrieve rate limit quotas and usage, with the option to filter per platform and endpoint [#631](https://github.com/GetStream/stream-chat-js/pull/631)
+- Support reactions sync for pinned messages in channel state [#629](https://github.com/GetStream/stream-chat-js/pull/629)
+
+## March 8, 2021 - 3.2.0
+
+### Feature
+
+- Added the `Client.queryBannedUsers` function to query banned users with optional filters [#625](https://github.com/GetStream/stream-chat-js/pull/625)
+
+## March 5, 2021 - 3.1.4
+
+### Fix
+
+- Clear (set to false) `isUpToDate` flag, when channel watcher is disconnected [#624](https://github.com/GetStream/stream-chat-js/pull/624)
+
 ## March 2, 2021 - 3.1.3
 
 ### Chore

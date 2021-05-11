@@ -28,6 +28,7 @@ import {
   PaginationOptions,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
+  QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
   SearchAPIResponse,
@@ -369,7 +370,7 @@ export class Channel<
   async queryMembers(
     filterConditions: UserFilters<UserType>,
     sort: UserSort<UserType> = [],
-    options: { limit?: number; offset?: number } = {},
+    options: QueryMembersOptions = {},
   ) {
     let id: string | undefined;
     const type = this.type;
@@ -1379,7 +1380,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void;
+  ): { unsubscribe: () => void };
   on(
     callback: EventHandler<
       AttachmentType,
@@ -1390,7 +1391,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void;
+  ): { unsubscribe: () => void };
   on(
     callbackOrString:
       | EventHandler<
@@ -1412,7 +1413,7 @@ export class Channel<
       ReactionType,
       UserType
     >,
-  ): void {
+  ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
@@ -1432,6 +1433,18 @@ export class Channel<
     );
 
     this.listeners[key].push(callback);
+
+    return {
+      unsubscribe: () => {
+        this._client.logger(
+          'info',
+          `Removing listener for ${key} event from channel ${this.cid}`,
+          { tags: ['event', 'channel'], channel: this },
+        );
+
+        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+      },
+    };
   }
 
   /**
@@ -1790,5 +1803,6 @@ export class Channel<
     );
 
     this.disconnected = true;
+    this.state.setIsUpToDate(false);
   }
 }

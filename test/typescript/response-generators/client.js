@@ -49,7 +49,7 @@ async function disconnect() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.connectAnonymousUser();
 	await authClient.connect();
-	return await authClient.disconnect();
+	return await authClient.disconnectUser();
 }
 
 async function getAppSettings() {
@@ -112,6 +112,20 @@ async function queryUsers() {
 	await utils.createUsers([user1, user2], { nickname: user2 });
 	const client = await utils.getTestClientForUser(user1);
 	return await client.queryUsers({ nickname: { $eq: user2 } });
+}
+
+async function queryBannedUsers() {
+	const authClient = await utils.getTestClient(true);
+	const user = {
+		id: uuidv4(),
+	};
+	const evilUser = 'evil-user' + uuidv4();
+	await utils.createUsers([evilUser, user.id]);
+	await authClient.banUser(evilUser, {
+		banned_by_id: user.id,
+		reason: 'because',
+	});
+	return await authClient.queryBannedUsers({ reason: 'because' }, { created_at: 1 });
 }
 
 async function connectAnonymousUser() {
@@ -195,6 +209,7 @@ module.exports = {
 	connectAnonymousUser,
 	setGuestUser,
 	connectUser,
+	queryBannedUsers,
 	sync,
 	updateAppSettings,
 	updateCommand,

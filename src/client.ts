@@ -23,6 +23,10 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BannedUsersFilters,
+  BannedUsersPaginationOptions,
+  BannedUsersResponse,
+  BannedUsersSort,
   BanUserOptions,
   BlockList,
   BlockListResponse,
@@ -44,6 +48,7 @@ import {
   CustomPermissionOptions,
   DeleteCommandResponse,
   Device,
+  EndpointName,
   Event,
   EventHandler,
   ExportChannelRequest,
@@ -53,6 +58,7 @@ import {
   FlagUserResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
   LiteralStringForUnion,
@@ -86,6 +92,7 @@ import {
   UpdateCommandResponse,
   UpdatedMessage,
   UpdateMessageAPIResponse,
+  UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
@@ -127,7 +134,6 @@ export class StreamChat<
   clientID?: string;
   configs: Configs<CommandType>;
   connecting?: boolean;
-  connectionEstablishedCount?: number;
   connectionID?: string;
   failures?: number;
   key: string;
@@ -232,7 +238,7 @@ export class StreamChat<
       ...inputOptions,
     };
 
-    if (this.node) {
+    if (this.node && !this.options.httpsAgent) {
       this.options.httpsAgent = new https.Agent({
         keepAlive: true,
         keepAliveMsecs: 3000,
@@ -241,7 +247,7 @@ export class StreamChat<
 
     this.axiosInstance = axios.create(this.options);
 
-    this.setBaseURL('https://chat-us-east-1.stream-io-api.com');
+    this.setBaseURL(this.options.baseURL || 'https://chat-us-east-1.stream-io-api.com');
 
     if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
@@ -446,17 +452,10 @@ export class StreamChat<
 
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
-    this.wsBaseURL = this.baseURL.replace('http', 'ws');
+    this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _setupConnection = () => {
-    this.clientID = `${this.userID}--${randomId()}`;
-    this.wsPromise = this.connect();
-    this._startCleaning();
-    return this.wsPromise;
-  };
-
-  _hasConnectionID = () => Boolean(this.connectionID);
+  _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -507,7 +506,7 @@ export class StreamChat<
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
 
-    const wsPromise = this._setupConnection();
+    const wsPromise = this.openConnection();
 
     this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
       (result) => result[1], // We only return connection promise;
@@ -539,6 +538,68 @@ export class StreamChat<
     // this one is actually used for requests...
     this._user = { ...user };
   }
+
+  /**
+   * Disconnects the websocket connection, without removing the user set on client.
+   * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
+   * to call client.openConnection to reconnect to websocket.
+   *
+   * This is mainly useful on mobile side. You can only receive push notifications
+   * if you don't have active websocket connection.
+   * So when your app goes to background, you can call `client.closeConnection`.
+   * And when app comes back to foreground, call `client.openConnection`.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   */
+  closeConnection = (timeout?: number) => {
+    if (this.cleaningIntervalRef != null) {
+      clearInterval(this.cleaningIntervalRef);
+      this.cleaningIntervalRef = undefined;
+    }
+
+    if (!this.wsConnection) {
+      return Promise.resolve();
+    }
+
+    return this.wsConnection.disconnect(timeout);
+  };
+
+  /**
+   * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
+   */
+  openConnection = async () => {
+    if (!this.userID) {
+      throw Error(
+        'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
+      );
+    }
+
+    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+      this.logger(
+        'info',
+        'client:openConnection() - openConnection called twice, healthy connection already exists',
+        {
+          tags: ['connection', 'client'],
+        },
+      );
+
+      return Promise.resolve();
+    }
+
+    this.clientID = `${this.userID}--${randomId()}`;
+    this.wsPromise = this.connect();
+    this._startCleaning();
+    return this.wsPromise;
+  };
+
+  /**
+   * @deprecated Please use client.openConnction instead.
+   * @private
+   *
+   * Creates a new websocket connection with current user.
+   */
+  _setupConnection = this.openConnection;
 
   /**
 	 * updateAppSettings - updates application settings
@@ -624,29 +685,29 @@ export class StreamChat<
   }
 
   /**
-   * disconnect - closes the WS connection
+   * Disconnects the websocket and removes the user from client.
+   *
+   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
+   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  disconnect(timeout?: number) {
+  disconnectUser = async (timeout?: number) => {
     this.logger('info', 'client:disconnect() - Disconnecting the client', {
       tags: ['connection', 'client'],
     });
+
     // remove the user specific fields
     delete this.user;
     delete this._user;
     delete this.userID;
 
-    if (this.cleaningIntervalRef != null) {
-      clearInterval(this.cleaningIntervalRef);
-      this.cleaningIntervalRef = undefined;
-    }
-
     this.anonymous = false;
 
-    this.connectionEstablishedCount = 0;
+    const closePromise = this.closeConnection(timeout);
 
     for (const channel of Object.values(this.activeChannels)) {
       channel._disconnect();
     }
+
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
@@ -655,12 +716,16 @@ export class StreamChat<
     this.tokenManager.reset();
 
     // close the WS connection
-    if (this.wsConnection) {
-      return this.wsConnection.disconnect(timeout);
-    }
+    return closePromise;
+  };
 
-    return Promise.resolve();
-  }
+  /**
+   *
+   * @deprecated Please use client.disconnectUser instead.
+   *
+   * Disconnects the websocket and removes the user from client.
+   */
+  disconnect = this.disconnectUser;
 
   /**
    * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
@@ -824,6 +889,10 @@ export class StreamChat<
     this.listeners[key].push(callback);
     return {
       unsubscribe: () => {
+        this.logger('info', `Removing listener for ${key} event`, {
+          tags: ['event', 'client'],
+        });
+
         this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
     };
@@ -1102,6 +1171,130 @@ export class StreamChat<
     this.dispatchEvent(event);
   };
 
+  /**
+   * Updates the members and watchers of the currently active channels that contain this user
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateMemberWatcherReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      /** search the members and watchers and update as needed... */
+      if (channel?.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
+        }
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
+        }
+      }
+    }
+  };
+
+  /**
+   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @private
+   */
+  _updateUserReferences = this._updateMemberWatcherReferences;
+
+  /**
+   * @private
+   *
+   * Updates the messages from the currently active channels that contain this user,
+   * with updated user object.
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateUserMessageReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** update the messages from this user. */
+      state?.updateUserMessages(user);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Deletes the messages from the currently active channels that contain this user
+   *
+   * If hardDelete is true, all the content of message will be stripped down.
+   * Otherwise, only 'message.type' will be set as 'deleted'.
+   *
+   * @param {UserResponse<UserType>} user
+   * @param {boolean} hardDelete
+   */
+  _deleteUserMessageReference = (user: UserResponse<UserType>, hardDelete = false) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** deleted the messages from this user. */
+      state?.deleteUserMessages(user, hardDelete);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Handle following user related events:
+   * - user.presence.changed
+   * - user.updated
+   * - user.deleted
+   *
+   * @param {Event} event
+   */
+  _handleUserEvent = (
+    event: Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) => {
+    if (!event.user) {
+      return;
+    }
+
+    /** update the client.state with any changes to users */
+    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+      if (event.user?.id === this.userID) {
+        this.user = this.user && { ...this.user, ...event.user };
+        /** Updating only available properties in _user object. */
+        Object.keys(event.user).forEach((key) => {
+          if (this._user && key in this._user) {
+            /** @ts-expect-error */
+            this._user[key] = event.user[key];
+          }
+        });
+      }
+      this.state.updateUser(event.user);
+      this._updateMemberWatcherReferences(event.user);
+    }
+
+    if (event.type === 'user.updated') {
+      this._updateUserMessageReferences(event.user);
+    }
+
+    if (
+      event.type === 'user.deleted' &&
+      event.user.deleted_at &&
+      (event.mark_messages_deleted || event.hard_delete)
+    ) {
+      this._deleteUserMessageReference(event.user, event.hard_delete);
+    }
+  };
+
   _handleClientEvent(
     event: Event<
       AttachmentType,
@@ -1123,24 +1316,14 @@ export class StreamChat<
       },
     );
 
-    // update the client.state with any changes to users
     if (
-      event.user &&
-      (event.type === 'user.presence.changed' || event.type === 'user.updated')
+      event.type === 'user.presence.changed' ||
+      event.type === 'user.updated' ||
+      event.type === 'user.deleted'
     ) {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        // Updating only available properties in _user object.
-        Object.keys(event.user).forEach(function (key) {
-          if (client._user && key in client._user) {
-            // @ts-expect-error
-            client._user[key] = event.user[key];
-          }
-        });
-      }
-      client.state.updateUser(event.user);
-      client._updateUserReferences(event.user);
+      this._handleUserEvent(event);
     }
+
     if (event.type === 'health.check' && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
@@ -1235,7 +1418,7 @@ export class StreamChat<
         tags: ['connection'],
       },
     );
-    this.connectionID = this.wsConnection?.connectionID;
+
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
       this.logger(
@@ -1267,27 +1450,9 @@ export class StreamChat<
     this.setUserPromise = Promise.resolve();
   };
 
-  /*
-	_updateUserReferences updates the members and watchers of the currently active channels
-	that contain this user
-	*/
-  _updateUserReferences(user: UserResponse<UserType>) {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
-    for (const channelID of refs) {
-      const channel = this.activeChannels[channelID];
-      // search the members and watchers and update as needed...
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-      }
-    }
-  }
-
+  /**
+   * @private
+   */
   async connect() {
     this.connecting = true;
     const client = this;
@@ -1336,7 +1501,6 @@ export class StreamChat<
       });
     }
 
-    this.connectionID = this.wsConnection.connectionID;
     return handshake;
   }
 
@@ -1383,6 +1547,33 @@ export class StreamChat<
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * queryBannedUsers - Query user bans
+   *
+   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
+   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
+   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<BannedUsersResponse<ChannelType, CommandType, UserType>>} Ban Query Response
+   */
+  async queryBannedUsers(
+    filterConditions: BannedUsersFilters = {},
+    sort: BannedUsersSort = [],
+    options: BannedUsersPaginationOptions = {},
+  ) {
+    // Return a list of user bans
+    return await this.get<BannedUsersResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/query_banned_users',
+      {
+        payload: {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
   }
 
   /**
@@ -1558,6 +1749,30 @@ export class StreamChat<
     return await this.delete<APIResponse>(this.baseURL + '/devices', {
       id,
       ...(userID ? { user_id: userID } : {}),
+    });
+  }
+
+  /**
+   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
+   * Only available server-side.
+   *
+   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
+   * @returns {Promise<GetRateLimitsResponse>}
+   */
+  async getRateLimits(params?: {
+    android?: boolean;
+    endpoints?: EndpointName[];
+    ios?: boolean;
+    serverSide?: boolean;
+    web?: boolean;
+  }) {
+    const { serverSide, web, android, ios, endpoints } = params || {};
+    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
+      server_side: serverSide,
+      web,
+      android,
+      ios,
+      endpoints: endpoints ? endpoints.join(',') : undefined,
     });
   }
 
@@ -2277,6 +2492,7 @@ export class StreamChat<
       | 'type'
       | 'updated_at'
       | 'user'
+      | '__html'
     > = [
       'command',
       'created_at',
@@ -2288,6 +2504,7 @@ export class StreamChat<
       'type',
       'updated_at',
       'user',
+      '__html',
     ];
 
     reservedMessageFields.forEach(function (item) {
@@ -2303,6 +2520,20 @@ export class StreamChat<
         clonedMessage.user = { id: userId.id } as UserResponse<UserType>;
       }
     }
+
+    /**
+     * Server always expects mentioned_users to be array of string. We are adding extra check, just in case
+     * SDK missed this conversion.
+     */
+    if (
+      Array.isArray(clonedMessage.mentioned_users) &&
+      !isString(clonedMessage.mentioned_users[0])
+    ) {
+      clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
+        (mu) => ((mu as unknown) as UserResponse).id,
+      );
+    }
+
     return await this.post<
       UpdateMessageAPIResponse<
         AttachmentType,
@@ -2421,7 +2652,7 @@ export class StreamChat<
         user_id: this.userID,
         ...options.params,
         api_key: this.key,
-        connection_id: this.connectionID,
+        connection_id: this.wsConnection?.connectionID,
       },
       headers: {
         Authorization: token,
@@ -2551,6 +2782,21 @@ export class StreamChat<
     >(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
+    });
+  }
+
+  /**
+   * sendUserCustomEvent - Send a custom event to a user
+   *
+   * @param {string} targetUserID target user id
+   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
+    return await this.post<APIResponse>(`${this.baseURL}/users/${targetUserID}/event`, {
+      target_user_id: targetUserID,
+      event,
     });
   }
 
