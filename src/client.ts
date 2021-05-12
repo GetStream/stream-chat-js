@@ -661,26 +661,7 @@ export class StreamChat<
    * Revokes token for a user issued before given time
    */
   async revokeUserToken(userID: string, before?: Date | string | null) {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    }
-
-    if (before instanceof Date) {
-      before = before.toISOString();
-    }
-
-    if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
-    }
-
-    return await this.partialUpdateUser({
-      id: userID,
-      set: <Partial<UserResponse<UserType>>>{
-        revoke_tokens_issued_before: before,
-      },
-    });
+    return await this.revokeUsersToken([userID], before);
   }
 
   /**
