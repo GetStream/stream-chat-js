@@ -1342,33 +1342,6 @@ export class StreamChat<
     }
   }
 
-  _muteStatus(cid: string) {
-    let muteStatus;
-    this.mutedChannels.forEach(function (mute) {
-      if (mute.channel?.cid === cid) {
-        let muted = true;
-        if (mute.expires) {
-          muted = new Date(mute.expires).getTime() > new Date().getTime();
-        }
-        muteStatus = {
-          muted,
-          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
-          expiresAt: mute.expires ? new Date(mute.expires) : null,
-        };
-      }
-    });
-
-    if (muteStatus) {
-      return muteStatus;
-    }
-
-    return {
-      muted: false,
-      createdAt: null,
-      expiresAt: null,
-    };
-  }
-
   _callClientListeners = (
     event: Event<
       AttachmentType,
@@ -2239,6 +2212,40 @@ export class StreamChat<
       if (this.mutedUsers[i].target.id === targetID) return true;
     }
     return false;
+  }
+
+  /**
+   * channelMuteStatus - check if the channel is muted or not, can be used after connectUser() is called
+   *
+   * @param cid
+   */
+  channelMuteStatus = (cid: string) => this._muteStatus(cid).muted;
+
+  _muteStatus(cid: string) {
+    let muteStatus;
+    this.mutedChannels.forEach(function (mute) {
+      if (mute.channel?.cid === cid) {
+        let muted = true;
+        if (mute.expires) {
+          muted = new Date(mute.expires).getTime() > new Date().getTime();
+        }
+        muteStatus = {
+          muted,
+          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
+          expiresAt: mute.expires ? new Date(mute.expires) : null,
+        };
+      }
+    });
+
+    if (muteStatus) {
+      return muteStatus;
+    }
+
+    return {
+      muted: false,
+      createdAt: null,
+      expiresAt: null,
+    };
   }
 
   /**

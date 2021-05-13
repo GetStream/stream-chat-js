@@ -1137,6 +1137,7 @@ export class Channel<
   }
 
   _countMessageAsUnread(message: {
+    cid?: string;
     shadowed?: boolean;
     silent?: boolean;
     user?: { id?: string } | null;
@@ -1146,6 +1147,8 @@ export class Channel<
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
+
+    if (message.cid && this.getClient().channelMuteStatus(message.cid)) return false;
 
     return true;
   }
