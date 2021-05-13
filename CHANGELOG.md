@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## May 3, 2021 - 3.9.0
+
+### Feature
+
+- New endpoint to send custom user events [#664](https://github.com/GetStream/stream-chat-js/pull/664)
+- Support Node v16 [#671](https://github.com/GetStream/stream-chat-js/pull/671)
+
 ## March 29, 2021 - 3.8.0
 
 - Better handling of user.deleted and user.updated events [6eddf39](https://github.com/GetStream/stream-chat-js/commit/6eddf39487d6073a9b7654712f51772c893d8dc6)
