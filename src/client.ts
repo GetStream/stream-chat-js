@@ -2215,13 +2215,6 @@ export class StreamChat<
     return false;
   }
 
-  /**
-   * channelMuteStatus - check if the channel is muted or not, can be used after connectUser() is called
-   *
-   * @param cid
-   */
-  channelMuteStatus = (cid: string) => this._muteStatus(cid).muted;
-
   _muteStatus(cid: string) {
     let muteStatus;
     this.mutedChannels.forEach(function (mute) {
@@ -2248,6 +2241,13 @@ export class StreamChat<
       expiresAt: null,
     };
   }
+
+  /**
+   * channelMuteStatus - check if the channel is muted or not, can be used after connectUser() is called
+   *
+   * @param cid
+   */
+  channelMuteStatus = (cid: string) => this._muteStatus(cid).muted;
 
   /**
    * flagMessage - flag a message

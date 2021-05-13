@@ -16,6 +16,7 @@ import {
   EventAPIResponse,
   EventHandler,
   EventTypes,
+  FormatMessageResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
@@ -24,6 +25,7 @@ import {
   MarkReadOptions,
   Message,
   MessageFilters,
+  MessageResponse,
   MuteChannelAPIResponse,
   PaginationOptions,
   PartialUpdateChannel,
@@ -1136,12 +1138,25 @@ export class Channel<
     }
   }
 
-  _countMessageAsUnread(message: {
-    cid?: string;
-    shadowed?: boolean;
-    silent?: boolean;
-    user?: { id?: string } | null;
-  }) {
+  _countMessageAsUnread(
+    message:
+      | FormatMessageResponse<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          MessageType,
+          ReactionType,
+          UserType
+        >
+      | MessageResponse<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          MessageType,
+          ReactionType,
+          UserType
+        >,
+  ) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.user?.id === this.getClient().userID) return false;
