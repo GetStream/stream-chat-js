@@ -2554,10 +2554,10 @@ export class StreamChat<
    * @param {string} id the message id
    *
    * @param {PartialUpdateMessage<MessageType>}  partialMessageObject which should contain id and any of "set" or "unset" params;
-   *         example: {id: "user1", set:{field: value}, unset:["field2"]}
+   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
    * @param {string | { id: string }} [userId]
    *
-   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
+   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the updated message
    */
   async partialUpdateMessage(
     id: string,

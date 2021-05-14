@@ -1699,6 +1699,11 @@ export type Mute<UserType = UnknownType> = {
   user: UserResponse<UserType>;
 };
 
+export type PartialUpdateMessage<MessageType = UnknownType> = {
+  set?: Partial<MessageResponse<MessageType>>;
+  unset?: Array<keyof MessageResponse<MessageType>>;
+};
+
 export type PartialUpdateChannel<ChannelType = UnknownType> = {
   set?: Partial<ChannelResponse<ChannelType>>;
   unset?: Array<keyof ChannelResponse<ChannelType>>;
@@ -1708,11 +1713,6 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
-};
-
-export type PartialUpdateMessage<MessageType = UnknownType> = {
-  set?: Partial<MessageResponse<MessageType>>;
-  unset?: Array<keyof MessageResponse<MessageType>>;
 };
 
 export type PermissionAPIObject = {
