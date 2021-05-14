@@ -71,7 +71,7 @@ import {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
-  PartialUpdateMessage,
+  PartialMessageUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -2561,7 +2561,7 @@ export class StreamChat<
    */
   async partialUpdateMessage(
     id: string,
-    partialMessageObject: PartialUpdateMessage<MessageType>,
+    partialMessageObject: PartialMessageUpdate<MessageType>,
     userId?: string | { id: string },
   ) {
     if (!id) {
