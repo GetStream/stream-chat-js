@@ -2234,19 +2234,19 @@ export class StreamChat<
 
   _muteStatus(cid: string) {
     let muteStatus;
-    this.mutedChannels.forEach(function (mute) {
+    for (let i = 0; i < this.mutedChannels.length; i++) {
+      const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
-        let muted = true;
-        if (mute.expires) {
-          muted = new Date(mute.expires).getTime() > new Date().getTime();
-        }
         muteStatus = {
-          muted,
+          muted: mute.expires
+            ? new Date(mute.expires).getTime() > new Date().getTime()
+            : true,
           createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
           expiresAt: mute.expires ? new Date(mute.expires) : null,
         };
+        break;
       }
-    });
+    }
 
     if (muteStatus) {
       return muteStatus;
