@@ -1360,6 +1360,33 @@ export class StreamChat<
     }
   }
 
+  _muteStatus(cid: string) {
+    let muteStatus;
+    for (let i = 0; i < this.mutedChannels.length; i++) {
+      const mute = this.mutedChannels[i];
+      if (mute.channel?.cid === cid) {
+        muteStatus = {
+          muted: mute.expires
+            ? new Date(mute.expires).getTime() > new Date().getTime()
+            : true,
+          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
+          expiresAt: mute.expires ? new Date(mute.expires) : null,
+        };
+        break;
+      }
+    }
+
+    if (muteStatus) {
+      return muteStatus;
+    }
+
+    return {
+      muted: false,
+      createdAt: null,
+      expiresAt: null,
+    };
+  }
+
   _callClientListeners = (
     event: Event<
       AttachmentType,
@@ -2231,40 +2258,6 @@ export class StreamChat<
     }
     return false;
   }
-
-  _muteStatus(cid: string) {
-    let muteStatus;
-    for (let i = 0; i < this.mutedChannels.length; i++) {
-      const mute = this.mutedChannels[i];
-      if (mute.channel?.cid === cid) {
-        muteStatus = {
-          muted: mute.expires
-            ? new Date(mute.expires).getTime() > new Date().getTime()
-            : true,
-          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
-          expiresAt: mute.expires ? new Date(mute.expires) : null,
-        };
-        break;
-      }
-    }
-
-    if (muteStatus) {
-      return muteStatus;
-    }
-
-    return {
-      muted: false,
-      createdAt: null,
-      expiresAt: null,
-    };
-  }
-
-  /**
-   * channelMuteStatus - check if the channel is muted or not, can be used after connectUser() is called
-   *
-   * @param cid
-   */
-  channelMuteStatus = (cid: string) => this._muteStatus(cid).muted;
 
   /**
    * flagMessage - flag a message

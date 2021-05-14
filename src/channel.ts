@@ -856,12 +856,12 @@ export class Channel<
 
   /**
    * muteStatus - returns the mute status for the current channel
-   * @return {{ muted: boolean; createdAt?: string | null; expiresAt?: string | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+   * @return {{ muted: boolean; createdAt: Date | null; expiresAt: Date | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
    */
   muteStatus(): {
+    createdAt: Date | null;
+    expiresAt: Date | null;
     muted: boolean;
-    createdAt?: string | null;
-    expiresAt?: string | null;
   } {
     this._checkInitialized();
     return this.getClient()._muteStatus(this.cid);
@@ -1163,7 +1163,7 @@ export class Channel<
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    if (message.cid && this.getClient().channelMuteStatus(message.cid)) return false;
+    if (this.muteStatus().muted) return false;
 
     return true;
   }
