@@ -134,6 +134,7 @@ export type ChannelResponse<
   UserType = UnknownType
 > = ChannelType & {
   cid: string;
+  disabled: boolean;
   frozen: boolean;
   id: string;
   type: string;
