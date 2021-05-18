@@ -1706,8 +1706,8 @@ export type PartialUpdateChannel<ChannelType = UnknownType> = {
 
 export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
-  set?: Partial<UserResponse<UserType>>;
-  unset?: Array<keyof UserResponse<UserType>>;
+  set?: Partial<Omit<UserResponse<UserType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' |'user' | 'user_id'>>;
+  unset?: Array<keyof Omit<UserResponse<UserType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' |'user' | 'user_id'>>;
 };
 
 export type PartialMessageUpdate<MessageType = UnknownType> = {
