@@ -1706,13 +1706,15 @@ export type PartialUpdateChannel<ChannelType = UnknownType> = {
 
 export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
-  set?: Partial<Omit<UserResponse<UserType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' |'user' | 'user_id'>>;
-  unset?: Array<keyof Omit<UserResponse<UserType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' |'user' | 'user_id'>>;
+  set?: Partial<UserResponse<UserType>>;
+  unset?: Array<keyof UserResponse<UserType>>;
 };
 
+export type MessageUpdatableFields<MessageType = UnknownType> = Omit<MessageResponse<MessageType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'>
+
 export type PartialMessageUpdate<MessageType = UnknownType> = {
-  set?: Partial<MessageResponse<MessageType>>;
-  unset?: Array<keyof MessageResponse<MessageType>>;
+    set?: Partial<MessageUpdatableFields<MessageType>>;
+    unset?: Array<keyof MessageUpdatableFields<MessageType>>;
 };
 
 export type PermissionAPIObject = {
