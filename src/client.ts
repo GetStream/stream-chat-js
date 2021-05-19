@@ -1593,7 +1593,7 @@ export class StreamChat<
   ) {
     // Return a list of user bans
     return await this.get<MessageFlagsResponse<ChannelType, CommandType, UserType>>(
-      this.baseURL + '/query_message_flags',
+      this.baseURL + '/moderation/flags/message',
       {
         payload: {
           filter_conditions: filterConditions,
