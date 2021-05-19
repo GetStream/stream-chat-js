@@ -1751,11 +1751,14 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   unset?: Array<keyof UserResponse<UserType>>;
 };
 
-export type MessageUpdatableFields<MessageType = UnknownType> = Omit<MessageResponse<MessageType>, 'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'>
+export type MessageUpdatableFields<MessageType = UnknownType> = Omit<
+  MessageResponse<MessageType>,
+  'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'
+>;
 
 export type PartialMessageUpdate<MessageType = UnknownType> = {
-    set?: Partial<MessageUpdatableFields<MessageType>>;
-    unset?: Array<keyof MessageUpdatableFields<MessageType>>;
+  set?: Partial<MessageUpdatableFields<MessageType>>;
+  unset?: Array<keyof MessageUpdatableFields<MessageType>>;
 };
 
 export type PermissionAPIObject = {
