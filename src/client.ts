@@ -634,6 +634,11 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
+  _tokenRevokeEmptyStringError = () =>
+    new Error(
+      "Don't pass blank string for since, use null instead if resetting the token revoke",
+    );
+
   /**
    * Revokes all tokens on application level issued before given time
    */
@@ -647,9 +652,7 @@ export class StreamChat<
     }
 
     if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
+      throw this._tokenRevokeEmptyStringError();
     }
 
     return await this.updateAppSettings({
@@ -677,9 +680,7 @@ export class StreamChat<
     }
 
     if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
+      throw this._tokenRevokeEmptyStringError();
     }
 
     const users: PartialUserUpdate<UserType>[] = [];
@@ -864,7 +865,6 @@ export class StreamChat<
       extra.exp = exp;
     }
 
-    // add iat claim for token revocation
     if (iat) {
       extra.iat = iat;
     }
