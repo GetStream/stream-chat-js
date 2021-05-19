@@ -74,6 +74,7 @@ import {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
+  PartialMessageUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -2431,6 +2432,7 @@ export class StreamChat<
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
+  // todo use partialMessageUpdate and allow pin using server side auth
   pinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2463,6 +2465,7 @@ export class StreamChat<
    * unpinMessage - unpins provided message
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    */
+  // todo use partialMessageUpdate and allow unpin using server side auth
   unpinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2569,6 +2572,44 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
+    });
+  }
+
+  /**
+   * partialUpdateMessage - Update the given message id while retaining additional properties
+   *
+   * @param {string} id the message id
+   *
+   * @param {PartialUpdateMessage<MessageType>}  partialMessageObject which should contain id and any of "set" or "unset" params;
+   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
+   * @param {string | { id: string }} [userId]
+   *
+   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the updated message
+   */
+  async partialUpdateMessage(
+    id: string,
+    partialMessageObject: PartialMessageUpdate<MessageType>,
+    userId?: string | { id: string },
+  ) {
+    if (!id) {
+      throw Error('Please specify the message id when calling partialUpdateMessage');
+    }
+    let user = userId;
+    if (userId != null && isString(userId)) {
+      user = { id: userId };
+    }
+    return await this.put<
+      UpdateMessageAPIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + `/messages/${id}`, {
+      ...partialMessageObject,
+      user,
     });
   }
 
