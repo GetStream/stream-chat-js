@@ -1084,11 +1084,34 @@ export type EventTypes =
 
 export type AscDesc = 1 | -1;
 
-export type MessageFlagsFilters = {
+export type MessageFlagsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
   user_id?: string;
 };
+
+export type MessageFlagsFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
+  } & {
+      [Key in keyof Omit<
+        MessageFlagsFiltersOptions,
+        'channel_cid' | 'user_id' | 'is_reviewed'
+      >]:
+        | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
+        | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
+    }
+>;
 
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;

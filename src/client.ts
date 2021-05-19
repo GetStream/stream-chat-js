@@ -1582,7 +1582,7 @@ export class StreamChat<
   /**
    * queryMessageFlags - Query message flags
    *
-   * @param {MessageFlagsFilters} filterConditions filter conditions
+   * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
    * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
    * @return {Promise<MessageFlagsResponse<ChannelType, CommandType, UserType>>} Message Flags Response
@@ -1591,7 +1591,7 @@ export class StreamChat<
     filterConditions: MessageFlagsFilters = {},
     options: MessageFlagsPaginationOptions = {},
   ) {
-    // Return a list of user bans
+    // Return a list of message flags
     return await this.get<MessageFlagsResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/moderation/flags/message',
       {
