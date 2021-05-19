@@ -369,7 +369,7 @@ export class Channel<
    * @param {SearchMessageSort} sort sort values
    * @param {SearchV2Options & {client_id?: string; connection_id?: string;  query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
    *
-   * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
+   * @return {Promise<SearchV2APIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
   async searchv2(
     query:
