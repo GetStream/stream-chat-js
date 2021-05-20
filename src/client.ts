@@ -638,15 +638,7 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
-  _tokenRevokeEmptyStringError = () =>
-    new Error(
-      "Don't pass blank string for since, use null instead if resetting the token revoke",
-    );
-
-  /**
-   * Revokes all tokens on application level issued before given time
-   */
-  async revokeTokens(before?: Date | string | null) {
+  _revokeTokensCheckDate = (before: Date | string | null | undefined): string | null => {
     if (before === undefined) {
       before = new Date().toISOString();
     }
@@ -656,11 +648,20 @@ export class StreamChat<
     }
 
     if (before === '') {
-      throw this._tokenRevokeEmptyStringError();
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
     }
 
+    return before;
+  };
+
+  /**
+   * Revokes all tokens on application level issued before given time
+   */
+  async revokeTokens(before?: Date | string | null) {
     return await this.updateAppSettings({
-      revoke_tokens_issued_before: before,
+      revoke_tokens_issued_before: this._revokeTokensCheckDate(before),
     });
   }
 
@@ -675,17 +676,7 @@ export class StreamChat<
    * Revokes tokens for a list of users issued before given time
    */
   async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    }
-
-    if (before instanceof Date) {
-      before = before.toISOString();
-    }
-
-    if (before === '') {
-      throw this._tokenRevokeEmptyStringError();
-    }
+    before = this._revokeTokensCheckDate(before);
 
     const users: PartialUserUpdate<UserType>[] = [];
     for (const userID of userIDs) {
