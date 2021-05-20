@@ -108,6 +108,35 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type MessageFlagsResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType
+> = APIResponse & {
+  flags?: Array<{
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+    user: UserResponse<UserType>;
+    approved_at?: string;
+    created_at?: string;
+    created_by_automod?: boolean;
+    moderation_result?: {};
+    rejected_at?: string;
+    reviewed_at?: string;
+    reviewed_by?: UserResponse<UserType>;
+    updated_at?: string;
+  }>;
+};
+
 export type BannedUsersResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -135,6 +164,7 @@ export type ChannelResponse<
   UserType = UnknownType
 > = ChannelType & {
   cid: string;
+  disabled: boolean;
   frozen: boolean;
   id: string;
   type: string;
@@ -701,6 +731,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
  * Option Types
  */
 
+export type MessageFlagsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
 export type BannedUsersPaginationOptions = Omit<
   PaginationOptions,
   'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
@@ -1050,6 +1085,35 @@ export type EventTypes =
  */
 
 export type AscDesc = 1 | -1;
+
+export type MessageFlagsFiltersOptions = {
+  channel_cid?: string;
+  is_reviewed?: boolean;
+  user_id?: string;
+};
+
+export type MessageFlagsFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
+  } & {
+      [Key in keyof Omit<
+        MessageFlagsFiltersOptions,
+        'channel_cid' | 'user_id' | 'is_reviewed'
+      >]:
+        | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
+        | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
+    }
+>;
 
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
@@ -1623,7 +1687,8 @@ export type EndpointName =
   | 'ExportChannels'
   | 'GetExportChannelsStatus'
   | 'CheckSQS'
-  | 'GetRateLimits';
+  | 'GetRateLimits'
+  | 'MessageUpdatePartial';
 
 export type ExportChannelRequest = {
   id: string;
@@ -1710,6 +1775,16 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
+};
+
+export type MessageUpdatableFields<MessageType = UnknownType> = Omit<
+  MessageResponse<MessageType>,
+  'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'
+>;
+
+export type PartialMessageUpdate<MessageType = UnknownType> = {
+  set?: Partial<MessageUpdatableFields<MessageType>>;
+  unset?: Array<keyof MessageUpdatableFields<MessageType>>;
 };
 
 export type PermissionAPIObject = {
