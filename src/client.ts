@@ -638,6 +638,59 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
+  _normalizeDate = (before: Date | string | null | undefined): string | null => {
+    if (before === undefined) {
+      before = new Date().toISOString();
+    }
+
+    if (before instanceof Date) {
+      before = before.toISOString();
+    }
+
+    if (before === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
+    }
+
+    return before;
+  };
+
+  /**
+   * Revokes all tokens on application level issued before given time
+   */
+  async revokeTokens(before?: Date | string | null) {
+    return await this.updateAppSettings({
+      revoke_tokens_issued_before: this._normalizeDate(before),
+    });
+  }
+
+  /**
+   * Revokes token for a user issued before given time
+   */
+  async revokeUserToken(userID: string, before?: Date | string | null) {
+    return await this.revokeUsersToken([userID], before);
+  }
+
+  /**
+   * Revokes tokens for a list of users issued before given time
+   */
+  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
+    before = this._normalizeDate(before);
+
+    const users: PartialUserUpdate<UserType>[] = [];
+    for (const userID of userIDs) {
+      users.push({
+        id: userID,
+        set: <Partial<UserResponse<UserType>>>{
+          revoke_tokens_issued_before: before,
+        },
+      });
+    }
+
+    return await this.partialUpdateUsers(users);
+  }
+
   /**
    * getAppSettings - retrieves application settings
    */
@@ -797,14 +850,18 @@ export class StreamChat<
    *
    * @return {string} Returns a token
    */
-  createToken(userID: string, exp?: number) {
+  createToken(userID: string, exp?: number, iat?: number) {
     if (this.secret == null) {
       throw Error(`tokens can only be created server-side using the API Secret`);
     }
-    const extra: { exp?: number } = {};
+    const extra: { exp?: number; iat?: number } = {};
 
     if (exp) {
       extra.exp = exp;
+    }
+
+    if (iat) {
+      extra.iat = iat;
     }
 
     return JWTUserToken(this.secret, userID, extra, {});
