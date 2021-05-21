@@ -108,6 +108,18 @@ export type AppSettingsAPIResponse<
   };
 };
 
+export type ModerationResult = {
+  action: string;
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+  user_bad_karma: boolean;
+  user_karma: number;
+  blocked_word?: string;
+  blocklist_name?: string;
+  moderated_by?: string;
+};
+
 export type MessageFlagsResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
@@ -129,7 +141,7 @@ export type MessageFlagsResponse<
     approved_at?: string;
     created_at?: string;
     created_by_automod?: boolean;
-    moderation_result?: {};
+    moderation_result?: ModerationResult;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: UserResponse<UserType>;
