@@ -638,7 +638,7 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
-  _revokeTokensCheckDate = (before: Date | string | null | undefined): string | null => {
+  _normalizeDate = (before: Date | string | null | undefined): string | null => {
     if (before === undefined) {
       before = new Date().toISOString();
     }
@@ -661,7 +661,7 @@ export class StreamChat<
    */
   async revokeTokens(before?: Date | string | null) {
     return await this.updateAppSettings({
-      revoke_tokens_issued_before: this._revokeTokensCheckDate(before),
+      revoke_tokens_issued_before: this._normalizeDate(before),
     });
   }
 
@@ -676,7 +676,7 @@ export class StreamChat<
    * Revokes tokens for a list of users issued before given time
    */
   async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    before = this._revokeTokensCheckDate(before);
+    before = this._normalizeDate(before);
 
     const users: PartialUserUpdate<UserType>[] = [];
     for (const userID of userIDs) {
