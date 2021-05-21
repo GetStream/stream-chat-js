@@ -97,6 +97,7 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    revoke_tokens_issued_before?: string;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -721,6 +722,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
 };
@@ -1433,6 +1435,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
