@@ -655,13 +655,7 @@ export class StreamChat<
   /**
    * Revokes all tokens on application level issued before given time
    */
-  async revokeTokens(before?: Date | string | null) {
-    if (before === undefined) {
-      throw new Error(
-        'Passing before parameter is mandatory for application level token revocation',
-      );
-    }
-
+  async revokeTokens(before: Date | string | null) {
     return await this.updateAppSettings({
       revoke_tokens_issued_before: this._normalizeDate(before),
     });
