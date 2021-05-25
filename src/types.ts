@@ -97,6 +97,7 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    revoke_tokens_issued_before?: string;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -105,6 +106,18 @@ export type AppSettingsAPIResponse<
     user_search_disallowed_roles?: string[];
     webhook_url?: string;
   };
+};
+
+export type ModerationResult = {
+  action: string;
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+  user_bad_karma: boolean;
+  user_karma: number;
+  blocked_word?: string;
+  blocklist_name?: string;
+  moderated_by?: string;
 };
 
 export type MessageFlagsResponse<
@@ -128,7 +141,7 @@ export type MessageFlagsResponse<
     approved_at?: string;
     created_at?: string;
     created_by_automod?: boolean;
-    moderation_result?: {};
+    moderation_result?: ModerationResult;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: UserResponse<UserType>;
@@ -747,6 +760,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
 };
@@ -1474,6 +1488,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;

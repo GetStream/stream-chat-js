@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## May 21, 2021 - 3.10.0
+
+### Feature
+
+- `client.partialUpdateMessage()` to partially update messages [#576](https://github.com/GetStream/stream-chat-js/pull/576)
+- `client.queryMessageFlags()` to query flagged messages [#676](https://github.com/GetStream/stream-chat-js/pull/676)
+- `client.createToken` add support to have `iat` claim while generating tokens [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokeTokens()` method to revoke/unrevoke tokens on an application level [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokeUserToken()` method to revoke/unrevoke tokens on user level [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokenUsersToken()` method to revoke/unrevoke tokens for multiple users at once [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+
 ## May 3, 2021 - 3.9.0
 
 ### Feature
