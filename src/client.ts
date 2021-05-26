@@ -54,6 +54,9 @@ import {
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
+  MessageFlagsFilters,
+  MessageFlagsPaginationOptions,
+  MessageFlagsResponse,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -71,6 +74,7 @@ import {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
+  PartialMessageUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -634,6 +638,59 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
+  _normalizeDate = (before: Date | string | null | undefined): string | null => {
+    if (before === undefined) {
+      before = new Date().toISOString();
+    }
+
+    if (before instanceof Date) {
+      before = before.toISOString();
+    }
+
+    if (before === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
+    }
+
+    return before;
+  };
+
+  /**
+   * Revokes all tokens on application level issued before given time
+   */
+  async revokeTokens(before?: Date | string | null) {
+    return await this.updateAppSettings({
+      revoke_tokens_issued_before: this._normalizeDate(before),
+    });
+  }
+
+  /**
+   * Revokes token for a user issued before given time
+   */
+  async revokeUserToken(userID: string, before?: Date | string | null) {
+    return await this.revokeUsersToken([userID], before);
+  }
+
+  /**
+   * Revokes tokens for a list of users issued before given time
+   */
+  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
+    before = this._normalizeDate(before);
+
+    const users: PartialUserUpdate<UserType>[] = [];
+    for (const userID of userIDs) {
+      users.push({
+        id: userID,
+        set: <Partial<UserResponse<UserType>>>{
+          revoke_tokens_issued_before: before,
+        },
+      });
+    }
+
+    return await this.partialUpdateUsers(users);
+  }
+
   /**
    * getAppSettings - retrieves application settings
    */
@@ -793,14 +850,18 @@ export class StreamChat<
    *
    * @return {string} Returns a token
    */
-  createToken(userID: string, exp?: number) {
+  createToken(userID: string, exp?: number, iat?: number) {
     if (this.secret == null) {
       throw Error(`tokens can only be created server-side using the API Secret`);
     }
-    const extra: { exp?: number } = {};
+    const extra: { exp?: number; iat?: number } = {};
 
     if (exp) {
       extra.exp = exp;
+    }
+
+    if (iat) {
+      extra.iat = iat;
     }
 
     return JWTUserToken(this.secret, userID, extra, {});
@@ -1569,6 +1630,30 @@ export class StreamChat<
         payload: {
           filter_conditions: filterConditions,
           sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
+  }
+
+  /**
+   * queryMessageFlags - Query message flags
+   *
+   * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
+   * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<MessageFlagsResponse<ChannelType, CommandType, UserType>>} Message Flags Response
+   */
+  async queryMessageFlags(
+    filterConditions: MessageFlagsFilters = {},
+    options: MessageFlagsPaginationOptions = {},
+  ) {
+    // Return a list of message flags
+    return await this.get<MessageFlagsResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/moderation/flags/message',
+      {
+        payload: {
+          filter_conditions: filterConditions,
           ...options,
         },
       },
@@ -2404,6 +2489,7 @@ export class StreamChat<
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
+  // todo use partialMessageUpdate and allow pin using server side auth
   pinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2436,6 +2522,7 @@ export class StreamChat<
    * unpinMessage - unpins provided message
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    */
+  // todo use partialMessageUpdate and allow unpin using server side auth
   unpinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2542,6 +2629,44 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
+    });
+  }
+
+  /**
+   * partialUpdateMessage - Update the given message id while retaining additional properties
+   *
+   * @param {string} id the message id
+   *
+   * @param {PartialUpdateMessage<MessageType>}  partialMessageObject which should contain id and any of "set" or "unset" params;
+   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
+   * @param {string | { id: string }} [userId]
+   *
+   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the updated message
+   */
+  async partialUpdateMessage(
+    id: string,
+    partialMessageObject: PartialMessageUpdate<MessageType>,
+    userId?: string | { id: string },
+  ) {
+    if (!id) {
+      throw Error('Please specify the message id when calling partialUpdateMessage');
+    }
+    let user = userId;
+    if (userId != null && isString(userId)) {
+      user = { id: userId };
+    }
+    return await this.put<
+      UpdateMessageAPIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + `/messages/${id}`, {
+      ...partialMessageObject,
+      user,
     });
   }
 
