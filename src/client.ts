@@ -56,6 +56,9 @@ import {
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
+  MessageFlagsFilters,
+  MessageFlagsPaginationOptions,
+  MessageFlagsResponse,
   FlagMessageResponse,
   FlagUserResponse,
   GetChannelTypeResponse,
@@ -73,6 +76,7 @@ import {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
+  PartialMessageUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
@@ -95,6 +99,7 @@ import {
   UpdateCommandResponse,
   UpdatedMessage,
   UpdateMessageAPIResponse,
+  UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
@@ -240,7 +245,7 @@ export class StreamChat<
       ...inputOptions,
     };
 
-    if (this.node) {
+    if (this.node && !this.options.httpsAgent) {
       this.options.httpsAgent = new https.Agent({
         keepAlive: true,
         keepAliveMsecs: 3000,
@@ -454,7 +459,7 @@ export class StreamChat<
 
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
-    this.wsBaseURL = this.baseURL.replace('http', 'ws');
+    this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
@@ -637,6 +642,59 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
+  _normalizeDate = (before: Date | string | null | undefined): string | null => {
+    if (before === undefined) {
+      before = new Date().toISOString();
+    }
+
+    if (before instanceof Date) {
+      before = before.toISOString();
+    }
+
+    if (before === '') {
+      throw new Error(
+        "Don't pass blank string for since, use null instead if resetting the token revoke",
+      );
+    }
+
+    return before;
+  };
+
+  /**
+   * Revokes all tokens on application level issued before given time
+   */
+  async revokeTokens(before?: Date | string | null) {
+    return await this.updateAppSettings({
+      revoke_tokens_issued_before: this._normalizeDate(before),
+    });
+  }
+
+  /**
+   * Revokes token for a user issued before given time
+   */
+  async revokeUserToken(userID: string, before?: Date | string | null) {
+    return await this.revokeUsersToken([userID], before);
+  }
+
+  /**
+   * Revokes tokens for a list of users issued before given time
+   */
+  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
+    before = this._normalizeDate(before);
+
+    const users: PartialUserUpdate<UserType>[] = [];
+    for (const userID of userIDs) {
+      users.push({
+        id: userID,
+        set: <Partial<UserResponse<UserType>>>{
+          revoke_tokens_issued_before: before,
+        },
+      });
+    }
+
+    return await this.partialUpdateUsers(users);
+  }
+
   /**
    * getAppSettings - retrieves application settings
    */
@@ -796,14 +854,18 @@ export class StreamChat<
    *
    * @return {string} Returns a token
    */
-  createToken(userID: string, exp?: number) {
+  createToken(userID: string, exp?: number, iat?: number) {
     if (this.secret == null) {
       throw Error(`tokens can only be created server-side using the API Secret`);
     }
-    const extra: { exp?: number } = {};
+    const extra: { exp?: number; iat?: number } = {};
 
     if (exp) {
       extra.exp = exp;
+    }
+
+    if (iat) {
+      extra.iat = iat;
     }
 
     return JWTUserToken(this.secret, userID, extra, {});
@@ -1173,6 +1235,130 @@ export class StreamChat<
     this.dispatchEvent(event);
   };
 
+  /**
+   * Updates the members and watchers of the currently active channels that contain this user
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateMemberWatcherReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      /** search the members and watchers and update as needed... */
+      if (channel?.state) {
+        if (channel.state.members[user.id]) {
+          channel.state.members[user.id].user = user;
+        }
+        if (channel.state.watchers[user.id]) {
+          channel.state.watchers[user.id] = user;
+        }
+      }
+    }
+  };
+
+  /**
+   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @private
+   */
+  _updateUserReferences = this._updateMemberWatcherReferences;
+
+  /**
+   * @private
+   *
+   * Updates the messages from the currently active channels that contain this user,
+   * with updated user object.
+   *
+   * @param {UserResponse<UserType>} user
+   */
+  _updateUserMessageReferences = (user: UserResponse<UserType>) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** update the messages from this user. */
+      state?.updateUserMessages(user);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Deletes the messages from the currently active channels that contain this user
+   *
+   * If hardDelete is true, all the content of message will be stripped down.
+   * Otherwise, only 'message.type' will be set as 'deleted'.
+   *
+   * @param {UserResponse<UserType>} user
+   * @param {boolean} hardDelete
+   */
+  _deleteUserMessageReference = (user: UserResponse<UserType>, hardDelete = false) => {
+    const refMap = this.state.userChannelReferences[user.id] || {};
+
+    for (const channelID in refMap) {
+      const channel = this.activeChannels[channelID];
+      const state = channel.state;
+
+      /** deleted the messages from this user. */
+      state?.deleteUserMessages(user, hardDelete);
+    }
+  };
+
+  /**
+   * @private
+   *
+   * Handle following user related events:
+   * - user.presence.changed
+   * - user.updated
+   * - user.deleted
+   *
+   * @param {Event} event
+   */
+  _handleUserEvent = (
+    event: Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) => {
+    if (!event.user) {
+      return;
+    }
+
+    /** update the client.state with any changes to users */
+    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+      if (event.user?.id === this.userID) {
+        this.user = this.user && { ...this.user, ...event.user };
+        /** Updating only available properties in _user object. */
+        Object.keys(event.user).forEach((key) => {
+          if (this._user && key in this._user) {
+            /** @ts-expect-error */
+            this._user[key] = event.user[key];
+          }
+        });
+      }
+      this.state.updateUser(event.user);
+      this._updateMemberWatcherReferences(event.user);
+    }
+
+    if (event.type === 'user.updated') {
+      this._updateUserMessageReferences(event.user);
+    }
+
+    if (
+      event.type === 'user.deleted' &&
+      event.user.deleted_at &&
+      (event.mark_messages_deleted || event.hard_delete)
+    ) {
+      this._deleteUserMessageReference(event.user, event.hard_delete);
+    }
+  };
+
   _handleClientEvent(
     event: Event<
       AttachmentType,
@@ -1194,24 +1380,14 @@ export class StreamChat<
       },
     );
 
-    // update the client.state with any changes to users
     if (
-      event.user &&
-      (event.type === 'user.presence.changed' || event.type === 'user.updated')
+      event.type === 'user.presence.changed' ||
+      event.type === 'user.updated' ||
+      event.type === 'user.deleted'
     ) {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        // Updating only available properties in _user object.
-        Object.keys(event.user).forEach(function (key) {
-          if (client._user && key in client._user) {
-            // @ts-expect-error
-            client._user[key] = event.user[key];
-          }
-        });
-      }
-      client.state.updateUser(event.user);
-      client._updateUserReferences(event.user);
+      this._handleUserEvent(event);
     }
+
     if (event.type === 'health.check' && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
@@ -1338,27 +1514,6 @@ export class StreamChat<
     this.setUserPromise = Promise.resolve();
   };
 
-  /*
-	_updateUserReferences updates the members and watchers of the currently active channels
-	that contain this user
-	*/
-  _updateUserReferences(user: UserResponse<UserType>) {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-    const refs = Object.keys(refMap);
-    for (const channelID of refs) {
-      const channel = this.activeChannels[channelID];
-      // search the members and watchers and update as needed...
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-      }
-    }
-  }
-
   /**
    * @private
    */
@@ -1479,6 +1634,30 @@ export class StreamChat<
         payload: {
           filter_conditions: filterConditions,
           sort: normalizeQuerySort(sort),
+          ...options,
+        },
+      },
+    );
+  }
+
+  /**
+   * queryMessageFlags - Query message flags
+   *
+   * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
+   * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<MessageFlagsResponse<ChannelType, CommandType, UserType>>} Message Flags Response
+   */
+  async queryMessageFlags(
+    filterConditions: MessageFlagsFilters = {},
+    options: MessageFlagsPaginationOptions = {},
+  ) {
+    // Return a list of message flags
+    return await this.get<MessageFlagsResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/moderation/flags/message',
+      {
+        payload: {
+          filter_conditions: filterConditions,
           ...options,
         },
       },
@@ -2414,6 +2593,7 @@ export class StreamChat<
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
+  // todo use partialMessageUpdate and allow pin using server side auth
   pinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2446,6 +2626,7 @@ export class StreamChat<
    * unpinMessage - unpins provided message
    * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
    */
+  // todo use partialMessageUpdate and allow unpin using server side auth
   unpinMessage(
     message: UpdatedMessage<
       AttachmentType,
@@ -2552,6 +2733,44 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
+    });
+  }
+
+  /**
+   * partialUpdateMessage - Update the given message id while retaining additional properties
+   *
+   * @param {string} id the message id
+   *
+   * @param {PartialUpdateMessage<MessageType>}  partialMessageObject which should contain id and any of "set" or "unset" params;
+   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
+   * @param {string | { id: string }} [userId]
+   *
+   * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the updated message
+   */
+  async partialUpdateMessage(
+    id: string,
+    partialMessageObject: PartialMessageUpdate<MessageType>,
+    userId?: string | { id: string },
+  ) {
+    if (!id) {
+      throw Error('Please specify the message id when calling partialUpdateMessage');
+    }
+    let user = userId;
+    if (userId != null && isString(userId)) {
+      user = { id: userId };
+    }
+    return await this.put<
+      UpdateMessageAPIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this.baseURL + `/messages/${id}`, {
+      ...partialMessageObject,
+      user,
     });
   }
 
@@ -2751,6 +2970,21 @@ export class StreamChat<
     >(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
+    });
+  }
+
+  /**
+   * sendUserCustomEvent - Send a custom event to a user
+   *
+   * @param {string} targetUserID target user id
+   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
+    return await this.post<APIResponse>(`${this.baseURL}/users/${targetUserID}/event`, {
+      target_user_id: targetUserID,
+      event,
     });
   }
 

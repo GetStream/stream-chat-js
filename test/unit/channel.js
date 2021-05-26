@@ -10,6 +10,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { StreamChat } from '../../src/client';
 import { Channel } from '../../src/channel';
+import { ClientState } from '../../src';
 
 const expect = chai.expect;
 
@@ -23,6 +24,7 @@ describe('Channel count unread', function () {
 		user,
 		userID: 'user',
 		userMuteStatus: (targetId) => targetId.startsWith('mute'),
+		state: new ClientState(),
 	});
 
 	const ignoredMessages = [
@@ -114,6 +116,7 @@ describe('Channel _handleChannelEvent', function () {
 			user,
 			userID: user.id,
 			userMuteStatus: (targetId) => targetId.startsWith('mute'),
+			state: new ClientState(),
 		},
 		'messaging',
 		'id',
