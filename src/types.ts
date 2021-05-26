@@ -83,7 +83,7 @@ export type AppSettingsAPIResponse<
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
-    enforce_unique_usernames?: string;
+    enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
@@ -97,6 +97,7 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
+    revoke_tokens_issued_before?: string;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -105,6 +106,47 @@ export type AppSettingsAPIResponse<
     user_search_disallowed_roles?: string[];
     webhook_url?: string;
   };
+};
+
+export type ModerationResult = {
+  action: string;
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+  user_bad_karma: boolean;
+  user_karma: number;
+  blocked_word?: string;
+  blocklist_name?: string;
+  moderated_by?: string;
+};
+
+export type MessageFlagsResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType
+> = APIResponse & {
+  flags?: Array<{
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >;
+    user: UserResponse<UserType>;
+    approved_at?: string;
+    created_at?: string;
+    created_by_automod?: boolean;
+    moderation_result?: ModerationResult;
+    rejected_at?: string;
+    reviewed_at?: string;
+    reviewed_by?: UserResponse<UserType>;
+    updated_at?: string;
+  }>;
 };
 
 export type BannedUsersResponse<
@@ -134,12 +176,14 @@ export type ChannelResponse<
   UserType = UnknownType
 > = ChannelType & {
   cid: string;
+  disabled: boolean;
   frozen: boolean;
   id: string;
   type: string;
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages;
   config?: ChannelConfigWithInfo<CommandType>;
+  cooldown?: number;
   created_at?: string;
   created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
@@ -690,6 +734,7 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
 };
@@ -697,6 +742,11 @@ export type UserResponse<UserType = UnknownType> = User<UserType> & {
 /**
  * Option Types
  */
+
+export type MessageFlagsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
 
 export type BannedUsersPaginationOptions = Omit<
   PaginationOptions,
@@ -950,6 +1000,8 @@ export type Event<
   clear_history?: boolean;
   connection_id?: string;
   created_at?: string;
+  hard_delete?: boolean;
+  mark_messages_deleted?: boolean;
   me?: OwnUserResponse<ChannelType, CommandType, UserType>;
   member?: ChannelMemberResponse<UserType>;
   message?: MessageResponse<
@@ -970,6 +1022,10 @@ export type Event<
   user?: UserResponse<UserType>;
   user_id?: string;
   watcher_count?: number;
+};
+
+export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
+  type: string;
 };
 
 export type EventHandler<
@@ -1041,6 +1097,35 @@ export type EventTypes =
  */
 
 export type AscDesc = 1 | -1;
+
+export type MessageFlagsFiltersOptions = {
+  channel_cid?: string;
+  is_reviewed?: boolean;
+  user_id?: string;
+};
+
+export type MessageFlagsFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
+  } & {
+      [Key in keyof Omit<
+        MessageFlagsFiltersOptions,
+        'channel_cid' | 'user_id' | 'is_reviewed'
+      >]:
+        | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
+        | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
+    }
+>;
 
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
@@ -1362,6 +1447,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
@@ -1613,7 +1699,8 @@ export type EndpointName =
   | 'ExportChannels'
   | 'GetExportChannelsStatus'
   | 'CheckSQS'
-  | 'GetRateLimits';
+  | 'GetRateLimits'
+  | 'MessageUpdatePartial';
 
 export type ExportChannelRequest = {
   id: string;
@@ -1700,6 +1787,16 @@ export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;
   unset?: Array<keyof UserResponse<UserType>>;
+};
+
+export type MessageUpdatableFields<MessageType = UnknownType> = Omit<
+  MessageResponse<MessageType>,
+  'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'
+>;
+
+export type PartialMessageUpdate<MessageType = UnknownType> = {
+  set?: Partial<MessageUpdatableFields<MessageType>>;
+  unset?: Array<keyof MessageUpdatableFields<MessageType>>;
 };
 
 export type PermissionAPIObject = {

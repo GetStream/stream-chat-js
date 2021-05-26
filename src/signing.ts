@@ -40,6 +40,10 @@ export function JWTUserToken(
     { algorithm: 'HS256', noTimestamp: true },
     jwtOptions,
   );
+
+  if (payload.iat) {
+    opts.noTimestamp = false;
+  }
   return jwt.sign(payload, apiSecret, opts);
 }
 

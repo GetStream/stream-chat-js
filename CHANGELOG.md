@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## May 21, 2021 - 3.10.0
+
+### Feature
+
+- `client.partialUpdateMessage()` to partially update messages [#576](https://github.com/GetStream/stream-chat-js/pull/576)
+- `client.queryMessageFlags()` to query flagged messages [#676](https://github.com/GetStream/stream-chat-js/pull/676)
+- `client.createToken` add support to have `iat` claim while generating tokens [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokeTokens()` method to revoke/unrevoke tokens on an application level [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokeUserToken()` method to revoke/unrevoke tokens on user level [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+- `client.revokenUsersToken()` method to revoke/unrevoke tokens for multiple users at once [#674](https://github.com/GetStream/stream-chat-js/pull/674)
+
+## May 3, 2021 - 3.9.0
+
+### Feature
+
+- New endpoint to send custom user events [#664](https://github.com/GetStream/stream-chat-js/pull/664)
+- Support Node v16 [#671](https://github.com/GetStream/stream-chat-js/pull/671)
+
+## March 29, 2021 - 3.8.0
+
+- Better handling of user.deleted and user.updated events [6eddf39](https://github.com/GetStream/stream-chat-js/commit/6eddf39487d6073a9b7654712f51772c893d8dc6)
+  - When `user.deleted` event is received, mark messages from corresponding user as deleted.
+  - When `user.updated` event is received, update references of corresponding user in messages.
+- Bug with with ChannelState.clean function [28581fd](https://github.com/GetStream/stream-chat-js/commit/28581fd9fae0f3cf761ac0cf785910cea476c61c)
+- Allow overriding of https agent on StreamChat [f18e397](https://github.com/GetStream/stream-chat-js/commit/f18e3974caa2b384d52beca10f25d34c726969e8)
+  ```js
+    const client = StreamChat.getInstance(apiKey, {
+      httpsAgent: new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 6000,
+      });
+    })
+  ```
+- Updated following types
+  - `AppSettingsAPIResponse.enforce_unique_usernames` [497220c](https://github.com/GetStream/stream-chat-js/commit/497220c9b32acbb9e8a4efc7a24e9eafbce06e71)
+  - `MessageLabel` [7897e23](https://github.com/GetStream/stream-chat-js/commit/7897e239037bdc97a1066ca446d6a1bf4b7c4967)
+
 ## March 19, 2021 - 3.7.0
 
 - Receive unsubscribe handler from `channel.on` [1ae1fca](https://github.com/GetStream/stream-chat-js/commit/1ae1fca10e5db251c549ce5b50ec19ff5ea617e2)
