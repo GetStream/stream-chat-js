@@ -638,11 +638,7 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
-  _normalizeDate = (before: Date | string | null | undefined): string | null => {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    }
-
+  _normalizeDate = (before: Date | string | null): string | null => {
     if (before instanceof Date) {
       before = before.toISOString();
     }
@@ -659,7 +655,7 @@ export class StreamChat<
   /**
    * Revokes all tokens on application level issued before given time
    */
-  async revokeTokens(before?: Date | string | null) {
+  async revokeTokens(before: Date | string | null) {
     return await this.updateAppSettings({
       revoke_tokens_issued_before: this._normalizeDate(before),
     });
@@ -676,7 +672,11 @@ export class StreamChat<
    * Revokes tokens for a list of users issued before given time
    */
   async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    before = this._normalizeDate(before);
+    if (before === undefined) {
+      before = new Date().toISOString();
+    } else {
+      before = this._normalizeDate(before);
+    }
 
     const users: PartialUserUpdate<UserType>[] = [];
     for (const userID of userIDs) {
