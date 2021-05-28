@@ -30,7 +30,7 @@ module.exports = {
 		options = {},
 	) {
 		const client = await this.getTestClientForUser(userID, options);
-		const channel = client.channel('messaging', id);
+		const channel = client.channel('messaging', id, { members: [userID] });
 		await channel.create();
 		return channel;
 	},

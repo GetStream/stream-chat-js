@@ -9,23 +9,25 @@ import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { StreamChat } from '../../src/client';
-import { Channel } from '../../src/channel';
-import { ClientState } from '../../src';
 
 const expect = chai.expect;
 
 describe('Channel count unread', function () {
 	const user = { id: 'user' };
 	const lastRead = new Date('2020-01-01T00:00:00');
+	const channelResponse = generateChannel();
 
-	const channel = new Channel({}, 'messaging', 'id');
+	const client = new StreamChat('apiKey');
+	client.user = user;
+	client.userID = 'user';
+	client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+
+	const channel = client.channel(
+		channelResponse.channel.type,
+		channelResponse.channel.id,
+	);
+	channel.initialized = true;
 	channel.lastRead = () => lastRead;
-	channel.getClient = () => ({
-		user,
-		userID: 'user',
-		userMuteStatus: (targetId) => targetId.startsWith('mute'),
-		state: new ClientState(),
-	});
 
 	const ignoredMessages = [
 		generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
@@ -63,6 +65,16 @@ describe('Channel count unread', function () {
 	});
 
 	it('_countMessageAsUnread should return true for unmuted user', function () {
+		expect(channel._countMessageAsUnread({ user: { id: 'unmute' } })).to.be.ok;
+	});
+
+	it('_countMessageAsUnread should return false for muted channel', function () {
+		client.mutedChannels = [{ user, channel }];
+		expect(channel._countMessageAsUnread({ user: { id: 'unmute' } })).not.to.be.ok;
+	});
+
+	it('_countMessageAsUnread should return true for unmuted channel', function () {
+		client.mutedChannels = [];
 		expect(channel._countMessageAsUnread({ user: { id: 'unmute' } })).to.be.ok;
 	});
 
@@ -110,17 +122,13 @@ describe('Channel count unread', function () {
 
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
-	const channel = new Channel(
-		{
-			logger: () => null,
-			user,
-			userID: user.id,
-			userMuteStatus: (targetId) => targetId.startsWith('mute'),
-			state: new ClientState(),
-		},
-		'messaging',
-		'id',
-	);
+	const client = new StreamChat('apiKey');
+	client.user = user;
+	client.userID = user.id;
+	client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+
+	const channel = client.channel('messaging', 'id');
+	channel.initialized = true;
 
 	it('message.new reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
