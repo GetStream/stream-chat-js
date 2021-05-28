@@ -1396,6 +1396,23 @@ export class StreamChat<
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
+      const currentMutedChannelIds: string[] = [];
+      const nextMutedChannelIds: string[] = [];
+
+      this.mutedChannels.forEach(
+        (mute) => mute.channel && currentMutedChannelIds.push(mute.channel.cid),
+      );
+      event.me.channel_mutes.forEach(
+        (mute) => mute.channel && nextMutedChannelIds.push(mute.channel.cid),
+      );
+
+      /** Set the unread count of un-muted channels to 0, which is the behaviour of backend */
+      currentMutedChannelIds.forEach((cid) => {
+        if (!nextMutedChannelIds.includes(cid)) {
+          this.activeChannels[cid].state.unreadCount = 0;
+        }
+      });
+
       this.mutedChannels = event.me.channel_mutes;
     }
 
@@ -1406,19 +1423,19 @@ export class StreamChat<
 
   _muteStatus(cid: string) {
     let muteStatus;
-    this.mutedChannels.forEach(function (mute) {
+    for (let i = 0; i < this.mutedChannels.length; i++) {
+      const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
-        let muted = true;
-        if (mute.expires) {
-          muted = new Date(mute.expires).getTime() > new Date().getTime();
-        }
         muteStatus = {
-          muted,
+          muted: mute.expires
+            ? new Date(mute.expires).getTime() > new Date().getTime()
+            : true,
           createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
           expiresAt: mute.expires ? new Date(mute.expires) : null,
         };
+        break;
       }
-    });
+    }
 
     if (muteStatus) {
       return muteStatus;
