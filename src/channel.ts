@@ -331,7 +331,7 @@ export class Channel<
     } = {},
   ) {
     // Return a list of channels
-    const { sort, ...options_without_sort } = { ...options };
+    const { sort: sort_value, ...options_without_sort } = { ...options };
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -355,8 +355,8 @@ export class Channel<
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
 
-    if (sort) {
-      payload.sort = normalizeQuerySort(sort);
+    if (sort_value) {
+      payload.sort = normalizeQuerySort(sort_value);
     }
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
