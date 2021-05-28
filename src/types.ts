@@ -633,23 +633,6 @@ export type SearchAPIResponse<
       UserType
     >;
   }[];
-};
-
-export type SearchV2APIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = SearchAPIResponse<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
-> & {
   next?: string;
   previous?: string;
   results_warning?: SearchWarning;
@@ -942,14 +925,17 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type SearchOptions = {
+export type SearchOptions = LimitOffsetSearchOptions | NextSearchOptions;
+
+export type LimitOffsetSearchOptions = {
   limit?: number;
   offset?: number;
 };
 
-export type SearchV2Options = {
+export type NextSearchOptions = {
   limit?: number;
   next?: string;
+  sort?: SearchMessageSort;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
@@ -1741,8 +1727,7 @@ export type EndpointName =
   | 'GetExportChannelsStatus'
   | 'CheckSQS'
   | 'GetRateLimits'
-  | 'MessageUpdatePartial'
-  | 'SearchV2';
+  | 'MessageUpdatePartial';
 
 export type ExportChannelRequest = {
   id: string;
@@ -1908,14 +1893,14 @@ export type Resource =
   | 'UpdateUser'
   | 'UploadAttachment';
 
-type BaseSearchPayload<
+export type SearchPayload<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = {
+> = Omit<SearchOptions, 'sort'> & {
   client_id?: string;
   connection_id?: string;
   filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
@@ -1928,45 +1913,11 @@ type BaseSearchPayload<
     UserType
   >;
   query?: string;
+  sort?: Array<{
+    direction: AscDesc;
+    field: string | number;
+  }>;
 };
-export type SearchV1Payload<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = BaseSearchPayload<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
-> &
-  SearchOptions;
-
-export type SearchV2Payload<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = BaseSearchPayload<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
-> &
-  SearchV2Options & {
-    sort?: Array<{
-      direction: AscDesc;
-      field: string | number;
-    }>;
-  };
 
 export type TestPushDataInput = {
   apnTemplate?: string;

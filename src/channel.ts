@@ -32,9 +32,8 @@ import {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
-  SearchV2Options,
-  SearchV2APIResponse,
-  SearchV2Payload,
+  SearchOptions,
+  SearchPayload,
   SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
@@ -43,7 +42,6 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
-  SearchMessageSort,
 } from './types';
 
 /**
@@ -301,7 +299,7 @@ export class Channel<
    * search - Query messages
    *
    * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string}  query search query or object MongoDB style filters
-   * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
+   * @param {{client_id?: string; connection_id?: string; query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
@@ -316,10 +314,9 @@ export class Channel<
           UserType
         >
       | string,
-    options: {
+    options: SearchOptions & {
       client_id?: string;
       connection_id?: string;
-      limit?: number;
       message_filter_conditions?: MessageFilters<
         AttachmentType,
         ChannelType,
@@ -328,14 +325,25 @@ export class Channel<
         ReactionType,
         UserType
       >;
-      offset?: number;
       query?: string;
     } = {},
   ) {
     // Return a list of channels
-    const payload = {
-      filter_conditions: { cid: this.cid },
-      ...options,
+    const { sort, ...options_without_sort } = { ...options };
+    const payload: SearchPayload<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    > = {
+      filter_conditions: { cid: this.cid } as ChannelFilters<
+        ChannelType,
+        CommandType,
+        UserType
+      >,
+      ...options_without_sort,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -345,6 +353,9 @@ export class Channel<
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
 
+    if (sort) {
+      payload.sort = normalizeQuerySort(sort);
+    }
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -358,75 +369,6 @@ export class Channel<
         UserType
       >
     >(this.getClient().baseURL + '/search', {
-      payload,
-    });
-  }
-
-  /**
-   * search v2 - Query messages
-   *
-   * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string}  query search query or object MongoDB style filters
-   * @param {SearchMessageSort} sort sort values
-   * @param {SearchV2Options & {client_id?: string; connection_id?: string;  query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
-   *
-   * @return {Promise<SearchV2APIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
-   */
-  async searchv2(
-    query:
-      | MessageFilters<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
-      | string,
-    sort: SearchMessageSort = [],
-    options: SearchV2Options & {
-      client_id?: string;
-      connection_id?: string;
-    } = {},
-  ) {
-    const payload: SearchV2Payload<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    > = {
-      filter_conditions: { cid: this.cid } as ChannelFilters<
-        ChannelType,
-        CommandType,
-        UserType
-      >,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    };
-
-    // Return a list of channels
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
-    }
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    return await this.getClient().get<
-      SearchV2APIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this.getClient().baseURL + '/search/v2', {
       payload,
     });
   }
