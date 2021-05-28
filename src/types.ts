@@ -97,7 +97,7 @@ export type AppSettingsAPIResponse<
       apn?: APNConfig;
       firebase?: FirebaseConfig;
     };
-    revoke_tokens_issued_before?: string;
+    revoke_tokens_issued_before?: string | null;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -1530,9 +1530,11 @@ export type ChannelData<ChannelType = UnknownType> = ChannelType & {
 };
 
 export type ChannelMembership<UserType = UnknownType> = {
+  banned?: boolean;
   created_at?: string;
   is_moderator?: boolean;
   role?: string;
+  shadow_banned?: boolean;
   updated_at?: string;
   user?: UserResponse<UserType>;
 };
@@ -1907,6 +1909,7 @@ export type TokenOrProvider = null | string | TokenProvider | undefined;
 export type TokenProvider = () => Promise<string>;
 
 export type TranslationLanguages =
+  | ''
   | 'af'
   | 'am'
   | 'ar'
