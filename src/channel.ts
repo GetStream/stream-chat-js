@@ -16,6 +16,7 @@ import {
   EventAPIResponse,
   EventHandler,
   EventTypes,
+  FormatMessageResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
@@ -24,6 +25,7 @@ import {
   MarkReadOptions,
   Message,
   MessageFilters,
+  MessageResponse,
   MuteChannelAPIResponse,
   PaginationOptions,
   PartialUpdateChannel,
@@ -854,12 +856,12 @@ export class Channel<
 
   /**
    * muteStatus - returns the mute status for the current channel
-   * @return {{ muted: boolean; createdAt?: string | null; expiresAt?: string | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+   * @return {{ muted: boolean; createdAt: Date | null; expiresAt: Date | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
    */
   muteStatus(): {
+    createdAt: Date | null;
+    expiresAt: Date | null;
     muted: boolean;
-    createdAt?: string | null;
-    expiresAt?: string | null;
   } {
     this._checkInitialized();
     return this.getClient()._muteStatus(this.cid);
@@ -1136,16 +1138,32 @@ export class Channel<
     }
   }
 
-  _countMessageAsUnread(message: {
-    shadowed?: boolean;
-    silent?: boolean;
-    user?: { id?: string } | null;
-  }) {
+  _countMessageAsUnread(
+    message:
+      | FormatMessageResponse<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          MessageType,
+          ReactionType,
+          UserType
+        >
+      | MessageResponse<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          MessageType,
+          ReactionType,
+          UserType
+        >,
+  ) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
+
+    if (this.muteStatus().muted) return false;
 
     return true;
   }

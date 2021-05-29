@@ -638,11 +638,7 @@ export class StreamChat<
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
-  _normalizeDate = (before: Date | string | null | undefined): string | null => {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    }
-
+  _normalizeDate = (before: Date | string | null): string | null => {
     if (before instanceof Date) {
       before = before.toISOString();
     }
@@ -659,7 +655,7 @@ export class StreamChat<
   /**
    * Revokes all tokens on application level issued before given time
    */
-  async revokeTokens(before?: Date | string | null) {
+  async revokeTokens(before: Date | string | null) {
     return await this.updateAppSettings({
       revoke_tokens_issued_before: this._normalizeDate(before),
     });
@@ -676,7 +672,11 @@ export class StreamChat<
    * Revokes tokens for a list of users issued before given time
    */
   async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    before = this._normalizeDate(before);
+    if (before === undefined) {
+      before = new Date().toISOString();
+    } else {
+      before = this._normalizeDate(before);
+    }
 
     const users: PartialUserUpdate<UserType>[] = [];
     for (const userID of userIDs) {
@@ -1396,6 +1396,23 @@ export class StreamChat<
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
+      const currentMutedChannelIds: string[] = [];
+      const nextMutedChannelIds: string[] = [];
+
+      this.mutedChannels.forEach(
+        (mute) => mute.channel && currentMutedChannelIds.push(mute.channel.cid),
+      );
+      event.me.channel_mutes.forEach(
+        (mute) => mute.channel && nextMutedChannelIds.push(mute.channel.cid),
+      );
+
+      /** Set the unread count of un-muted channels to 0, which is the behaviour of backend */
+      currentMutedChannelIds.forEach((cid) => {
+        if (!nextMutedChannelIds.includes(cid)) {
+          this.activeChannels[cid].state.unreadCount = 0;
+        }
+      });
+
       this.mutedChannels = event.me.channel_mutes;
     }
 
@@ -1406,19 +1423,19 @@ export class StreamChat<
 
   _muteStatus(cid: string) {
     let muteStatus;
-    this.mutedChannels.forEach(function (mute) {
+    for (let i = 0; i < this.mutedChannels.length; i++) {
+      const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
-        let muted = true;
-        if (mute.expires) {
-          muted = new Date(mute.expires).getTime() > new Date().getTime();
-        }
         muteStatus = {
-          muted,
+          muted: mute.expires
+            ? new Date(mute.expires).getTime() > new Date().getTime()
+            : true,
           createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
           expiresAt: mute.expires ? new Date(mute.expires) : null,
         };
+        break;
       }
-    });
+    }
 
     if (muteStatus) {
       return muteStatus;
