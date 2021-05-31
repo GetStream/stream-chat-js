@@ -237,6 +237,7 @@ export type ChannelMemberAPIResponse<UserType = UnknownType> = APIResponse & {
 
 export type ChannelMemberResponse<UserType = UnknownType> = {
   banned?: boolean;
+  channel_role?: string;
   created_at?: string;
   invite_accepted_at?: string;
   invite_rejected_at?: string;
