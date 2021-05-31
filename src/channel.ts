@@ -732,6 +732,34 @@ export class Channel<
   }
 
   /**
+   * setRoles - set member roles in a channel
+   *
+   * @param {[userID: string]: string} roles An object with role assignments
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
+   */
+  async setRoles(
+    roles: { [userID: string]: string },
+    message?: Message<AttachmentType, MessageType, UserType>,
+  ) {
+    const data = await this.getClient().post<
+      UpdateChannelAPIResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >(this._channelURL(), {
+      set_roles: roles,
+      message,
+    });
+    this.data = data.channel;
+    return data;
+  }
+
+  /**
    * inviteMembers - invite members to the channel
    *
    * @param {string[]} members An array of member identifiers
