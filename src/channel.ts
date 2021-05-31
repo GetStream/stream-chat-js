@@ -509,22 +509,11 @@ export class Channel<
       delete channelData[key];
     });
 
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       message: updateMessage,
       data: channelData,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -624,21 +613,10 @@ export class Channel<
       UserType
     > = {},
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       accept_invite: true,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -658,21 +636,10 @@ export class Channel<
       UserType
     > = {},
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       reject_invite: true,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -686,21 +653,10 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       add_members: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -714,21 +670,10 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       add_moderators: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -742,21 +687,10 @@ export class Channel<
     roles: { [userID: string]: string },
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       set_roles: roles,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -770,21 +704,10 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       invites: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -798,21 +721,10 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       remove_members: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -826,6 +738,18 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
+    return await this._update({
+      demote_moderators: members,
+      message,
+    });
+  }
+
+  /**
+   * _update - executes channel update request
+   * @param payload Object Update Channel payload
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
+   */
+  async _update(payload: Object) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
         AttachmentType,
@@ -835,10 +759,7 @@ export class Channel<
         ReactionType,
         UserType
       >
-    >(this._channelURL(), {
-      demote_moderators: members,
-      message,
-    });
+    >(this._channelURL(), payload);
     this.data = data.channel;
     return data;
   }
