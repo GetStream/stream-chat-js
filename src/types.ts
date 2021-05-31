@@ -1995,3 +1995,20 @@ export type User<UserType = UnknownType> = UserType & {
   teams?: string[];
   username?: string;
 };
+
+export type SegmentData = {
+  description: string;
+  filter: {
+    channel?: object;
+    users?: string[];
+  };
+  name: string;
+};
+
+export type Segment = {
+  app_pk: number;
+  created_at: string;
+  id: string;
+  updated_at: string;
+  recipients?: number;
+} & SegmentData;

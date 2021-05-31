@@ -100,6 +100,8 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  SegmentData,
+  Segment,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -2943,5 +2945,39 @@ export class StreamChat<
     return this.get<APIResponse & ExportChannelStatusResponse>(
       `${this.baseURL}/export_channels/${id}`,
     );
+  }
+
+  async createSegment(params: SegmentData) {
+    const { segment } = await this.post<{ segment: Segment }>(
+      this.baseURL + `/segments`,
+      { segment: params },
+    );
+    return segment;
+  }
+
+  async getSegment(id: string) {
+    const { segment } = await this.get<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+    );
+    return segment;
+  }
+
+  async listSegments() {
+    const { segments } = await this.get<{ segments: Segment[] }>(
+      this.baseURL + `/segments`,
+    );
+    return segments;
+  }
+
+  async updateSegment(id: string, params: Partial<SegmentData>) {
+    const { segment } = await this.put<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+      params,
+    );
+    return segment;
+  }
+
+  async deleteSegment(id: string) {
+    return this.delete<{}>(this.baseURL + `/segments/${id}`);
   }
 }
