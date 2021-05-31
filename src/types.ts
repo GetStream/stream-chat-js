@@ -1532,6 +1532,7 @@ export type ChannelData<ChannelType = UnknownType> = ChannelType & {
 
 export type ChannelMembership<UserType = UnknownType> = {
   banned?: boolean;
+  channel_role?: string;
   created_at?: string;
   is_moderator?: boolean;
   role?: string;
