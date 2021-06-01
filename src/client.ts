@@ -1118,7 +1118,9 @@ export class StreamChat<
           e.response.data.code === chatCodes.TOKEN_EXPIRED &&
           !this.tokenManager.isStatic()
         ) {
-          await sleep(this._retryInterval());
+          if (this.consecutiveFailures > 1) {
+            await sleep(this._retryInterval());
+          }
           this.tokenManager.loadToken();
           return await this.doAxiosRequest<T>(type, url, data, options);
         }
