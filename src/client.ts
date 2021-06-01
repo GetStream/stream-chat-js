@@ -18,6 +18,7 @@ import {
   normalizeQuerySort,
   randomId,
   sleep,
+  retryInterval,
 } from './utils';
 
 import {
@@ -1119,7 +1120,7 @@ export class StreamChat<
           !this.tokenManager.isStatic()
         ) {
           if (this.consecutiveFailures > 1) {
-            await sleep(this._retryInterval());
+            await sleep(retryInterval(this.consecutiveFailures));
           }
           this.tokenManager.loadToken();
           return await this.doAxiosRequest<T>(type, url, data, options);
@@ -1129,13 +1130,6 @@ export class StreamChat<
         throw e;
       }
     }
-  };
-
-  _retryInterval = () => {
-    // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
-    const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
-    const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
-    return Math.floor(Math.random() * (max - min) + min);
   };
 
   get<T>(url: string, params?: AxiosRequestConfig['params']) {

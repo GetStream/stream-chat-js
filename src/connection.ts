@@ -1,5 +1,5 @@
 import WebSocket from 'isomorphic-ws';
-import { chatCodes, sleep } from './utils';
+import { chatCodes, sleep, retryInterval } from './utils';
 import { TokenManager } from './token_manager';
 import {
   ConnectAPIResponse,
@@ -356,7 +356,7 @@ export class StableWSConnection<
     // also reconnect if the health check cycle fails
     let interval = options.interval;
     if (!interval) {
-      interval = this._retryInterval();
+      interval = retryInterval(this.consecutiveFailures);
     }
     // reconnect, or try again after a little while...
     await sleep(interval);
