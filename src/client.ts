@@ -17,6 +17,7 @@ import {
   chatCodes,
   normalizeQuerySort,
   randomId,
+  sleep,
 } from './utils';
 
 import {
@@ -180,6 +181,7 @@ export class StreamChat<
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
+  consecutiveFailures: number;
 
   /**
    * Initialize a client
@@ -273,6 +275,7 @@ export class StreamChat<
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
     this.tokenManager = new TokenManager(this.secret);
+    this.consecutiveFailures = 0;
 
     /**
      * logger function should accept 3 parameters:
@@ -1105,16 +1108,17 @@ export class StreamChat<
           throw new Error('Invalid request type');
       }
       this._logApiResponse<T>(type, url, response);
-
+      this.consecutiveFailures = 0;
       return this.handleResponse(response);
     } catch (e) {
       this._logApiError(type, url, e);
-
+      this.consecutiveFailures += 1;
       if (e.response) {
         if (
           e.response.data.code === chatCodes.TOKEN_EXPIRED &&
           !this.tokenManager.isStatic()
         ) {
+          await sleep(this._retryInterval());
           this.tokenManager.loadToken();
           return await this.doAxiosRequest<T>(type, url, data, options);
         }
@@ -1123,6 +1127,13 @@ export class StreamChat<
         throw e;
       }
     }
+  };
+
+  _retryInterval = () => {
+    // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
+    const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
+    const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
+    return Math.floor(Math.random() * (max - min) + min);
   };
 
   get<T>(url: string, params?: AxiosRequestConfig['params']) {
