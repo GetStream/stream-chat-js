@@ -1421,7 +1421,7 @@ export class StreamChat<
 
       /** Set the unread count of un-muted channels to 0, which is the behaviour of backend */
       currentMutedChannelIds.forEach((cid) => {
-        if (!nextMutedChannelIds.includes(cid)) {
+        if (!nextMutedChannelIds.includes(cid) && this.activeChannels[cid]) {
           this.activeChannels[cid].state.unreadCount = 0;
         }
       });
