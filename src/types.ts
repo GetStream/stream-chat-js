@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from 'axios';
+import { Role } from './permissions';
 
 /**
  * Utility Types
@@ -237,7 +238,7 @@ export type ChannelMemberAPIResponse<UserType = UnknownType> = APIResponse & {
 
 export type ChannelMemberResponse<UserType = UnknownType> = {
   banned?: boolean;
-  channel_role?: string;
+  channel_role?: Role;
   created_at?: string;
   invite_accepted_at?: string;
   invite_rejected_at?: string;
@@ -838,6 +839,7 @@ export type CustomPermissionOptions = {
   same_team?: boolean;
 };
 
+// TODO: rename to UpdateChannelOptions in the next major update and use it in channel._update and/or channel.update
 export type InviteOptions<
   AttachmentType = UnknownType,
   ChannelType = UnknownType,
@@ -956,6 +958,7 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
+// TODO: rename to UpdateChannelTypeOptions in the next major update
 export type UpdateChannelOptions<
   CommandType extends string = LiteralStringForUnion
 > = Omit<CreateChannelOptions<CommandType>, 'name'> & {
@@ -1532,7 +1535,7 @@ export type ChannelData<ChannelType = UnknownType> = ChannelType & {
 
 export type ChannelMembership<UserType = UnknownType> = {
   banned?: boolean;
-  channel_role?: string;
+  channel_role?: Role;
   created_at?: string;
   is_moderator?: boolean;
   role?: string;

@@ -42,6 +42,7 @@ import {
   UserResponse,
   UserSort,
 } from './types';
+import { Role } from './permissions';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -684,7 +685,7 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async setRoles(
-    roles: { [userID: string]: string },
+    roles: { [userID: string]: Role },
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     return await this._update({
@@ -748,6 +749,7 @@ export class Channel<
    * _update - executes channel update request
    * @param payload Object Update Channel payload
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
+   * TODO: introduce new type instead of Object in the next major update
    */
   async _update(payload: Object) {
     const data = await this.getClient().post<
