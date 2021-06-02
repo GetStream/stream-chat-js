@@ -117,6 +117,18 @@ export function normalizeQuerySort<T extends QuerySort>(sort: T) {
   return sortFields;
 }
 
+/**
+ * retryInterval - A retry interval which increases acc to number of failures
+ *
+ * @return {number} Duration to wait in milliseconds
+ */
+export function retryInterval(numberOfFailures: number) {
+  // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
+  const max = Math.min(500 + numberOfFailures * 2000, 25000);
+  const min = Math.min(Math.max(250, (numberOfFailures - 1) * 2000), 25000);
+  return Math.floor(Math.random() * (max - min) + min);
+}
+
 /** adopted from https://github.com/ai/nanoid/blob/master/non-secure/index.js */
 const alphabet = 'ModuleSymbhasOwnPr0123456789ABCDEFGHNRVfgctiUvzKqYTJkLxpZXIjQW';
 export function randomId() {
