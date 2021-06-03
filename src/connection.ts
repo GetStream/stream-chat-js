@@ -138,7 +138,7 @@ export class StableWSConnection<
     /** Store the last event time for health checks */
     this.lastEvent = null;
     /** Send a health check message every 30 seconds */
-    this.healthCheckInterval = 30 * 1000;
+    this.healthCheckInterval = 25 * 1000;
     this._listenForConnectionChanges();
   }
 
