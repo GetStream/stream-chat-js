@@ -17,6 +17,8 @@ import {
   chatCodes,
   normalizeQuerySort,
   randomId,
+  sleep,
+  retryInterval,
 } from './utils';
 
 import {
@@ -180,6 +182,7 @@ export class StreamChat<
   wsBaseURL?: string;
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
+  consecutiveFailures: number;
 
   /**
    * Initialize a client
@@ -273,6 +276,7 @@ export class StreamChat<
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
     this.tokenManager = new TokenManager(this.secret);
+    this.consecutiveFailures = 0;
 
     /**
      * logger function should accept 3 parameters:
@@ -1105,16 +1109,19 @@ export class StreamChat<
           throw new Error('Invalid request type');
       }
       this._logApiResponse<T>(type, url, response);
-
+      this.consecutiveFailures = 0;
       return this.handleResponse(response);
     } catch (e) {
       this._logApiError(type, url, e);
-
+      this.consecutiveFailures += 1;
       if (e.response) {
         if (
           e.response.data.code === chatCodes.TOKEN_EXPIRED &&
           !this.tokenManager.isStatic()
         ) {
+          if (this.consecutiveFailures > 1) {
+            await sleep(retryInterval(this.consecutiveFailures));
+          }
           this.tokenManager.loadToken();
           return await this.doAxiosRequest<T>(type, url, data, options);
         }

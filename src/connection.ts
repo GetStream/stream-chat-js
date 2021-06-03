@@ -1,5 +1,5 @@
 import WebSocket from 'isomorphic-ws';
-import { chatCodes, sleep } from './utils';
+import { chatCodes, sleep, retryInterval } from './utils';
 import { TokenManager } from './token_manager';
 import {
   ConnectAPIResponse,
@@ -158,6 +158,7 @@ export class StableWSConnection<
       healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
+
       this.logger(
         'info',
         `connection:connect() - Established ws connection with healthcheck: ${healthCheck}`,
@@ -350,7 +351,7 @@ export class StableWSConnection<
     // also reconnect if the health check cycle fails
     let interval = options.interval;
     if (!interval) {
-      interval = this._retryInterval();
+      interval = retryInterval(this.consecutiveFailures);
     }
     // reconnect, or try again after a little while...
     await sleep(interval);
@@ -694,18 +695,6 @@ export class StableWSConnection<
       // we don't care
     }
   }
-
-  /**
-   * _retryInterval - A retry interval which increases after consecutive failures
-   *
-   * @return {number} Duration to wait in milliseconds
-   */
-  _retryInterval = () => {
-    // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
-    const max = Math.min(500 + this.consecutiveFailures * 2000, 25000);
-    const min = Math.min(Math.max(250, (this.consecutiveFailures - 1) * 2000), 25000);
-    return Math.floor(Math.random() * (max - min) + min);
-  };
 
   /**
    * _setupPromise - sets up the this.connectOpen promise
