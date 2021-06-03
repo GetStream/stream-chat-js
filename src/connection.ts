@@ -158,8 +158,7 @@ export class StableWSConnection<
       healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
-      // this.scheduleConnectionCheck();
-      // this.ping();
+
       this.logger(
         'info',
         `connection:connect() - Established ws connection with healthcheck: ${healthCheck}`,
