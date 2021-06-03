@@ -678,18 +678,18 @@ export class Channel<
   }
 
   /**
-   * setRoles - set member roles in a channel
+   * assignRoles - sets member roles in a channel
    *
    * @param {[userID: string]: string} roles An object with role assignments
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async setRoles(
+  async assignRoles(
     roles: { [userID: string]: Role },
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     return await this._update({
-      set_roles: roles,
+      assign_roles: roles,
       message,
     });
   }
