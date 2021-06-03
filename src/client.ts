@@ -102,6 +102,8 @@ import {
   UserSort,
   SegmentData,
   Segment,
+  Campaign,
+  CampaignData,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -2979,5 +2981,71 @@ export class StreamChat<
 
   async deleteSegment(id: string) {
     return this.delete<{}>(this.baseURL + `/segments/${id}`);
+  }
+
+  async createCampaign(params: CampaignData) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns`,
+      { campaign: params },
+    );
+    return campaign;
+  }
+
+  async getCampaign(id: string) {
+    const { campaign } = await this.get<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+    );
+    return campaign;
+  }
+
+  async listCampaigns() {
+    const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
+      this.baseURL + `/campaigns`,
+    );
+    return campaigns;
+  }
+
+  async updateCampaign(id: string, params: Partial<CampaignData>) {
+    const { campaign } = await this.put<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+      params,
+    );
+    return campaign;
+  }
+
+  async deleteCampaign(id: string) {
+    return this.delete<{}>(this.baseURL + `/campaigns/${id}`);
+  }
+
+  async scheduleCampaign(id: string, params: { sendAt: number }) {
+    const { sendAt } = params;
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/schedule`,
+      { send_at: sendAt },
+    );
+    return campaign;
+  }
+
+  async stopCampaign(id: string) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/stop`,
+    );
+    return campaign;
+  }
+
+  async resumeCampaign(id: string) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/resume`,
+    );
+    return campaign;
+  }
+
+  async testCampaign(id: string, params: { users: string[] }) {
+    const { users } = params;
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/test`,
+      { users },
+    );
+    return campaign;
   }
 }
