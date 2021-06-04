@@ -646,12 +646,12 @@ export class Channel<
   /**
    * addMembers - add members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
-    members: string[],
+    members: string[] | { user_id: string; channel_role?: Role }[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     return await this._update({
@@ -680,12 +680,12 @@ export class Channel<
   /**
    * assignRoles - sets member roles in a channel
    *
-   * @param {[userID: string]: string} roles An object with role assignments
+   * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async assignRoles(
-    roles: { [userID: string]: Role },
+    roles: { channel_role: Role; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     return await this._update({
@@ -697,12 +697,12 @@ export class Channel<
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
-    members: string[],
+    members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
     return await this._update({
