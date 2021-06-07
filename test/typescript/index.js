@@ -20,12 +20,6 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['addDevice']>>",
 	},
 	{
-		f: rg.getDevices,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getDevices']>>",
-	},
-	{
 		f: rg.addMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
@@ -44,12 +38,6 @@ const executables = [
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['banUser']>>",
 	},
 	{
-		f: rg.shadowBan,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['shadowBan']>>",
-	},
-	{
 		f: rg.channelSearch,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
@@ -60,6 +48,18 @@ const executables = [
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connect']>>",
+	},
+	{
+		f: rg.connectAnonymousUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectAnonymousUser']>>",
+	},
+	{
+		f: rg.connectUser,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectUser']>>",
 	},
 	{
 		f: rg.create,
@@ -218,6 +218,12 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['getConfig']>>",
+	},
+	{
+		f: rg.getDevices,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['getDevices']>>",
 	},
 	{
 		f: rg.getMessage,
@@ -431,22 +437,16 @@ const executables = [
 			"Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sendReaction']>>",
 	},
 	{
-		f: rg.connectAnonymousUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectAnonymousUser']>>",
-	},
-	{
 		f: rg.setGuestUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['setGuestUser']>>",
 	},
 	{
-		f: rg.connectUser,
+		f: rg.shadowBan,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['connectUser']>>",
+			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['shadowBan']>>",
 	},
 	{
 		f: rg.show,
