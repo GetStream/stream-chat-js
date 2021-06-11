@@ -2000,7 +2000,7 @@ export type SegmentData = {
   description: string;
   filter: {
     channel?: object;
-    users?: string[];
+    user?: object;
   };
   name: string;
 };
