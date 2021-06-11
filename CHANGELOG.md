@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## June 8, 2021 - 3.11.0
+
+- Fixed timer throttling issue, which was introduced with recent release of Chrome browser [#698](https://github.com/GetStream/stream-chat-js/pull/698)
+- Fixed issues with unread count on muted channels [#678](https://github.com/GetStream/stream-chat-js/pull/678)
+
 ## May 21, 2021 - 3.10.0
 
 ### Feature
