@@ -79,14 +79,14 @@ export class StableWSConnection<
   connectionID?: string;
   connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
   consecutiveFailures: number;
-  healthCheckInterval: number;
-  healthCheckIntervalRef?: NodeJS.Timeout;
+  pingInterval: number;
+  healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
-  monitorInterval: number;
-  monitorIntervalRef?: NodeJS.Timeout;
+  connectionCheckTimeout: number;
+  connectionCheckTimeoutRef?: NodeJS.Timeout;
   rejectPromise?: (
     reason?: Error & {
       code?: string | number;
@@ -138,10 +138,9 @@ export class StableWSConnection<
     this.wsID = 1;
     /** Store the last event time for health checks */
     this.lastEvent = null;
-    /** Send a health check message every 30 seconds */
-    this.healthCheckInterval = 30 * 1000;
-    /** Every second we verify that we didn't miss any health checks */
-    this.monitorInterval = 1 * 1000;
+    /** Send a health check message every 25 seconds */
+    this.pingInterval = 25 * 1000;
+    this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
     this._listenForConnectionChanges();
   }
 
@@ -158,12 +157,10 @@ export class StableWSConnection<
       );
     }
     try {
-      this.isConnecting = true;
       healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
-      this._startMonitor();
-      this._startHealthCheck();
+
       this.logger(
         'info',
         `connection:connect() - Established ws connection with healthcheck: ${healthCheck}`,
@@ -230,11 +227,11 @@ export class StableWSConnection<
     this.wsID += 1;
 
     // start by removing all the listeners
-    if (this.healthCheckIntervalRef) {
-      clearInterval(this.healthCheckIntervalRef);
+    if (this.healthCheckTimeoutRef) {
+      clearInterval(this.healthCheckTimeoutRef);
     }
-    if (this.monitorIntervalRef) {
-      clearInterval(this.monitorIntervalRef);
+    if (this.connectionCheckTimeoutRef) {
+      clearInterval(this.connectionCheckTimeoutRef);
     }
 
     this._removeConnectionListeners();
@@ -481,11 +478,12 @@ export class StableWSConnection<
   onmessage = (wsID: number, event: WebSocket.MessageEvent) => {
     if (this.wsID !== wsID) return;
 
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
+
     // we wait till the first message before we consider the connection open..
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
     // after that a ws.onclose..
-    if (!this.isResolved && typeof event.data === 'string') {
-      const data = JSON.parse(event.data) as WebSocket.Data & Record<string, unknown>;
+    if (!this.isResolved && data) {
       if (data.error != null) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
@@ -504,7 +502,12 @@ export class StableWSConnection<
       wsID,
     });
 
+    if (data && data.type === 'health.check') {
+      this.scheduleNextPing();
+    }
+
     this.messageCallback(event);
+    this.scheduleConnectionCheck();
   };
 
   onclose = (wsID: number, event: WebSocket.CloseEvent) => {
@@ -729,49 +732,54 @@ export class StableWSConnection<
   };
 
   /**
-   * _startHealthCheck - Sends a message every 30s or so to see if the ws connection still works
-   *
+   * Schedules a next health check ping for websocket.
    */
-  _startHealthCheck() {
-    const that = this;
+  scheduleNextPing = () => {
+    if (this.healthCheckTimeoutRef) {
+      clearTimeout(this.healthCheckTimeoutRef);
+    }
+
     // 30 seconds is the recommended interval (messenger uses this)
-    this.healthCheckIntervalRef = setInterval(() => {
+    this.healthCheckTimeoutRef = setTimeout(() => {
       // send the healthcheck.., server replies with a health check event
       const data = [
         {
           type: 'health.check',
-          client_id: that.clientID,
-          user_id: that.userID,
+          client_id: this.clientID,
+          user_id: this.userID,
         },
       ];
       // try to send on the connection
       try {
-        that.ws?.send(JSON.stringify(data));
+        this.ws?.send(JSON.stringify(data));
       } catch (e) {
         // error will already be detected elsewhere
       }
-    }, that.healthCheckInterval);
-  }
+    }, this.pingInterval);
+  };
 
   /**
-   * _startMonitor - Verifies we didn't miss any events. Marks the connection as failed in case we did.
-   *
+   * scheduleConnectionCheck - schedules a check for time difference between last received event and now.
+   * If the difference is more than 35 seconds, it means our health check logic has failed and websocket needs
+   * to be reconnected.
    */
-  _startMonitor() {
-    const that = this;
-    this.monitorIntervalRef = setInterval(() => {
+  scheduleConnectionCheck = () => {
+    if (this.connectionCheckTimeoutRef) {
+      clearTimeout(this.connectionCheckTimeoutRef);
+    }
+
+    this.connectionCheckTimeoutRef = setTimeout(() => {
       const now = new Date();
-      // means we missed a health check
       if (
-        that.lastEvent &&
-        now.getTime() - that.lastEvent.getTime() > this.healthCheckInterval + 10 * 1000
+        this.lastEvent &&
+        now.getTime() - this.lastEvent.getTime() > this.connectionCheckTimeout
       ) {
-        this.logger('info', 'connection:_startMonitor - going to reconnect', {
+        this.logger('info', 'connection:scheduleConnectionCheck - going to reconnect', {
           tags: ['connection'],
         });
-        that._setHealth(false);
-        that._reconnect();
+        this._setHealth(false);
+        this._reconnect();
       }
-    }, that.monitorInterval);
-  }
+    }, this.connectionCheckTimeout);
+  };
 }

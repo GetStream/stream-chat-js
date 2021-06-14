@@ -768,5 +768,6 @@ export class ChannelState<
 
   clearMessages() {
     this.messages = [];
+    this.pinnedMessages = [];
   }
 }
