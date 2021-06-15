@@ -182,7 +182,7 @@ export type ChannelResponse<
   id: string;
   type: string;
   auto_translation_enabled?: boolean;
-  auto_translation_language?: TranslationLanguages;
+  auto_translation_language?: TranslationLanguages | '';
   config?: ChannelConfigWithInfo<CommandType>;
   cooldown?: number;
   created_at?: string;
@@ -495,6 +495,31 @@ export type MessageResponse<
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
+> = MessageResponseBase<
+  AttachmentType,
+  ChannelType,
+  CommandType,
+  MessageType,
+  ReactionType,
+  UserType
+> & {
+  quoted_message?: MessageResponseBase<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+};
+
+export type MessageResponseBase<
+  AttachmentType = UnknownType,
+  ChannelType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType = UnknownType,
+  ReactionType = UnknownType,
+  UserType = UnknownType
 > = MessageBase<AttachmentType, MessageType, UserType> & {
   args?: string;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
@@ -512,17 +537,6 @@ export type MessageResponse<
   pin_expires?: string | null;
   pinned_at?: string | null;
   pinned_by?: UserResponse<UserType> | null;
-  quoted_message?: Omit<
-    MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    'quoted_message'
-  >;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
