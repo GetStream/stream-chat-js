@@ -2009,3 +2009,62 @@ export type User<UserType = UnknownType> = UserType & {
   teams?: string[];
   username?: string;
 };
+
+export type SegmentData = {
+  description: string;
+  filter: {
+    channel?: object;
+    user?: object;
+  };
+  name: string;
+};
+
+export type Segment = {
+  app_pk: number;
+  created_at: string;
+  id: string;
+  updated_at: string;
+  recipients?: number;
+} & SegmentData;
+
+export type CampaignData = {
+  attachments: Attachment[];
+  defaults: { [key: string]: string };
+  segment_id: string;
+  sender_id: string | null;
+  text: string;
+  push_notifications?: boolean;
+  track_opened?: boolean;
+};
+
+export type CampaignStatus = {
+  errors: string[];
+  status:
+    | 'draft'
+    | 'stopped'
+    | 'scheduled'
+    | 'completed'
+    | 'failed'
+    | 'canceled'
+    | 'in_progress';
+  completed_at?: string;
+  failed_at?: string;
+  progress?: {
+    delivered: number;
+    errored: number;
+    sent: number;
+  };
+  resumed_at?: string;
+  scheduled_at?: string;
+  stopped_at?: string;
+};
+
+export type Campaign = {
+  app_pk: string;
+  created_at: string;
+  id: string;
+  updated_at: string;
+  test?: boolean;
+  test_original_id?: string;
+} & CampaignData &
+  CampaignStatus;
