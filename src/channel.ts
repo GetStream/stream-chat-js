@@ -42,6 +42,7 @@ import {
   UserResponse,
   UserSort,
 } from './types';
+import { Role } from './permissions';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -509,22 +510,11 @@ export class Channel<
       delete channelData[key];
     });
 
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       message: updateMessage,
       data: channelData,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -624,21 +614,10 @@ export class Channel<
       UserType
     > = {},
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       accept_invite: true,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -658,49 +637,27 @@ export class Channel<
       UserType
     > = {},
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       reject_invite: true,
       ...options,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
    * addMembers - add members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
-    members: string[],
+    members: string[] | { user_id: string; channel_role?: Role }[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       add_members: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -714,49 +671,44 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       add_moderators: members,
       message,
     });
-    this.data = data.channel;
-    return data;
+  }
+
+  /**
+   * assignRoles - sets member roles in a channel
+   *
+   * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
+   */
+  async assignRoles(
+    roles: { channel_role: Role; user_id: string }[],
+    message?: Message<AttachmentType, MessageType, UserType>,
+  ) {
+    return await this._update({
+      assign_roles: roles,
+      message,
+    });
   }
 
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {string[]} members An array of member identifiers
+   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
-    members: string[],
+    members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       invites: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -770,21 +722,10 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
-    const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this._channelURL(), {
+    return await this._update({
       remove_members: members,
       message,
     });
-    this.data = data.channel;
-    return data;
   }
 
   /**
@@ -798,6 +739,19 @@ export class Channel<
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
   ) {
+    return await this._update({
+      demote_moderators: members,
+      message,
+    });
+  }
+
+  /**
+   * _update - executes channel update request
+   * @param payload Object Update Channel payload
+   * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
+   * TODO: introduce new type instead of Object in the next major update
+   */
+  async _update(payload: Object) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<
         AttachmentType,
@@ -807,10 +761,7 @@ export class Channel<
         ReactionType,
         UserType
       >
-    >(this._channelURL(), {
-      demote_moderators: members,
-      message,
-    });
+    >(this._channelURL(), payload);
     this.data = data.channel;
     return data;
   }
