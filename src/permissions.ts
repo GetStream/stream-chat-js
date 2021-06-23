@@ -56,6 +56,15 @@ export const DenyAll = new Permission(
   Deny,
 );
 
+export type Role =
+  | 'admin'
+  | 'user'
+  | 'guest'
+  | 'anonymous'
+  | 'channel_member'
+  | 'channel_moderator'
+  | string;
+
 export const BuiltinRoles = {
   Admin: 'admin',
   Anonymous: 'anonymous',
