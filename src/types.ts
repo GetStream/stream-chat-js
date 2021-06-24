@@ -288,7 +288,7 @@ export type CreateChannelResponse<
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type CreateCommandResponse<
@@ -393,7 +393,7 @@ export type GetChannelTypeResponse<
     created_at: string;
     updated_at: string;
     commands?: CommandResponse<CommandType>[];
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type GetCommandResponse<
@@ -462,7 +462,7 @@ export type ListChannelResponse<
       commands: CommandResponse<CommandType>[];
       created_at: string;
       updated_at: string;
-      roles?: Record<string, ChannelRole[]>;
+      grants?: Record<string, string[]>;
     }
   >;
 };
