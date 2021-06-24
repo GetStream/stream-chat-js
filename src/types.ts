@@ -846,9 +846,10 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 };
 
 export type CustomPermissionOptions = {
+  action: string;
   name: string;
-  resource: Resource;
   condition?: string;
+  description?: string;
   owner?: boolean;
   same_team?: boolean;
 };
@@ -1821,10 +1822,11 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 };
 
 export type PermissionAPIObject = {
+  action?: string;
   custom?: boolean;
+  description?: string;
   name?: string;
   owner?: boolean;
-  resource?: Resource;
   same_team?: boolean;
 };
 

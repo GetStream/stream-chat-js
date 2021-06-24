@@ -2801,7 +2801,7 @@ export class StreamChat<
    * @returns {Promise<PermissionAPIResponse>}
    */
   getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(`${this.baseURL}/custom_permission/${name}`);
+    return this.get<PermissionAPIResponse>(`${this.baseURL}/permissions/${name}`);
   }
 
   /** createPermission - creates a custom permission
@@ -2810,7 +2810,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_permission`, {
+    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
       ...permissionData,
     });
   }
@@ -2822,7 +2822,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   updatePermission(name: string, permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_permission/${name}`, {
+    return this.put<APIResponse>(`${this.baseURL}/permissions/${name}`, {
       ...permissionData,
     });
   }
@@ -2833,15 +2833,15 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   deletePermission(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/permissions/${name}`);
   }
 
-  /** listPermissions - returns the list of custom permissions for this application
+  /** listPermissions - returns the list of all permissions for this application
    *
    * @returns {Promise<APIResponse>}
    */
   listPermissions() {
-    return this.get<PermissionsAPIResponse>(`${this.baseURL}/custom_permission`);
+    return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
   }
 
   /** createRole - creates a custom role
@@ -2850,15 +2850,15 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   createRole(name: string) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_role`, { name });
+    return this.post<APIResponse>(`${this.baseURL}/roles`, { name });
   }
 
-  /** listRoles - returns the list of custom roles for this application
+  /** listRoles - returns the list of all roles for this application
    *
    * @returns {Promise<APIResponse>}
    */
   listRoles() {
-    return this.get<APIResponse>(`${this.baseURL}/custom_role`);
+    return this.get<APIResponse>(`${this.baseURL}/roles`);
   }
 
   /** deleteRole - deletes a custom role
@@ -2867,7 +2867,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/custom_role/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/roles/${name}`);
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
