@@ -847,6 +847,7 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 
 export type CustomPermissionOptions = {
   action: string;
+  id: string;
   name: string;
   condition?: string;
   description?: string;

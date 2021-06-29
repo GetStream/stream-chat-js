@@ -2817,12 +2817,12 @@ export class StreamChat<
 
   /** updatePermission - updates an existing custom permission
    *
-   * @param {string} name
-   * @param {CustomPermissionOptions} permissionData the permission data
+   * @param {string} id
+   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
    * @returns {Promise<APIResponse>}
    */
-  updatePermission(name: string, permissionData: CustomPermissionOptions) {
-    return this.put<APIResponse>(`${this.baseURL}/permissions/${name}`, {
+  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
+    return this.put<APIResponse>(`${this.baseURL}/permissions/${id}`, {
       ...permissionData,
     });
   }
