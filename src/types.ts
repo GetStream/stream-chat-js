@@ -1489,6 +1489,7 @@ export type AppSettings = {
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
+  multi_tenant_enabled?: boolean;
   push_config?: {
     version?: string;
   };
