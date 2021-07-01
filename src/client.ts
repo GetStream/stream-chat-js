@@ -3026,7 +3026,7 @@ export class StreamChat<
 
   async scheduleCampaign(id: string, params: { sendAt: number }) {
     const { sendAt } = params;
-    const { campaign } = await this.post<{ campaign: Campaign }>(
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/schedule`,
       { send_at: sendAt },
     );
@@ -3034,14 +3034,14 @@ export class StreamChat<
   }
 
   async stopCampaign(id: string) {
-    const { campaign } = await this.post<{ campaign: Campaign }>(
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/stop`,
     );
     return campaign;
   }
 
   async resumeCampaign(id: string) {
-    const { campaign } = await this.post<{ campaign: Campaign }>(
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/resume`,
     );
     return campaign;
