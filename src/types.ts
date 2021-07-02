@@ -288,7 +288,7 @@ export type CreateChannelResponse<
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type CreateCommandResponse<
@@ -393,7 +393,7 @@ export type GetChannelTypeResponse<
     created_at: string;
     updated_at: string;
     commands?: CommandResponse<CommandType>[];
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type GetCommandResponse<
@@ -462,7 +462,7 @@ export type ListChannelResponse<
       commands: CommandResponse<CommandType>[];
       created_at: string;
       updated_at: string;
-      roles?: Record<string, ChannelRole[]>;
+      grants?: Record<string, string[]>;
     }
   >;
 };
@@ -846,9 +846,11 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 };
 
 export type CustomPermissionOptions = {
+  action: string;
+  id: string;
   name: string;
-  resource: Resource;
   condition?: string;
+  description?: string;
   owner?: boolean;
   same_team?: boolean;
 };
@@ -1698,14 +1700,14 @@ export type EndpointName =
   | 'ReactivateUser'
   | 'HideChannel'
   | 'ShowChannel'
-  | 'CreateCustomPermission'
-  | 'UpdateCustomPermission'
-  | 'GetCustomPermission'
-  | 'DeleteCustomPermission'
-  | 'ListCustomPermission'
-  | 'CreateCustomRole'
-  | 'DeleteCustomRole'
-  | 'ListCustomRole'
+  | 'CreatePermission'
+  | 'UpdatePermission'
+  | 'GetPermission'
+  | 'DeletePermission'
+  | 'ListPermissions'
+  | 'CreateRole'
+  | 'DeleteRole'
+  | 'ListRoles'
   | 'Sync'
   | 'TranslateMessage'
   | 'CreateCommand'
@@ -1822,10 +1824,11 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 };
 
 export type PermissionAPIObject = {
+  action?: string;
   custom?: boolean;
+  description?: string;
   name?: string;
   owner?: boolean;
-  resource?: Resource;
   same_team?: boolean;
 };
 
