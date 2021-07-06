@@ -332,7 +332,7 @@ export class Channel<
     } = {},
   ) {
     // Return a list of channels
-    const { sort: sort_value, ...options_without_sort } = { ...options };
+    const { sort, ...optionsWithoutSort } = { ...options };
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
