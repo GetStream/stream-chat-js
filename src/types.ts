@@ -944,8 +944,6 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type SearchOptions = LimitOffsetSearchOptions | NextSearchOptions;
-
 export type LimitOffsetSearchOptions = {
   limit?: number;
   offset?: number;
@@ -956,6 +954,8 @@ export type NextSearchOptions = {
   next?: string;
   sort?: SearchMessageSort;
 };
+
+export type SearchOptions = LimitOffsetSearchOptions | NextSearchOptions;
 
 export type StreamChatOptions = AxiosRequestConfig & {
   /**
@@ -1426,18 +1426,24 @@ export type UserSort<UserType = UnknownType> =
 
 export type SearchRelevanceSort = { relevance?: AscDesc };
 
-export type SearchMessageSortBase =
+export type SearchMessageSortBase<MessageType = UnknownType> =
   | SearchRelevanceSort
-  | Sort<Message>
+  | Sort<MessageType>
   | { [field: string]: AscDesc };
 
-export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
+export type SearchMessageSort<MessageType = UnknownType> =
+  | SearchMessageSortBase<MessageType>
+  | Array<SearchMessageSortBase<MessageType>>;
 
-export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+export type QuerySort<
+  ChannelType = UnknownType,
+  UserType = UnknownType,
+  MessageType = UnknownType
+> =
   | BannedUsersSort
   | ChannelSort<ChannelType>
-  | UserSort<UserType>
-  | SearchMessageSort;
+  | SearchMessageSort<MessageType>
+  | UserSort<UserType>;
 
 /**
  * Base Types
