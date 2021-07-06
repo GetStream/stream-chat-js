@@ -346,7 +346,7 @@ export class Channel<
         CommandType,
         UserType
       >,
-      ...options_without_sort,
+      ...optionsWithoutSort,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -356,8 +356,8 @@ export class Channel<
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
 
-    if (sort_value) {
-      payload.sort = normalizeQuerySort(sort_value);
+    if (sort) {
+      payload.sort = normalizeQuerySort(sort);
     }
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
