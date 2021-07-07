@@ -1032,7 +1032,7 @@ export class Channel<
 
     // add any messages to our thread state
     if (data.messages) {
-      this.state.addMessagesSorted(data.messages);
+      this.state.addMessagesSorted(data.messages, false, false, true);
     }
 
     return data;

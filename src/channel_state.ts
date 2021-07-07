@@ -216,6 +216,7 @@ export class ChannelState<
     >[],
     timestampChanged = false,
     initializing = false,
+    isGetReplies = false,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
       const message = this.formatMessage(newMessages[i]);
@@ -255,8 +256,16 @@ export class ChannelState<
         this.messages = this._addToMessageList(this.messages, message, timestampChanged);
       }
 
-      // add to the thread if applicable..
-      if (parentID) {
+      /**
+       * Add message to thread if applicable and the message
+       * was added when querying for replies, or the thread already exits.
+       * This is to prevent the thread state from getting out of sync if
+       * a thread message is shown in channel but older than the newest thread
+       * message. This situation can result in a thread state where a random
+       * message is "oldest" message, and newer messages are therefore not loaded.
+       * This can also occur is an old thread message is updated.
+       */
+      if (parentID && (isGetReplies || this.threads[parentID])) {
         const thread = this.threads[parentID] || [];
         const threadMessages = this._addToMessageList(thread, message, timestampChanged);
         this.threads[parentID] = threadMessages;
