@@ -102,6 +102,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  SearchMessageSort,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1761,7 +1762,7 @@ export class StreamChat<
    *
    * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions MongoDB style filter conditions
    * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string} query search query or object MongoDB style filters
-   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
+   * @param {SearchOptions<MessageType>} [options] Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
@@ -1777,9 +1778,12 @@ export class StreamChat<
           ReactionType,
           UserType
         >,
-    options: SearchOptions = {},
+    options: SearchOptions<MessageType> = {},
   ) {
-    const { sort: sort_value, ...options_without_sort } = { ...options };
+    if ('offset' in options && ('sort' in options || 'next' in options)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
+    }
+    const { sort: sortValue, ...optionsWithoutSort } = { ...options };
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -1789,7 +1793,7 @@ export class StreamChat<
       UserType
     > = {
       filter_conditions: filterConditions,
-      ...options_without_sort,
+      ...optionsWithoutSort,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -1798,8 +1802,8 @@ export class StreamChat<
     } else {
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
-    if (sort_value) {
-      payload.sort = normalizeQuerySort(sort_value);
+    if (sortValue) {
+      payload.sort = normalizeQuerySort<SearchMessageSort<MessageType>>(sortValue);
     }
 
     // Make sure we wait for the connect promise if there is a pending one

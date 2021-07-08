@@ -944,18 +944,12 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type LimitOffsetSearchOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-export type NextSearchOptions = {
+export type SearchOptions<MessageType = UnknownType> = {
   limit?: number;
   next?: string;
-  sort?: SearchMessageSort;
+  offset?: number;
+  sort?: SearchMessageSort<MessageType>;
 };
-
-export type SearchOptions = LimitOffsetSearchOptions | NextSearchOptions;
 
 export type StreamChatOptions = AxiosRequestConfig & {
   /**
@@ -1424,12 +1418,21 @@ export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
-export type SearchRelevanceSort = { relevance?: AscDesc };
-
-export type SearchMessageSortBase<MessageType = UnknownType> =
-  | SearchRelevanceSort
-  | Sort<MessageType>
-  | { [field: string]: AscDesc };
+export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
+  attachments?: AscDesc;
+  'attachments.type'?: AscDesc;
+  created_at?: AscDesc;
+  id?: AscDesc;
+  'mentioned_users.id'?: AscDesc;
+  parent_id?: AscDesc;
+  pinned?: AscDesc;
+  relevance?: AscDesc;
+  reply_count?: AscDesc;
+  text?: AscDesc;
+  type?: AscDesc;
+  updated_at?: AscDesc;
+  'user.id'?: AscDesc;
+};
 
 export type SearchMessageSort<MessageType = UnknownType> =
   | SearchMessageSortBase<MessageType>
@@ -1931,7 +1934,7 @@ export type SearchPayload<
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = Omit<SearchOptions, 'sort'> & {
+> = Omit<SearchOptions<MessageType>, 'sort'> & {
   client_id?: string;
   connection_id?: string;
   filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
@@ -1946,7 +1949,7 @@ export type SearchPayload<
   query?: string;
   sort?: Array<{
     direction: AscDesc;
-    field: string | number;
+    field: Extract<keyof SearchMessageSortBase<MessageType>, string>;
   }>;
 };
 

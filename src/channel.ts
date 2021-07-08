@@ -44,6 +44,7 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
+  SearchMessageSort,
 } from './types';
 import { Role } from './permissions';
 
@@ -317,7 +318,7 @@ export class Channel<
           UserType
         >
       | string,
-    options: SearchOptions & {
+    options: SearchOptions<MessageType> & {
       client_id?: string;
       connection_id?: string;
       message_filter_conditions?: MessageFilters<
@@ -331,8 +332,11 @@ export class Channel<
       query?: string;
     } = {},
   ) {
+    if ('offset' in options && ('sort' in options || 'next' in options)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
+    }
     // Return a list of channels
-    const { sort, ...optionsWithoutSort } = { ...options };
+    const { sort: sortValue, ...optionsWithoutSort } = { ...options };
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -355,9 +359,8 @@ export class Channel<
     } else {
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
-
-    if (sort) {
-      payload.sort = normalizeQuerySort(sort);
+    if (sortValue) {
+      payload.sort = normalizeQuerySort<SearchMessageSort<MessageType>>(sortValue);
     }
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;

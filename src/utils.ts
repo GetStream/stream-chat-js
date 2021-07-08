@@ -102,7 +102,7 @@ export function normalizeQuerySort<T extends QuerySort>(sort: T) {
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
     const entries = (Object.entries(item) as unknown) as [
-      T extends (infer K)[] ? keyof K : keyof T,
+      T extends (infer K)[] ? Extract<keyof K, string> : Extract<keyof T, string>,
       AscDesc,
     ][];
     if (entries.length > 1) {
