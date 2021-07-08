@@ -97,10 +97,15 @@ describe('Channel count unread', function () {
 
 	it('countUnread should return correct count', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
-		channel.state.addMessagesSorted([
-			generateMsg({ date: '2021-01-01T00:00:00' }),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
-		]);
+		channel.state.addMessagesSorted(
+			[
+				generateMsg({ date: '2021-01-01T00:00:00' }),
+				generateMsg({ date: '2022-01-01T00:00:00' }),
+			],
+			false,
+			true,
+			true,
+		);
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
