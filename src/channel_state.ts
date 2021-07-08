@@ -155,8 +155,14 @@ export class ChannelState<
       UserType
     >,
     timestampChanged = false,
+    addIfDoesNotExist = false,
   ) {
-    return this.addMessagesSorted([newMessage], timestampChanged);
+    return this.addMessagesSorted(
+      [newMessage],
+      timestampChanged,
+      false,
+      addIfDoesNotExist,
+    );
   }
 
   /**
@@ -216,7 +222,7 @@ export class ChannelState<
     >[],
     timestampChanged = false,
     initializing = false,
-    isGetReplies = false,
+    addIfDoesNotExist = false,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
       const message = this.formatMessage(newMessages[i]);
@@ -253,7 +259,13 @@ export class ChannelState<
 
       // add to the main message list
       if (!parentID || message.show_in_channel) {
-        this.messages = this._addToMessageList(this.messages, message, timestampChanged);
+        this.messages = this._addToMessageList(
+          this.messages,
+          message,
+          timestampChanged,
+          'created_at',
+          addIfDoesNotExist,
+        );
       }
 
       /**
@@ -265,9 +277,15 @@ export class ChannelState<
        * message is "oldest" message, and newer messages are therefore not loaded.
        * This can also occur is an old thread message is updated.
        */
-      if (parentID && (isGetReplies || this.threads[parentID])) {
+      if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
-        const threadMessages = this._addToMessageList(thread, message, timestampChanged);
+        const threadMessages = this._addToMessageList(
+          thread,
+          message,
+          timestampChanged,
+          'created_at',
+          addIfDoesNotExist,
+        );
         this.threads[parentID] = threadMessages;
       }
     }
@@ -315,6 +333,7 @@ export class ChannelState<
       this.formatMessage(pinnedMessage),
       false,
       'pinned_at',
+      true,
     );
   }
 
@@ -526,6 +545,7 @@ export class ChannelState<
     >,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
+    addIfDoesNotExist = false,
   ) {
     let messageArr = messages;
 
@@ -535,14 +555,26 @@ export class ChannelState<
       messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
     }
 
-    // for empty list just concat and return
-    if (messageArr.length === 0) return messageArr.concat(message);
+    // for empty list just concat and return unless it's an update or deletion
+    if (messageArr.length === 0 && addIfDoesNotExist) {
+      return messageArr.concat(message);
+    } else if (messageArr.length === 0) {
+      return [...messageArr];
+    }
 
     const messageTime = (message[sortBy] as Date).getTime();
 
-    // if message is newer than last item in the list concat and return
-    if ((messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime)
+    // if message is newer than last item in the list concat and return unless it's an update or deletion
+    if (
+      (messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime &&
+      addIfDoesNotExist
+    ) {
       return messageArr.concat(message);
+    } else if (
+      (messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime
+    ) {
+      return [...messageArr];
+    }
 
     // find the closest index to push the new message
     let left = 0;
@@ -568,7 +600,12 @@ export class ChannelState<
       }
     }
 
-    messageArr.splice(left, 0, message);
+    // message is added if it's new, addIfDoesNotExist is always true when
+    // timestampChanged is true for your own messages. Do not add updated or
+    // deleted messages to the list if they do not already exist.
+    if (addIfDoesNotExist) {
+      messageArr.splice(left, 0, message);
+    }
     return [...messageArr];
   }
 

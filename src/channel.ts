@@ -1558,7 +1558,7 @@ export class Channel<
             event.message.parent_id && !event.message.show_in_channel;
 
           if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage);
+            channelState.addMessageSorted(event.message, ownMessage, true);
           }
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -1712,7 +1712,7 @@ export class Channel<
     if (!this.state.messages) {
       this.state.messages = [];
     }
-    this.state.addMessagesSorted(messages, false, true);
+    this.state.addMessagesSorted(messages, false, true, true);
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
     }
