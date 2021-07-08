@@ -111,15 +111,20 @@ describe('Channel count unread', function () {
 
 	it('countUnreadMentions should return correct count', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
-		channel.state.addMessageSorted(
-			generateMsg({
-				date: '2021-01-01T00:00:00',
-				mentioned_users: [user, { id: 'random' }],
-			}),
-			generateMsg({
-				date: '2022-01-01T00:00:00',
-				mentioned_users: [{ id: 'random' }],
-			}),
+		channel.state.addMessagesSorted(
+			[
+				generateMsg({
+					date: '2021-01-01T00:00:00',
+					mentioned_users: [user, { id: 'random' }],
+				}),
+				generateMsg({
+					date: '2022-01-01T00:00:00',
+					mentioned_users: [{ id: 'random' }],
+				}),
+			],
+			false,
+			true,
+			true,
 		);
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});

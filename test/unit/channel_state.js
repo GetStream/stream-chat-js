@@ -314,7 +314,7 @@ describe('ChannelState reactions', () => {
 		const client = new StreamChat();
 		client.userID = 'observer';
 		state = new ChannelState(new Channel(client, 'live', 'stream', {}));
-		state.addMessageSorted(message);
+		state.addMessageSorted(message, false, true);
 	});
 	it('Add one reaction', () => {
 		const reaction = {
