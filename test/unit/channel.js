@@ -49,7 +49,7 @@ describe('Channel count unread', function () {
 			mentioned_users: [user],
 		}),
 	];
-	channel.state.addMessagesSorted(ignoredMessages);
+	channel.state.addMessagesSorted(ignoredMessages, false, true, true);
 
 	it('_countMessageAsUnread should return false shadowed or silent messages', function () {
 		expect(channel._countMessageAsUnread({ shadowed: true })).not.to.be.ok;

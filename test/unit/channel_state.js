@@ -15,13 +15,19 @@ describe('ChannelState addMessagesSorted', function () {
 	it('empty state add single messages', async function () {
 		const state = new ChannelState();
 		expect(state.messages).to.have.length(0);
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })],
+			false,
+			true,
+			true,
+		);
 		expect(state.messages).to.have.length(1);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:01.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '1', date: '2020-01-01T00:00:01.000Z' })],
+			false,
+			true,
+			true,
+		);
 
 		expect(state.messages).to.have.length(2);
 		expect(state.messages[0].id).to.be.equal('0');
@@ -30,11 +36,16 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('empty state add multiple messages', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+			],
+			false,
+			true,
+			true,
+		);
 
 		expect(state.messages).to.have.length(3);
 		expect(state.messages[0].id).to.be.equal('0');
@@ -44,7 +55,7 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('update a message in place 1', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([generateMsg({ id: '0' })]);
+		state.addMessagesSorted([generateMsg({ id: '0' })], false, true, true);
 		state.addMessagesSorted([{ ...state.messages[0], text: 'update' }]);
 
 		expect(state.messages).to.have.length(1);
@@ -53,11 +64,16 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('update a message in place 2', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+			],
+			false,
+			true,
+			true,
+		);
 
 		state.addMessagesSorted([{ ...state.messages[1], text: 'update' }]);
 
@@ -70,12 +86,17 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('update a message in place 3', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
-		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+				generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+			],
+			false,
+			true,
+			true,
+		);
 
 		state.addMessagesSorted([{ ...state.messages[0], text: 'update 0' }]);
 		expect(state.messages).to.have.length(4);
@@ -94,9 +115,12 @@ describe('ChannelState addMessagesSorted', function () {
 		const state = new ChannelState();
 
 		for (let i = 0; i < 10; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` }),
-			]);
+			state.addMessagesSorted(
+				[generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` })],
+				false,
+				true,
+				true,
+			);
 		}
 
 		for (let i = 10; i < state.messages.length - 1; i++) {
@@ -107,9 +131,12 @@ describe('ChannelState addMessagesSorted', function () {
 		}
 
 		expect(state.messages).to.have.length(10);
-		state.addMessagesSorted([
-			generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` })],
+			false,
+			false,
+			true,
+		);
 		expect(state.messages).to.have.length(11);
 		expect(state.messages[7].id).to.be.equal('7');
 		expect(state.messages[8].id).to.be.equal('id');
@@ -119,9 +146,12 @@ describe('ChannelState addMessagesSorted', function () {
 		const state = new ChannelState();
 
 		for (let i = 100; i < 300; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` }),
-			]);
+			state.addMessagesSorted(
+				[generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` })],
+				false,
+				false,
+				true,
+			);
 		}
 
 		expect(state.messages).to.have.length(200);
@@ -146,7 +176,7 @@ describe('ChannelState addMessagesSorted', function () {
 			[messages[i], messages[j]] = [messages[j], messages[i]];
 		}
 
-		state.addMessagesSorted(messages);
+		state.addMessagesSorted(messages, false, false, true);
 
 		expect(state.messages).to.have.length(200);
 		for (let i = 0; i < 200; i++) {
@@ -156,9 +186,12 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should avoid duplicates if message.created_at changes', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })],
+			false,
+			true,
+			true,
+		);
 		expect(state.messages).to.have.length(1);
 
 		state.addMessageSorted(
@@ -178,12 +211,17 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should respect order and avoid duplicates if message.created_at changes', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
-		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+				generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+			],
+			false,
+			true,
+			true,
+		);
 		expect(state.messages).to.have.length(4);
 
 		state.addMessagesSorted(
@@ -218,22 +256,31 @@ describe('ChannelState addMessagesSorted', function () {
 	it('updates last_message_at correctly', async function () {
 		const state = new ChannelState();
 		expect(state.last_message_at).to.be.null;
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })],
+			false,
+			true,
+			true,
+		);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' })],
+			false,
+			false,
+			true,
+		);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
 
-		state.addMessagesSorted([
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }),
-		]);
+		state.addMessagesSorted(
+			[generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' })],
+			false,
+			false,
+			true,
+		);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.001Z').getTime(),
 		);
@@ -398,7 +445,7 @@ describe('deleteUserMessages', () => {
 		const m1u2 = generateMsg({ user: user2 });
 		const m2u2 = generateMsg({ user: user2 });
 
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2], false, true, true);
 
 		expect(state.messages).to.have.length(4);
 
@@ -433,7 +480,7 @@ describe('deleteUserMessages', () => {
 		const m1u2 = generateMsg({ user: user2 });
 		const m2u2 = generateMsg({ user: user2 });
 
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2], false, true, true);
 		expect(state.messages).to.have.length(4);
 
 		state.deleteUserMessages(user1);
@@ -469,7 +516,7 @@ describe('updateUserMessages', () => {
 		const m1u2 = generateMsg({ user: user2 });
 		const m2u2 = generateMsg({ user: user2 });
 
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
+		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2], false, true, true);
 
 		expect(state.messages).to.have.length(4);
 
