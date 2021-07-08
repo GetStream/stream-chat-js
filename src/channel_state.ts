@@ -547,6 +547,7 @@ export class ChannelState<
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = false,
   ) {
+    const addMessageToList = addIfDoesNotExist || timestampChanged;
     let messageArr = messages;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
@@ -556,7 +557,7 @@ export class ChannelState<
     }
 
     // for empty list just concat and return unless it's an update or deletion
-    if (messageArr.length === 0 && addIfDoesNotExist) {
+    if (messageArr.length === 0 && addMessageToList) {
       return messageArr.concat(message);
     } else if (messageArr.length === 0) {
       return [...messageArr];
@@ -567,7 +568,7 @@ export class ChannelState<
     // if message is newer than last item in the list concat and return unless it's an update or deletion
     if (
       (messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime &&
-      addIfDoesNotExist
+      addMessageToList
     ) {
       return messageArr.concat(message);
     } else if (
@@ -600,10 +601,9 @@ export class ChannelState<
       }
     }
 
-    // message is added if it's new, addIfDoesNotExist is always true when
-    // timestampChanged is true for your own messages. Do not add updated or
-    // deleted messages to the list if they do not already exist.
-    if (addIfDoesNotExist) {
+    // Do not add updated or deleted messages to the list if they do not already exist
+    // or have a timestamp change.
+    if (addMessageToList) {
       messageArr.splice(left, 0, message);
     }
     return [...messageArr];
