@@ -155,7 +155,7 @@ export class ChannelState<
       UserType
     >,
     timestampChanged = false,
-    addIfDoesNotExist = false,
+    addIfDoesNotExist = true,
   ) {
     return this.addMessagesSorted(
       [newMessage],
@@ -222,7 +222,7 @@ export class ChannelState<
     >[],
     timestampChanged = false,
     initializing = false,
-    addIfDoesNotExist = false,
+    addIfDoesNotExist = true,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
       const message = this.formatMessage(newMessages[i]);
@@ -333,7 +333,6 @@ export class ChannelState<
       this.formatMessage(pinnedMessage),
       false,
       'pinned_at',
-      true,
     );
   }
 
@@ -545,7 +544,7 @@ export class ChannelState<
     >,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
-    addIfDoesNotExist = false,
+    addIfDoesNotExist = true,
   ) {
     const addMessageToList = addIfDoesNotExist || timestampChanged;
     let messageArr = messages;

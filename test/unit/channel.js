@@ -49,7 +49,7 @@ describe('Channel count unread', function () {
 			mentioned_users: [user],
 		}),
 	];
-	channel.state.addMessagesSorted(ignoredMessages, false, true, true);
+	channel.state.addMessagesSorted(ignoredMessages);
 
 	it('_countMessageAsUnread should return false shadowed or silent messages', function () {
 		expect(channel._countMessageAsUnread({ shadowed: true })).not.to.be.ok;
@@ -97,34 +97,24 @@ describe('Channel count unread', function () {
 
 	it('countUnread should return correct count', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
-		channel.state.addMessagesSorted(
-			[
-				generateMsg({ date: '2021-01-01T00:00:00' }),
-				generateMsg({ date: '2022-01-01T00:00:00' }),
-			],
-			false,
-			true,
-			true,
-		);
+		channel.state.addMessagesSorted([
+			generateMsg({ date: '2021-01-01T00:00:00' }),
+			generateMsg({ date: '2022-01-01T00:00:00' }),
+		]);
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
 	it('countUnreadMentions should return correct count', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
-		channel.state.addMessagesSorted(
-			[
-				generateMsg({
-					date: '2021-01-01T00:00:00',
-					mentioned_users: [user, { id: 'random' }],
-				}),
-				generateMsg({
-					date: '2022-01-01T00:00:00',
-					mentioned_users: [{ id: 'random' }],
-				}),
-			],
-			false,
-			true,
-			true,
+		channel.state.addMessageSorted(
+			generateMsg({
+				date: '2021-01-01T00:00:00',
+				mentioned_users: [user, { id: 'random' }],
+			}),
+			generateMsg({
+				date: '2022-01-01T00:00:00',
+				mentioned_users: [{ id: 'random' }],
+			}),
 		);
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});

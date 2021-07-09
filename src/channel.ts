@@ -1032,7 +1032,7 @@ export class Channel<
 
     // add any messages to our thread state
     if (data.messages) {
-      this.state.addMessagesSorted(data.messages, false, false, true);
+      this.state.addMessagesSorted(data.messages);
     }
 
     return data;
@@ -1544,7 +1544,7 @@ export class Channel<
       case 'message.deleted':
         if (event.message) {
           if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message);
+          else channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
           }
@@ -1558,7 +1558,7 @@ export class Channel<
             event.message.parent_id && !event.message.show_in_channel;
 
           if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage, true);
+            channelState.addMessageSorted(event.message, ownMessage);
           }
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -1577,7 +1577,7 @@ export class Channel<
         break;
       case 'message.updated':
         if (event.message) {
-          channelState.addMessageSorted(event.message);
+          channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           } else {
@@ -1712,7 +1712,7 @@ export class Channel<
     if (!this.state.messages) {
       this.state.messages = [];
     }
-    this.state.addMessagesSorted(messages, false, true, true);
+    this.state.addMessagesSorted(messages, false, true);
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
     }
