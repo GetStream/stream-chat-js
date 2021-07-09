@@ -332,11 +332,10 @@ export class Channel<
       query?: string;
     } = {},
   ) {
-    if ('offset' in options && ('sort' in options || 'next' in options)) {
+    if (options.offset && (options.sort || options.next)) {
       throw Error(`Cannot specify offset with sort or next parameters`);
     }
     // Return a list of channels
-    const { sort: sortValue, ...optionsWithoutSort } = { ...options };
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -350,7 +349,8 @@ export class Channel<
         CommandType,
         UserType
       >,
-      ...optionsWithoutSort,
+      ...options,
+      sort: options.sort ? normalizeQuerySort<SearchMessageSort<MessageType>>(options.sort) : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -358,9 +358,6 @@ export class Channel<
       payload.message_filter_conditions = query;
     } else {
       throw Error(`Invalid type ${typeof query} for query parameter`);
-    }
-    if (sortValue) {
-      payload.sort = normalizeQuerySort<SearchMessageSort<MessageType>>(sortValue);
     }
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
