@@ -1949,7 +1949,7 @@ export type SearchPayload<
   query?: string;
   sort?: Array<{
     direction: AscDesc;
-    field: Extract<keyof SearchMessageSortBase<MessageType>, string>;
+    field: keyof SearchMessageSortBase<MessageType>;
   }>;
 };
 

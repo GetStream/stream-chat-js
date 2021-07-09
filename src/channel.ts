@@ -44,7 +44,7 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
-  SearchMessageSort,
+  SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
 
@@ -350,7 +350,9 @@ export class Channel<
         UserType
       >,
       ...options,
-      sort: options.sort ? normalizeQuerySort<SearchMessageSort<MessageType>>(options.sort) : undefined,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;

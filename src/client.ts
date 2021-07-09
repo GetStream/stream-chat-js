@@ -102,7 +102,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  SearchMessageSort,
+  SearchMessageSortBase,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1793,7 +1793,9 @@ export class StreamChat<
     > = {
       filter_conditions: filterConditions,
       ...options,
-      sort: options.sort ? normalizeQuerySort<SearchMessageSort<MessageType>>(options.sort) : undefined,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;

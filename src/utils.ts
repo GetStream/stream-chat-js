@@ -3,7 +3,6 @@ import {
   AscDesc,
   LiteralStringForUnion,
   OwnUserResponse,
-  QuerySort,
   UnknownType,
   UserResponse,
 } from './types';
@@ -96,15 +95,13 @@ export function addFileToFormData(
 
   return data;
 }
-
-export function normalizeQuerySort<T extends QuerySort>(sort: T) {
-  const sortFields = [];
+export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
+  sort: T | T[],
+) {
+  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
-    const entries = (Object.entries(item) as unknown) as [
-      T extends (infer K)[] ? Extract<keyof K, string> : Extract<keyof T, string>,
-      AscDesc,
-    ][];
+    const entries = Object.entries(item) as [keyof T, AscDesc][];
     if (entries.length > 1) {
       console.warn(
         "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
