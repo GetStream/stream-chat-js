@@ -2509,17 +2509,11 @@ export class StreamChat<
   }
 
   /**
-   * pinMessage - pins provided message
-   * @param {string | {id: string}} messageOrMessageID object
+   * _normalizeExpiration - pins provided message transforms expiration value into ISO string
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   * @param {string | { id: string }} [userId]
    */
-  pinMessage(
-    messageOrMessageID: string | { id: string },
-    timeoutOrExpirationDate?: null | number | string | Date,
-    userId?: string | { id: string },
-  ) {
-    let pinExpires;
+  _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
+    let pinExpires: undefined | string;
     if (typeof timeoutOrExpirationDate === 'number') {
       const now = new Date();
       now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
@@ -2529,21 +2523,44 @@ export class StreamChat<
     } else if (timeoutOrExpirationDate instanceof Date) {
       pinExpires = timeoutOrExpirationDate.toISOString();
     }
-    let messageID: string;
-    if (typeof messageOrMessageID === 'string') {
-      messageID = messageOrMessageID;
+    return pinExpires;
+  }
+
+  /**
+   * _messageId - extracts string message id from either message object or message id
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {string} caller caller function name to report an error in case of message id absence
+   */
+  _messageId(messageOrMessageId: string | { id: string }, caller: string) {
+    let messageId: string;
+    if (typeof messageOrMessageId === 'string') {
+      messageId = messageOrMessageId;
     } else {
-      if (!messageOrMessageID.id) {
-        throw Error('Please specify the message id when calling pinMessage');
+      if (!messageOrMessageId.id) {
+        throw Error('Please specify the message id when calling ' + caller);
       }
-      messageID = messageOrMessageID.id;
+      messageId = messageOrMessageId.id;
     }
+    return messageId;
+  }
+
+  /**
+   * pinMessage - pins the message
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * @param {string | { id: string }} [userId]
+   */
+  pinMessage(
+    messageOrMessageId: string | { id: string },
+    timeoutOrExpirationDate?: null | number | string | Date,
+    userId?: string | { id: string },
+  ) {
     return this.partialUpdateMessage(
-      messageID,
+      this._messageId(messageOrMessageId, 'pinMessage'),
       {
         set: {
           pinned: true,
-          pin_expires: pinExpires,
+          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
         },
       },
       userId,
@@ -2551,25 +2568,16 @@ export class StreamChat<
   }
 
   /**
-   * unpinMessage - unpins provided message
-   * @param {string | {id: string}} messageOrMessageID
+   * unpinMessage - unpins the message that was previously pinned
+   * @param {string | { id: string }} messageOrMessageId message object or message id
    * @param {string | { id: string }} [userId]
    */
   unpinMessage(
-    messageOrMessageID: string | { id: string },
+    messageOrMessageId: string | { id: string },
     userId?: string | { id: string },
   ) {
-    let messageID: string;
-    if (typeof messageOrMessageID === 'string') {
-      messageID = messageOrMessageID;
-    } else {
-      if (!messageOrMessageID.id) {
-        throw Error('Please specify the message id when calling unpinMessage');
-      }
-      messageID = messageOrMessageID.id;
-    }
     return this.partialUpdateMessage(
-      messageID,
+      this._messageId(messageOrMessageId, 'unpinMessage'),
       {
         set: {
           pinned: false,
