@@ -2509,7 +2509,7 @@ export class StreamChat<
   }
 
   /**
-   * _normalizeExpiration - pins provided message transforms expiration value into ISO string
+   * _normalizeExpiration - transforms expiration value into ISO string
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
   _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
