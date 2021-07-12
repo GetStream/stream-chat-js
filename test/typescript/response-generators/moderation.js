@@ -182,10 +182,11 @@ async function getBlockList() {
 async function getPermission() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
+		id: 'test-get-permission',
 		name: 'TestGetPermission',
-		resource: 'ReadChannel',
+		action: 'ReadChannel',
 	});
-	return await authClient.getPermission('TestGetPermission');
+	return await authClient.getPermission('test-get-permission');
 }
 
 async function listBlockLists() {
@@ -201,8 +202,9 @@ async function listBlockLists() {
 async function listPermissions() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
+		id: 'test-list-permissions',
 		name: 'TestListPermissions',
-		resource: 'ReadChannel',
+		action: 'ReadChannel',
 	});
 	return await authClient.listPermissions();
 }
@@ -351,11 +353,13 @@ async function updateBlockList() {
 async function updatePermission() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
+		id: 'test-update-permission',
 		name: 'TestUpdatePermission',
-		resource: 'ReadChannel',
+		action: 'ReadChannel',
 	});
-	return await authClient.updatePermission('TestUpdatePermission', {
-		resource: 'DeleteChannel',
+	return await authClient.updatePermission('test-update-permission', {
+		name: 'TestUpdatePermissionUpdated',
+		action: 'DeleteChannel',
 	});
 }
 
