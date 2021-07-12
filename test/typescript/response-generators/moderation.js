@@ -49,8 +49,9 @@ async function createBlockList() {
 async function createPermission() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.createPermission({
+		id: 'test-create-permission',
 		name: 'TestCreatePermission',
-		resource: 'ReadChannel',
+		action: 'ReadChannel',
 	});
 }
 
@@ -77,10 +78,11 @@ async function deleteBlockList() {
 async function deletePermission() {
 	const authClient = await utils.getTestClient(true);
 	await authClient.createPermission({
+		id: 'test-delete-permission',
 		name: 'TestDeletePermission',
-		resource: 'DeleteChannel',
+		action: 'ReadChannel',
 	});
-	return await authClient.deletePermission('TestDeletePermission');
+	return await authClient.deletePermission('test-delete-permission');
 }
 
 async function deleteRole() {
