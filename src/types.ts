@@ -832,6 +832,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   connect_events?: boolean;
   connection_id?: string;
   custom_events?: boolean;
+  grants?: Record<string, string[]>;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1863,6 +1864,7 @@ export type PermissionAPIObject = {
   action?: string;
   custom?: boolean;
   description?: string;
+  id?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;
