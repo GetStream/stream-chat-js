@@ -2535,7 +2535,7 @@ export class StreamChat<
   /**
    * _messageId - extracts string message id from either message object or message id
    * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string} message error message to report in case of message id absence
+   * @param {string} errorText error message to report in case of message id absence
    */
   _validateAndGetMessageId(messageOrMessageId: string | { id: string }, errorText: string) {
     let messageId: string;
