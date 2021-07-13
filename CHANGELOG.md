@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## July 13, 2021 - 3.12.0
+
+### Features/updates
+
+- Updates to `client.search()` and `channel.search()` endpoint [#677](https://github.com/GetStream/stream-chat-js/pull/677)
+
+  - supports sorting results
+  - returns `next` and `previous` parameters to get the next/previous page of results
+  - supports pagination using the `next` parameter
+
+- Added new `channel.assignRoles` method for assigning custom roles to the channel members ([#692](https://github.com/GetStream/stream-chat-js/pull/692))
+- Updated Permissions API methods ([#707](https://github.com/GetStream/stream-chat-js/pull/707), [#715](https://github.com/GetStream/stream-chat-js/pull/715))
+- Switched `pinMessage` and `unpinMessage` to partial update ([#712](https://github.com/GetStream/stream-chat-js/pull/712))
+
+### Issue fixes
+
+- [704](https://github.com/GetStream/stream-chat-js/issues/704) Added missing `team` property to `Event` typescript type. [#716](https://github.com/GetStream/stream-chat-js/pull/716/files)
+
 ## June 8, 2021 - 3.11.0
 
 - Fixed timer throttling issue, which was introduced with recent release of Chrome browser [#698](https://github.com/GetStream/stream-chat-js/pull/698)
