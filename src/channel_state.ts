@@ -551,13 +551,15 @@ export class ChannelState<
   ) {
     const addMessageToList = addIfDoesNotExist || timestampChanged;
     let messageArr = messages;
-    const messageArrayLength = messageArr.length;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
     // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
     if (timestampChanged) {
       messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
     }
+
+    // Get array length after filtering
+    const messageArrayLength = messageArr.length;
 
     // for empty list just concat and return unless it's an update or deletion
     if (messageArrayLength === 0 && addMessageToList) {
