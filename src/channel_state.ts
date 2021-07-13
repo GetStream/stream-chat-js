@@ -143,6 +143,7 @@ export class ChannelState<
    *
    * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessageSorted(
@@ -209,6 +210,7 @@ export class ChannelState<
    * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessagesSorted(
@@ -516,6 +518,7 @@ export class ChannelState<
    * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {string} sortBy field name to use to sort the messages by
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    */
   _addToMessageList(
     messages: Array<
