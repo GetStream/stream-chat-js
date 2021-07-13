@@ -1,11 +1,12 @@
 import chai from 'chai';
-
+import chaiAsPromised from 'chai-as-promised';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
 import { StreamChat } from '../../src/client';
 
 const expect = chai.expect;
+chai.use(chaiAsPromised);
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -266,5 +267,46 @@ describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 				mentioned_users: undefined,
 			}),
 		);
+	});
+});
+
+describe('Client search', async () => {
+	const client = await getClientWithUser();
+
+	it('search with sorting by defined field', async () => {
+		client.get = (url, config) => {
+			expect(config.payload.sort).to.be.eql([
+				{ field: 'updated_at', direction: -1 },
+			]);
+		};
+		await client.search({ cid: 'messaging:my-cid' }, 'query', {
+			sort: [{ updated_at: -1 }],
+		});
+	});
+	it('search with sorting by custom field', async () => {
+		client.get = (url, config) => {
+			expect(config.payload.sort).to.be.eql([
+				{ field: 'custom_field', direction: -1 },
+			]);
+		};
+		await client.search({ cid: 'messaging:my-cid' }, 'query', {
+			sort: [{ custom_field: -1 }],
+		});
+	});
+	it('sorting and offset fails', async () => {
+		await expect(
+			client.search({ cid: 'messaging:my-cid' }, 'query', {
+				offset: 1,
+				sort: [{ custom_field: -1 }],
+			}),
+		).to.be.rejectedWith(Error);
+	});
+	it('next and offset fails', async () => {
+		await expect(
+			client.search({ cid: 'messaging:my-cid' }, 'query', {
+				offset: 1,
+				next: 'next',
+			}),
+		).to.be.rejectedWith(Error);
 	});
 });

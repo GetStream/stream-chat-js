@@ -425,3 +425,34 @@ describe('event subscription and unsubscription', () => {
 		expect(channel.listeners['all'].length).to.be.equal(0);
 	});
 });
+describe('Channel search', async () => {
+	const client = await getClientWithUser();
+	const channel = client.channel('messaging', uuidv4());
+
+	it('search with sorting by defined field', async () => {
+		client.get = (url, config) => {
+			expect(config.payload.sort).to.be.eql([
+				{ field: 'updated_at', direction: -1 },
+			]);
+		};
+		await channel.search('query', { sort: [{ updated_at: -1 }] });
+	});
+	it('search with sorting by custom field', async () => {
+		client.get = (url, config) => {
+			expect(config.payload.sort).to.be.eql([
+				{ field: 'custom_field', direction: -1 },
+			]);
+		};
+		await channel.search('query', { sort: [{ custom_field: -1 }] });
+	});
+	it('sorting and offset fails', async () => {
+		await expect(
+			channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }),
+		).to.be.rejectedWith(Error);
+	});
+	it('next and offset fails', async () => {
+		await expect(
+			channel.search('query', { offset: 1, next: 'next' }),
+		).to.be.rejectedWith(Error);
+	});
+});
