@@ -649,8 +649,17 @@ export type SearchAPIResponse<
       UserType
     >;
   }[];
+  next?: string;
+  previous?: string;
+  results_warning?: SearchWarning;
 };
 
+export type SearchWarning = {
+  channel_search_cids: string[];
+  channel_search_count: number;
+  warning_code: number;
+  warning_description: string;
+};
 export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
@@ -936,9 +945,11 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type SearchOptions = {
+export type SearchOptions<MessageType = UnknownType> = {
   limit?: number;
+  next?: string;
   offset?: number;
+  sort?: SearchMessageSort<MessageType>;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
@@ -1408,9 +1419,34 @@ export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
-export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
+  attachments?: AscDesc;
+  'attachments.type'?: AscDesc;
+  created_at?: AscDesc;
+  id?: AscDesc;
+  'mentioned_users.id'?: AscDesc;
+  parent_id?: AscDesc;
+  pinned?: AscDesc;
+  relevance?: AscDesc;
+  reply_count?: AscDesc;
+  text?: AscDesc;
+  type?: AscDesc;
+  updated_at?: AscDesc;
+  'user.id'?: AscDesc;
+};
+
+export type SearchMessageSort<MessageType = UnknownType> =
+  | SearchMessageSortBase<MessageType>
+  | Array<SearchMessageSortBase<MessageType>>;
+
+export type QuerySort<
+  ChannelType = UnknownType,
+  UserType = UnknownType,
+  MessageType = UnknownType
+> =
   | BannedUsersSort
   | ChannelSort<ChannelType>
+  | SearchMessageSort<MessageType>
   | UserSort<UserType>;
 
 /**
@@ -1900,7 +1936,7 @@ export type SearchPayload<
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SearchOptions & {
+> = Omit<SearchOptions<MessageType>, 'sort'> & {
   client_id?: string;
   connection_id?: string;
   filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
@@ -1913,6 +1949,10 @@ export type SearchPayload<
     UserType
   >;
   query?: string;
+  sort?: Array<{
+    direction: AscDesc;
+    field: keyof SearchMessageSortBase<MessageType>;
+  }>;
 };
 
 export type TestPushDataInput = {
