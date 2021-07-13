@@ -81,9 +81,9 @@ import {
   PermissionAPIResponse,
   PermissionsAPIResponse,
   ReactionResponse,
-  SearchAPIResponse,
   SearchOptions,
   SearchPayload,
+  SearchAPIResponse,
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
@@ -102,6 +102,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  SearchMessageSortBase,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -1761,7 +1762,7 @@ export class StreamChat<
    *
    * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions MongoDB style filter conditions
    * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string} query search query or object MongoDB style filters
-   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
+   * @param {SearchOptions<MessageType>} [options] Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
@@ -1777,9 +1778,11 @@ export class StreamChat<
           ReactionType,
           UserType
         >,
-    options: SearchOptions = {},
+    options: SearchOptions<MessageType> = {},
   ) {
-    // Return a list of channels
+    if (options.offset && (options.sort || options.next)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
+    }
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -1790,6 +1793,9 @@ export class StreamChat<
     > = {
       filter_conditions: filterConditions,
       ...options,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
