@@ -1048,6 +1048,7 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  team?: string;
   total_unread_count?: number;
   unread_channels?: number;
   unread_count?: number;

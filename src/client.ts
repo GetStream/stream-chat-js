@@ -2515,23 +2515,11 @@ export class StreamChat<
   }
 
   /**
-   * pinMessage - pins provided message
-   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
-   * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * _normalizeExpiration - transforms expiration value into ISO string
+   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
-  // todo use partialMessageUpdate and allow pin using server side auth
-  pinMessage(
-    message: UpdatedMessage<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    timeoutOrExpirationDate?: number | string | Date,
-  ) {
-    let pinExpires;
+  _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
+    let pinExpires: undefined | string;
     if (typeof timeoutOrExpirationDate === 'number') {
       const now = new Date();
       now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
@@ -2541,32 +2529,79 @@ export class StreamChat<
     } else if (timeoutOrExpirationDate instanceof Date) {
       pinExpires = timeoutOrExpirationDate.toISOString();
     }
-    return this.updateMessage({
-      ...message,
-      pinned: true,
-      pin_expires: pinExpires,
-    });
+    return pinExpires;
   }
 
   /**
-   * unpinMessage - unpins provided message
-   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   * _messageId - extracts string message id from either message object or message id
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {string} errorText error message to report in case of message id absence
    */
-  // todo use partialMessageUpdate and allow unpin using server side auth
-  unpinMessage(
-    message: UpdatedMessage<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+  _validateAndGetMessageId(
+    messageOrMessageId: string | { id: string },
+    errorText: string,
   ) {
-    return this.updateMessage({
-      ...message,
-      pinned: false,
-    });
+    let messageId: string;
+    if (typeof messageOrMessageId === 'string') {
+      messageId = messageOrMessageId;
+    } else {
+      if (!messageOrMessageId.id) {
+        throw Error(errorText);
+      }
+      messageId = messageOrMessageId.id;
+    }
+    return messageId;
+  }
+
+  /**
+   * pinMessage - pins the message
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * @param {string | { id: string }} [userId]
+   */
+  pinMessage(
+    messageOrMessageId: string | { id: string },
+    timeoutOrExpirationDate?: null | number | string | Date,
+    userId?: string | { id: string },
+  ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
+    return this.partialUpdateMessage(
+      messageId,
+      {
+        set: {
+          pinned: true,
+          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+        },
+      },
+      userId,
+    );
+  }
+
+  /**
+   * unpinMessage - unpins the message that was previously pinned
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {string | { id: string }} [userId]
+   */
+  unpinMessage(
+    messageOrMessageId: string | { id: string },
+    userId?: string | { id: string },
+  ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
+    return this.partialUpdateMessage(
+      messageId,
+      {
+        set: {
+          pinned: false,
+        },
+      },
+      userId,
+    );
   }
 
   /**

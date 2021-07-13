@@ -3,7 +3,23 @@ require('dotenv').config();
 const apiKey = '892s22ypvt6m';
 const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
 
+const multiTenancySecret =
+	'pf8krbh9z3vc8d35dn65tq4xsa4jqmcbdgp5spuej2fprm6rqc5mtxuxghgxw43u';
+const multiTenancyKey = '2g3vcvcnmm5u';
+
 module.exports = {
+	createMultiTenancyUsers: async function createMultiTenancyUsers(
+		userIDs,
+		teams = [],
+		additionalInfo,
+	) {
+		const serverClient = await this.getMultiTenancyServerTestClient();
+		const users = [];
+		for (const userID of userIDs) {
+			users.push({ id: userID, teams, ...additionalInfo });
+		}
+		return await serverClient.upsertUsers(users);
+	},
 	createUsers: async function createUsers(userIDs, additionalInfo) {
 		const serverClient = this.getServerTestClient();
 		const users = [];
@@ -11,6 +27,10 @@ module.exports = {
 			users.push({ id: userID, ...additionalInfo });
 		}
 		return await serverClient.upsertUsers(users);
+	},
+	createMultiTenancyUserToken: function createUserToken(userID) {
+		const chat = new StreamChat(multiTenancyKey, multiTenancySecret);
+		return chat.createToken(userID);
 	},
 	createUserToken: function createUserToken(userID) {
 		const chat = new StreamChat(apiKey, apiSecret);
@@ -33,6 +53,48 @@ module.exports = {
 		const channel = client.channel('messaging', id, { members: [userID] });
 		await channel.create();
 		return channel;
+	},
+	createTestMultiTenancyChannelForUser: async function createTestMultiTenancyChannelForUser(
+		id,
+		userID,
+		team,
+		options = {},
+	) {
+		const client = await this.getMultiTenancyTestClientForUser(userID, options);
+		const channel = client.channel('messaging', id, { members: [userID], team });
+		await channel.create();
+		return channel;
+	},
+	getMultiTenancyTestClient: async function getMultiTenancyTestClient(serverSide) {
+		const client = new StreamChat(
+			multiTenancyKey,
+			serverSide ? multiTenancySecret : null,
+			{
+				timeout: 8000,
+				allowServerSideConnect: true,
+			},
+		);
+		if (serverSide) {
+			await client.updateAppSettings({
+				multi_tenant_enabled: true,
+			});
+		}
+		return client;
+	},
+	getMultiTenancyTestClientForUser: async function getMultiTenancyTestClientForUser(
+		userID,
+		options = {},
+	) {
+		const client = await this.getMultiTenancyTestClient(false);
+		const health = await client.connectUser(
+			{ id: userID, ...options },
+			this.createMultiTenancyUserToken(userID),
+		);
+		client.health = health;
+		return client;
+	},
+	getMultiTenancyServerTestClient: async function getMultiTenancyServerTestClient() {
+		return await this.getMultiTenancyTestClient(true);
 	},
 	getServerTestClient: function getServerTestClient() {
 		return this.getTestClient(true);

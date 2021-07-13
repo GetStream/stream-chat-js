@@ -472,6 +472,12 @@ const executables = [
 		type:
 			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sync']>>",
 	},
+	{
+		f: rg.syncTeam,
+		imports: ['StreamChat', 'Unpacked'],
+		type:
+			"Unpacked<ReturnType<StreamChat<{}, { description?: string }, string & {}, {}, {}, {}, {}>['sync']>>",
+	},
 	// Need translation on the account to run this test
 	// {
 	// 	f: rg.translateMessage,
