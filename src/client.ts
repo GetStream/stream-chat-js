@@ -2543,7 +2543,7 @@ export class StreamChat<
       messageId = messageOrMessageId;
     } else {
       if (!messageOrMessageId.id) {
-        throw Error(message);
+        throw Error(errorText);
       }
       messageId = messageOrMessageId.id;
     }
