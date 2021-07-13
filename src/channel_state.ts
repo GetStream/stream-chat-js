@@ -277,7 +277,7 @@ export class ChannelState<
        * a thread message is shown in channel but older than the newest thread
        * message. This situation can result in a thread state where a random
        * message is "oldest" message, and newer messages are therefore not loaded.
-       * This can also occur is an old thread message is updated.
+       * This can also occur if an old thread message is updated.
        */
       if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
