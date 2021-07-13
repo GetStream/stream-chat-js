@@ -551,6 +551,7 @@ export class ChannelState<
   ) {
     const addMessageToList = addIfDoesNotExist || timestampChanged;
     let messageArr = messages;
+    const messageArrayLength = messageArr.length;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
     // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
@@ -559,30 +560,27 @@ export class ChannelState<
     }
 
     // for empty list just concat and return unless it's an update or deletion
-    if (messageArr.length === 0 && addMessageToList) {
+    if (messageArrayLength === 0 && addMessageToList) {
       return messageArr.concat(message);
-    } else if (messageArr.length === 0) {
+    } else if (messageArrayLength === 0) {
       return [...messageArr];
     }
 
     const messageTime = (message[sortBy] as Date).getTime();
+    const messageIsNewest =
+      (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
 
     // if message is newer than last item in the list concat and return unless it's an update or deletion
-    if (
-      (messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime &&
-      addMessageToList
-    ) {
+    if (messageIsNewest && addMessageToList) {
       return messageArr.concat(message);
-    } else if (
-      (messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime
-    ) {
+    } else if (messageIsNewest) {
       return [...messageArr];
     }
 
     // find the closest index to push the new message
     let left = 0;
     let middle = 0;
-    let right = messageArr.length - 1;
+    let right = messageArrayLength - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
       if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime)
