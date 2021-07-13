@@ -1562,7 +1562,7 @@ export class Channel<
       case 'message.deleted':
         if (event.message) {
           if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message);
+          else channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
           }
@@ -1595,7 +1595,7 @@ export class Channel<
         break;
       case 'message.updated':
         if (event.message) {
-          channelState.addMessageSorted(event.message);
+          channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           } else {

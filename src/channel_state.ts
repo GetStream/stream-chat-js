@@ -143,6 +143,7 @@ export class ChannelState<
    *
    * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessageSorted(
@@ -155,8 +156,14 @@ export class ChannelState<
       UserType
     >,
     timestampChanged = false,
+    addIfDoesNotExist = true,
   ) {
-    return this.addMessagesSorted([newMessage], timestampChanged);
+    return this.addMessagesSorted(
+      [newMessage],
+      timestampChanged,
+      false,
+      addIfDoesNotExist,
+    );
   }
 
   /**
@@ -203,6 +210,7 @@ export class ChannelState<
    * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessagesSorted(
@@ -216,6 +224,7 @@ export class ChannelState<
     >[],
     timestampChanged = false,
     initializing = false,
+    addIfDoesNotExist = true,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
       const message = this.formatMessage(newMessages[i]);
@@ -252,13 +261,33 @@ export class ChannelState<
 
       // add to the main message list
       if (!parentID || message.show_in_channel) {
-        this.messages = this._addToMessageList(this.messages, message, timestampChanged);
+        this.messages = this._addToMessageList(
+          this.messages,
+          message,
+          timestampChanged,
+          'created_at',
+          addIfDoesNotExist,
+        );
       }
 
-      // add to the thread if applicable..
-      if (parentID) {
+      /**
+       * Add message to thread if applicable and the message
+       * was added when querying for replies, or the thread already exits.
+       * This is to prevent the thread state from getting out of sync if
+       * a thread message is shown in channel but older than the newest thread
+       * message. This situation can result in a thread state where a random
+       * message is "oldest" message, and newer messages are therefore not loaded.
+       * This can also occur if an old thread message is updated.
+       */
+      if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
-        const threadMessages = this._addToMessageList(thread, message, timestampChanged);
+        const threadMessages = this._addToMessageList(
+          thread,
+          message,
+          timestampChanged,
+          'created_at',
+          addIfDoesNotExist,
+        );
         this.threads[parentID] = threadMessages;
       }
     }
@@ -489,6 +518,7 @@ export class ChannelState<
    * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {string} sortBy field name to use to sort the messages by
+   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    */
   _addToMessageList(
     messages: Array<
@@ -517,7 +547,9 @@ export class ChannelState<
     >,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
+    addIfDoesNotExist = true,
   ) {
+    const addMessageToList = addIfDoesNotExist || timestampChanged;
     let messageArr = messages;
 
     // if created_at has changed, message should be filtered and re-inserted in correct order
@@ -526,19 +558,31 @@ export class ChannelState<
       messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
     }
 
-    // for empty list just concat and return
-    if (messageArr.length === 0) return messageArr.concat(message);
+    // Get array length after filtering
+    const messageArrayLength = messageArr.length;
+
+    // for empty list just concat and return unless it's an update or deletion
+    if (messageArrayLength === 0 && addMessageToList) {
+      return messageArr.concat(message);
+    } else if (messageArrayLength === 0) {
+      return [...messageArr];
+    }
 
     const messageTime = (message[sortBy] as Date).getTime();
+    const messageIsNewest =
+      (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
 
-    // if message is newer than last item in the list concat and return
-    if ((messageArr[messageArr.length - 1][sortBy] as Date).getTime() < messageTime)
+    // if message is newer than last item in the list concat and return unless it's an update or deletion
+    if (messageIsNewest && addMessageToList) {
       return messageArr.concat(message);
+    } else if (messageIsNewest) {
+      return [...messageArr];
+    }
 
     // find the closest index to push the new message
     let left = 0;
     let middle = 0;
-    let right = messageArr.length - 1;
+    let right = messageArrayLength - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
       if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime)
@@ -559,7 +603,11 @@ export class ChannelState<
       }
     }
 
-    messageArr.splice(left, 0, message);
+    // Do not add updated or deleted messages to the list if they do not already exist
+    // or have a timestamp change.
+    if (addMessageToList) {
+      messageArr.splice(left, 0, message);
+    }
     return [...messageArr];
   }
 
