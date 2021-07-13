@@ -2529,15 +2529,15 @@ export class StreamChat<
   /**
    * _messageId - extracts string message id from either message object or message id
    * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string} caller caller function name to report an error in case of message id absence
+   * @param {string} message error message to report in case of message id absence
    */
-  _messageId(messageOrMessageId: string | { id: string }, caller: string) {
+  _validateAndGetMessageId(messageOrMessageId: string | { id: string }, message: string) {
     let messageId: string;
     if (typeof messageOrMessageId === 'string') {
       messageId = messageOrMessageId;
     } else {
       if (!messageOrMessageId.id) {
-        throw Error('Please specify the message id when calling ' + caller);
+        throw Error(message);
       }
       messageId = messageOrMessageId.id;
     }
@@ -2555,8 +2555,12 @@ export class StreamChat<
     timeoutOrExpirationDate?: null | number | string | Date,
     userId?: string | { id: string },
   ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
     return this.partialUpdateMessage(
-      this._messageId(messageOrMessageId, 'pinMessage'),
+      messageId,
       {
         set: {
           pinned: true,
@@ -2576,8 +2580,12 @@ export class StreamChat<
     messageOrMessageId: string | { id: string },
     userId?: string | { id: string },
   ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
     return this.partialUpdateMessage(
-      this._messageId(messageOrMessageId, 'unpinMessage'),
+      messageId,
       {
         set: {
           pinned: false,
