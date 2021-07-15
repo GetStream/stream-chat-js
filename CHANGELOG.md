@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## July 15, 2021 - 3.12.1
+
+### Issue fixes
+
+- Fixed an issue with event (`message.updated`, `message.deleted` etc) based updates to message list, which can cause messages to go out of sync than desired state. Please read the PR description for more details - [#713](https://github.com/GetStream/stream-chat-js/pull/713)
+
 ## July 13, 2021 - 3.12.0
 
 ### Features/updates
