@@ -288,7 +288,7 @@ export type CreateChannelResponse<
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type CreateCommandResponse<
@@ -393,7 +393,7 @@ export type GetChannelTypeResponse<
     created_at: string;
     updated_at: string;
     commands?: CommandResponse<CommandType>[];
-    roles?: Record<string, ChannelRole[]>;
+    grants?: Record<string, string[]>;
   };
 
 export type GetCommandResponse<
@@ -462,7 +462,7 @@ export type ListChannelResponse<
       commands: CommandResponse<CommandType>[];
       created_at: string;
       updated_at: string;
-      roles?: Record<string, ChannelRole[]>;
+      grants?: Record<string, string[]>;
     }
   >;
 };
@@ -649,8 +649,17 @@ export type SearchAPIResponse<
       UserType
     >;
   }[];
+  next?: string;
+  previous?: string;
+  results_warning?: SearchWarning;
 };
 
+export type SearchWarning = {
+  channel_search_cids: string[];
+  channel_search_count: number;
+  warning_code: number;
+  warning_description: string;
+};
 export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
@@ -823,6 +832,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   connect_events?: boolean;
   connection_id?: string;
   custom_events?: boolean;
+  grants?: Record<string, string[]>;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -846,9 +856,11 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 };
 
 export type CustomPermissionOptions = {
+  action: string;
+  id: string;
   name: string;
-  resource: Resource;
   condition?: string;
+  description?: string;
   owner?: boolean;
   same_team?: boolean;
 };
@@ -933,9 +945,11 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type SearchOptions = {
+export type SearchOptions<MessageType = UnknownType> = {
   limit?: number;
+  next?: string;
   offset?: number;
+  sort?: SearchMessageSort<MessageType>;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
@@ -1034,6 +1048,7 @@ export type Event<
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
   received_at?: string | Date;
+  team?: string;
   total_unread_count?: number;
   unread_channels?: number;
   unread_count?: number;
@@ -1405,9 +1420,34 @@ export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
-export type QuerySort<ChannelType = UnknownType, UserType = UnknownType> =
+export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
+  attachments?: AscDesc;
+  'attachments.type'?: AscDesc;
+  created_at?: AscDesc;
+  id?: AscDesc;
+  'mentioned_users.id'?: AscDesc;
+  parent_id?: AscDesc;
+  pinned?: AscDesc;
+  relevance?: AscDesc;
+  reply_count?: AscDesc;
+  text?: AscDesc;
+  type?: AscDesc;
+  updated_at?: AscDesc;
+  'user.id'?: AscDesc;
+};
+
+export type SearchMessageSort<MessageType = UnknownType> =
+  | SearchMessageSortBase<MessageType>
+  | Array<SearchMessageSortBase<MessageType>>;
+
+export type QuerySort<
+  ChannelType = UnknownType,
+  UserType = UnknownType,
+  MessageType = UnknownType
+> =
   | BannedUsersSort
   | ChannelSort<ChannelType>
+  | SearchMessageSort<MessageType>
   | UserSort<UserType>;
 
 /**
@@ -1462,6 +1502,7 @@ export type AppSettings = {
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
+  multi_tenant_enabled?: boolean;
   push_config?: {
     version?: string;
   };
@@ -1697,14 +1738,14 @@ export type EndpointName =
   | 'ReactivateUser'
   | 'HideChannel'
   | 'ShowChannel'
-  | 'CreateCustomPermission'
-  | 'UpdateCustomPermission'
-  | 'GetCustomPermission'
-  | 'DeleteCustomPermission'
-  | 'ListCustomPermission'
-  | 'CreateCustomRole'
-  | 'DeleteCustomRole'
-  | 'ListCustomRole'
+  | 'CreatePermission'
+  | 'UpdatePermission'
+  | 'GetPermission'
+  | 'DeletePermission'
+  | 'ListPermissions'
+  | 'CreateRole'
+  | 'DeleteRole'
+  | 'ListRoles'
   | 'Sync'
   | 'TranslateMessage'
   | 'CreateCommand'
@@ -1821,10 +1862,12 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 };
 
 export type PermissionAPIObject = {
+  action?: string;
   custom?: boolean;
+  description?: string;
+  id?: string;
   name?: string;
   owner?: boolean;
-  resource?: Resource;
   same_team?: boolean;
 };
 
@@ -1894,7 +1937,7 @@ export type SearchPayload<
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = SearchOptions & {
+> = Omit<SearchOptions<MessageType>, 'sort'> & {
   client_id?: string;
   connection_id?: string;
   filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
@@ -1907,6 +1950,10 @@ export type SearchPayload<
     UserType
   >;
   query?: string;
+  sort?: Array<{
+    direction: AscDesc;
+    field: keyof SearchMessageSortBase<MessageType>;
+  }>;
 };
 
 export type TestPushDataInput = {

@@ -7,6 +7,7 @@ import {
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
+  ChannelFilters,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
@@ -33,6 +34,8 @@ import {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
+  SearchOptions,
+  SearchPayload,
   SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
@@ -41,6 +44,7 @@ import {
   UserFilters,
   UserResponse,
   UserSort,
+  SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
 
@@ -299,7 +303,7 @@ export class Channel<
    * search - Query messages
    *
    * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string}  query search query or object MongoDB style filters
-   * @param {{client_id?: string; connection_id?: string; limit?: number; offset?: number; query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
+   * @param {{client_id?: string; connection_id?: string; query?: string; message_filter_conditions?: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>}} options Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
@@ -314,10 +318,9 @@ export class Channel<
           UserType
         >
       | string,
-    options: {
+    options: SearchOptions<MessageType> & {
       client_id?: string;
       connection_id?: string;
-      limit?: number;
       message_filter_conditions?: MessageFilters<
         AttachmentType,
         ChannelType,
@@ -326,14 +329,30 @@ export class Channel<
         ReactionType,
         UserType
       >;
-      offset?: number;
       query?: string;
     } = {},
   ) {
+    if (options.offset && (options.sort || options.next)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
+    }
     // Return a list of channels
-    const payload = {
-      filter_conditions: { cid: this.cid },
+    const payload: SearchPayload<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    > = {
+      filter_conditions: { cid: this.cid } as ChannelFilters<
+        ChannelType,
+        CommandType,
+        UserType
+      >,
       ...options,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -342,7 +361,6 @@ export class Channel<
     } else {
       throw Error(`Invalid type ${typeof query} for query parameter`);
     }
-
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -1544,7 +1562,7 @@ export class Channel<
       case 'message.deleted':
         if (event.message) {
           if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message);
+          else channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
           }
@@ -1577,7 +1595,7 @@ export class Channel<
         break;
       case 'message.updated':
         if (event.message) {
-          channelState.addMessageSorted(event.message);
+          channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           } else {

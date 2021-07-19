@@ -166,6 +166,27 @@ async function sync() {
 	);
 }
 
+async function syncTeam() {
+	const team = 'TestTeam';
+	const user1 = uuidv4();
+	await utils.createMultiTenancyUsers([user1], [team]);
+	const client = await utils.getMultiTenancyTestClientForUser(user1);
+	const channelId = uuidv4();
+	const channel = await utils.createTestMultiTenancyChannelForUser(
+		channelId,
+		user1,
+		team,
+	);
+	await channel.sendMessage({
+		text: 'New Event?',
+		user: { id: user1 },
+	});
+	return await client.sync(
+		[channel.cid],
+		new Date(Date.now() - 1000 * 60).toISOString(),
+	);
+}
+
 async function updateAppSettings() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.updateAppSettings({
@@ -211,6 +232,7 @@ module.exports = {
 	connectUser,
 	queryBannedUsers,
 	sync,
+	syncTeam,
 	updateAppSettings,
 	updateCommand,
 };

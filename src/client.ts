@@ -81,9 +81,9 @@ import {
   PermissionAPIResponse,
   PermissionsAPIResponse,
   ReactionResponse,
-  SearchAPIResponse,
   SearchOptions,
   SearchPayload,
+  SearchAPIResponse,
   SendFileAPIResponse,
   StreamChatOptions,
   TestPushDataInput,
@@ -102,6 +102,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  SearchMessageSortBase,
   SegmentData,
   Segment,
   Campaign,
@@ -1765,7 +1766,7 @@ export class StreamChat<
    *
    * @param {ChannelFilters<ChannelType, CommandType, UserType>} filterConditions MongoDB style filter conditions
    * @param {MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string} query search query or object MongoDB style filters
-   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
+   * @param {SearchOptions<MessageType>} [options] Option object, {user_id: 'tommaso'}
    *
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
@@ -1781,9 +1782,11 @@ export class StreamChat<
           ReactionType,
           UserType
         >,
-    options: SearchOptions = {},
+    options: SearchOptions<MessageType> = {},
   ) {
-    // Return a list of channels
+    if (options.offset && (options.sort || options.next)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
+    }
     const payload: SearchPayload<
       AttachmentType,
       ChannelType,
@@ -1794,6 +1797,9 @@ export class StreamChat<
     > = {
       filter_conditions: filterConditions,
       ...options,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -2513,23 +2519,11 @@ export class StreamChat<
   }
 
   /**
-   * pinMessage - pins provided message
-   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
-   * @param {undefined|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * _normalizeExpiration - transforms expiration value into ISO string
+   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
-  // todo use partialMessageUpdate and allow pin using server side auth
-  pinMessage(
-    message: UpdatedMessage<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-    timeoutOrExpirationDate?: number | string | Date,
-  ) {
-    let pinExpires;
+  _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
+    let pinExpires: undefined | string;
     if (typeof timeoutOrExpirationDate === 'number') {
       const now = new Date();
       now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
@@ -2539,32 +2533,79 @@ export class StreamChat<
     } else if (timeoutOrExpirationDate instanceof Date) {
       pinExpires = timeoutOrExpirationDate.toISOString();
     }
-    return this.updateMessage({
-      ...message,
-      pinned: true,
-      pin_expires: pinExpires,
-    });
+    return pinExpires;
   }
 
   /**
-   * unpinMessage - unpins provided message
-   * @param {UpdatedMessage<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>} message object
+   * _messageId - extracts string message id from either message object or message id
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {string} errorText error message to report in case of message id absence
    */
-  // todo use partialMessageUpdate and allow unpin using server side auth
-  unpinMessage(
-    message: UpdatedMessage<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+  _validateAndGetMessageId(
+    messageOrMessageId: string | { id: string },
+    errorText: string,
   ) {
-    return this.updateMessage({
-      ...message,
-      pinned: false,
-    });
+    let messageId: string;
+    if (typeof messageOrMessageId === 'string') {
+      messageId = messageOrMessageId;
+    } else {
+      if (!messageOrMessageId.id) {
+        throw Error(errorText);
+      }
+      messageId = messageOrMessageId.id;
+    }
+    return messageId;
+  }
+
+  /**
+   * pinMessage - pins the message
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * @param {string | { id: string }} [userId]
+   */
+  pinMessage(
+    messageOrMessageId: string | { id: string },
+    timeoutOrExpirationDate?: null | number | string | Date,
+    userId?: string | { id: string },
+  ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
+    return this.partialUpdateMessage(
+      messageId,
+      {
+        set: {
+          pinned: true,
+          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+        },
+      },
+      userId,
+    );
+  }
+
+  /**
+   * unpinMessage - unpins the message that was previously pinned
+   * @param {string | { id: string }} messageOrMessageId message object or message id
+   * @param {string | { id: string }} [userId]
+   */
+  unpinMessage(
+    messageOrMessageId: string | { id: string },
+    userId?: string | { id: string },
+  ) {
+    const messageId = this._validateAndGetMessageId(
+      messageOrMessageId,
+      'Please specify the message id when calling unpinMessage',
+    );
+    return this.partialUpdateMessage(
+      messageId,
+      {
+        set: {
+          pinned: false,
+        },
+      },
+      userId,
+    );
   }
 
   /**
@@ -2805,7 +2846,7 @@ export class StreamChat<
    * @returns {Promise<PermissionAPIResponse>}
    */
   getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(`${this.baseURL}/custom_permission/${name}`);
+    return this.get<PermissionAPIResponse>(`${this.baseURL}/permissions/${name}`);
   }
 
   /** createPermission - creates a custom permission
@@ -2814,19 +2855,19 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_permission`, {
+    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
       ...permissionData,
     });
   }
 
   /** updatePermission - updates an existing custom permission
    *
-   * @param {string} name
-   * @param {CustomPermissionOptions} permissionData the permission data
+   * @param {string} id
+   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
    * @returns {Promise<APIResponse>}
    */
-  updatePermission(name: string, permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_permission/${name}`, {
+  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
+    return this.put<APIResponse>(`${this.baseURL}/permissions/${id}`, {
       ...permissionData,
     });
   }
@@ -2837,15 +2878,15 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   deletePermission(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/custom_permission/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/permissions/${name}`);
   }
 
-  /** listPermissions - returns the list of custom permissions for this application
+  /** listPermissions - returns the list of all permissions for this application
    *
    * @returns {Promise<APIResponse>}
    */
   listPermissions() {
-    return this.get<PermissionsAPIResponse>(`${this.baseURL}/custom_permission`);
+    return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
   }
 
   /** createRole - creates a custom role
@@ -2854,15 +2895,15 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   createRole(name: string) {
-    return this.post<APIResponse>(`${this.baseURL}/custom_role`, { name });
+    return this.post<APIResponse>(`${this.baseURL}/roles`, { name });
   }
 
-  /** listRoles - returns the list of custom roles for this application
+  /** listRoles - returns the list of all roles for this application
    *
    * @returns {Promise<APIResponse>}
    */
   listRoles() {
-    return this.get<APIResponse>(`${this.baseURL}/custom_role`);
+    return this.get<APIResponse>(`${this.baseURL}/roles`);
   }
 
   /** deleteRole - deletes a custom role
@@ -2871,7 +2912,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/custom_role/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/roles/${name}`);
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
