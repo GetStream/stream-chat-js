@@ -2944,7 +2944,6 @@ export class StreamChat<
    */
   async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
     return await this.post<APIResponse>(`${this.baseURL}/users/${targetUserID}/event`, {
-      target_user_id: targetUserID,
       event,
     });
   }
