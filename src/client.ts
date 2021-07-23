@@ -3011,9 +3011,10 @@ export class StreamChat<
     return segment;
   }
 
-  async listSegments() {
+  async listSegments(options: { limit?: number; offset?: number }) {
     const { segments } = await this.get<{ segments: Segment[] }>(
       this.baseURL + `/segments`,
+      options,
     );
     return segments;
   }
@@ -3045,9 +3046,10 @@ export class StreamChat<
     return campaign;
   }
 
-  async listCampaigns() {
+  async listCampaigns(options: { limit?: number; offset?: number }) {
     const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
       this.baseURL + `/campaigns`,
+      options,
     );
     return campaigns;
   }
