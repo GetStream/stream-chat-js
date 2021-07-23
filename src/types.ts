@@ -652,7 +652,7 @@ export type SearchAPIResponse<
   }[];
   next?: string;
   previous?: string;
-  results_warning?: SearchWarning;
+  results_warning?: SearchWarning | null;
 };
 
 export type SearchWarning = {
