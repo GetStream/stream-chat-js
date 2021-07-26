@@ -964,6 +964,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   baseURL?: string;
   browser?: boolean;
+  device?: BaseDeviceFields;
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -1672,12 +1673,15 @@ export type Device<UserType = UnknownType> = DeviceFields & {
   user_id?: string;
 };
 
-export type DeviceFields = {
+export type BaseDeviceFields = {
+  id: string;
+  push_provider: 'apn' | 'firebase';
+};
+
+export type DeviceFields = Partial<BaseDeviceFields> & {
   created_at: string;
   disabled?: boolean;
   disabled_reason?: string;
-  id?: string;
-  push_provider?: 'apn' | 'firebase';
 };
 
 export type EndpointName =
