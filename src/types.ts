@@ -86,6 +86,7 @@ export type AppSettingsAPIResponse<
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
+    grants?: Record<string, string[]>;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -651,7 +652,7 @@ export type SearchAPIResponse<
   }[];
   next?: string;
   previous?: string;
-  results_warning?: SearchWarning;
+  results_warning?: SearchWarning | null;
 };
 
 export type SearchWarning = {
@@ -1500,6 +1501,7 @@ export type AppSettings = {
     notification_template?: string;
     server_key?: string;
   };
+  grants?: Record<string, string[]>;
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   multi_tenant_enabled?: boolean;
