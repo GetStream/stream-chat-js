@@ -1678,7 +1678,7 @@ export type BaseDeviceFields = {
   push_provider: 'apn' | 'firebase';
 };
 
-export type DeviceFields = Partial<BaseDeviceFields> & {
+export type DeviceFields = BaseDeviceFields & {
   created_at: string;
   disabled?: boolean;
   disabled_reason?: string;
