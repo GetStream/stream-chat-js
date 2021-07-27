@@ -437,6 +437,51 @@ export class ChannelState<
     return messageWithReaction;
   }
 
+  removeQuotedMessages(
+    message: MessageResponse<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    const parseMessage = (
+      m: ReturnType<
+        ChannelState<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >['formatMessage']
+      >,
+    ) =>
+      (({
+        ...m,
+        created_at: m.created_at.toString(),
+        pinned_at: m.pinned_at?.toString(),
+        updated_at: m.updated_at?.toString(),
+      } as unknown) as MessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >);
+
+    const updatedMessages = this.messages
+      .filter((msg) => msg.quoted_message_id === message.id)
+      .map(parseMessage)
+      .map((msg) => ({ ...msg, quoted_message: { ...message, attachments: [] } }));
+
+    this.addMessagesSorted(updatedMessages, true);
+  }
+
   /**
    * Updates all instances of given message in channel state
    * @param message
@@ -608,6 +653,7 @@ export class ChannelState<
     if (addMessageToList) {
       messageArr.splice(left, 0, message);
     }
+    console.log('finished state update');
     return [...messageArr];
   }
 
