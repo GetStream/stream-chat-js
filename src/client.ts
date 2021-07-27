@@ -2996,6 +2996,13 @@ export class StreamChat<
     );
   }
 
+  /**
+   * createSegment - Creates a Campaign Segment
+   *
+   * @param {SegmentData} params Segment data
+   *
+   * @return {Segment} The Created Segment
+   */
   async createSegment(params: SegmentData) {
     const { segment } = await this.post<{ segment: Segment }>(
       this.baseURL + `/segments`,
@@ -3004,6 +3011,13 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * getSegment - Get a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Segment} A Segment
+   */
   async getSegment(id: string) {
     const { segment } = await this.get<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
@@ -3011,6 +3025,12 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * listSegments - List Campaign Segments
+   *
+   *
+   * @return {Segment[]} Segments
+   */
   async listSegments() {
     const { segments } = await this.get<{ segments: Segment[] }>(
       this.baseURL + `/segments`,
@@ -3018,6 +3038,14 @@ export class StreamChat<
     return segments;
   }
 
+  /**
+   * updateSegment - Update a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   * @param {Partial<SegmentData>} params Segment data
+   *
+   * @return {Segment} Updated Segment
+   */
   async updateSegment(id: string, params: Partial<SegmentData>) {
     const { segment } = await this.put<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
@@ -3026,10 +3054,24 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * deleteSegment - Delete a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
   async deleteSegment(id: string) {
-    return this.delete<{}>(this.baseURL + `/segments/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
   }
 
+  /**
+   * createCampaign - Creates a Campaign
+   *
+   * @param {CampaignData} params Campaign data
+   *
+   * @return {Campaign} The Created Campaign
+   */
   async createCampaign(params: CampaignData) {
     const { campaign } = await this.post<{ campaign: Campaign }>(
       this.baseURL + `/campaigns`,
@@ -3038,6 +3080,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * getCampaign - Get a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} A Campaign
+   */
   async getCampaign(id: string) {
     const { campaign } = await this.get<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
@@ -3045,6 +3094,12 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * listCampaigns - List Campaigns
+   *
+   *
+   * @return {Campaign[]} Campaigns
+   */
   async listCampaigns() {
     const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
       this.baseURL + `/campaigns`,
@@ -3052,6 +3107,14 @@ export class StreamChat<
     return campaigns;
   }
 
+  /**
+   * updateCampaign - Update a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {Partial<CampaignData>} params Campaign data
+   *
+   * @return {Campaign} Updated Campaign
+   */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     const { campaign } = await this.put<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
@@ -3060,10 +3123,25 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * deleteCampaign - Delete a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
   async deleteCampaign(id: string) {
-    return this.delete<{}>(this.baseURL + `/campaigns/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
   }
 
+  /**
+   * scheduleCampaign - Schedule a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{sendAt: number}} params Schedule params
+   *
+   * @return {Campaign} Scheduled Campaign
+   */
   async scheduleCampaign(id: string, params: { sendAt: number }) {
     const { sendAt } = params;
     const { campaign } = await this.patch<{ campaign: Campaign }>(
@@ -3073,6 +3151,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * stopCampaign - Stop a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Stopped Campaign
+   */
   async stopCampaign(id: string) {
     const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/stop`,
@@ -3080,6 +3165,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * resumeCampaign - Resume a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Resumed Campaign
+   */
   async resumeCampaign(id: string) {
     const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/resume`,
@@ -3087,6 +3179,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * testCampaign - Test a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{users: string[]}} params Test params
+   * @return {Campaign} Test Campaign
+   */
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     const { campaign } = await this.post<{ campaign: Campaign }>(
