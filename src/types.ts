@@ -2085,9 +2085,9 @@ export type CampaignData = {
   attachments: Attachment[];
   defaults: Record<string, string>;
   segment_id: string;
-  sender_id: string | null;
   text: string;
   push_notifications?: boolean;
+  sender_id?: string;
   track_opened?: boolean;
 };
 
