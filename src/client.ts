@@ -103,6 +103,10 @@ import {
   UserResponse,
   UserSort,
   SearchMessageSortBase,
+  SegmentData,
+  Segment,
+  Campaign,
+  CampaignData,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -2990,5 +2994,204 @@ export class StreamChat<
     return this.get<APIResponse & ExportChannelStatusResponse>(
       `${this.baseURL}/export_channels/${id}`,
     );
+  }
+
+  /**
+   * createSegment - Creates a Campaign Segment
+   *
+   * @param {SegmentData} params Segment data
+   *
+   * @return {Segment} The Created Segment
+   */
+  async createSegment(params: SegmentData) {
+    const { segment } = await this.post<{ segment: Segment }>(
+      this.baseURL + `/segments`,
+      { segment: params },
+    );
+    return segment;
+  }
+
+  /**
+   * getSegment - Get a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Segment} A Segment
+   */
+  async getSegment(id: string) {
+    const { segment } = await this.get<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+    );
+    return segment;
+  }
+
+  /**
+   * listSegments - List Campaign Segments
+   *
+   *
+   * @return {Segment[]} Segments
+   */
+  async listSegments() {
+    const { segments } = await this.get<{ segments: Segment[] }>(
+      this.baseURL + `/segments`,
+    );
+    return segments;
+  }
+
+  /**
+   * updateSegment - Update a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   * @param {Partial<SegmentData>} params Segment data
+   *
+   * @return {Segment} Updated Segment
+   */
+  async updateSegment(id: string, params: Partial<SegmentData>) {
+    const { segment } = await this.put<{ segment: Segment }>(
+      this.baseURL + `/segments/${id}`,
+      params,
+    );
+    return segment;
+  }
+
+  /**
+   * deleteSegment - Delete a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async deleteSegment(id: string) {
+    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
+  /**
+   * createCampaign - Creates a Campaign
+   *
+   * @param {CampaignData} params Campaign data
+   *
+   * @return {Campaign} The Created Campaign
+   */
+  async createCampaign(params: CampaignData) {
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns`,
+      { campaign: params },
+    );
+    return campaign;
+  }
+
+  /**
+   * getCampaign - Get a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} A Campaign
+   */
+  async getCampaign(id: string) {
+    const { campaign } = await this.get<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+    );
+    return campaign;
+  }
+
+  /**
+   * listCampaigns - List Campaigns
+   *
+   *
+   * @return {Campaign[]} Campaigns
+   */
+  async listCampaigns() {
+    const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
+      this.baseURL + `/campaigns`,
+    );
+    return campaigns;
+  }
+
+  /**
+   * updateCampaign - Update a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {Partial<CampaignData>} params Campaign data
+   *
+   * @return {Campaign} Updated Campaign
+   */
+  async updateCampaign(id: string, params: Partial<CampaignData>) {
+    const { campaign } = await this.put<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}`,
+      params,
+    );
+    return campaign;
+  }
+
+  /**
+   * deleteCampaign - Delete a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async deleteCampaign(id: string) {
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
+  }
+
+  /**
+   * scheduleCampaign - Schedule a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{sendAt: number}} params Schedule params
+   *
+   * @return {Campaign} Scheduled Campaign
+   */
+  async scheduleCampaign(id: string, params: { sendAt: number }) {
+    const { sendAt } = params;
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/schedule`,
+      { send_at: sendAt },
+    );
+    return campaign;
+  }
+
+  /**
+   * stopCampaign - Stop a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Stopped Campaign
+   */
+  async stopCampaign(id: string) {
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/stop`,
+    );
+    return campaign;
+  }
+
+  /**
+   * resumeCampaign - Resume a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Resumed Campaign
+   */
+  async resumeCampaign(id: string) {
+    const { campaign } = await this.patch<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/resume`,
+    );
+    return campaign;
+  }
+
+  /**
+   * testCampaign - Test a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{users: string[]}} params Test params
+   * @return {Campaign} Test Campaign
+   */
+  async testCampaign(id: string, params: { users: string[] }) {
+    const { users } = params;
+    const { campaign } = await this.post<{ campaign: Campaign }>(
+      this.baseURL + `/campaigns/${id}/test`,
+      { users },
+    );
+    return campaign;
   }
 }
