@@ -2083,7 +2083,7 @@ export type Segment = {
 
 export type CampaignData = {
   attachments: Attachment[];
-  defaults: { [key: string]: string };
+  defaults: Record<string, string>;
   segment_id: string;
   sender_id: string | null;
   text: string;
