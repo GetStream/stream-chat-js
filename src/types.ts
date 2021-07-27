@@ -2066,6 +2066,7 @@ export type User<UserType = UnknownType> = UserType & {
 
 export type SegmentData = {
   description: string;
+  // TODO: define this type in more detail
   filter: {
     channel?: object;
     user?: object;
