@@ -1437,8 +1437,7 @@ export class StreamChat<
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      const deletedChannel = this.activeChannels[event.cid];
-      deletedChannel._disconnect();
+      this.activeChannels[event.cid]?._disconnect();
       delete this.activeChannels[event.cid];
     }
   }
