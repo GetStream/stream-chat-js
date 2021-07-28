@@ -546,7 +546,7 @@ export class StreamChat<
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
   ) {
     /**
-     * This one is used by the frontend. This is copy of current user, stored on backend.
+     * This one is used by the frontend. This is a copy of the current user object stored on backend.
      * It contains reserved properties and own user properties which are not present in `this._user`.
      */
     this.user = user;
