@@ -80,11 +80,7 @@ export function isOwnUser<
  *
  * @returns {array} "Own user" specific properties
  */
-function getOwnUserBaseProperties<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
->(): (keyof OwnUserBase<ChannelType, CommandType, UserType>)[] {
+function getOwnUserBaseProperties(): (keyof OwnUserBase)[] {
   return [
     'channel_mutes',
     'devices',
@@ -97,16 +93,8 @@ function getOwnUserBaseProperties<
   ];
 }
 
-export function isOwnUserProperty<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
->(property: string) {
-  return (getOwnUserBaseProperties<
-    ChannelType,
-    CommandType,
-    UserType
-  >() as string[]).includes(property);
+export function isOwnUserProperty(property: string) {
+  return (getOwnUserBaseProperties() as string[]).includes(property);
 }
 
 export function addFileToFormData(
