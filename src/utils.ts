@@ -2,6 +2,7 @@ import FormData from 'form-data';
 import {
   AscDesc,
   LiteralStringForUnion,
+  OwnUserBase,
   OwnUserResponse,
   UnknownType,
   UserResponse,
@@ -72,6 +73,23 @@ export function isOwnUser<
     (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
     undefined
   );
+}
+
+export function isOwnUserBaseProperty(property: string) {
+  const ownUserBaseProperties: {
+    [Property in keyof Required<OwnUserBase>]: boolean;
+  } = {
+    channel_mutes: true,
+    devices: true,
+    mutes: true,
+    total_unread_count: true,
+    unread_channels: true,
+    unread_count: true,
+    invisible: true,
+    roles: true,
+  };
+
+  return ownUserBaseProperties[property as keyof OwnUserBase];
 }
 
 export function addFileToFormData(
