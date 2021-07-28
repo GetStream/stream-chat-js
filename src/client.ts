@@ -1347,30 +1347,29 @@ export class StreamChat<
       (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
       event.user.id === this.userID
     ) {
+      const user = { ...(this.user || {}) };
+      const _user = { ...(this._user || {}) };
+
       // Remove deleted properties from user objects.
       for (const key in this.user) {
         if (key in event.user || isOwnUserBaseProperty(key)) {
           continue;
         }
 
-        if (this.user?.[key]) {
-          delete this.user[key];
-        }
-
-        if (this._user?.[key]) {
-          delete this._user[key];
-        }
+        delete user[key];
+        delete _user[key];
       }
-
-      this.user = this.user && { ...this.user, ...event.user };
 
       /** Updating only available properties in _user object. */
       for (const key in event.user) {
-        if (this._user && key in this._user) {
-          /** @ts-expect-error */
-          this._user[key] = event.user[key];
+        if (_user && key in _user) {
+          _user[key] = event.user[key];
         }
       }
+
+      // @ts-expect-error
+      this._user = { ..._user };
+      this.user = { ...user, ...event.user };
 
       this.state.updateUser(event.user);
       this._updateMemberWatcherReferences(event.user);
