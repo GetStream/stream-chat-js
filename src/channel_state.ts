@@ -437,7 +437,7 @@ export class ChannelState<
     return messageWithReaction;
   }
 
-  removeQuotedMessages(
+  removeQuotedMessageReferences(
     message: MessageResponse<
       AttachmentType,
       ChannelType,
