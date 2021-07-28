@@ -653,7 +653,6 @@ export class ChannelState<
     if (addMessageToList) {
       messageArr.splice(left, 0, message);
     }
-    console.log('finished state update');
     return [...messageArr];
   }
 
