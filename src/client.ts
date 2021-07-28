@@ -13,6 +13,7 @@ import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import {
   isFunction,
+  isOwnUserBaseProperty,
   addFileToFormData,
   chatCodes,
   normalizeQuerySort,
@@ -546,9 +547,12 @@ export class StreamChat<
   _setUser(
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
   ) {
-    // this one is used by the frontend
+    /**
+     * This one is used by the frontend. This is a copy of the current user object stored on backend.
+     * It contains reserved properties and own user properties which are not present in `this._user`.
+     */
     this.user = user;
-    // this one is actually used for requests...
+    // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
 
@@ -1340,17 +1344,34 @@ export class StreamChat<
     }
 
     /** update the client.state with any changes to users */
-    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        /** Updating only available properties in _user object. */
-        Object.keys(event.user).forEach((key) => {
-          if (this._user && key in this._user) {
-            /** @ts-expect-error */
-            this._user[key] = event.user[key];
-          }
-        });
+    if (
+      (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
+      event.user.id === this.userID
+    ) {
+      const user = { ...(this.user || {}) };
+      const _user = { ...(this._user || {}) };
+
+      // Remove deleted properties from user objects.
+      for (const key in this.user) {
+        if (key in event.user || isOwnUserBaseProperty(key)) {
+          continue;
+        }
+
+        delete user[key];
+        delete _user[key];
       }
+
+      /** Updating only available properties in _user object. */
+      for (const key in event.user) {
+        if (_user && key in _user) {
+          _user[key] = event.user[key];
+        }
+      }
+
+      // @ts-expect-error
+      this._user = { ..._user };
+      this.user = { ...user, ...event.user };
+
       this.state.updateUser(event.user);
       this._updateMemberWatcherReferences(event.user);
     }
@@ -1431,6 +1452,15 @@ export class StreamChat<
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
       this.mutedUsers = event.me.mutes;
+    }
+
+    if (
+      (event.type === 'channel.deleted' ||
+        event.type === 'notification.channel_deleted') &&
+      event.cid
+    ) {
+      this.activeChannels[event.cid]?._disconnect();
+      delete this.activeChannels[event.cid];
     }
   }
 
