@@ -1431,6 +1431,16 @@ export class StreamChat<
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
       this.mutedUsers = event.me.mutes;
     }
+
+    if (
+      (event.type === 'channel.deleted' ||
+        event.type === 'notification.channel_deleted') &&
+      event.cid
+    ) {
+      const deletedChannel = this.activeChannels[event.cid];
+      deletedChannel._disconnect();
+      delete this.activeChannels[event.cid];
+    }
   }
 
   _muteStatus(cid: string) {
