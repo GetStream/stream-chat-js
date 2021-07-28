@@ -13,6 +13,7 @@ import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import {
   isFunction,
+  isOwnUserProperty,
   addFileToFormData,
   chatCodes,
   normalizeQuerySort,
@@ -1346,20 +1347,9 @@ export class StreamChat<
       (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
       event.user.id === this.userID
     ) {
-      const ownUserProperties = [
-        'channel_mutes',
-        'devices',
-        'mutes',
-        'total_unread_count',
-        'unread_channels',
-        'unread_count',
-        'invisible',
-        'roles',
-      ];
-
       // Remove deleted properties from user objects.
       for (const key in this.user) {
-        if (key in event.user || ownUserProperties.includes(key)) {
+        if (key in event.user || isOwnUserProperty(key)) {
           continue;
         }
 

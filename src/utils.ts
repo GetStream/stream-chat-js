@@ -2,6 +2,7 @@ import FormData from 'form-data';
 import {
   AscDesc,
   LiteralStringForUnion,
+  OwnUserBase,
   OwnUserResponse,
   UnknownType,
   UserResponse,
@@ -72,6 +73,40 @@ export function isOwnUser<
     (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
     undefined
   );
+}
+
+/**
+ * @todo Fix the typescript to ensure all the properties of `OwnUserBase` exist in return statement.
+ *
+ * @returns {array} "Own user" specific properties
+ */
+function getOwnUserBaseProperties<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(): (keyof OwnUserBase<ChannelType, CommandType, UserType>)[] {
+  return [
+    'channel_mutes',
+    'devices',
+    'mutes',
+    'total_unread_count',
+    'unread_channels',
+    'unread_count',
+    'invisible',
+    'roles',
+  ];
+}
+
+export function isOwnUserProperty<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(property: string) {
+  return (getOwnUserBaseProperties<
+    ChannelType,
+    CommandType,
+    UserType
+  >() as string[]).includes(property);
 }
 
 export function addFileToFormData(

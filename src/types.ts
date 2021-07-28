@@ -567,11 +567,14 @@ export type MuteUserResponse<
   own_user?: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
 
-export type OwnUserResponse<
+/**
+ * @caution updates to `OwnUserBase` type should also be reflected in `getOwnUserBaseProperties` function.
+ */
+export type OwnUserBase<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
-> = UserResponse<UserType> & {
+> = {
   channel_mutes: ChannelMute<ChannelType, CommandType, UserType>[];
   devices: Device<UserType>[];
   mutes: Mute<UserType>[];
@@ -581,6 +584,12 @@ export type OwnUserResponse<
   invisible?: boolean;
   roles?: string[];
 };
+
+export type OwnUserResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = UserResponse<UserType> & OwnUserBase<ChannelType, CommandType, UserType>;
 
 export type PartialUpdateChannelAPIResponse<
   ChannelType = UnknownType,
