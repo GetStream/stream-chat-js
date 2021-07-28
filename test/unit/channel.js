@@ -178,6 +178,38 @@ describe('Channel _handleChannelEvent', function () {
 		});
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
+
+	it('message.delete removes quoted messages references', function () {
+		const originalMessage = generateMsg({ silent: true });
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id' },
+			message: originalMessage,
+		});
+
+		const quotingMessage = generateMsg({
+			silent: true,
+			quoted_message: originalMessage,
+			quoted_message_id: originalMessage.id,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id2' },
+			message: quotingMessage,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: { ...originalMessage, deleted_at: new Date().toISOString() },
+		});
+
+		expect(
+			channel.state.messages.find((msg) => msg.id === quotingMessage.id)
+				.quoted_message.deleted_at,
+		).to.be.ok;
+	});
 });
 
 describe('Channels - Constructor', function () {
