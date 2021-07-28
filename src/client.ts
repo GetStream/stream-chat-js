@@ -26,6 +26,7 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BaseDeviceFields,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
   BannedUsersResponse,
@@ -1605,6 +1606,7 @@ export class StreamChat<
       messageCallback: this.handleEvent,
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
+      device: this.options.device,
     });
 
     let warmUpPromise;
@@ -1854,6 +1856,22 @@ export class StreamChat<
     >(this.baseURL + '/search', {
       payload,
     });
+  }
+
+  /**
+   * setLocalDevice - Set the device info for the current client(device) that will be sent via WS connection automatically
+   *
+   * @param {BaseDeviceFields} device the device object
+   * @param {string} device.id device id
+   * @param {string} device.push_provider the push provider (apn or firebase)
+   *
+   */
+  setLocalDevice(device: BaseDeviceFields) {
+    if (this.wsConnection) {
+      throw new Error('you can only set device before opening a websocket connection');
+    }
+
+    this.options.device = device;
   }
 
   /**
