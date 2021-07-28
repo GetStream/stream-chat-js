@@ -545,9 +545,12 @@ export class StreamChat<
   _setUser(
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
   ) {
-    // this one is used by the frontend
+    /**
+     * This one is used by the frontend. This is copy of current user, stored on backend.
+     * It contains reserved properties and own user properties which are not present in `this._user`.
+     */
     this.user = user;
-    // this one is actually used for requests...
+    // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
 
@@ -1339,17 +1342,46 @@ export class StreamChat<
     }
 
     /** update the client.state with any changes to users */
-    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        /** Updating only available properties in _user object. */
-        Object.keys(event.user).forEach((key) => {
-          if (this._user && key in this._user) {
-            /** @ts-expect-error */
-            this._user[key] = event.user[key];
-          }
-        });
+    if (
+      (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
+      event.user.id === this.userID
+    ) {
+      const ownUserProperties = [
+        'channel_mutes',
+        'devices',
+        'mutes',
+        'total_unread_count',
+        'unread_channels',
+        'unread_count',
+        'invisible',
+        'roles',
+      ];
+
+      // Remove deleted properties from user objects.
+      for (const key in this.user) {
+        if (key in event.user || ownUserProperties.includes(key)) {
+          continue;
+        }
+
+        if (this.user?.[key]) {
+          delete this.user[key];
+        }
+
+        if (this._user?.[key]) {
+          delete this._user[key];
+        }
       }
+
+      this.user = this.user && { ...this.user, ...event.user };
+
+      /** Updating only available properties in _user object. */
+      for (const key in event.user) {
+        if (this._user && key in this._user) {
+          /** @ts-expect-error */
+          this._user[key] = event.user[key];
+        }
+      }
+
       this.state.updateUser(event.user);
       this._updateMemberWatcherReferences(event.user);
     }
