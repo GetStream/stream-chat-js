@@ -75,26 +75,21 @@ export function isOwnUser<
   );
 }
 
-/**
- * @todo Fix the typescript to ensure all the properties of `OwnUserBase` exist in return statement.
- *
- * @returns {array} "Own user" specific properties
- */
-function getOwnUserBaseProperties(): (keyof OwnUserBase)[] {
-  return [
-    'channel_mutes',
-    'devices',
-    'mutes',
-    'total_unread_count',
-    'unread_channels',
-    'unread_count',
-    'invisible',
-    'roles',
-  ];
-}
+export function isOwnUserBaseProperty(property: string) {
+  const ownUserBaseProperties: {
+    [Property in keyof Required<OwnUserBase>]: boolean;
+  } = {
+    channel_mutes: true,
+    devices: true,
+    mutes: true,
+    total_unread_count: true,
+    unread_channels: true,
+    unread_count: true,
+    invisible: true,
+    roles: true,
+  };
 
-export function isOwnUserProperty(property: string) {
-  return (getOwnUserBaseProperties() as string[]).includes(property);
+  return ownUserBaseProperties[property as keyof OwnUserBase];
 }
 
 export function addFileToFormData(

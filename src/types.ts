@@ -567,9 +567,6 @@ export type MuteUserResponse<
   own_user?: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
 
-/**
- * @caution updates to `OwnUserBase` type should also be reflected in `getOwnUserBaseProperties` function.
- */
 export type OwnUserBase<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,

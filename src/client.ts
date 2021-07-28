@@ -13,7 +13,7 @@ import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import {
   isFunction,
-  isOwnUserProperty,
+  isOwnUserBaseProperty,
   addFileToFormData,
   chatCodes,
   normalizeQuerySort,
@@ -1349,7 +1349,7 @@ export class StreamChat<
     ) {
       // Remove deleted properties from user objects.
       for (const key in this.user) {
-        if (key in event.user || isOwnUserProperty(key)) {
+        if (key in event.user || isOwnUserBaseProperty(key)) {
           continue;
         }
 
