@@ -38,4 +38,10 @@ export class ClientState<UserType = UnknownType> {
     }
     this.userChannelReferences[user.id][channelID] = true;
   }
+
+  deleteAllChannelReference(channelID: string) {
+    for (const userID in this.userChannelReferences) {
+      delete this.userChannelReferences[userID][channelID];
+    }
+  }
 }
