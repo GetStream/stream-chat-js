@@ -310,3 +310,23 @@ describe('Client search', async () => {
 		).to.be.rejectedWith(Error);
 	});
 });
+
+describe('Client setLocalDevice', async () => {
+	const device = { id: 'id1', push_provider: 'apn' };
+	const client = new StreamChat('', '', { device });
+
+	it('should update device info before ws open', async () => {
+		expect(client.options.device).to.deep.equal(device);
+		const newDevice = { id: 'id2', push_provider: 'firebase' };
+		client.setLocalDevice(newDevice);
+		expect(client.options.device).to.deep.equal(newDevice);
+	});
+
+	it('should throw error when updating device with ws open', async () => {
+		client.wsConnection = true;
+
+		expect(() =>
+			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
+		).to.throw();
+	});
+});
