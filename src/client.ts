@@ -1461,6 +1461,7 @@ export class StreamChat<
     ) {
       this.activeChannels[event.cid]?._disconnect();
       delete this.activeChannels[event.cid];
+      client.state.deleteAllChannelReference(event.cid);
     }
   }
 
