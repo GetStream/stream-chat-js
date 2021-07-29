@@ -2101,7 +2101,6 @@ export type CampaignData = {
   description?: string;
   push_notifications?: boolean;
   sender_id?: string;
-  track_opened?: boolean;
 };
 
 export type CampaignStatus = {
