@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## July 29, 2021 - 3.13.1
+
+- Allowing listeners for `channel.deleted` and `notification.channel_deleted` before disconnecting the channel from client [cc8796e](https://github.com/GetStream/stream-chat-js/commit/cc8796e6bf3cfc1966080bc5ef9581dc83c6ed77)
+- Fixing issue with presence indicator not updating [feff028](https://github.com/GetStream/stream-chat-js/commit/feff0289c1bca121b71663a9b860faf15c57c50f)
+
 ## July 28, 2021 - 3.13.0
 
 ### Issue fixes
@@ -7,6 +12,7 @@
 - Clear channel from `client.activeChannels` when its deleted on backend [#728](https://github.com/GetStream/stream-chat-js/pull/728)
 - Remove deleted properties from user objects on client when user-update related events are received [#727](https://github.com/GetStream/stream-chat-js/pull/727)
 - Remove reference to quoted message, when message gets deleted [#726](https://github.com/GetStream/stream-chat-js/pull/726)
+  Please note that channel can't be used once its deleted. You will need to re-create the channel using `client.channel(channelType, channelId)` call
 
 ### Features/updates
 
