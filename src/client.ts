@@ -1318,6 +1318,12 @@ export class StreamChat<
     }
   };
 
+  _deleteChannelReferences = (cid: string) => {
+    this.activeChannels[cid]?._disconnect();
+    delete this.activeChannels[cid];
+    this.state.deleteChannelReferences(cid);
+  };
+
   /**
    * @private
    *
@@ -1459,9 +1465,7 @@ export class StreamChat<
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      this.activeChannels[event.cid]?._disconnect();
-      delete this.activeChannels[event.cid];
-      client.state.deleteAllChannelReference(event.cid);
+      this._deleteChannelReferences(event.cid);
     }
   }
 

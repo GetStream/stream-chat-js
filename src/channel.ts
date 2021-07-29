@@ -599,9 +599,13 @@ export class Channel<
    * @return {Promise<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
   async delete() {
-    return await this.getClient().delete<
+    const res = await this.getClient().delete<
       DeleteChannelAPIResponse<ChannelType, CommandType, UserType>
     >(this._channelURL(), {});
+
+    this.getClient()._deleteChannelReferences(this.cid);
+
+    return res;
   }
 
   /**

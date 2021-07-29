@@ -19,7 +19,7 @@ describe('ClientState', () => {
 			user3: { ch1: true, ch4: true },
 		};
 
-		state.deleteAllChannelReference('ch2');
+		state.deleteChannelReferences('ch2');
 
 		expect(state.userChannelReferences).to.deep.equal({
 			user1: { ch1: true, ch3: true },
