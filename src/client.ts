@@ -1215,7 +1215,7 @@ export class StreamChat<
     >,
   ) => {
     // client event handlers
-    this._handleClientEvent(event);
+    const postListenerCallbacks = this._handleClientEvent(event);
 
     // channel event handlers
     const cid = event.cid;
@@ -1229,6 +1229,8 @@ export class StreamChat<
     if (channel) {
       channel._callChannelListeners(event);
     }
+
+    postListenerCallbacks.forEach((c) => c());
   };
 
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
@@ -1399,6 +1401,7 @@ export class StreamChat<
     >,
   ) {
     const client = this;
+    const postListenerCallbacks = [];
     this.logger(
       'info',
       `client:_handleClientEvent - Received event of type { ${event.type} }`,
@@ -1457,10 +1460,17 @@ export class StreamChat<
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      this.activeChannels[event.cid]?._disconnect();
-      delete this.activeChannels[event.cid];
       client.state.deleteAllChannelReference(event.cid);
+      this.activeChannels[event.cid]?._disconnect();
+
+      postListenerCallbacks.push(() => {
+        if (!event.cid) return;
+
+        delete this.activeChannels[event.cid];
+      });
     }
+
+    return postListenerCallbacks;
   }
 
   _muteStatus(cid: string) {
@@ -2045,6 +2055,10 @@ export class StreamChat<
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
+      if (channel.disconnected) {
+        continue;
+      }
+
       if (key === tempCid) {
         return channel;
       }
@@ -2102,7 +2116,7 @@ export class StreamChat<
 
     // only allow 1 channel object per cid
     const cid = `${channelType}:${channelID}`;
-    if (cid in this.activeChannels) {
+    if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = custom;
