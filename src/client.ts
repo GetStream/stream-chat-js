@@ -1344,33 +1344,32 @@ export class StreamChat<
     }
 
     /** update the client.state with any changes to users */
-    if (
-      (event.type === 'user.presence.changed' || event.type === 'user.updated') &&
-      event.user.id === this.userID
-    ) {
-      const user = { ...(this.user || {}) };
-      const _user = { ...(this._user || {}) };
+    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+      if (event.user.id === this.userID) {
+        const user = { ...(this.user || {}) };
+        const _user = { ...(this._user || {}) };
 
-      // Remove deleted properties from user objects.
-      for (const key in this.user) {
-        if (key in event.user || isOwnUserBaseProperty(key)) {
-          continue;
+        // Remove deleted properties from user objects.
+        for (const key in this.user) {
+          if (key in event.user || isOwnUserBaseProperty(key)) {
+            continue;
+          }
+
+          delete user[key];
+          delete _user[key];
         }
 
-        delete user[key];
-        delete _user[key];
-      }
-
-      /** Updating only available properties in _user object. */
-      for (const key in event.user) {
-        if (_user && key in _user) {
-          _user[key] = event.user[key];
+        /** Updating only available properties in _user object. */
+        for (const key in event.user) {
+          if (_user && key in _user) {
+            _user[key] = event.user[key];
+          }
         }
-      }
 
-      // @ts-expect-error
-      this._user = { ..._user };
-      this.user = { ...user, ...event.user };
+        // @ts-expect-error
+        this._user = { ..._user };
+        this.user = { ...user, ...event.user };
+      }
 
       this.state.updateUser(event.user);
       this._updateMemberWatcherReferences(event.user);
