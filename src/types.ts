@@ -2095,8 +2095,10 @@ export type Segment = {
 export type CampaignData = {
   attachments: Attachment[];
   defaults: Record<string, string>;
+  name: string;
   segment_id: string;
   text: string;
+  description?: string;
   push_notifications?: boolean;
   sender_id?: string;
   track_opened?: boolean;
@@ -2114,11 +2116,7 @@ export type CampaignStatus = {
     | 'in_progress';
   completed_at?: string;
   failed_at?: string;
-  progress?: {
-    delivered: number;
-    errored: number;
-    sent: number;
-  };
+  progress?: number;
   resumed_at?: string;
   scheduled_at?: string;
   stopped_at?: string;
@@ -2129,7 +2127,5 @@ export type Campaign = {
   created_at: string;
   id: string;
   updated_at: string;
-  test?: boolean;
-  test_original_id?: string;
 } & CampaignData &
   CampaignStatus;
