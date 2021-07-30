@@ -86,6 +86,7 @@ export type AppSettingsAPIResponse<
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
+    grants?: Record<string, string[]>;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -566,11 +567,11 @@ export type MuteUserResponse<
   own_user?: OwnUserResponse<ChannelType, CommandType, UserType>;
 };
 
-export type OwnUserResponse<
+export type OwnUserBase<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
-> = UserResponse<UserType> & {
+> = {
   channel_mutes: ChannelMute<ChannelType, CommandType, UserType>[];
   devices: Device<UserType>[];
   mutes: Mute<UserType>[];
@@ -580,6 +581,12 @@ export type OwnUserResponse<
   invisible?: boolean;
   roles?: string[];
 };
+
+export type OwnUserResponse<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = UserResponse<UserType> & OwnUserBase<ChannelType, CommandType, UserType>;
 
 export type PartialUpdateChannelAPIResponse<
   ChannelType = UnknownType,
@@ -651,7 +658,7 @@ export type SearchAPIResponse<
   }[];
   next?: string;
   previous?: string;
-  results_warning?: SearchWarning;
+  results_warning?: SearchWarning | null;
 };
 
 export type SearchWarning = {
@@ -963,6 +970,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   baseURL?: string;
   browser?: boolean;
+  device?: BaseDeviceFields;
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -1500,6 +1508,7 @@ export type AppSettings = {
     notification_template?: string;
     server_key?: string;
   };
+  grants?: Record<string, string[]>;
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   multi_tenant_enabled?: boolean;
@@ -1670,12 +1679,15 @@ export type Device<UserType = UnknownType> = DeviceFields & {
   user_id?: string;
 };
 
-export type DeviceFields = {
+export type BaseDeviceFields = {
+  id: string;
+  push_provider: 'apn' | 'firebase';
+};
+
+export type DeviceFields = BaseDeviceFields & {
   created_at: string;
   disabled?: boolean;
   disabled_reason?: string;
-  id?: string;
-  push_provider?: 'apn' | 'firebase';
 };
 
 export type EndpointName =
@@ -2064,6 +2076,7 @@ export type User<UserType = UnknownType> = UserType & {
 
 export type SegmentData = {
   description: string;
+  // TODO: define this type in more detail
   filter: {
     channel?: object;
     user?: object;
@@ -2081,12 +2094,13 @@ export type Segment = {
 
 export type CampaignData = {
   attachments: Attachment[];
-  defaults: { [key: string]: string };
+  defaults: Record<string, string>;
+  name: string;
   segment_id: string;
-  sender_id: string | null;
   text: string;
+  description?: string;
   push_notifications?: boolean;
-  track_opened?: boolean;
+  sender_id?: string;
 };
 
 export type CampaignStatus = {
@@ -2101,11 +2115,7 @@ export type CampaignStatus = {
     | 'in_progress';
   completed_at?: string;
   failed_at?: string;
-  progress?: {
-    delivered: number;
-    errored: number;
-    sent: number;
-  };
+  progress?: number;
   resumed_at?: string;
   scheduled_at?: string;
   stopped_at?: string;
@@ -2116,7 +2126,5 @@ export type Campaign = {
   created_at: string;
   id: string;
   updated_at: string;
-  test?: boolean;
-  test_original_id?: string;
 } & CampaignData &
   CampaignStatus;

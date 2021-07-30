@@ -2,6 +2,7 @@ import WebSocket from 'isomorphic-ws';
 import { chatCodes, sleep, retryInterval } from './utils';
 import { TokenManager } from './token_manager';
 import {
+  BaseDeviceFields,
   ConnectAPIResponse,
   ConnectionChangeEvent,
   ConnectionOpen,
@@ -39,6 +40,7 @@ type Constructor<
   userAgent: string;
   userID: string;
   wsBaseURL: string;
+  device?: BaseDeviceFields;
 };
 
 /**
@@ -75,6 +77,7 @@ export class StableWSConnection<
   userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
   userID: Constructor<ChannelType, CommandType, UserType>['userID'];
   wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
+  device: Constructor<ChannelType, CommandType, UserType>['device'];
 
   connectionID?: string;
   connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
@@ -112,6 +115,7 @@ export class StableWSConnection<
     userAgent,
     userID,
     wsBaseURL,
+    device,
   }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
@@ -121,6 +125,7 @@ export class StableWSConnection<
     this.userAgent = userAgent;
     this.apiKey = apiKey;
     this.tokenManager = tokenManager;
+    this.device = device;
     /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
@@ -205,6 +210,7 @@ export class StableWSConnection<
       user_details: this.user,
       user_token: this.tokenManager.getToken(),
       server_determines_connection_id: true,
+      device: this.device,
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();

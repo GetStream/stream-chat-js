@@ -1563,6 +1563,9 @@ export class Channel<
         if (event.message) {
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
+
+          channelState.removeQuotedMessageReferences(event.message);
+
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
           }

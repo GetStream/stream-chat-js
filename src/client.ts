@@ -13,6 +13,7 @@ import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import {
   isFunction,
+  isOwnUserBaseProperty,
   addFileToFormData,
   chatCodes,
   normalizeQuerySort,
@@ -25,6 +26,7 @@ import {
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
+  BaseDeviceFields,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
   BannedUsersResponse,
@@ -545,9 +547,12 @@ export class StreamChat<
   _setUser(
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
   ) {
-    // this one is used by the frontend
+    /**
+     * This one is used by the frontend. This is a copy of the current user object stored on backend.
+     * It contains reserved properties and own user properties which are not present in `this._user`.
+     */
     this.user = user;
-    // this one is actually used for requests...
+    // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
 
@@ -1211,7 +1216,7 @@ export class StreamChat<
     >,
   ) => {
     // client event handlers
-    this._handleClientEvent(event);
+    const postListenerCallbacks = this._handleClientEvent(event);
 
     // channel event handlers
     const cid = event.cid;
@@ -1225,6 +1230,8 @@ export class StreamChat<
     if (channel) {
       channel._callChannelListeners(event);
     }
+
+    postListenerCallbacks.forEach((c) => c());
   };
 
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
@@ -1340,16 +1347,32 @@ export class StreamChat<
 
     /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user?.id === this.userID) {
-        this.user = this.user && { ...this.user, ...event.user };
-        /** Updating only available properties in _user object. */
-        Object.keys(event.user).forEach((key) => {
-          if (this._user && key in this._user) {
-            /** @ts-expect-error */
-            this._user[key] = event.user[key];
+      if (event.user.id === this.userID) {
+        const user = { ...(this.user || {}) };
+        const _user = { ...(this._user || {}) };
+
+        // Remove deleted properties from user objects.
+        for (const key in this.user) {
+          if (key in event.user || isOwnUserBaseProperty(key)) {
+            continue;
           }
-        });
+
+          delete user[key];
+          delete _user[key];
+        }
+
+        /** Updating only available properties in _user object. */
+        for (const key in event.user) {
+          if (_user && key in _user) {
+            _user[key] = event.user[key];
+          }
+        }
+
+        // @ts-expect-error
+        this._user = { ..._user };
+        this.user = { ...user, ...event.user };
       }
+
       this.state.updateUser(event.user);
       this._updateMemberWatcherReferences(event.user);
     }
@@ -1379,6 +1402,7 @@ export class StreamChat<
     >,
   ) {
     const client = this;
+    const postListenerCallbacks = [];
     this.logger(
       'info',
       `client:_handleClientEvent - Received event of type { ${event.type} }`,
@@ -1431,6 +1455,23 @@ export class StreamChat<
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
       this.mutedUsers = event.me.mutes;
     }
+
+    if (
+      (event.type === 'channel.deleted' ||
+        event.type === 'notification.channel_deleted') &&
+      event.cid
+    ) {
+      client.state.deleteAllChannelReference(event.cid);
+      this.activeChannels[event.cid]?._disconnect();
+
+      postListenerCallbacks.push(() => {
+        if (!event.cid) return;
+
+        delete this.activeChannels[event.cid];
+      });
+    }
+
+    return postListenerCallbacks;
   }
 
   _muteStatus(cid: string) {
@@ -1575,6 +1616,7 @@ export class StreamChat<
       messageCallback: this.handleEvent,
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
+      device: this.options.device,
     });
 
     let warmUpPromise;
@@ -1827,6 +1869,22 @@ export class StreamChat<
   }
 
   /**
+   * setLocalDevice - Set the device info for the current client(device) that will be sent via WS connection automatically
+   *
+   * @param {BaseDeviceFields} device the device object
+   * @param {string} device.id device id
+   * @param {string} device.push_provider the push provider (apn or firebase)
+   *
+   */
+  setLocalDevice(device: BaseDeviceFields) {
+    if (this.wsConnection) {
+      throw new Error('you can only set device before opening a websocket connection');
+    }
+
+    this.options.device = device;
+  }
+
+  /**
    * addDevice - Adds a push device for a user.
    *
    * @param {string} id the device id
@@ -2015,6 +2073,10 @@ export class StreamChat<
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
+      if (channel.disconnected) {
+        continue;
+      }
+
       if (key === tempCid) {
         return channel;
       }
@@ -2072,7 +2134,7 @@ export class StreamChat<
 
     // only allow 1 channel object per cid
     const cid = `${channelType}:${channelID}`;
-    if (cid in this.activeChannels) {
+    if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = custom;
@@ -2996,6 +3058,13 @@ export class StreamChat<
     );
   }
 
+  /**
+   * createSegment - Creates a Campaign Segment
+   *
+   * @param {SegmentData} params Segment data
+   *
+   * @return {Segment} The Created Segment
+   */
   async createSegment(params: SegmentData) {
     const { segment } = await this.post<{ segment: Segment }>(
       this.baseURL + `/segments`,
@@ -3004,6 +3073,13 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * getSegment - Get a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Segment} A Segment
+   */
   async getSegment(id: string) {
     const { segment } = await this.get<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
@@ -3011,6 +3087,12 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * listSegments - List Campaign Segments
+   *
+   *
+   * @return {Segment[]} Segments
+   */
   async listSegments(options: { limit?: number; offset?: number }) {
     const { segments } = await this.get<{ segments: Segment[] }>(
       this.baseURL + `/segments`,
@@ -3019,6 +3101,14 @@ export class StreamChat<
     return segments;
   }
 
+  /**
+   * updateSegment - Update a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   * @param {Partial<SegmentData>} params Segment data
+   *
+   * @return {Segment} Updated Segment
+   */
   async updateSegment(id: string, params: Partial<SegmentData>) {
     const { segment } = await this.put<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
@@ -3027,10 +3117,24 @@ export class StreamChat<
     return segment;
   }
 
+  /**
+   * deleteSegment - Delete a Campaign Segment
+   *
+   * @param {string} id Segment ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
   async deleteSegment(id: string) {
-    return this.delete<{}>(this.baseURL + `/segments/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
   }
 
+  /**
+   * createCampaign - Creates a Campaign
+   *
+   * @param {CampaignData} params Campaign data
+   *
+   * @return {Campaign} The Created Campaign
+   */
   async createCampaign(params: CampaignData) {
     const { campaign } = await this.post<{ campaign: Campaign }>(
       this.baseURL + `/campaigns`,
@@ -3039,6 +3143,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * getCampaign - Get a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} A Campaign
+   */
   async getCampaign(id: string) {
     const { campaign } = await this.get<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
@@ -3046,6 +3157,12 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * listCampaigns - List Campaigns
+   *
+   *
+   * @return {Campaign[]} Campaigns
+   */
   async listCampaigns(options: { limit?: number; offset?: number }) {
     const { campaigns } = await this.get<{ campaigns: Campaign[] }>(
       this.baseURL + `/campaigns`,
@@ -3054,6 +3171,14 @@ export class StreamChat<
     return campaigns;
   }
 
+  /**
+   * updateCampaign - Update a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {Partial<CampaignData>} params Campaign data
+   *
+   * @return {Campaign} Updated Campaign
+   */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     const { campaign } = await this.put<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
@@ -3062,10 +3187,25 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * deleteCampaign - Delete a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
   async deleteCampaign(id: string) {
-    return this.delete<{}>(this.baseURL + `/campaigns/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
   }
 
+  /**
+   * scheduleCampaign - Schedule a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{sendAt: number}} params Schedule params
+   *
+   * @return {Campaign} Scheduled Campaign
+   */
   async scheduleCampaign(id: string, params: { sendAt: number }) {
     const { sendAt } = params;
     const { campaign } = await this.patch<{ campaign: Campaign }>(
@@ -3075,6 +3215,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * stopCampaign - Stop a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Stopped Campaign
+   */
   async stopCampaign(id: string) {
     const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/stop`,
@@ -3082,6 +3229,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * resumeCampaign - Resume a Campaign
+   *
+   * @param {string} id Campaign ID
+   *
+   * @return {Campaign} Resumed Campaign
+   */
   async resumeCampaign(id: string) {
     const { campaign } = await this.patch<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}/resume`,
@@ -3089,6 +3243,13 @@ export class StreamChat<
     return campaign;
   }
 
+  /**
+   * testCampaign - Test a Campaign
+   *
+   * @param {string} id Campaign ID
+   * @param {{users: string[]}} params Test params
+   * @return {Campaign} Test Campaign
+   */
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     const { campaign } = await this.post<{ campaign: Campaign }>(
