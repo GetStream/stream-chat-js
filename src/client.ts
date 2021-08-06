@@ -40,6 +40,7 @@ import {
   ChannelMute,
   ChannelOptions,
   ChannelSort,
+  ChannelStateOptions,
   CheckPushResponse,
   CheckSQSResponse,
   Configs,
@@ -1738,6 +1739,8 @@ export class StreamChat<
    * @param {ChannelSort<ChannelType>} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object
+   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
+   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    *
    * @return {Promise<APIResponse & { channels: Array<ChannelAPIResponse<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>>}> } search channels response
    */
@@ -1745,9 +1748,7 @@ export class StreamChat<
     filterConditions: ChannelFilters<ChannelType, CommandType, UserType>,
     sort: ChannelSort<ChannelType> = [],
     options: ChannelOptions = {},
-    stateOptions: {
-      skipInitialization?: string[];
-    } = {},
+    stateOptions: ChannelStateOptions = {},
   ) {
     const { skipInitialization } = stateOptions;
     const defaultOptions: ChannelOptions = {

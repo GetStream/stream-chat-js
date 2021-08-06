@@ -829,6 +829,10 @@ export type ChannelQueryOptions<
   watchers?: PaginationOptions;
 };
 
+export type ChannelStateOptions = {
+  skipInitialization?: string[];
+};
+
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
