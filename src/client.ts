@@ -1745,7 +1745,11 @@ export class StreamChat<
     filterConditions: ChannelFilters<ChannelType, CommandType, UserType>,
     sort: ChannelSort<ChannelType> = [],
     options: ChannelOptions = {},
+    stateOptions: {
+      skipInitialization?: string[];
+    } = {},
   ) {
+    const { skipInitialization } = stateOptions;
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1797,7 +1801,14 @@ export class StreamChat<
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
       c.initialized = true;
-      c._initializeState(channelState);
+
+      if (skipInitialization === undefined) {
+        c._initializeState(channelState);
+      } else if (!skipInitialization.includes(channelState.channel.id)) {
+        c.state.clearMessages();
+        c._initializeState(channelState);
+      }
+
       channels.push(c);
     }
     return channels;
