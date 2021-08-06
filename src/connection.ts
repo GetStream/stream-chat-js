@@ -561,9 +561,7 @@ export class StableWSConnection<
       );
 
       // reconnect if its an abnormal failure
-      if (this.isFirstConnectSuccesful) {
-        this._reconnect();
-      }
+      this._reconnect();
     }
   };
 
@@ -580,10 +578,7 @@ export class StableWSConnection<
       event,
     });
 
-    // Don't call reconnect if the first connect call results into error.
-    if (this.isFirstConnectSuccesful) {
-      this._reconnect();
-    }
+    this._reconnect();
   };
 
   /**
