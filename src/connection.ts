@@ -85,7 +85,7 @@ export class StableWSConnection<
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
-  isFirstConnectSuccesful: boolean;
+  isFirstConnectSuccessful: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
@@ -133,7 +133,7 @@ export class StableWSConnection<
     this.totalFailures = 0;
     /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
-    this.isFirstConnectSuccesful = false;
+    this.isFirstConnectSuccessful = false;
     /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
     /** Callback when the connection fails and recovers */
@@ -166,7 +166,7 @@ export class StableWSConnection<
     try {
       healthCheck = await this._connect();
       this.isConnecting = false;
-      this.isFirstConnectSuccesful = true;
+      this.isFirstConnectSuccessful = true;
       this.consecutiveFailures = 0;
 
       this.logger(
@@ -346,7 +346,7 @@ export class StableWSConnection<
     this.logger('info', 'connection:_reconnect() - Initiating the reconnect', {
       tags: ['connection'],
     });
-    if (!this.isFirstConnectSuccesful) {
+    if (!this.isFirstConnectSuccessful) {
       this.logger(
         'info',
         'connection:_reconnect() - Abort (0) since first call to "client.connectUser" never succeded',
@@ -560,7 +560,7 @@ export class StableWSConnection<
       this.totalFailures += 1;
       this._setHealth(false);
 
-      this.rejectPromise?.(this._errorFromWSEvent(event, this.isFirstConnectSuccesful));
+      this.rejectPromise?.(this._errorFromWSEvent(event, this.isFirstConnectSuccessful));
 
       this.logger(
         'info',
@@ -582,7 +582,7 @@ export class StableWSConnection<
     this.totalFailures += 1;
     this._setHealth(false);
 
-    this.rejectPromise?.(this._errorFromWSEvent(event, this.isFirstConnectSuccesful));
+    this.rejectPromise?.(this._errorFromWSEvent(event, this.isFirstConnectSuccessful));
     this.logger('info', `connection:onerror() - WS connection resulted into error`, {
       tags: ['connection'],
       event,
