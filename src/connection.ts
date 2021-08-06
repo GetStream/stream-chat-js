@@ -346,6 +346,17 @@ export class StableWSConnection<
     this.logger('info', 'connection:_reconnect() - Initiating the reconnect', {
       tags: ['connection'],
     });
+    if (!this.isFirstConnectSuccesful) {
+      this.logger(
+        'info',
+        'connection:_reconnect() - Abort (0) since first call to "client.connectUser" never succeded',
+        {
+          tags: ['connection'],
+        },
+      );
+      return;
+    }
+
     // only allow 1 connection at the time
     if (this.isConnecting || this.isHealthy) {
       this.logger(
@@ -560,10 +571,7 @@ export class StableWSConnection<
         },
       );
 
-      // reconnect if its an abnormal failure
-      if (this.isFirstConnectSuccesful) {
-        this._reconnect();
-      }
+      this._reconnect();
     }
   };
 
@@ -580,10 +588,7 @@ export class StableWSConnection<
       event,
     });
 
-    // Don't call reconnect if the first connect call results into error.
-    if (this.isFirstConnectSuccesful) {
-      this._reconnect();
-    }
+    this._reconnect();
   };
 
   /**
