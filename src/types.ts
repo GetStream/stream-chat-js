@@ -228,6 +228,7 @@ export type ChannelAPIResponse<
     UserType
   >[];
   hidden?: boolean;
+  hidden_at?: string;
   membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
   watcher_count?: number;
