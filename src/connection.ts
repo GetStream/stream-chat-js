@@ -195,28 +195,43 @@ export class StableWSConnection<
 
   /**
    * _waitForHealthy polls the promise connection to see if its resolved until it times out
-   * the default 5s timeout allows between 2~3 tries
+   * the default 15s timeout allows between 2~3 tries
    * @param timeout duration(ms)
    */
-  async _waitForHealthy(timeout = 5000) {
-    const interval = 50; // ms
-    for (let i = 0; i <= timeout; i += interval) {
-      try {
-        return await this.connectionOpen;
-      } catch (error) {
-        if (i === timeout) {
-          throw new Error(
-            JSON.stringify({
-              code: error.code,
-              StatusCode: error.StatusCode,
-              message: error.message,
-              isWSFailure: error.isWSFailure,
-            }),
-          );
+  async _waitForHealthy(timeout = 15000) {
+    return Promise.race([
+      (async () => {
+        const interval = 50; // ms
+        for (let i = 0; i <= timeout; i += interval) {
+          try {
+            return await this.connectionOpen;
+          } catch (error) {
+            if (i === timeout) {
+              throw new Error(
+                JSON.stringify({
+                  code: error.code,
+                  StatusCode: error.StatusCode,
+                  message: error.message,
+                  isWSFailure: error.isWSFailure,
+                }),
+              );
+            }
+            await sleep(interval);
+          }
         }
-        await sleep(interval);
-      }
-    }
+      })(),
+      (async () => {
+        await sleep(timeout);
+        throw new Error(
+          JSON.stringify({
+            code: '',
+            StatusCode: '',
+            message: 'initial WS connection could not be established',
+            isWSFailure: true,
+          }),
+        );
+      })(),
+    ]);
   }
 
   _buildUrl = () => {
