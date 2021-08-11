@@ -480,10 +480,10 @@ export class StreamChat<
    *
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
    */
-  connectUser = (
+  connectUser = async (
     user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
     userTokenOrProvider: TokenOrProvider,
-  ): ConnectAPIResponse<ChannelType, CommandType, UserType> => {
+  ) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
@@ -527,7 +527,13 @@ export class StreamChat<
       (result) => result[1], // We only return connection promise;
     );
 
-    return this.setUserPromise;
+    try {
+      return await this.setUserPromise;
+    } catch (err) {
+      // cleanup client to allow the user to retry connectUser again
+      this.disconnectUser();
+      throw err;
+    }
   };
 
   /**
