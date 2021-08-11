@@ -187,9 +187,16 @@ export class StableWSConnection<
           },
         );
         this._reconnect({ refreshToken: true });
-      } else if (error.statusCode) {
-        // error that has a statusCode means API rejected the connection and we should not retry
-        throw error;
+      } else if (!error.isWSFailure) {
+        // API rejected the connection and we should not retry
+        throw new Error(
+          JSON.stringify({
+            code: error.code,
+            StatusCode: error.StatusCode,
+            message: error.message,
+            isWSFailure: error.isWSFailure,
+          }),
+        );
       }
     }
 
