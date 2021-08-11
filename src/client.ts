@@ -5,8 +5,8 @@ import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
-import { Channel } from './channel';
-import { ClientState } from './client_state';
+import { Channel, ChannelStateAndData } from './channel';
+import { ClientState, ClientStateData } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
@@ -114,6 +114,16 @@ import {
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
+
+export type ClientStateAndData<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = {
+  state: ClientStateData<UserType>;
+  token: string;
+  user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
+};
 
 export class StreamChat<
   AttachmentType extends UnknownType = UnknownType,
@@ -1729,6 +1739,52 @@ export class StreamChat<
         },
       },
     );
+  }
+
+  getStateData() {
+    const clientData = {
+      state: this.state.getStateData(),
+      user: this.user,
+      token: this._getToken(),
+    };
+
+    const channelsData = Object.values(this.activeChannels).map((item) =>
+      item.getStateData(),
+    );
+
+    return {
+      client: clientData,
+      channels: channelsData,
+    };
+  }
+
+  reInitializeWithState(
+    clientData: ClientStateAndData<ChannelType, CommandType, UserType>,
+    channelsData: ChannelStateAndData<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >[],
+  ) {
+    const socketUser = {
+      id: clientData.user.id,
+      name: clientData.user.name,
+    } as OwnUserResponse<ChannelType, CommandType, UserType>;
+
+    this.connectUser(socketUser, clientData.token);
+
+    this.state.reInitializeWithState(clientData.state);
+    for (const channelData of channelsData) {
+      const c = this.channel(channelData.type, channelData.id);
+      c.data = channelData.data;
+      c.initialized = true;
+
+      c.reInitializeWithState(channelData);
+    }
   }
 
   /**

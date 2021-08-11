@@ -1,4 +1,4 @@
-import { ChannelState } from './channel_state';
+import { ChannelState, ChannelStateData } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
@@ -47,6 +47,30 @@ import {
   SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
+
+export type ChannelStateAndData<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  _data: ChannelResponse<ChannelType, CommandType, UserType> | undefined;
+  data: ChannelResponse<ChannelType, CommandType, UserType> | undefined;
+  id: string | undefined;
+  state: ChannelStateData<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  type: string;
+};
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -1780,6 +1804,36 @@ export class Channel<
         }
       }
     }
+  }
+
+  getStateData() {
+    return {
+      state: this.state.getStateData(),
+      data: this.data,
+      _data: this._data,
+      id: this.id,
+      type: this.type,
+    };
+  }
+
+  reInitializeWithState(
+    channelState: ChannelStateAndData<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    this.state.reInitializeWithState(channelState.state);
+    this.data = channelState.data;
+    if (channelState._data) {
+      this._data = channelState._data;
+    }
+    this.id = channelState.id;
+    this.type = channelState.type;
   }
 
   _disconnect() {

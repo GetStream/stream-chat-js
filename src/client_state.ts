@@ -3,6 +3,14 @@ import { UnknownType, UserResponse } from './types';
 /**
  * ClientState - A container class for the client state.
  */
+
+export type ClientStateData<UserType = UnknownType> = {
+  userChannelReferences: { [key: string]: { [key: string]: boolean } };
+  users: {
+    [key: string]: UserResponse<UserType>;
+  };
+};
+
 export class ClientState<UserType = UnknownType> {
   users: {
     [key: string]: UserResponse<UserType>;
@@ -43,5 +51,17 @@ export class ClientState<UserType = UnknownType> {
     for (const userID in this.userChannelReferences) {
       delete this.userChannelReferences[userID][channelID];
     }
+  }
+
+  getStateData() {
+    return {
+      users: this.users,
+      userChannelReferences: this.userChannelReferences,
+    };
+  }
+
+  reInitializeWithState(clientState: ClientStateData<UserType>) {
+    this.users = clientState.users;
+    this.userChannelReferences = clientState.userChannelReferences;
   }
 }

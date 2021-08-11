@@ -11,6 +11,67 @@ import {
   UserResponse,
 } from './types';
 
+export type ChannelStateData<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UnknownType = UnknownType,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  isUpToDate: boolean;
+  last_message_at: string | null;
+  members: Record<string, ChannelMemberResponse<UserType>>;
+  membership: ChannelMembership<UserType>;
+  messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  mutedUsers: Array<UserResponse<UserType>>;
+  pinnedMessages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  read: Record<string, { last_read: string; user: UserResponse<UserType> }>;
+  threads: Record<
+    string,
+    Array<
+      MessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >
+  >;
+  typing: Record<
+    string,
+    Event<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >
+  >;
+  unreadCount: number;
+  watcher_count: number;
+  watchers: Record<string, UserResponse<UserType>>;
+};
+
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -654,6 +715,60 @@ export class ChannelState<
       messageArr.splice(left, 0, message);
     }
     return [...messageArr];
+  }
+
+  getStateData() {
+    return {
+      watcher_count: this.watcher_count,
+      typing: this.typing,
+      read: this.read,
+      messages: this.messages,
+      pinnedMessages: this.pinnedMessages,
+      threads: this.threads,
+      mutedUsers: this.mutedUsers,
+      watchers: this.watchers,
+      members: this.members,
+      membership: this.membership,
+      unreadCount: this.unreadCount,
+      isUpToDate: this.isUpToDate,
+      last_message_at: this.last_message_at,
+    };
+  }
+
+  reInitializeWithState(
+    channelState: ChannelStateData<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      EventType,
+      MessageType,
+      ReactionType,
+      UserType
+    >,
+  ) {
+    this.watcher_count = channelState.watcher_count;
+    this.typing = channelState.typing;
+    this.read = Object.entries(channelState.read).reduce((acc, next) => {
+      const [id, value] = next;
+      acc[id] = { ...value, last_read: new Date(value.last_read) };
+      return acc;
+    }, {} as Record<string, { last_read: Date; user: UserResponse<UserType> }>);
+    this.messages = channelState.messages.map((m) => this.formatMessage(m));
+    this.pinnedMessages = channelState.pinnedMessages.map((m) => this.formatMessage(m));
+    this.threads = Object.entries(channelState.threads).reduce((acc, next) => {
+      const [id, value] = next;
+      acc[id] = value.map((m) => this.formatMessage(m));
+      return acc;
+    }, {} as Record<string, Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>>);
+    this.mutedUsers = channelState.mutedUsers;
+    this.watchers = channelState.watchers;
+    this.members = channelState.members;
+    this.membership = channelState.membership;
+    this.unreadCount = channelState.unreadCount;
+    this.isUpToDate = channelState.isUpToDate;
+    this.last_message_at = channelState.last_message_at
+      ? new Date(channelState.last_message_at)
+      : null;
   }
 
   /**
