@@ -1777,13 +1777,6 @@ export class StreamChat<
       UserType
     >[],
   ) {
-    const socketUser = {
-      id: clientData.user.id,
-      name: clientData.user.name,
-    } as OwnUserResponse<ChannelType, CommandType, UserType>;
-
-    this.connectUser(socketUser, clientData.token);
-
     this.state.reInitializeWithState(clientData.state);
     for (const channelData of channelsData) {
       const c = this.channel(channelData.type, channelData.id);
