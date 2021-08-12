@@ -155,14 +155,14 @@ export class StableWSConnection<
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async connect() {
-    let healthCheck: ConnectionOpen<ChannelType, CommandType, UserType> | undefined;
     if (this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
       );
     }
+
     try {
-      healthCheck = await this._connect();
+      const healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
 
@@ -173,11 +173,11 @@ export class StableWSConnection<
           tags: ['connection'],
         },
       );
-      return healthCheck;
     } catch (error) {
       this.isConnecting = false;
       this.isHealthy = false;
       this.consecutiveFailures += 1;
+
       if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
         this.logger(
           'info',
@@ -186,12 +186,9 @@ export class StableWSConnection<
             tags: ['connection'],
           },
         );
-        return this._reconnect({ refreshToken: true });
-      }
-
-      if (!error.isWSFailure) {
-        // This is a permanent failure, throw the error...
-        // We are keeping the error consistent with http error.
+        this._reconnect({ refreshToken: true });
+      } else if (!error.isWSFailure) {
+        // API rejected the connection and we should not retry
         throw new Error(
           JSON.stringify({
             code: error.code,
@@ -202,6 +199,49 @@ export class StableWSConnection<
         );
       }
     }
+
+    return await this._waitForHealthy();
+  }
+
+  /**
+   * _waitForHealthy polls the promise connection to see if its resolved until it times out
+   * the default 15s timeout allows between 2~3 tries
+   * @param timeout duration(ms)
+   */
+  async _waitForHealthy(timeout = 15000) {
+    return Promise.race([
+      (async () => {
+        const interval = 50; // ms
+        for (let i = 0; i <= timeout; i += interval) {
+          try {
+            return await this.connectionOpen;
+          } catch (error) {
+            if (i === timeout) {
+              throw new Error(
+                JSON.stringify({
+                  code: error.code,
+                  StatusCode: error.StatusCode,
+                  message: error.message,
+                  isWSFailure: error.isWSFailure,
+                }),
+              );
+            }
+            await sleep(interval);
+          }
+        }
+      })(),
+      (async () => {
+        await sleep(timeout);
+        throw new Error(
+          JSON.stringify({
+            code: '',
+            StatusCode: '',
+            message: 'initial WS connection could not be established',
+            isWSFailure: true,
+          }),
+        );
+      })(),
+    ]);
   }
 
   _buildUrl = () => {
