@@ -43,7 +43,8 @@ describe('StreamChat getInstance', () => {
 
 		await client1.connectUser({ id: 'vishal' }, 'token');
 		const client2 = StreamChat.getInstance('key2');
-		expect(() => client2.connectUser({ id: 'Amin' }, 'token')).to.throw(
+
+		await expect(client2.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
 			/connectUser was called twice/,
 		);
 	});
@@ -136,7 +137,7 @@ describe('Client connectUser', () => {
 	});
 
 	it('should throw err for missing user id', async () => {
-		expect(() => client.connectUser({ user: 'user' }, 'token')).to.throw(
+		await expect(client.connectUser({ user: 'user' }, 'token')).to.be.rejectedWith(
 			/The "id" field on the user is missing/,
 		);
 	});
@@ -151,7 +152,7 @@ describe('Client connectUser', () => {
 
 	it('should throw error if connectUser called twice on the client with different user', async () => {
 		await client.connectUser({ id: 'vishal' }, 'token');
-		expect(() => client.connectUser({ id: 'Amin' }, 'token')).to.throw(
+		await expect(client.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
 			/connectUser was called twice/,
 		);
 	});
@@ -160,7 +161,6 @@ describe('Client connectUser', () => {
 		const promise1 = client.connectUser({ id: 'vishal' }, 'token');
 		const promise2 = client.connectUser({ id: 'vishal' }, 'token');
 
-		expect(promise1).to.equal(promise2);
 		expect(await promise1).to.equal(await promise2);
 	});
 

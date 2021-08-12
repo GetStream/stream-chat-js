@@ -81,6 +81,7 @@ export type AppSettingsAPIResponse<
     >;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
+    campaign_enabled?: boolean;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
@@ -826,6 +827,10 @@ export type ChannelQueryOptions<
   state?: boolean;
   watch?: boolean;
   watchers?: PaginationOptions;
+};
+
+export type ChannelStateOptions = {
+  skipInitialization?: string[];
 };
 
 export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {

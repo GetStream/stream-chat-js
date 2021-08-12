@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## Augest 12, 2021 - 4.0.0
+
+### Breaking ⚠️
+
+From now on `client.connectUser()` should be awaited #747. All instances of `connectUser()` should be changed to:
+
+```js
+await connectUser();
+// or
+connectUser().then();
+// ....
+// queryChannels and other methods should be called after promosie is resolved
+```
+
+The behavior is now improved for poor connections and `connectUser` retries to establish the connection before throwing an error. Make sure to handle the failure gracefully and do not proceed to query channels or other methods until `connectUser` resolves.
+
+### Feature
+
+- Campaign feature flag, name and description added #745 #736
+- Campaign and Segment pagination option #737
+- `queryChannels` options to skip initialization of certain channels #743 #740
+
 ## July 29, 2021 - 3.13.1
 
 - Allowing listeners for `channel.deleted` and `notification.channel_deleted` before disconnecting the channel from client [cc8796e](https://github.com/GetStream/stream-chat-js/commit/cc8796e6bf3cfc1966080bc5ef9581dc83c6ed77)
