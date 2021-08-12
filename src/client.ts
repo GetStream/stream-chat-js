@@ -482,6 +482,24 @@ export class StreamChat<
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
+  _setUserConnection = (
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ) => {
+    // we generate the client id client side
+    this.userID = user.id;
+    this.anonymous = false;
+
+    const setTokenPromise = this._setToken(user, userTokenOrProvider);
+    this._setUser(user);
+
+    const wsPromise = this.openConnection();
+
+    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
+      (result) => result[1], // We only return connection promise;
+    );
+  };
+
   /**
    * connectUser - Set the current user and open a WebSocket connection
    *
@@ -506,6 +524,14 @@ export class StreamChat<
       console.warn(
         'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
       );
+
+      // If last connection attempt failed, we reset user connection with new data. Otherwise we just return the old connection
+      try {
+        await this.setUserPromise;
+      } catch {
+        await this._setUserConnection(user, userTokenOrProvider);
+      }
+
       return this.setUserPromise;
     }
 
@@ -524,26 +550,9 @@ export class StreamChat<
       );
     }
 
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
+    await this._setUserConnection(user, userTokenOrProvider);
 
-    const setTokenPromise = this._setToken(user, userTokenOrProvider);
-    this._setUser(user);
-
-    const wsPromise = this.openConnection();
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
-      (result) => result[1], // We only return connection promise;
-    );
-
-    try {
-      return await this.setUserPromise;
-    } catch (err) {
-      // cleanup client to allow the user to retry connectUser again
-      this.disconnectUser();
-      throw err;
-    }
+    return this.setUserPromise;
   };
 
   /**
