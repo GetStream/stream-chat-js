@@ -529,7 +529,7 @@ export class StreamChat<
       try {
         await this.setUserPromise;
       } catch {
-        await this._setUserConnection(user, userTokenOrProvider);
+        this._setUserConnection(user, userTokenOrProvider);
       }
 
       return this.setUserPromise;
@@ -550,7 +550,7 @@ export class StreamChat<
       );
     }
 
-    await this._setUserConnection(user, userTokenOrProvider);
+    this._setUserConnection(user, userTokenOrProvider);
 
     return this.setUserPromise;
   };
