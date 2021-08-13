@@ -2280,6 +2280,20 @@ export class StreamChat<
     >(this.baseURL + `/users/${userID}`, params);
   }
 
+  async deleteUsers(
+    userIDs: string[],
+    params?: {
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
+  ) {
+    return await this.post<APIResponse>(this.baseURL + `/users-delete`, {
+      user_ids: userIDs,
+      ...params,
+    });
+  }
+
   async reactivateUser(
     userID: string,
     options?: { created_by_id?: string; name?: string; restore_messages?: boolean },
@@ -3074,6 +3088,10 @@ export class StreamChat<
     return this.get<APIResponse & ExportChannelStatusResponse>(
       `${this.baseURL}/export_channels/${id}`,
     );
+  }
+
+  getTask(id: string) {
+    return this.get<APIResponse>(`${this.baseURL}/tasks/${id}`);
   }
 
   /**
