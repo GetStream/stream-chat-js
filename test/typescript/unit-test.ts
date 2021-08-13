@@ -34,74 +34,88 @@ type UserType = {
 type ChannelType = {
   color: string;
 };
-
 type AttachmentType = UnknownType;
 type EventType = UnknownType;
 type MessageType = UnknownType;
 type ReactionType = UnknownType;
 type CommandType = string & {};
 
+export type StreamTypes = {
+  attachmentType: AttachmentType;
+  channelType: ChannelType;
+  commandType: CommandType;
+  eventType: EventType;
+  messageType: MessageType;
+  reactionType: ReactionType;
+  userType: UserType;
+};
+
 let voidReturn: void | { unsubscribe: () => void };
 let voidPromise: Promise<void>;
 
-const client: StreamChat<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = new StreamChat<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
->(apiKey, undefined, {
+const client: StreamChat<StreamTypes> = new StreamChat<StreamTypes>(apiKey, undefined, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
-const clientWithoutSecret: StreamChat<
-  {},
-  ChannelType,
-  string & {},
-  {},
-  {},
-  {},
-  UserType
-> = new StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey, {
+const clientWithoutSecret: StreamChat<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: UserType;
+}> = new StreamChat<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: UserType;
+}>(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
 
-const singletonClient = StreamChat.getInstance<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
->(apiKey);
+const singletonClient = StreamChat.getInstance<StreamTypes>(apiKey);
 
-const singletonClient1: StreamChat<
-  {},
-  ChannelType,
-  string & {},
-  {},
-  {},
-  {},
-  UserType
-> = StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
+const singletonClient1: StreamChat<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: UserType;
+}> = StreamChat.getInstance<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: UserType;
+}>(apiKey);
 
-const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<
-  {},
-  ChannelType
->(apiKey, '', {});
+const singletonClient2: StreamChat<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: {};
+}> = StreamChat.getInstance<{
+  attachmentType: {};
+  channelType: ChannelType;
+  commandType: string & {};
+  eventType: {};
+  messageType: {};
+  reactionType: {};
+  userType: {};
+}>(apiKey, '', {});
 
 const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
@@ -112,7 +126,7 @@ const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
 const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
 voidPromise = client.disconnectUser();
 
-const updateRequest: PartialUserUpdate<UserType> = {
+const updateRequest: PartialUserUpdate<StreamTypes> = {
   id: 'vishal',
   set: {
     name: 'Awesome',
@@ -121,14 +135,14 @@ const updateRequest: PartialUserUpdate<UserType> = {
 };
 
 const updateUser: Promise<{
-  users: { [key: string]: UserResponse<UserType> };
+  users: { [key: string]: UserResponse<StreamTypes> };
 }> = client.partialUpdateUser(updateRequest);
 const updateUsers: Promise<{
-  users: { [key: string]: UserResponse<UserType> };
+  users: { [key: string]: UserResponse<StreamTypes> };
 }> = client.partialUpdateUsers([updateRequest]);
 
 const updateUsersWithSingletonClient: Promise<{
-  users: { [key: string]: UserResponse<UserType> };
+  users: { [key: string]: UserResponse<StreamTypes> };
 }> = singletonClient.partialUpdateUsers([updateRequest]);
 
 const eventHandler = (event: Event) => {};
@@ -137,7 +151,7 @@ voidReturn = client.off(eventHandler);
 voidReturn = client.on('message.new', eventHandler);
 voidReturn = client.off('message.new', eventHandler);
 
-let userReturn: ConnectAPIResponse<ChannelType, CommandType, UserType>;
+let userReturn: ConnectAPIResponse<StreamTypes>;
 userReturn = client.connectUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.connectUser({ id: 'john', phone: 2 }, async () => 'token');
 userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
@@ -164,15 +178,7 @@ const file: Promise<SendFileAPIResponse> = client.sendFile(
 );
 
 const type: EventTypes = 'user.updated';
-const event: Event<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = {
+const event: Event<StreamTypes> = {
   type,
   cid: 'channelid',
   message: {
@@ -201,64 +207,26 @@ const event: Event<
 voidReturn = client.dispatchEvent(event);
 voidPromise = client.recoverState();
 
-const channels: Promise<
-  Channel<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[]
-> = client.queryChannels({}, {}, {});
+const channels: Promise<Channel<StreamTypes>[]> = client.queryChannels({}, {}, {});
 channels.then((response) => {
   const type: string = response[0].type;
   const cid: string = response[0].cid;
 });
 
-const channel: Channel<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = client.channel('messaging', 'channelName', { color: 'green' });
-const channelState: ChannelState<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = channel.state;
-const chUser1: ChannelMemberResponse<UserType> = channelState.members.someUser12433222;
-const chUser2: ChannelMemberResponse<UserType> = channelState.members.someUser124332221;
+const channel: Channel<StreamTypes> = client.channel('messaging', 'channelName', {
+  color: 'green',
+});
+const channelState: ChannelState<StreamTypes> = channel.state;
+const chUser1: ChannelMemberResponse<StreamTypes> = channelState.members.someUser12433222;
+const chUser2: ChannelMemberResponse<StreamTypes> =
+  channelState.members.someUser124332221;
 
-const chUser3: UserResponse<UserType> = channelState.read.someUserId.user;
-const typing: Event<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = channelState.typing['someUserId'];
+const chUser3: UserResponse<StreamTypes> = channelState.read.someUserId.user;
+const typing: Event<StreamTypes> = channelState.typing['someUserId'];
 
-const acceptInvite: Promise<
-  UpdateChannelAPIResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >
-> = channel.acceptInvite({});
+const acceptInvite: Promise<UpdateChannelAPIResponse<StreamTypes>> = channel.acceptInvite(
+  {},
+);
 
 voidReturn = channel.on(eventHandler);
 voidReturn = channel.off(eventHandler);
