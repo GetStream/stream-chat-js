@@ -32,6 +32,26 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type StreamChatDefaultGenerics = {
+  attachmentType: UnknownType;
+  channelType: UnknownType;
+  commandType: LiteralStringForUnion;
+  eventType: UnknownType;
+  messageType: UnknownType;
+  reactionType: UnknownType;
+  userType: UnknownType;
+};
+
+export type StreamChatExtendableGenerics = {
+  attachmentType: UnknownType;
+  channelType: UnknownType;
+  commandType: string;
+  eventType: UnknownType;
+  messageType: UnknownType;
+  reactionType: UnknownType;
+  userType: UnknownType;
+};
+
 export type UnknownType = Record<string, unknown>;
 
 export type Unpacked<T> = T extends (infer U)[]
@@ -51,7 +71,7 @@ export type APIResponse = {
 };
 
 export type AppSettingsAPIResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
   app?: {
     channel_configs: Record<
@@ -60,7 +80,7 @@ export type AppSettingsAPIResponse<
         automod?: ChannelConfigAutomod;
         automod_behavior?: ChannelConfigAutomodBehavior;
         blocklist_behavior?: ChannelConfigAutomodBehavior;
-        commands?: CommandVariants<CommandType>[];
+        commands?: CommandVariants<StreamChatGenerics>[];
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
@@ -124,43 +144,29 @@ export type ModerationResult = {
 };
 
 export type MessageFlagsResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType,
-  AttachmentType = UnknownType,
-  MessageType = UnknownType,
-  ReactionType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
   flags?: Array<{
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >;
-    user: UserResponse<UserType>;
+    message: MessageResponse<StreamChatGenerics>;
+    user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
     created_at?: string;
     created_by_automod?: boolean;
     moderation_result?: ModerationResult;
     rejected_at?: string;
     reviewed_at?: string;
-    reviewed_by?: UserResponse<UserType>;
+    reviewed_by?: UserResponse<StreamChatGenerics>;
     updated_at?: string;
   }>;
 };
 
 export type BannedUsersResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
   bans?: Array<{
-    user: UserResponse<UserType>;
-    banned_by?: UserResponse<UserType>;
-    channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+    user: UserResponse<StreamChatGenerics>;
+    banned_by?: UserResponse<StreamChatGenerics>;
+    channel?: ChannelResponse<StreamChatGenerics>;
     expires?: string;
     ip_ban?: boolean;
     reason?: string;
@@ -174,10 +180,8 @@ export type BlockListResponse = BlockList & {
 };
 
 export type ChannelResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
-> = ChannelType & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['channelType'] & {
   cid: string;
   disabled: boolean;
   frozen: boolean;
@@ -185,16 +189,16 @@ export type ChannelResponse<
   type: string;
   auto_translation_enabled?: boolean;
   auto_translation_language?: TranslationLanguages | '';
-  config?: ChannelConfigWithInfo<CommandType>;
+  config?: ChannelConfigWithInfo<StreamChatGenerics>;
   cooldown?: number;
   created_at?: string;
-  created_by?: UserResponse<UserType> | null;
+  created_by?: UserResponse<StreamChatGenerics> | null;
   created_by_id?: string;
   deleted_at?: string;
   invites?: string[];
   last_message_at?: string;
   member_count?: number;
-  members?: ChannelMemberResponse<UserType>[];
+  members?: ChannelMemberResponse<StreamChatGenerics>[];
   muted?: boolean;
   name?: string;
   team?: string;
@@ -202,43 +206,28 @@ export type ChannelResponse<
 };
 
 export type ChannelAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel: ChannelResponse<ChannelType, CommandType, UserType>;
-  members: ChannelMemberResponse<UserType>[];
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
-  pinned_messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  channel: ChannelResponse<StreamChatGenerics>;
+  members: ChannelMemberResponse<StreamChatGenerics>[];
+  messages: MessageResponse<StreamChatGenerics>[];
+  pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
-  membership?: ChannelMembership<UserType> | null;
-  read?: ReadResponse<UserType>[];
+  membership?: ChannelMembership<StreamChatGenerics> | null;
+  read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
-  watchers?: UserResponse<UserType>[];
+  watchers?: UserResponse<StreamChatGenerics>[];
 };
 
-export type ChannelMemberAPIResponse<UserType = UnknownType> = APIResponse & {
-  members: ChannelMemberResponse<UserType>[];
+export type ChannelMemberAPIResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
+  members: ChannelMemberResponse<StreamChatGenerics>[];
 };
 
-export type ChannelMemberResponse<UserType = UnknownType> = {
+export type ChannelMemberResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   banned?: boolean;
   channel_role?: Role;
   created_at?: string;
@@ -249,7 +238,7 @@ export type ChannelMemberResponse<UserType = UnknownType> = {
   role?: string;
   shadow_banned?: boolean;
   updated_at?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
@@ -270,65 +259,49 @@ export type CheckSQSResponse = APIResponse & {
 };
 
 export type CommandResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = Partial<CreatedAtUpdatedAt> & {
   args?: string;
   description?: string;
-  name?: CommandVariants<CommandType>;
-  set?: CommandVariants<CommandType>;
+  name?: CommandVariants<StreamChatGenerics>;
+  set?: CommandVariants<StreamChatGenerics>;
 };
 
 export type ConnectAPIResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
-> = Promise<void | ConnectionOpen<ChannelType, CommandType, UserType>>;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Promise<void | ConnectionOpen<StreamChatGenerics>>;
 
 export type CreateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
+  Omit<CreateChannelOptions<StreamChatGenerics>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
     grants?: Record<string, string[]>;
   };
 
 export type CreateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & { command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt };
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
+  command: CreateCommandOptions<StreamChatGenerics> & CreatedAtUpdatedAt;
+};
 
 export type DeleteChannelAPIResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  channel: ChannelResponse<StreamChatGenerics>;
 };
 
 export type DeleteCommandResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  name?: CommandVariants<CommandType>;
+  name?: CommandVariants<StreamChatGenerics>;
 };
 
 export type EventAPIResponse<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  event: Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  event: Event<StreamChatGenerics>;
 };
 
 export type ExportChannelResponse = {
@@ -342,13 +315,15 @@ export type ExportChannelStatusResponse = {
   updated_at?: string;
 };
 
-export type FlagMessageResponse<UserType = UnknownType> = APIResponse & {
+export type FlagMessageResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
   flag: {
     created_at: string;
     created_by_automod: boolean;
     target_message_id: string;
     updated_at: string;
-    user: UserResponse<UserType>;
+    user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
     rejected_at?: string;
     reviewed_at?: string;
@@ -356,13 +331,15 @@ export type FlagMessageResponse<UserType = UnknownType> = APIResponse & {
   };
 };
 
-export type FlagUserResponse<UserType = UnknownType> = APIResponse & {
+export type FlagUserResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
   flag: {
     created_at: string;
     created_by_automod: boolean;
-    target_user: UserResponse<UserType>;
+    target_user: UserResponse<StreamChatGenerics>;
     updated_at: string;
-    user: UserResponse<UserType>;
+    user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
     rejected_at?: string;
     reviewed_at?: string;
@@ -371,17 +348,12 @@ export type FlagUserResponse<UserType = UnknownType> = APIResponse & {
 };
 
 export type FormatMessageResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = Omit<
-  MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>,
+  MessageResponse<Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }>,
   'created_at' | 'pinned_at' | 'updated_at' | 'status'
 > &
-  MessageType & {
+  StreamChatGenerics['messageType'] & {
     created_at: Date;
     pinned_at: Date | null;
     status: string;
@@ -389,35 +361,26 @@ export type FormatMessageResponse<
   };
 
 export type GetChannelTypeResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id' | 'commands'> & {
+  Omit<
+    CreateChannelOptions<StreamChatGenerics>,
+    'client_id' | 'connection_id' | 'commands'
+  > & {
     created_at: string;
     updated_at: string;
-    commands?: CommandResponse<CommandType>[];
+    commands?: CommandResponse<StreamChatGenerics>[];
     grants?: Record<string, string[]>;
   };
 
 export type GetCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & CreateCommandOptions<StreamChatGenerics> & CreatedAtUpdatedAt;
 
 export type GetMultipleMessagesAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  messages: MessageResponse<StreamChatGenerics>[];
 };
 
 export type GetRateLimitsResponse = APIResponse & {
@@ -428,40 +391,27 @@ export type GetRateLimitsResponse = APIResponse & {
 };
 
 export type GetReactionsAPIResponse<
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  reactions: ReactionResponse<ReactionType, UserType>[];
+  reactions: ReactionResponse<StreamChatGenerics>[];
 };
 
 export type GetRepliesAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  messages: MessageResponse<StreamChatGenerics>[];
 };
 
 export type ListChannelResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
   channel_types: Record<
     string,
     Omit<
-      CreateChannelOptions<CommandType>,
+      CreateChannelOptions<StreamChatGenerics>,
       'client_id' | 'connection_id' | 'commands'
     > & {
-      commands: CommandResponse<CommandType>[];
+      commands: CommandResponse<StreamChatGenerics>[];
       created_at: string;
       updated_at: string;
       grants?: Record<string, string[]>;
@@ -470,61 +420,35 @@ export type ListChannelResponse<
 };
 
 export type ListChannelTypesAPIResponse<
-  CommandType extends string = LiteralStringForUnion
-> = ListChannelResponse<CommandType>;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = ListChannelResponse<StreamChatGenerics>;
 
 export type ListCommandsResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<StreamChatGenerics> & CreatedAtUpdatedAt>;
 };
 
 export type MuteChannelAPIResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel_mute: ChannelMute<ChannelType, CommandType, UserType>;
-  own_user: OwnUserResponse<ChannelType, CommandType, UserType>;
-  channel_mutes?: ChannelMute<ChannelType, CommandType, UserType>[];
-  mute?: MuteResponse<UserType>;
+  channel_mute: ChannelMute<StreamChatGenerics>;
+  own_user: OwnUserResponse<StreamChatGenerics>;
+  channel_mutes?: ChannelMute<StreamChatGenerics>[];
+  mute?: MuteResponse<StreamChatGenerics>;
 };
 
 export type MessageResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = MessageResponseBase<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
-> & {
-  quoted_message?: MessageResponseBase<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = MessageResponseBase<StreamChatGenerics> & {
+  quoted_message?: MessageResponseBase<StreamChatGenerics>;
 };
 
 export type MessageResponseBase<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = MessageBase<AttachmentType, MessageType, UserType> & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = MessageBase<StreamChatGenerics> & {
   args?: string;
-  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  channel?: ChannelResponse<StreamChatGenerics>;
   cid?: string;
   command?: string;
   command_info?: { name?: string };
@@ -533,49 +457,47 @@ export type MessageResponseBase<
   i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
     language: TranslationLanguages;
   };
-  latest_reactions?: ReactionResponse<ReactionType, UserType>[];
-  mentioned_users?: UserResponse<UserType>[];
-  own_reactions?: ReactionResponse<ReactionType, UserType>[] | null;
+  latest_reactions?: ReactionResponse<StreamChatGenerics>[];
+  mentioned_users?: UserResponse<StreamChatGenerics>[];
+  own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
-  pinned_by?: UserResponse<UserType> | null;
+  pinned_by?: UserResponse<StreamChatGenerics> | null;
   reaction_counts?: { [key: string]: number } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
   silent?: boolean;
   status?: string;
-  thread_participants?: UserResponse<UserType>[];
+  thread_participants?: UserResponse<StreamChatGenerics>[];
   type?: MessageLabel;
   updated_at?: string;
 };
 
-export type MuteResponse<UserType = UnknownType> = {
-  user: UserResponse<UserType>;
+export type MuteResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
+  user: UserResponse<StreamChatGenerics>;
   created_at?: string;
   expires?: string;
-  target?: UserResponse<UserType>;
+  target?: UserResponse<StreamChatGenerics>;
   updated_at?: string;
 };
 
 export type MuteUserResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  mute?: MuteResponse<UserType>;
-  mutes?: Array<Mute<UserType>>;
-  own_user?: OwnUserResponse<ChannelType, CommandType, UserType>;
+  mute?: MuteResponse<StreamChatGenerics>;
+  mutes?: Array<Mute<StreamChatGenerics>>;
+  own_user?: OwnUserResponse<StreamChatGenerics>;
 };
 
 export type OwnUserBase<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
-  channel_mutes: ChannelMute<ChannelType, CommandType, UserType>[];
-  devices: Device<UserType>[];
-  mutes: Mute<UserType>[];
+  channel_mutes: ChannelMute<StreamChatGenerics>[];
+  devices: Device<StreamChatGenerics>[];
+  mutes: Mute<StreamChatGenerics>[];
   total_unread_count: number;
   unread_channels: number;
   unread_count: number;
@@ -584,18 +506,14 @@ export type OwnUserBase<
 };
 
 export type OwnUserResponse<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
-> = UserResponse<UserType> & OwnUserBase<ChannelType, CommandType, UserType>;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = UserResponse<StreamChatGenerics> & OwnUserBase<StreamChatGenerics>;
 
 export type PartialUpdateChannelAPIResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel: ChannelResponse<ChannelType, CommandType, UserType>;
-  members: ChannelMemberResponse<UserType>[];
+  channel: ChannelResponse<StreamChatGenerics>;
+  members: ChannelMemberResponse<StreamChatGenerics>[];
 };
 
 export type PermissionAPIResponse = APIResponse & {
@@ -607,55 +525,32 @@ export type PermissionsAPIResponse = APIResponse & {
 };
 
 export type ReactionAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
-  reaction: ReactionResponse<ReactionType, UserType>;
+  message: MessageResponse<StreamChatGenerics>;
+  reaction: ReactionResponse<StreamChatGenerics>;
 };
 
 export type ReactionResponse<
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Reaction<ReactionType, UserType> & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Reaction<StreamChatGenerics> & {
   created_at: string;
   updated_at: string;
 };
 
-export type ReadResponse<UserType = UnknownType> = {
+export type ReadResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   last_read: string;
-  user: UserResponse<UserType>;
+  user: UserResponse<StreamChatGenerics>;
   unread_messages?: number;
 };
 
 export type SearchAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
   results: {
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >;
+    message: MessageResponse<StreamChatGenerics>;
   }[];
   next?: string;
   previous?: string;
@@ -671,95 +566,63 @@ export type SearchWarning = {
 export type SendFileAPIResponse = APIResponse & { file: string };
 
 export type SendMessageAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message: MessageResponse<StreamChatGenerics>;
 };
 
 export type TruncateChannelAPIResponse<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  channel: ChannelResponse<StreamChatGenerics>;
 };
 
 export type UpdateChannelAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  channel: ChannelResponse<ChannelType, CommandType, UserType>;
-  members: ChannelMemberResponse<UserType>[];
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  channel: ChannelResponse<StreamChatGenerics>;
+  members: ChannelMemberResponse<StreamChatGenerics>[];
+  message?: MessageResponse<StreamChatGenerics>;
 };
 
 export type UpdateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
+  Omit<CreateChannelOptions<StreamChatGenerics>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
   };
 
 export type UpdateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  command: UpdateCommandOptions<CommandType> &
+  command: UpdateCommandOptions<StreamChatGenerics> &
     CreatedAtUpdatedAt & {
-      name: CommandVariants<CommandType>;
+      name: CommandVariants<StreamChatGenerics>;
     };
 };
 
 export type UpdateMessageAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message: MessageResponse<StreamChatGenerics>;
 };
 
-export type UsersAPIResponse<UserType = UnknownType> = APIResponse & {
-  users: Array<UserResponse<UserType>>;
+export type UsersAPIResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
+  users: Array<UserResponse<StreamChatGenerics>>;
 };
 
-export type UpdateUsersAPIResponse<UserType = UnknownType> = APIResponse & {
-  users: { [key: string]: UserResponse<UserType> };
+export type UpdateUsersAPIResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = APIResponse & {
+  users: { [key: string]: UserResponse<StreamChatGenerics> };
 };
 
-export type UserResponse<UserType = UnknownType> = User<UserType> & {
+export type UserResponse<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = User<StreamChatGenerics> & {
   banned?: boolean;
   created_at?: string;
   deactivated_at?: string;
@@ -786,8 +649,10 @@ export type BannedUsersPaginationOptions = Omit<
   'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
 >;
 
-export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
-  banned_by?: UserResponse<UserType>;
+export type BanUserOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = UnBanUserOptions & {
+  banned_by?: UserResponse<StreamChatGenerics>;
   banned_by_id?: string;
   ip_ban?: boolean;
   reason?: string;
@@ -795,7 +660,7 @@ export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   /**
    * @deprecated please use banned_by
    */
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   /**
    * @deprecated please use banned_by_id
    */
@@ -814,13 +679,11 @@ export type ChannelOptions = {
 };
 
 export type ChannelQueryOptions<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
   client_id?: string;
   connection_id?: string;
-  data?: ChannelResponse<ChannelType, CommandType, UserType>;
+  data?: ChannelResponse<StreamChatGenerics>;
   members?: PaginationOptions;
   messages?: PaginationOptions;
   presence?: boolean;
@@ -833,14 +696,16 @@ export type ChannelStateOptions = {
   skipInitialization?: string[];
 };
 
-export type CreateChannelOptions<CommandType extends string = LiteralStringForUnion> = {
+export type CreateChannelOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
   automod_thresholds?: ChannelConfigAutomodThresholds;
   blocklist?: string;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   client_id?: string;
-  commands?: CommandVariants<CommandType>[];
+  commands?: CommandVariants<StreamChatGenerics>[];
   connect_events?: boolean;
   connection_id?: string;
   custom_events?: boolean;
@@ -860,11 +725,13 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   url_enrichment?: boolean;
 };
 
-export type CreateCommandOptions<CommandType extends string = LiteralStringForUnion> = {
+export type CreateCommandOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   description: string;
-  name: CommandVariants<CommandType>;
+  name: CommandVariants<StreamChatGenerics>;
   args?: string;
-  set?: CommandVariants<CommandType>;
+  set?: CommandVariants<StreamChatGenerics>;
 };
 
 export type CustomPermissionOptions = {
@@ -879,51 +746,45 @@ export type CustomPermissionOptions = {
 
 // TODO: rename to UpdateChannelOptions in the next major update and use it in channel._update and/or channel.update
 export type InviteOptions<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
   accept_invite?: boolean;
   add_members?: string[];
   add_moderators?: string[];
   client_id?: string;
   connection_id?: string;
-  data?: Omit<ChannelResponse<ChannelType, CommandType, UserType>, 'id' | 'cid'>;
+  data?: Omit<ChannelResponse<StreamChatGenerics>, 'id' | 'cid'>;
   demote_moderators?: string[];
   invites?: string[];
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message?: MessageResponse<StreamChatGenerics>;
   reject_invite?: boolean;
   remove_members?: string[];
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
-export type MarkAllReadOptions<UserType = UnknownType> = {
+export type MarkAllReadOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   client_id?: string;
   connection_id?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
-export type MarkReadOptions<UserType = UnknownType> = {
+export type MarkReadOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   client_id?: string;
   connection_id?: string;
   message_id?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
-export type MuteUserOptions<UserType = UnknownType> = {
+export type MuteUserOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   client_id?: string;
   connection_id?: string;
   id?: string;
@@ -931,7 +792,7 @@ export type MuteUserOptions<UserType = UnknownType> = {
   target_user_id?: string;
   timeout?: number;
   type?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
@@ -957,11 +818,13 @@ export type QueryMembersOptions = {
   user_id_lte?: string;
 };
 
-export type SearchOptions<MessageType = UnknownType> = {
+export type SearchOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   limit?: number;
   next?: string;
   offset?: number;
-  sort?: SearchMessageSort<MessageType>;
+  sort?: SearchMessageSort<StreamChatGenerics>;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {
@@ -1001,16 +864,18 @@ export type UnBanUserOptions = {
 
 // TODO: rename to UpdateChannelTypeOptions in the next major update
 export type UpdateChannelOptions<
-  CommandType extends string = LiteralStringForUnion
-> = Omit<CreateChannelOptions<CommandType>, 'name'> & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Omit<CreateChannelOptions<StreamChatGenerics>, 'name'> & {
   created_at?: string;
   updated_at?: string;
 };
 
-export type UpdateCommandOptions<CommandType extends string = LiteralStringForUnion> = {
+export type UpdateCommandOptions<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   description: string;
   args?: string;
-  set?: CommandVariants<CommandType>;
+  set?: CommandVariants<StreamChatGenerics>;
 };
 
 export type UserOptions = {
@@ -1029,16 +894,10 @@ export type ConnectionChangeEvent = {
 };
 
 export type Event<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = EventType & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['eventType'] & {
   type: EventTypes;
-  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
   channel_type?: string;
   cid?: string;
@@ -1047,52 +906,31 @@ export type Event<
   created_at?: string;
   hard_delete?: boolean;
   mark_messages_deleted?: boolean;
-  me?: OwnUserResponse<ChannelType, CommandType, UserType>;
-  member?: ChannelMemberResponse<UserType>;
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  me?: OwnUserResponse<StreamChatGenerics>;
+  member?: ChannelMemberResponse<StreamChatGenerics>;
+  message?: MessageResponse<StreamChatGenerics>;
   online?: boolean;
   parent_id?: string;
-  reaction?: ReactionResponse<ReactionType, UserType>;
+  reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
   total_unread_count?: number;
   unread_channels?: number;
   unread_count?: number;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;
 };
 
-export type UserCustomEvent<EventType extends UnknownType = UnknownType> = EventType & {
+export type UserCustomEvent<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['eventType'] & {
   type: string;
 };
 
 export type EventHandler<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = (
-  event: Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >,
-) => void;
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = (event: Event<StreamChatGenerics>) => void;
 
 export type EventTypes =
   | 'all'
@@ -1204,11 +1042,9 @@ export type BannedUsersFilters = QueryFilters<
 >;
 
 export type ChannelFilters<
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = QueryFilters<
-  ContainsOperator<ChannelType> & {
+  ContainsOperator<StreamChatGenerics['channelType']> & {
     members?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
@@ -1217,17 +1053,27 @@ export type ChannelFilters<
     name?:
       | RequireOnlyOne<
           {
-            $autocomplete?: ChannelResponse<ChannelType, CommandType, UserType>['name'];
-          } & QueryFilter<ChannelResponse<ChannelType, CommandType, UserType>['name']>
+            $autocomplete?: ChannelResponse<StreamChatGenerics>['name'];
+          } & QueryFilter<ChannelResponse<StreamChatGenerics>['name']>
         >
-      | PrimitiveFilter<ChannelResponse<ChannelType, CommandType, UserType>['name']>;
+      | PrimitiveFilter<ChannelResponse<StreamChatGenerics>['name']>;
   } & {
       [Key in keyof Omit<
-        ChannelResponse<{}, CommandType, UserType>,
+        ChannelResponse<Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }>,
         'name' | 'members'
       >]:
-        | RequireOnlyOne<QueryFilter<ChannelResponse<{}, CommandType, UserType>[Key]>>
-        | PrimitiveFilter<ChannelResponse<{}, CommandType, UserType>[Key]>;
+        | RequireOnlyOne<
+            QueryFilter<
+              ChannelResponse<
+                Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }
+              >[Key]
+            >
+          >
+        | PrimitiveFilter<
+            ChannelResponse<
+              Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }
+            >[Key]
+          >;
     }
 >;
 
@@ -1246,86 +1092,32 @@ export type ContainsOperator<CustomType = {}> = {
 };
 
 export type MessageFilters<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = QueryFilters<
-  ContainsOperator<MessageType> & {
+  ContainsOperator<StreamChatGenerics['messageType']> & {
     text?:
       | RequireOnlyOne<
           {
-            $autocomplete?: MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['text'];
-            $q?: MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['text'];
-          } & QueryFilter<
-            MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['text']
-          >
+            $autocomplete?: MessageResponse<StreamChatGenerics>['text'];
+            $q?: MessageResponse<StreamChatGenerics>['text'];
+          } & QueryFilter<MessageResponse<StreamChatGenerics>['text']>
         >
-      | PrimitiveFilter<
-          MessageResponse<
-            AttachmentType,
-            ChannelType,
-            CommandType,
-            MessageType,
-            ReactionType,
-            UserType
-          >['text']
-        >;
+      | PrimitiveFilter<MessageResponse<StreamChatGenerics>['text']>;
   } & {
       [Key in keyof Omit<
-        MessageResponse<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          {},
-          ReactionType,
-          UserType
-        >,
+        MessageResponse<Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }>,
         'text'
       >]?:
         | RequireOnlyOne<
             QueryFilter<
               MessageResponse<
-                AttachmentType,
-                ChannelType,
-                CommandType,
-                {},
-                ReactionType,
-                UserType
+                Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }
               >[Key]
             >
           >
         | PrimitiveFilter<
             MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              {},
-              ReactionType,
-              UserType
+              Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }
             >[Key]
           >;
     }
@@ -1367,39 +1159,50 @@ export type QueryLogicalOperators<Operators> = {
   $or?: ArrayTwoOrMore<QueryFilters<Operators>>;
 };
 
-export type UserFilters<UserType = UnknownType> = QueryFilters<
-  ContainsOperator<UserType> & {
+export type UserFilters<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = QueryFilters<
+  ContainsOperator<StreamChatGenerics['userType']> & {
     id?:
       | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['id'] } & QueryFilter<
-            UserResponse<UserType>['id']
+          { $autocomplete?: UserResponse<StreamChatGenerics>['id'] } & QueryFilter<
+            UserResponse<StreamChatGenerics>['id']
           >
         >
-      | PrimitiveFilter<UserResponse<UserType>['id']>;
+      | PrimitiveFilter<UserResponse<StreamChatGenerics>['id']>;
     name?:
       | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['name'] } & QueryFilter<
-            UserResponse<UserType>['name']
+          { $autocomplete?: UserResponse<StreamChatGenerics>['name'] } & QueryFilter<
+            UserResponse<StreamChatGenerics>['name']
           >
         >
-      | PrimitiveFilter<UserResponse<UserType>['name']>;
+      | PrimitiveFilter<UserResponse<StreamChatGenerics>['name']>;
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
-          $eq?: PrimitiveFilter<UserResponse<UserType>['teams']>;
+          $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
         }>
-      | PrimitiveFilter<UserResponse<UserType>['teams']>;
+      | PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
     username?:
       | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['username'] } & QueryFilter<
-            UserResponse<UserType>['username']
+          { $autocomplete?: UserResponse<StreamChatGenerics>['username'] } & QueryFilter<
+            UserResponse<StreamChatGenerics>['username']
           >
         >
-      | PrimitiveFilter<UserResponse<UserType>['username']>;
+      | PrimitiveFilter<UserResponse<StreamChatGenerics>['username']>;
   } & {
-      [Key in keyof Omit<UserResponse<{}>, 'id' | 'name' | 'teams' | 'username'>]?:
-        | RequireOnlyOne<QueryFilter<UserResponse<{}>[Key]>>
-        | PrimitiveFilter<UserResponse<{}>[Key]>;
+      [Key in keyof Omit<
+        UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>,
+        'id' | 'name' | 'teams' | 'username'
+      >]?:
+        | RequireOnlyOne<
+            QueryFilter<
+              UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>[Key]
+            >
+          >
+        | PrimitiveFilter<
+            UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>[Key]
+          >;
     }
 >;
 
@@ -1411,11 +1214,13 @@ export type BannedUsersSort = BannedUsersSortBase | Array<BannedUsersSortBase>;
 
 export type BannedUsersSortBase = { created_at?: AscDesc };
 
-export type ChannelSort<ChannelType = UnknownType> =
-  | ChannelSortBase<ChannelType>
-  | Array<ChannelSortBase<ChannelType>>;
+export type ChannelSort<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = ChannelSortBase<StreamChatGenerics> | Array<ChannelSortBase<StreamChatGenerics>>;
 
-export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
+export type ChannelSortBase<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Sort<StreamChatGenerics['channelType']> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1429,11 +1234,15 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type UserSort<UserType = UnknownType> =
-  | Sort<UserResponse<UserType>>
-  | Array<Sort<UserResponse<UserType>>>;
+export type UserSort<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> =
+  | Sort<UserResponse<StreamChatGenerics>>
+  | Array<Sort<UserResponse<StreamChatGenerics>>>;
 
-export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
+export type SearchMessageSortBase<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Sort<StreamChatGenerics['messageType']> & {
   attachments?: AscDesc;
   'attachments.type'?: AscDesc;
   created_at?: AscDesc;
@@ -1449,19 +1258,19 @@ export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType>
   'user.id'?: AscDesc;
 };
 
-export type SearchMessageSort<MessageType = UnknownType> =
-  | SearchMessageSortBase<MessageType>
-  | Array<SearchMessageSortBase<MessageType>>;
+export type SearchMessageSort<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> =
+  | SearchMessageSortBase<StreamChatGenerics>
+  | Array<SearchMessageSortBase<StreamChatGenerics>>;
 
 export type QuerySort<
-  ChannelType = UnknownType,
-  UserType = UnknownType,
-  MessageType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > =
   | BannedUsersSort
-  | ChannelSort<ChannelType>
-  | SearchMessageSort<MessageType>
-  | UserSort<UserType>;
+  | ChannelSort<StreamChatGenerics>
+  | SearchMessageSort<StreamChatGenerics>
+  | UserSort<StreamChatGenerics>;
 
 /**
  * Base Types
@@ -1527,7 +1336,9 @@ export type AppSettings = {
   webhook_url?: string;
 };
 
-export type Attachment<T = UnknownType> = T & {
+export type Attachment<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['attachmentType'] & {
   actions?: Action[];
   asset_url?: string;
   author_icon?: string;
@@ -1554,10 +1365,10 @@ export type BlockList = {
 };
 
 export type ChannelConfig<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = ChannelConfigFields &
   CreatedAtUpdatedAt & {
-    commands?: CommandVariants<CommandType>[];
+    commands?: CommandVariants<StreamChatGenerics>[];
   };
 
 export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
@@ -1591,18 +1402,22 @@ export type ChannelConfigFields = {
 };
 
 export type ChannelConfigWithInfo<
-  CommandType extends string = LiteralStringForUnion
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = ChannelConfigFields &
   CreatedAtUpdatedAt & {
-    commands?: CommandResponse<CommandType>[];
+    commands?: CommandResponse<StreamChatGenerics>[];
   };
 
-export type ChannelData<ChannelType = UnknownType> = ChannelType & {
+export type ChannelData<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['channelType'] & {
   members?: string[];
   name?: string;
 };
 
-export type ChannelMembership<UserType = UnknownType> = {
+export type ChannelMembership<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   banned?: boolean;
   channel_role?: Role;
   created_at?: string;
@@ -1610,16 +1425,14 @@ export type ChannelMembership<UserType = UnknownType> = {
   role?: string;
   shadow_banned?: boolean;
   updated_at?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
 };
 
 export type ChannelMute<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
-  user: UserResponse<UserType>;
-  channel?: ChannelResponse<ChannelType, CommandType, UserType>;
+  user: UserResponse<StreamChatGenerics>;
+  channel?: ChannelResponse<StreamChatGenerics>;
   created_at?: string;
   expires?: string;
   updated_at?: string;
@@ -1633,18 +1446,22 @@ export type ChannelRole = {
   same_team?: boolean;
 };
 
-export type CheckPushInput<UserType = UnknownType> = {
+export type CheckPushInput<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   apn_template?: string;
   client_id?: string;
   connection_id?: string;
   firebase_data_template?: string;
   firebase_template?: string;
   message_id?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
-export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
+export type CommandVariants<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> =
   | 'all'
   | 'ban'
   | 'flag'
@@ -1655,21 +1472,21 @@ export type CommandVariants<CommandType extends string = LiteralStringForUnion> 
   | 'mute'
   | 'unban'
   | 'unmute'
-  | CommandType;
+  | StreamChatGenerics['commandType'];
 
-export type Configs<CommandType extends string = LiteralStringForUnion> = {
-  [channel_type: string]: ChannelConfigWithInfo<CommandType> | undefined;
+export type Configs<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
+  [channel_type: string]: ChannelConfigWithInfo<StreamChatGenerics> | undefined;
 };
 
 export type ConnectionOpen<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
   connection_id: string;
   cid?: string;
   created_at?: string;
-  me?: OwnUserResponse<ChannelType, CommandType, UserType>;
+  me?: OwnUserResponse<StreamChatGenerics>;
   type?: string;
 };
 
@@ -1678,9 +1495,11 @@ export type CreatedAtUpdatedAt = {
   updated_at: string;
 };
 
-export type Device<UserType = UnknownType> = DeviceFields & {
+export type Device<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = DeviceFields & {
   provider?: string;
-  user?: UserResponse<UserType>;
+  user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
 
@@ -1817,20 +1636,16 @@ export type Logger = (
 ) => void;
 
 export type Message<
-  AttachmentType = UnknownType,
-  MessageType = UnknownType,
-  UserType = UnknownType
-> = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Partial<MessageBase<StreamChatGenerics>> & {
   mentioned_users?: string[];
 };
 
 export type MessageBase<
-  AttachmentType = UnknownType,
-  MessageType = UnknownType,
-  UserType = UnknownType
-> = MessageType & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['messageType'] & {
   id: string;
-  attachments?: Attachment<AttachmentType>[];
+  attachments?: Attachment<StreamChatGenerics>[];
   html?: string;
   mml?: string;
   parent_id?: string;
@@ -1838,7 +1653,7 @@ export type MessageBase<
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
-  user?: UserResponse<UserType> | null;
+  user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
@@ -1850,32 +1665,42 @@ export type MessageLabel =
   | 'reply'
   | 'system';
 
-export type Mute<UserType = UnknownType> = {
+export type Mute<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   created_at: string;
-  target: UserResponse<UserType>;
+  target: UserResponse<StreamChatGenerics>;
   updated_at: string;
-  user: UserResponse<UserType>;
+  user: UserResponse<StreamChatGenerics>;
 };
 
-export type PartialUpdateChannel<ChannelType = UnknownType> = {
-  set?: Partial<ChannelResponse<ChannelType>>;
-  unset?: Array<keyof ChannelResponse<ChannelType>>;
+export type PartialUpdateChannel<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
+  set?: Partial<ChannelResponse<StreamChatGenerics>>;
+  unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
 };
 
-export type PartialUserUpdate<UserType = UnknownType> = {
+export type PartialUserUpdate<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
   id: string;
-  set?: Partial<UserResponse<UserType>>;
-  unset?: Array<keyof UserResponse<UserType>>;
+  set?: Partial<UserResponse<StreamChatGenerics>>;
+  unset?: Array<keyof UserResponse<StreamChatGenerics>>;
 };
 
-export type MessageUpdatableFields<MessageType = UnknownType> = Omit<
-  MessageResponse<MessageType>,
+export type MessageUpdatableFields<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Omit<
+  MessageResponse<StreamChatGenerics>,
   'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'
 >;
 
-export type PartialMessageUpdate<MessageType = UnknownType> = {
-  set?: Partial<MessageUpdatableFields<MessageType>>;
-  unset?: Array<keyof MessageUpdatableFields<MessageType>>;
+export type PartialMessageUpdate<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = {
+  set?: Partial<MessageUpdatableFields<StreamChatGenerics>>;
+  unset?: Array<keyof MessageUpdatableFields<StreamChatGenerics>>;
 };
 
 export type PermissionAPIObject = {
@@ -1917,13 +1742,12 @@ export type RateLimitsInfo = {
 export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
 export type Reaction<
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = ReactionType & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['reactionType'] & {
   type: string;
   message_id?: string;
   score?: number;
-  user?: UserResponse<UserType> | null;
+  user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
@@ -1948,28 +1772,16 @@ export type Resource =
   | 'UploadAttachment';
 
 export type SearchPayload<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Omit<SearchOptions<MessageType>, 'sort'> & {
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Omit<SearchOptions<StreamChatGenerics>, 'sort'> & {
   client_id?: string;
   connection_id?: string;
-  filter_conditions?: ChannelFilters<ChannelType, CommandType, UserType>;
-  message_filter_conditions?: MessageFilters<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  filter_conditions?: ChannelFilters<StreamChatGenerics>;
+  message_filter_conditions?: MessageFilters<StreamChatGenerics>;
   query?: string;
   sort?: Array<{
     direction: AscDesc;
-    field: keyof SearchMessageSortBase<MessageType>;
+    field: keyof SearchMessageSortBase<StreamChatGenerics>;
   }>;
 };
 
@@ -2052,25 +1864,14 @@ export type TranslationLanguages =
 export type TypingStartEvent = Event;
 
 export type UpdatedMessage<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Omit<
-  MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >,
-  'mentioned_users'
-> & { mentioned_users?: string[] };
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = Omit<MessageResponse<StreamChatGenerics>, 'mentioned_users'> & {
+  mentioned_users?: string[];
+};
 
-export type User<UserType = UnknownType> = UserType & {
+export type User<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> = StreamChatGenerics['userType'] & {
   id: string;
   anon?: boolean;
   name?: string;
