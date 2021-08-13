@@ -6,9 +6,9 @@ import {
   ConnectAPIResponse,
   ConnectionChangeEvent,
   ConnectionOpen,
-  LiteralStringForUnion,
   Logger,
-  UnknownType,
+  StreamChatDefaultGenerics,
+  StreamChatExtendableGenerics,
   UserResponse,
 } from './types';
 
@@ -22,9 +22,7 @@ const isErrorEvent = (
 ): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).error !== undefined;
 
 type Constructor<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = {
   apiKey: string;
   authType: 'anonymous' | 'jwt';
@@ -32,11 +30,9 @@ type Constructor<
   eventCallback: (event: ConnectionChangeEvent) => void;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-  recoverCallback: (
-    open?: ConnectionOpen<ChannelType, CommandType, UserType>,
-  ) => Promise<void>;
-  tokenManager: TokenManager<UserType>;
-  user: UserResponse<UserType>;
+  recoverCallback: (open?: ConnectionOpen<StreamChatGenerics>) => Promise<void>;
+  tokenManager: TokenManager<StreamChatGenerics>;
+  user: UserResponse<StreamChatGenerics>;
   userAgent: string;
   userID: string;
   wsBaseURL: string;
@@ -61,26 +57,24 @@ type Constructor<
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
 export class StableWSConnection<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > {
-  apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
-  authType: Constructor<ChannelType, CommandType, UserType>['authType'];
-  clientID: Constructor<ChannelType, CommandType, UserType>['clientID'];
-  eventCallback: Constructor<ChannelType, CommandType, UserType>['eventCallback'];
-  logger: Constructor<ChannelType, CommandType, UserType>['logger'];
-  messageCallback: Constructor<ChannelType, CommandType, UserType>['messageCallback'];
-  recoverCallback: Constructor<ChannelType, CommandType, UserType>['recoverCallback'];
-  tokenManager: Constructor<ChannelType, CommandType, UserType>['tokenManager'];
-  user: Constructor<ChannelType, CommandType, UserType>['user'];
-  userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
-  userID: Constructor<ChannelType, CommandType, UserType>['userID'];
-  wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
-  device: Constructor<ChannelType, CommandType, UserType>['device'];
+  apiKey: Constructor<StreamChatGenerics>['apiKey'];
+  authType: Constructor<StreamChatGenerics>['authType'];
+  clientID: Constructor<StreamChatGenerics>['clientID'];
+  eventCallback: Constructor<StreamChatGenerics>['eventCallback'];
+  logger: Constructor<StreamChatGenerics>['logger'];
+  messageCallback: Constructor<StreamChatGenerics>['messageCallback'];
+  recoverCallback: Constructor<StreamChatGenerics>['recoverCallback'];
+  tokenManager: Constructor<StreamChatGenerics>['tokenManager'];
+  user: Constructor<StreamChatGenerics>['user'];
+  userAgent: Constructor<StreamChatGenerics>['userAgent'];
+  userID: Constructor<StreamChatGenerics>['userID'];
+  wsBaseURL: Constructor<StreamChatGenerics>['wsBaseURL'];
+  device: Constructor<StreamChatGenerics>['device'];
 
   connectionID?: string;
-  connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
+  connectionOpen?: ConnectAPIResponse<StreamChatGenerics>;
   consecutiveFailures: number;
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
@@ -116,7 +110,7 @@ export class StableWSConnection<
     userID,
     wsBaseURL,
     device,
-  }: Constructor<ChannelType, CommandType, UserType>) {
+  }: Constructor<StreamChatGenerics>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
     this.userID = userID;
@@ -152,7 +146,7 @@ export class StableWSConnection<
   /**
    * connect - Connect to the WS URL
    *
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
+   * @return {ConnectAPIResponse<StreamChatGenerics>} Promise that completes once the first health check message is received
    */
   async connect() {
     if (this.isConnecting) {
@@ -347,7 +341,7 @@ export class StableWSConnection<
   /**
    * _connect - Connect to the WS endpoint
    *
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
+   * @return {ConnectAPIResponse<StreamChatGenerics>} Promise that completes once the first health check message is received
    */
   async _connect() {
     await this.tokenManager.tokenReady();
@@ -756,11 +750,7 @@ export class StableWSConnection<
     }).then(
       (e) => {
         if (e.data && typeof e.data === 'string') {
-          const data = JSON.parse(e.data) as ConnectionOpen<
-            ChannelType,
-            CommandType,
-            UserType
-          > & {
+          const data = JSON.parse(e.data) as ConnectionOpen<StreamChatGenerics> & {
             error?: unknown;
           };
           if (data && data.error != null) {
