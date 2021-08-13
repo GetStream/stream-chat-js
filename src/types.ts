@@ -350,7 +350,15 @@ export type FlagUserResponse<
 export type FormatMessageResponse<
   StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 > = Omit<
-  MessageResponse<Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }>,
+  MessageResponse<{
+    attachmentType: StreamChatGenerics['attachmentType'];
+    channelType: StreamChatGenerics['channelType'];
+    commandType: StreamChatGenerics['commandType'];
+    eventType: StreamChatGenerics['eventType'];
+    messageType: {};
+    reactionType: StreamChatGenerics['reactionType'];
+    userType: StreamChatGenerics['userType'];
+  }>,
   'created_at' | 'pinned_at' | 'updated_at' | 'status'
 > &
   StreamChatGenerics['messageType'] & {
@@ -1059,20 +1067,40 @@ export type ChannelFilters<
       | PrimitiveFilter<ChannelResponse<StreamChatGenerics>['name']>;
   } & {
       [Key in keyof Omit<
-        ChannelResponse<Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }>,
+        ChannelResponse<{
+          attachmentType: StreamChatGenerics['attachmentType'];
+          channelType: {};
+          commandType: StreamChatGenerics['commandType'];
+          eventType: StreamChatGenerics['eventType'];
+          messageType: StreamChatGenerics['messageType'];
+          reactionType: StreamChatGenerics['reactionType'];
+          userType: StreamChatGenerics['userType'];
+        }>,
         'name' | 'members'
       >]:
         | RequireOnlyOne<
             QueryFilter<
-              ChannelResponse<
-                Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }
-              >[Key]
+              ChannelResponse<{
+                attachmentType: StreamChatGenerics['attachmentType'];
+                channelType: {};
+                commandType: StreamChatGenerics['commandType'];
+                eventType: StreamChatGenerics['eventType'];
+                messageType: StreamChatGenerics['messageType'];
+                reactionType: StreamChatGenerics['reactionType'];
+                userType: StreamChatGenerics['userType'];
+              }>[Key]
             >
           >
         | PrimitiveFilter<
-            ChannelResponse<
-              Omit<StreamChatGenerics, 'channelType'> & { channelType: {} }
-            >[Key]
+            ChannelResponse<{
+              attachmentType: StreamChatGenerics['attachmentType'];
+              channelType: {};
+              commandType: StreamChatGenerics['commandType'];
+              eventType: StreamChatGenerics['eventType'];
+              messageType: StreamChatGenerics['messageType'];
+              reactionType: StreamChatGenerics['reactionType'];
+              userType: StreamChatGenerics['userType'];
+            }>[Key]
           >;
     }
 >;
@@ -1105,20 +1133,40 @@ export type MessageFilters<
       | PrimitiveFilter<MessageResponse<StreamChatGenerics>['text']>;
   } & {
       [Key in keyof Omit<
-        MessageResponse<Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }>,
+        MessageResponse<{
+          attachmentType: StreamChatGenerics['attachmentType'];
+          channelType: StreamChatGenerics['channelType'];
+          commandType: StreamChatGenerics['commandType'];
+          eventType: StreamChatGenerics['eventType'];
+          messageType: {};
+          reactionType: StreamChatGenerics['reactionType'];
+          userType: StreamChatGenerics['userType'];
+        }>,
         'text'
       >]?:
         | RequireOnlyOne<
             QueryFilter<
-              MessageResponse<
-                Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }
-              >[Key]
+              MessageResponse<{
+                attachmentType: StreamChatGenerics['attachmentType'];
+                channelType: StreamChatGenerics['channelType'];
+                commandType: StreamChatGenerics['commandType'];
+                eventType: StreamChatGenerics['eventType'];
+                messageType: {};
+                reactionType: StreamChatGenerics['reactionType'];
+                userType: StreamChatGenerics['userType'];
+              }>[Key]
             >
           >
         | PrimitiveFilter<
-            MessageResponse<
-              Omit<StreamChatGenerics, 'messageType'> & { messageType: {} }
-            >[Key]
+            MessageResponse<{
+              attachmentType: StreamChatGenerics['attachmentType'];
+              channelType: StreamChatGenerics['channelType'];
+              commandType: StreamChatGenerics['commandType'];
+              eventType: StreamChatGenerics['eventType'];
+              messageType: {};
+              reactionType: StreamChatGenerics['reactionType'];
+              userType: StreamChatGenerics['userType'];
+            }>[Key]
           >;
     }
 >;
@@ -1192,16 +1240,40 @@ export type UserFilters<
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['username']>;
   } & {
       [Key in keyof Omit<
-        UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>,
+        UserResponse<{
+          attachmentType: StreamChatGenerics['attachmentType'];
+          channelType: StreamChatGenerics['channelType'];
+          commandType: StreamChatGenerics['commandType'];
+          eventType: StreamChatGenerics['eventType'];
+          messageType: StreamChatGenerics['messageType'];
+          reactionType: StreamChatGenerics['reactionType'];
+          userType: {};
+        }>,
         'id' | 'name' | 'teams' | 'username'
       >]?:
         | RequireOnlyOne<
             QueryFilter<
-              UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>[Key]
+              UserResponse<{
+                attachmentType: StreamChatGenerics['attachmentType'];
+                channelType: StreamChatGenerics['channelType'];
+                commandType: StreamChatGenerics['commandType'];
+                eventType: StreamChatGenerics['eventType'];
+                messageType: StreamChatGenerics['messageType'];
+                reactionType: StreamChatGenerics['reactionType'];
+                userType: {};
+              }>[Key]
             >
           >
         | PrimitiveFilter<
-            UserResponse<Omit<StreamChatGenerics, 'userType'> & { userType: {} }>[Key]
+            UserResponse<{
+              attachmentType: StreamChatGenerics['attachmentType'];
+              channelType: StreamChatGenerics['channelType'];
+              commandType: StreamChatGenerics['commandType'];
+              eventType: StreamChatGenerics['eventType'];
+              messageType: StreamChatGenerics['messageType'];
+              reactionType: StreamChatGenerics['reactionType'];
+              userType: {};
+            }>[Key]
           >;
     }
 >;
