@@ -1,10 +1,10 @@
 import FormData from 'form-data';
 import {
   AscDesc,
-  LiteralStringForUnion,
   OwnUserBase,
   OwnUserResponse,
-  UnknownType,
+  StreamChatDefaultGenerics,
+  StreamChatExtendableGenerics,
   UserResponse,
 } from './types';
 
@@ -63,21 +63,18 @@ function isFileWebAPI(uri: unknown): uri is File {
 }
 
 export function isOwnUser<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
 >(
-  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-): user is OwnUserResponse<ChannelType, CommandType, UserType> {
-  return (
-    (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
-    undefined
-  );
+  user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
+): user is OwnUserResponse<StreamChatGenerics> {
+  return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
 }
 
-export function isOwnUserBaseProperty(property: string) {
+export function isOwnUserBaseProperty<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+>(property: string) {
   const ownUserBaseProperties: {
-    [Property in keyof Required<OwnUserBase>]: boolean;
+    [Property in keyof Required<OwnUserBase<StreamChatGenerics>>]: boolean;
   } = {
     channel_mutes: true,
     devices: true,
@@ -89,7 +86,7 @@ export function isOwnUserBaseProperty(property: string) {
     roles: true,
   };
 
-  return ownUserBaseProperties[property as keyof OwnUserBase];
+  return ownUserBaseProperties[property as keyof OwnUserBase<StreamChatGenerics>];
 }
 
 export function addFileToFormData(

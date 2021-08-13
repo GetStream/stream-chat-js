@@ -387,7 +387,7 @@ export class StreamChat<
    * @param {OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Returns a promise that resolves when the connection is setup
+   * @return {ConnectAPIResponse<StreamChatGenerics>} Returns a promise that resolves when the connection is setup
    */
   connectUser = async (
     user: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
