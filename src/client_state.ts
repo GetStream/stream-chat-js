@@ -1,11 +1,17 @@
-import { UnknownType, UserResponse } from './types';
+import {
+  StreamChatDefaultGenerics,
+  StreamChatExtendableGenerics,
+  UserResponse,
+} from './types';
 
 /**
  * ClientState - A container class for the client state.
  */
-export class ClientState<UserType = UnknownType> {
+export class ClientState<
+  StreamChatGenerics extends StreamChatExtendableGenerics = StreamChatDefaultGenerics
+> {
   users: {
-    [key: string]: UserResponse<UserType>;
+    [key: string]: UserResponse<StreamChatGenerics>;
   };
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor() {
@@ -16,19 +22,19 @@ export class ClientState<UserType = UnknownType> {
     this.userChannelReferences = {};
   }
 
-  updateUsers(users: UserResponse<UserType>[]) {
+  updateUsers(users: UserResponse<StreamChatGenerics>[]) {
     for (const user of users) {
       this.updateUser(user);
     }
   }
 
-  updateUser(user?: UserResponse<UserType>) {
+  updateUser(user?: UserResponse<StreamChatGenerics>) {
     if (user != null) {
       this.users[user.id] = user;
     }
   }
 
-  updateUserReference(user: UserResponse<UserType>, channelID: string) {
+  updateUserReference(user: UserResponse<StreamChatGenerics>, channelID: string) {
     if (user == null) {
       return;
     }
