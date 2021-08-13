@@ -719,14 +719,11 @@ export class ChannelState<
 
   getStateData() {
     return {
-      watcher_count: this.watcher_count,
-      typing: this.typing,
       read: this.read,
       messages: this.messages,
       pinnedMessages: this.pinnedMessages,
       threads: this.threads,
       mutedUsers: this.mutedUsers,
-      watchers: this.watchers,
       members: this.members,
       membership: this.membership,
       unreadCount: this.unreadCount,
@@ -746,8 +743,6 @@ export class ChannelState<
       UserType
     >,
   ) {
-    this.watcher_count = channelState.watcher_count;
-    this.typing = channelState.typing;
     this.read = Object.entries(channelState.read).reduce((acc, next) => {
       const [id, value] = next;
       acc[id] = { ...value, last_read: new Date(value.last_read) };
@@ -761,7 +756,6 @@ export class ChannelState<
       return acc;
     }, {} as Record<string, Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>>);
     this.mutedUsers = channelState.mutedUsers;
-    this.watchers = channelState.watchers;
     this.members = channelState.members;
     this.membership = channelState.membership;
     this.unreadCount = channelState.unreadCount;
