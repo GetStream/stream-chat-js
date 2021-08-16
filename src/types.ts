@@ -683,6 +683,7 @@ export type ChannelOptions = {
   presence?: boolean;
   recovery?: boolean;
   state?: boolean;
+  user_id?: string;
   watch?: boolean;
 };
 
