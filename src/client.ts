@@ -1783,6 +1783,18 @@ export class StreamChat<
     };
   }
 
+  async reInitializeAuthState(
+    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
+    userTokenOrProvider: TokenOrProvider,
+  ) {
+    this.userID = user.id;
+    this.anonymous = false;
+
+    await this._setToken(user, userTokenOrProvider);
+
+    this._setUser(user);
+  }
+
   reInitializeWithState(
     clientData: ClientStateAndData<ChannelType, CommandType, UserType>,
     channelsData: ChannelStateAndData<
