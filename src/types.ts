@@ -994,6 +994,7 @@ export type AscDesc = 1 | -1;
 export type MessageFlagsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
+  team?: string;
   user_id?: string;
 };
 
@@ -1004,6 +1005,12 @@ export type MessageFlagsFilters = QueryFilters<
           Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
         >
       | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
+  } & {
+    team?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['team']>;
   } & {
     user_id?:
       | RequireOnlyOne<
