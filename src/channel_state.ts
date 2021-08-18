@@ -11,20 +11,20 @@ import {
   UserResponse,
 } from './types';
 
-export type ChannelStateData<
+// Used when retrieving the state data
+export type ChannelStateDataOutput<
   AttachmentType extends UnknownType = UnknownType,
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = {
   isUpToDate: boolean;
-  last_message_at: string | null;
+  last_message_at: Date | null;
   members: Record<string, ChannelMemberResponse<UserType>>;
   membership: ChannelMembership<UserType>;
-  messages: MessageResponse<
+  messages: FormatMessageResponse<
     AttachmentType,
     ChannelType,
     CommandType,
@@ -33,6 +33,59 @@ export type ChannelStateData<
     UserType
   >[];
   mutedUsers: Array<UserResponse<UserType>>;
+  pinnedMessages: FormatMessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
+  threads: Record<
+    string,
+    Array<
+      FormatMessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >
+  >;
+  unreadCount: number;
+};
+
+// Used when reInitializing the state data
+export type ChannelStateDataInput<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = Omit<
+  ChannelStateDataOutput<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'last_message_at' | 'messages' | 'pinnedMessages' | 'read' | 'threads'
+> & {
+  last_message_at: string | null;
+  messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
   pinnedMessages: MessageResponse<
     AttachmentType,
     ChannelType,
@@ -55,21 +108,6 @@ export type ChannelStateData<
       >
     >
   >;
-  typing: Record<
-    string,
-    Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
-  >;
-  unreadCount: number;
-  watcher_count: number;
-  watchers: Record<string, UserResponse<UserType>>;
 };
 
 /**
@@ -717,7 +755,14 @@ export class ChannelState<
     return [...messageArr];
   }
 
-  getStateData() {
+  getStateData(): ChannelStateDataOutput<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  > {
     return {
       read: this.read,
       messages: this.messages,
@@ -733,11 +778,10 @@ export class ChannelState<
   }
 
   reInitializeWithState(
-    channelState: ChannelStateData<
+    channelState: ChannelStateDataInput<
       AttachmentType,
       ChannelType,
       CommandType,
-      EventType,
       MessageType,
       ReactionType,
       UserType
