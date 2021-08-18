@@ -5,7 +5,7 @@ import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
-import { Channel, ChannelStateAndData } from './channel';
+import { Channel, ChannelStateAndDataInput, ChannelStateAndDataOutput } from './channel';
 import { ClientState, ClientStateData } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
@@ -122,8 +122,11 @@ export type ClientStateAndData<
   UserType extends UnknownType = UnknownType
 > = {
   state: ClientStateData<UserType>;
-  token: string;
-  user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>;
+  token: string | null | undefined;
+  user:
+    | OwnUserResponse<ChannelType, CommandType, UserType>
+    | UserResponse<UserType>
+    | undefined;
 };
 
 export class StreamChat<
@@ -1766,7 +1769,17 @@ export class StreamChat<
     );
   }
 
-  getStateData() {
+  getStateData(): {
+    channels: ChannelStateAndDataOutput<
+      AttachmentType,
+      ChannelType,
+      CommandType,
+      MessageType,
+      ReactionType,
+      UserType
+    >[];
+    client: ClientStateAndData<ChannelType, CommandType, UserType>;
+  } {
     const clientData = {
       state: this.state.getStateData(),
       user: this.user,
@@ -1797,11 +1810,10 @@ export class StreamChat<
 
   reInitializeWithState(
     clientData: ClientStateAndData<ChannelType, CommandType, UserType>,
-    channelsData: ChannelStateAndData<
+    channelsData: ChannelStateAndDataInput<
       AttachmentType,
       ChannelType,
       CommandType,
-      EventType,
       MessageType,
       ReactionType,
       UserType
