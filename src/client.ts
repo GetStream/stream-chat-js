@@ -2305,6 +2305,28 @@ export class StreamChat<
     );
   }
 
+  /** deactivateAndDeleteUser - convenience method that both deactivates and deletes a user
+   *
+   * @param {string} userID target user ID
+   * @param {object} [options] options for both deactivateUser and deleteUser
+   * @returns {Promise<APIResponse>}
+   */
+  async deactivateAndDeleteUser(
+    userID: string,
+    options?: {
+      created_by_id?: string;
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
+  ) {
+    await this.deactivateUser(userID, {
+      created_by_id: options?.created_by_id,
+      mark_messages_deleted: options?.mark_messages_deleted,
+    });
+    return await this.deleteUser(userID, options);
+  }
+
   async exportUser(userID: string, options?: Record<string, string>) {
     return await this.get<
       APIResponse & {
