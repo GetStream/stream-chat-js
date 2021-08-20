@@ -3293,7 +3293,7 @@ export class StreamChat<
       mark_messages_deleted?: boolean;
     },
   ) {
-    return await this.post<APIResponse>(this.baseURL + `/users-delete`, {
+    return await this.post<APIResponse>(this.baseURL + `/async/delete/users`, {
       user_ids: userIDs,
       ...params,
     });
