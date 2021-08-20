@@ -3276,4 +3276,37 @@ export class StreamChat<
     );
     return campaign;
   }
+
+  /**
+   * deleteUsers - Batch delete Users
+   *
+   * @param {string[]} userIDs User IDs
+   * @param {{delete_conversation_channels?: boolean, hard_delete?: boolean, mark_messages_deleted?: boolean}} params User delete parameters
+   *
+   * @return {APIResponse} A task ID
+   */
+  async deleteUsers(
+    userIDs: string[],
+    params?: {
+      delete_conversation_channels?: boolean;
+      hard_delete?: boolean;
+      mark_messages_deleted?: boolean;
+    },
+  ) {
+    return await this.post<APIResponse>(this.baseURL + `/users-delete`, {
+      user_ids: userIDs,
+      ...params,
+    });
+  }
+
+  /**
+   * getTask - Gets a task
+   *
+   * @param {string} id Task ID
+   *
+   * @return {APIResponse} The task status
+   */
+  async getTask(id: string) {
+    return this.get<APIResponse>(`${this.baseURL}/tasks/${id}`);
+  }
 }
