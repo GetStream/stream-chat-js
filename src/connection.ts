@@ -85,6 +85,7 @@ export class StableWSConnection<
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
+  isReconnecting: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
@@ -130,8 +131,9 @@ export class StableWSConnection<
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
     this.totalFailures = 0;
-    /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
+    /** We only make 1 attempt to reconnect at the same time.. */
+    this.isReconnecting = false;
     /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
     /** Callback when the connection fails and recovers */
@@ -155,13 +157,14 @@ export class StableWSConnection<
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async connect() {
-    if (this.isConnecting) {
+    if (this.isReconnecting || this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
       );
     }
 
     try {
+      this.isConnecting = true;
       const healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
@@ -384,7 +387,7 @@ export class StableWSConnection<
       tags: ['connection'],
     });
     // only allow 1 connection at the time
-    if (this.isConnecting || this.isHealthy) {
+    if (this.isReconnecting || this.isHealthy) {
       this.logger(
         'info',
         'connection:_reconnect() - Abort (1) since already connecting or healthy',
@@ -406,7 +409,7 @@ export class StableWSConnection<
 
     // Check once again if by some other call to _reconnect is active or connection is
     // already restored, then no need to proceed.
-    if (this.isConnecting || this.isHealthy) {
+    if (this.isReconnecting || this.isHealthy) {
       this.logger(
         'info',
         'connection:_reconnect() - Abort (2) since already connecting or healthy',
@@ -417,7 +420,7 @@ export class StableWSConnection<
       return;
     }
 
-    this.isConnecting = true;
+    this.isReconnecting = true;
 
     // cleanup the old connection
     this.logger('info', 'connection:_reconnect() - Destroying current WS connection', {
@@ -441,10 +444,10 @@ export class StableWSConnection<
           tags: ['connection'],
         });
       }
-      this.isConnecting = false;
+      this.isReconnecting = false;
       this.consecutiveFailures = 0;
     } catch (error) {
-      this.isConnecting = false;
+      this.isReconnecting = false;
       this.isHealthy = false;
       this.consecutiveFailures += 1;
       if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
@@ -506,7 +509,7 @@ export class StableWSConnection<
           tags: ['connection'],
         },
       );
-      if (!this.isHealthy) {
+      if (!this.isHealthy && !this.isConnecting) {
         this._reconnect({ interval: 10 });
       }
     }
