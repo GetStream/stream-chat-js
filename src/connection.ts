@@ -162,6 +162,7 @@ export class StableWSConnection<
     }
 
     try {
+      this.isConnecting = true;
       const healthCheck = await this._connect();
       this.isConnecting = false;
       this.consecutiveFailures = 0;
