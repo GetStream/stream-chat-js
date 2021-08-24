@@ -197,6 +197,7 @@ export type ChannelResponse<
   members?: ChannelMemberResponse<UserType>[];
   muted?: boolean;
   name?: string;
+  own_capabilities?: string[];
   team?: string;
   updated_at?: string;
 };
