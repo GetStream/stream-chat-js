@@ -81,6 +81,7 @@ export type AppSettingsAPIResponse<
     >;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
+    campaign_enabled?: boolean;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
@@ -810,6 +811,7 @@ export type ChannelOptions = {
   presence?: boolean;
   recovery?: boolean;
   state?: boolean;
+  user_id?: string;
   watch?: boolean;
 };
 
@@ -1147,6 +1149,7 @@ export type AscDesc = 1 | -1;
 export type MessageFlagsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
+  team?: string;
   user_id?: string;
 };
 
@@ -1157,6 +1160,12 @@ export type MessageFlagsFilters = QueryFilters<
           Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
         >
       | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
+  } & {
+    team?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<MessageFlagsFiltersOptions['team']>;
   } & {
     user_id?:
       | RequireOnlyOne<
