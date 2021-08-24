@@ -65,7 +65,7 @@ function isFileWebAPI(uri: unknown): uri is File {
 export function isOwnUser<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 >(
   user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
 ): user is OwnUserResponse<ChannelType, CommandType, UserType> {

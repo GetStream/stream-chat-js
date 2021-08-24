@@ -58,7 +58,7 @@ export class Channel<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > {
   _client: StreamChat<
     AttachmentType,

@@ -123,7 +123,7 @@ export class StreamChat<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
@@ -367,7 +367,7 @@ export class StreamChat<
     EventType extends UnknownType = UnknownType,
     MessageType extends UnknownType = UnknownType,
     ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    UserType extends UnknownType = UnknownType,
   >(
     key: string,
     options?: StreamChatOptions,
@@ -387,7 +387,7 @@ export class StreamChat<
     EventType extends UnknownType = UnknownType,
     MessageType extends UnknownType = UnknownType,
     ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    UserType extends UnknownType = UnknownType,
   >(
     key: string,
     secret?: string,
@@ -408,7 +408,7 @@ export class StreamChat<
     EventType extends UnknownType = UnknownType,
     MessageType extends UnknownType = UnknownType,
     ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    UserType extends UnknownType = UnknownType,
   >(
     key: string,
     secretOrOptions?: StreamChatOptions | string,
@@ -2763,7 +2763,7 @@ export class StreamChat<
       !isString(clonedMessage.mentioned_users[0])
     ) {
       clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
-        (mu) => ((mu as unknown) as UserResponse).id,
+        (mu) => (mu as unknown as UserResponse).id,
       );
     }
 

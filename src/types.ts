@@ -50,66 +50,65 @@ export type APIResponse = {
   duration: string;
 };
 
-export type AppSettingsAPIResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  app?: {
-    channel_configs: Record<
-      string,
-      {
-        automod?: ChannelConfigAutomod;
-        automod_behavior?: ChannelConfigAutomodBehavior;
-        blocklist_behavior?: ChannelConfigAutomodBehavior;
-        commands?: CommandVariants<CommandType>[];
-        connect_events?: boolean;
-        created_at?: string;
-        custom_events?: boolean;
-        max_message_length?: number;
-        message_retention?: string;
-        mutes?: boolean;
-        name?: string;
-        push_notifications?: boolean;
-        reactions?: boolean;
-        read_events?: boolean;
-        replies?: boolean;
-        search?: boolean;
-        typing_events?: boolean;
-        updated_at?: string;
-        uploads?: boolean;
-        url_enrichment?: boolean;
-      }
-    >;
-    auto_translation_enabled?: boolean;
-    before_message_send_hook_url?: string;
-    campaign_enabled?: boolean;
-    custom_action_handler_url?: string;
-    disable_auth_checks?: boolean;
-    disable_permissions_checks?: boolean;
-    enforce_unique_usernames?: 'no' | 'app' | 'team';
-    file_upload_config?: FileUploadConfig;
-    grants?: Record<string, string[]>;
-    image_moderation_enabled?: boolean;
-    image_upload_config?: FileUploadConfig;
-    multi_tenant_enabled?: boolean;
-    name?: string;
-    organization?: string;
-    permission_version?: string;
-    policies?: Record<string, Policy[]>;
-    push_notifications?: {
-      version: string;
-      apn?: APNConfig;
-      firebase?: FirebaseConfig;
+export type AppSettingsAPIResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & {
+    app?: {
+      channel_configs: Record<
+        string,
+        {
+          automod?: ChannelConfigAutomod;
+          automod_behavior?: ChannelConfigAutomodBehavior;
+          blocklist_behavior?: ChannelConfigAutomodBehavior;
+          commands?: CommandVariants<CommandType>[];
+          connect_events?: boolean;
+          created_at?: string;
+          custom_events?: boolean;
+          max_message_length?: number;
+          message_retention?: string;
+          mutes?: boolean;
+          name?: string;
+          push_notifications?: boolean;
+          reactions?: boolean;
+          read_events?: boolean;
+          replies?: boolean;
+          search?: boolean;
+          typing_events?: boolean;
+          updated_at?: string;
+          uploads?: boolean;
+          url_enrichment?: boolean;
+        }
+      >;
+      auto_translation_enabled?: boolean;
+      before_message_send_hook_url?: string;
+      campaign_enabled?: boolean;
+      custom_action_handler_url?: string;
+      disable_auth_checks?: boolean;
+      disable_permissions_checks?: boolean;
+      enforce_unique_usernames?: 'no' | 'app' | 'team';
+      file_upload_config?: FileUploadConfig;
+      grants?: Record<string, string[]>;
+      image_moderation_enabled?: boolean;
+      image_upload_config?: FileUploadConfig;
+      multi_tenant_enabled?: boolean;
+      name?: string;
+      organization?: string;
+      permission_version?: string;
+      policies?: Record<string, Policy[]>;
+      push_notifications?: {
+        version: string;
+        apn?: APNConfig;
+        firebase?: FirebaseConfig;
+      };
+      revoke_tokens_issued_before?: string | null;
+      sqs_key?: string;
+      sqs_secret?: string;
+      sqs_url?: string;
+      suspended?: boolean;
+      suspended_explanation?: string;
+      user_search_disallowed_roles?: string[];
+      webhook_url?: string;
     };
-    revoke_tokens_issued_before?: string | null;
-    sqs_key?: string;
-    sqs_secret?: string;
-    sqs_url?: string;
-    suspended?: boolean;
-    suspended_explanation?: string;
-    user_search_disallowed_roles?: string[];
-    webhook_url?: string;
   };
-};
 
 export type ModerationResult = {
   action: string;
@@ -129,7 +128,7 @@ export type MessageFlagsResponse<
   UserType extends UnknownType = UnknownType,
   AttachmentType = UnknownType,
   MessageType = UnknownType,
-  ReactionType = UnknownType
+  ReactionType = UnknownType,
 > = APIResponse & {
   flags?: Array<{
     message: MessageResponse<
@@ -155,7 +154,7 @@ export type MessageFlagsResponse<
 export type BannedUsersResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = APIResponse & {
   bans?: Array<{
     user: UserResponse<UserType>;
@@ -176,7 +175,7 @@ export type BlockListResponse = BlockList & {
 export type ChannelResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = ChannelType & {
   cid: string;
   disabled: boolean;
@@ -208,7 +207,7 @@ export type ChannelAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
@@ -270,47 +269,43 @@ export type CheckSQSResponse = APIResponse & {
   error?: string;
 };
 
-export type CommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = Partial<CreatedAtUpdatedAt> & {
-  args?: string;
-  description?: string;
-  name?: CommandVariants<CommandType>;
-  set?: CommandVariants<CommandType>;
-};
+export type CommandResponse<CommandType extends string = LiteralStringForUnion> =
+  Partial<CreatedAtUpdatedAt> & {
+    args?: string;
+    description?: string;
+    name?: CommandVariants<CommandType>;
+    set?: CommandVariants<CommandType>;
+  };
 
 export type ConnectAPIResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = Promise<void | ConnectionOpen<ChannelType, CommandType, UserType>>;
 
-export type CreateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
-    created_at: string;
-    updated_at: string;
-    grants?: Record<string, string[]>;
-  };
+export type CreateChannelResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse &
+    Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
+      created_at: string;
+      updated_at: string;
+      grants?: Record<string, string[]>;
+    };
 
-export type CreateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & { command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt };
+export type CreateCommandResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & { command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt };
 
 export type DeleteChannelAPIResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
 };
 
-export type DeleteCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  name?: CommandVariants<CommandType>;
-};
+export type DeleteCommandResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & {
+    name?: CommandVariants<CommandType>;
+  };
 
 export type EventAPIResponse<
   AttachmentType extends UnknownType = UnknownType,
@@ -319,7 +314,7 @@ export type EventAPIResponse<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = APIResponse & {
   event: Event<
     AttachmentType,
@@ -377,7 +372,7 @@ export type FormatMessageResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = Omit<
   MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>,
   'created_at' | 'pinned_at' | 'updated_at' | 'status'
@@ -389,19 +384,20 @@ export type FormatMessageResponse<
     updated_at: Date;
   };
 
-export type GetChannelTypeResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id' | 'commands'> & {
-    created_at: string;
-    updated_at: string;
-    commands?: CommandResponse<CommandType>[];
-    grants?: Record<string, string[]>;
-  };
+export type GetChannelTypeResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse &
+    Omit<
+      CreateChannelOptions<CommandType>,
+      'client_id' | 'connection_id' | 'commands'
+    > & {
+      created_at: string;
+      updated_at: string;
+      commands?: CommandResponse<CommandType>[];
+      grants?: Record<string, string[]>;
+    };
 
-export type GetCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
+export type GetCommandResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
 
 export type GetMultipleMessagesAPIResponse<
   AttachmentType = UnknownType,
@@ -409,7 +405,7 @@ export type GetMultipleMessagesAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   messages: MessageResponse<
     AttachmentType,
@@ -430,7 +426,7 @@ export type GetRateLimitsResponse = APIResponse & {
 
 export type GetReactionsAPIResponse<
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   reactions: ReactionResponse<ReactionType, UserType>[];
 };
@@ -441,7 +437,7 @@ export type GetRepliesAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   messages: MessageResponse<
     AttachmentType,
@@ -453,37 +449,35 @@ export type GetRepliesAPIResponse<
   >[];
 };
 
-export type ListChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  channel_types: Record<
-    string,
-    Omit<
-      CreateChannelOptions<CommandType>,
-      'client_id' | 'connection_id' | 'commands'
-    > & {
-      commands: CommandResponse<CommandType>[];
-      created_at: string;
-      updated_at: string;
-      grants?: Record<string, string[]>;
-    }
-  >;
-};
+export type ListChannelResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & {
+    channel_types: Record<
+      string,
+      Omit<
+        CreateChannelOptions<CommandType>,
+        'client_id' | 'connection_id' | 'commands'
+      > & {
+        commands: CommandResponse<CommandType>[];
+        created_at: string;
+        updated_at: string;
+        grants?: Record<string, string[]>;
+      }
+    >;
+  };
 
 export type ListChannelTypesAPIResponse<
-  CommandType extends string = LiteralStringForUnion
+  CommandType extends string = LiteralStringForUnion,
 > = ListChannelResponse<CommandType>;
 
-export type ListCommandsResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
-};
+export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & {
+    commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  };
 
 export type MuteChannelAPIResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = APIResponse & {
   channel_mute: ChannelMute<ChannelType, CommandType, UserType>;
   own_user: OwnUserResponse<ChannelType, CommandType, UserType>;
@@ -497,7 +491,7 @@ export type MessageResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = MessageResponseBase<
   AttachmentType,
   ChannelType,
@@ -522,7 +516,7 @@ export type MessageResponseBase<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = MessageBase<AttachmentType, MessageType, UserType> & {
   args?: string;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
@@ -562,7 +556,7 @@ export type MuteResponse<UserType = UnknownType> = {
 export type MuteUserResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = APIResponse & {
   mute?: MuteResponse<UserType>;
   mutes?: Array<Mute<UserType>>;
@@ -572,7 +566,7 @@ export type MuteUserResponse<
 export type OwnUserBase<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = {
   channel_mutes: ChannelMute<ChannelType, CommandType, UserType>[];
   devices: Device<UserType>[];
@@ -587,13 +581,13 @@ export type OwnUserBase<
 export type OwnUserResponse<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = UserResponse<UserType> & OwnUserBase<ChannelType, CommandType, UserType>;
 
 export type PartialUpdateChannelAPIResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
@@ -613,7 +607,7 @@ export type ReactionAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   message: MessageResponse<
     AttachmentType,
@@ -628,7 +622,7 @@ export type ReactionAPIResponse<
 
 export type ReactionResponse<
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = Reaction<ReactionType, UserType> & {
   created_at: string;
   updated_at: string;
@@ -646,7 +640,7 @@ export type SearchAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   results: {
     message: MessageResponse<
@@ -677,7 +671,7 @@ export type SendMessageAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   message: MessageResponse<
     AttachmentType,
@@ -692,7 +686,7 @@ export type SendMessageAPIResponse<
 export type TruncateChannelAPIResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
 };
@@ -703,7 +697,7 @@ export type UpdateChannelAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
@@ -717,22 +711,20 @@ export type UpdateChannelAPIResponse<
   >;
 };
 
-export type UpdateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
-  Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
-    created_at: string;
-    updated_at: string;
-  };
-
-export type UpdateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
-  command: UpdateCommandOptions<CommandType> &
-    CreatedAtUpdatedAt & {
-      name: CommandVariants<CommandType>;
+export type UpdateChannelResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse &
+    Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
+      created_at: string;
+      updated_at: string;
     };
-};
+
+export type UpdateCommandResponse<CommandType extends string = LiteralStringForUnion> =
+  APIResponse & {
+    command: UpdateCommandOptions<CommandType> &
+      CreatedAtUpdatedAt & {
+        name: CommandVariants<CommandType>;
+      };
+  };
 
 export type UpdateMessageAPIResponse<
   AttachmentType = UnknownType,
@@ -740,7 +732,7 @@ export type UpdateMessageAPIResponse<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = APIResponse & {
   message: MessageResponse<
     AttachmentType,
@@ -818,7 +810,7 @@ export type ChannelOptions = {
 export type ChannelQueryOptions<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = {
   client_id?: string;
   connection_id?: string;
@@ -886,7 +878,7 @@ export type InviteOptions<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = {
   accept_invite?: boolean;
   add_members?: string[];
@@ -1002,12 +994,11 @@ export type UnBanUserOptions = {
 };
 
 // TODO: rename to UpdateChannelTypeOptions in the next major update
-export type UpdateChannelOptions<
-  CommandType extends string = LiteralStringForUnion
-> = Omit<CreateChannelOptions<CommandType>, 'name'> & {
-  created_at?: string;
-  updated_at?: string;
-};
+export type UpdateChannelOptions<CommandType extends string = LiteralStringForUnion> =
+  Omit<CreateChannelOptions<CommandType>, 'name'> & {
+    created_at?: string;
+    updated_at?: string;
+  };
 
 export type UpdateCommandOptions<CommandType extends string = LiteralStringForUnion> = {
   description: string;
@@ -1037,7 +1028,7 @@ export type Event<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = EventType & {
   type: EventTypes;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
@@ -1083,7 +1074,7 @@ export type EventHandler<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = (
   event: Event<
     AttachmentType,
@@ -1215,7 +1206,7 @@ export type BannedUsersFilters = QueryFilters<
 export type ChannelFilters<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = QueryFilters<
   ContainsOperator<ChannelType> & {
     members?:
@@ -1260,7 +1251,7 @@ export type MessageFilters<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = QueryFilters<
   ContainsOperator<MessageType> & {
     text?:
@@ -1465,7 +1456,7 @@ export type SearchMessageSort<MessageType = UnknownType> =
 export type QuerySort<
   ChannelType = UnknownType,
   UserType = UnknownType,
-  MessageType = UnknownType
+  MessageType = UnknownType,
 > =
   | BannedUsersSort
   | ChannelSort<ChannelType>
@@ -1562,12 +1553,11 @@ export type BlockList = {
   words: string[];
 };
 
-export type ChannelConfig<
-  CommandType extends string = LiteralStringForUnion
-> = ChannelConfigFields &
-  CreatedAtUpdatedAt & {
-    commands?: CommandVariants<CommandType>[];
-  };
+export type ChannelConfig<CommandType extends string = LiteralStringForUnion> =
+  ChannelConfigFields &
+    CreatedAtUpdatedAt & {
+      commands?: CommandVariants<CommandType>[];
+    };
 
 export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
 
@@ -1599,12 +1589,11 @@ export type ChannelConfigFields = {
   url_enrichment?: boolean;
 };
 
-export type ChannelConfigWithInfo<
-  CommandType extends string = LiteralStringForUnion
-> = ChannelConfigFields &
-  CreatedAtUpdatedAt & {
-    commands?: CommandResponse<CommandType>[];
-  };
+export type ChannelConfigWithInfo<CommandType extends string = LiteralStringForUnion> =
+  ChannelConfigFields &
+    CreatedAtUpdatedAt & {
+      commands?: CommandResponse<CommandType>[];
+    };
 
 export type ChannelData<ChannelType = UnknownType> = ChannelType & {
   members?: string[];
@@ -1625,7 +1614,7 @@ export type ChannelMembership<UserType = UnknownType> = {
 export type ChannelMute<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = {
   user: UserResponse<UserType>;
   channel?: ChannelResponse<ChannelType, CommandType, UserType>;
@@ -1673,7 +1662,7 @@ export type Configs<CommandType extends string = LiteralStringForUnion> = {
 export type ConnectionOpen<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = {
   connection_id: string;
   cid?: string;
@@ -1828,7 +1817,7 @@ export type Logger = (
 export type Message<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
   mentioned_users?: string[];
 };
@@ -1836,7 +1825,7 @@ export type Message<
 export type MessageBase<
   AttachmentType = UnknownType,
   MessageType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = MessageType & {
   id: string;
   attachments?: Attachment<AttachmentType>[];
@@ -1927,7 +1916,7 @@ export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
 export type Reaction<
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = ReactionType & {
   type: string;
   message_id?: string;
@@ -1962,7 +1951,7 @@ export type SearchPayload<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = Omit<SearchOptions<MessageType>, 'sort'> & {
   client_id?: string;
   connection_id?: string;
@@ -2066,7 +2055,7 @@ export type UpdatedMessage<
   CommandType extends string = LiteralStringForUnion,
   MessageType = UnknownType,
   ReactionType = UnknownType,
-  UserType = UnknownType
+  UserType = UnknownType,
 > = Omit<
   MessageResponse<
     AttachmentType,

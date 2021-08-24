@@ -54,17 +54,18 @@ module.exports = {
 		await channel.create();
 		return channel;
 	},
-	createTestMultiTenancyChannelForUser: async function createTestMultiTenancyChannelForUser(
-		id,
-		userID,
-		team,
-		options = {},
-	) {
-		const client = await this.getMultiTenancyTestClientForUser(userID, options);
-		const channel = client.channel('messaging', id, { members: [userID], team });
-		await channel.create();
-		return channel;
-	},
+	createTestMultiTenancyChannelForUser:
+		async function createTestMultiTenancyChannelForUser(
+			id,
+			userID,
+			team,
+			options = {},
+		) {
+			const client = await this.getMultiTenancyTestClientForUser(userID, options);
+			const channel = client.channel('messaging', id, { members: [userID], team });
+			await channel.create();
+			return channel;
+		},
 	getMultiTenancyTestClient: async function getMultiTenancyTestClient(serverSide) {
 		const client = new StreamChat(
 			multiTenancyKey,

@@ -88,15 +88,8 @@ const singletonClient = StreamChat.getInstance<
   UserType
 >(apiKey);
 
-const singletonClient1: StreamChat<
-  {},
-  ChannelType,
-  string & {},
-  {},
-  {},
-  {},
-  UserType
-> = StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
+const singletonClient1: StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType> =
+  StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
 
 const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<
   {},

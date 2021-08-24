@@ -21,7 +21,7 @@ export class ChannelState<
   EventType extends UnknownType = UnknownType,
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > {
   _channel: Channel<
     AttachmentType,
@@ -460,12 +460,12 @@ export class ChannelState<
         >['formatMessage']
       >,
     ) =>
-      (({
+      ({
         ...m,
         created_at: m.created_at.toString(),
         pinned_at: m.pinned_at?.toString(),
         updated_at: m.updated_at?.toString(),
-      } as unknown) as MessageResponse<
+      } as unknown as MessageResponse<
         AttachmentType,
         ChannelType,
         CommandType,
@@ -782,7 +782,7 @@ export class ChannelState<
            * In case of hard delete, we need to strip down all text, html,
            * attachments and all the custom properties on message
            */
-          messages[i] = ({
+          messages[i] = {
             cid: m.cid,
             created_at: m.created_at,
             deleted_at: user.deleted_at,
@@ -797,7 +797,7 @@ export class ChannelState<
             type: 'deleted',
             updated_at: m.updated_at,
             user: m.user,
-          } as unknown) as ReturnType<
+          } as unknown as ReturnType<
             ChannelState<
               AttachmentType,
               ChannelType,

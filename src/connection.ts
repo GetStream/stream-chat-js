@@ -24,7 +24,7 @@ const isErrorEvent = (
 type Constructor<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > = {
   apiKey: string;
   authType: 'anonymous' | 'jwt';
@@ -63,7 +63,7 @@ type Constructor<
 export class StableWSConnection<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UnknownType = UnknownType,
 > {
   apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
   authType: Constructor<ChannelType, CommandType, UserType>['authType'];
