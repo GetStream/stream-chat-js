@@ -485,24 +485,6 @@ export class StreamChat<
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
 
-  _setUserConnection = (
-    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
-
-    const setTokenPromise = this._setToken(user, userTokenOrProvider);
-    this._setUser(user);
-
-    const wsPromise = this.openConnection();
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
-      (result) => result[1], // We only return connection promise;
-    );
-  };
-
   /**
    * connectUser - Set the current user and open a WebSocket connection
    *
