@@ -5,8 +5,8 @@ import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
-import { Channel, ChannelStateAndDataInput, ChannelStateAndDataOutput } from './channel';
-import { ClientState, ClientStateData } from './client_state';
+import { Channel } from './channel';
+import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
@@ -40,9 +40,12 @@ import {
   ChannelMute,
   ChannelOptions,
   ChannelSort,
+  ChannelStateAndDataInput,
+  ChannelStateAndDataOutput,
   ChannelStateOptions,
   CheckPushResponse,
   CheckSQSResponse,
+  ClientStateAndData,
   Configs,
   ConnectAPIResponse,
   ConnectionChangeEvent,
@@ -115,19 +118,6 @@ import {
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
-
-export type ClientStateAndData<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
-> = {
-  state: ClientStateData<UserType>;
-  token: string | null | undefined;
-  user:
-    | OwnUserResponse<ChannelType, CommandType, UserType>
-    | UserResponse<UserType>
-    | undefined;
-};
 
 export class StreamChat<
   AttachmentType extends UnknownType = UnknownType,
@@ -484,24 +474,6 @@ export class StreamChat<
   }
 
   _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
-
-  _setUserConnection = (
-    user: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
-
-    const setTokenPromise = this._setToken(user, userTokenOrProvider);
-    this._setUser(user);
-
-    const wsPromise = this.openConnection();
-
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
-      (result) => result[1], // We only return connection promise;
-    );
-  };
 
   /**
    * connectUser - Set the current user and open a WebSocket connection

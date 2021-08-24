@@ -1,15 +1,8 @@
-import { UnknownType, UserResponse } from './types';
+import { ClientStateData, UnknownType, UserResponse } from './types';
 
 /**
  * ClientState - A container class for the client state.
  */
-
-export type ClientStateData<UserType = UnknownType> = {
-  userChannelReferences: { [key: string]: { [key: string]: boolean } };
-  users: {
-    [key: string]: UserResponse<UserType>;
-  };
-};
 
 export class ClientState<UserType = UnknownType> {
   users: {
