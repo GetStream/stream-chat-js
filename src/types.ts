@@ -1472,6 +1472,179 @@ export type QuerySort<
   | UserSort<UserType>;
 
 /**
+ * Client Rehydration Types
+ */
+
+export type ClientStateData<UserType = UnknownType> = {
+  userChannelReferences: { [key: string]: { [key: string]: boolean } };
+  users: {
+    [key: string]: UserResponse<UserType>;
+  };
+};
+
+export type ClientStateAndData<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+> = {
+  state: ClientStateData<UserType>;
+  token: string | null | undefined;
+  user:
+    | OwnUserResponse<ChannelType, CommandType, UserType>
+    | UserResponse<UserType>
+    | undefined;
+};
+
+export type ChannelStateAndDataOutput<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
+  data:
+    | ChannelData<ChannelType>
+    | ChannelResponse<ChannelType, CommandType, UserType>
+    | undefined;
+  id: string | undefined;
+  state: ChannelStateDataOutput<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  type: string;
+};
+
+export type ChannelStateAndDataInput<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
+  data:
+    | ChannelData<ChannelType>
+    | ChannelResponse<ChannelType, CommandType, UserType>
+    | undefined;
+  id: string | undefined;
+  state: ChannelStateDataInput<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
+  type: string;
+};
+
+// Used when retrieving the state data
+export type ChannelStateDataOutput<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = {
+  isUpToDate: boolean;
+  last_message_at: Date | null;
+  members: Record<string, ChannelMemberResponse<UserType>>;
+  membership: ChannelMembership<UserType>;
+  messages: FormatMessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  mutedUsers: Array<UserResponse<UserType>>;
+  pinnedMessages: FormatMessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
+  threads: Record<
+    string,
+    Array<
+      FormatMessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >
+  >;
+  unreadCount: number;
+};
+
+// Used when reInitializing the state data
+export type ChannelStateDataInput<
+  AttachmentType extends UnknownType = UnknownType,
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  MessageType extends UnknownType = UnknownType,
+  ReactionType extends UnknownType = UnknownType,
+  UserType extends UnknownType = UnknownType
+> = Omit<
+  ChannelStateDataOutput<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >,
+  'last_message_at' | 'messages' | 'pinnedMessages' | 'read' | 'threads'
+> & {
+  last_message_at: string | null;
+  messages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  pinnedMessages: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >[];
+  read: Record<string, { last_read: string; user: UserResponse<UserType> }>;
+  threads: Record<
+    string,
+    Array<
+      MessageResponse<
+        AttachmentType,
+        ChannelType,
+        CommandType,
+        MessageType,
+        ReactionType,
+        UserType
+      >
+    >
+  >;
+};
+
+/**
  * Base Types
  */
 

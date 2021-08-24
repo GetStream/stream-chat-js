@@ -1,8 +1,4 @@
-import {
-  ChannelState,
-  ChannelStateDataInput,
-  ChannelStateDataOutput,
-} from './channel_state';
+import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
 import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
@@ -15,6 +11,8 @@ import {
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
+  ChannelStateAndDataInput,
+  ChannelStateAndDataOutput,
   ChannelResponse,
   DeleteChannelAPIResponse,
   Event,
@@ -51,56 +49,6 @@ import {
   SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
-
-export type ChannelStateAndDataOutput<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = {
-  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
-  data:
-    | ChannelData<ChannelType>
-    | ChannelResponse<ChannelType, CommandType, UserType>
-    | undefined;
-  id: string | undefined;
-  state: ChannelStateDataOutput<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
-  type: string;
-};
-
-export type ChannelStateAndDataInput<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
-> = {
-  _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
-  data:
-    | ChannelData<ChannelType>
-    | ChannelResponse<ChannelType, CommandType, UserType>
-    | undefined;
-  id: string | undefined;
-  state: ChannelStateDataInput<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
-  type: string;
-};
 
 /**
  * Channel - The Channel class manages it's own state.
