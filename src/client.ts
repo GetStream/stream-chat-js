@@ -3130,7 +3130,7 @@ export class StreamChat<
   async updateSegment(id: string, params: Partial<SegmentData>) {
     const { segment } = await this.put<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
-      params,
+      { segment: params },
     );
     return segment;
   }
@@ -3200,7 +3200,7 @@ export class StreamChat<
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     const { campaign } = await this.put<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
-      params,
+      { campaign: params },
     );
     return campaign;
   }

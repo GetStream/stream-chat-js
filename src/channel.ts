@@ -523,6 +523,7 @@ export class Channel<
       'created_at',
       'updated_at',
       'last_message_at',
+      'own_capabilities',
     ];
     reserved.forEach((key) => {
       delete channelData[key];
