@@ -1871,6 +1871,8 @@ export type PartialUpdateChannel<ChannelType = UnknownType> = {
   unset?: Array<keyof ChannelResponse<ChannelType>>;
 };
 
+export type UserPatch<UserType = UnknownType> = Partial<UserResponse<UserType>>;
+
 export type PartialUserUpdate<UserType = UnknownType> = {
   id: string;
   set?: Partial<UserResponse<UserType>>;

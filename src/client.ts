@@ -81,6 +81,7 @@ import {
   OwnUserResponse,
   PartialMessageUpdate,
   PartialUserUpdate,
+  UserPatch,
   PermissionAPIResponse,
   PermissionsAPIResponse,
   ReactionResponse,
@@ -2261,6 +2262,22 @@ export class StreamChat<
         users: { [key: string]: UserResponse<UserType> };
       }
     >(this.baseURL + '/users', {
+      users,
+    });
+  }
+
+  async patchUsers(users: UserPatch<UserType>[]) {
+    for (const userObject of users) {
+      if (!userObject.id) {
+        throw Error('User ID is required when updating a user');
+      }
+    }
+
+    return await this.patch<
+      APIResponse & {
+        users: { [key: string]: UserPatch<UserType> };
+      }
+    >(this.baseURL + '/users-n', {
       users,
     });
   }
