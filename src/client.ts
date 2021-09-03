@@ -56,6 +56,7 @@ import {
   EndpointName,
   Event,
   EventHandler,
+  ExportChannelOptions,
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
@@ -3056,9 +3057,13 @@ export class StreamChat<
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 
-  exportChannels(request: Array<ExportChannelRequest>) {
+  exportChannels(
+    request: Array<ExportChannelRequest>,
+    options: ExportChannelOptions = {},
+  ) {
     const payload = {
       channels: request,
+      ...options,
     };
     return this.post<APIResponse & ExportChannelResponse>(
       `${this.baseURL}/export_channels`,
@@ -3066,8 +3071,8 @@ export class StreamChat<
     );
   }
 
-  exportChannel(request: ExportChannelRequest) {
-    return this.exportChannels([request]);
+  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
+    return this.exportChannels([request], options);
   }
 
   getExportChannelStatus(id: string) {

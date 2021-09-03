@@ -1797,6 +1797,10 @@ export type ExportChannelRequest = {
   messages_until?: Date;
 };
 
+export type ExportChannelOptions = {
+  clear_deleted_message_text?: boolean;
+};
+
 export type Field = {
   short?: boolean;
   title?: string;
