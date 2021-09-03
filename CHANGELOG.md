@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## Augest 24, 2021 - 4.1.0
+
+### Feature
+
+- Add `own_capabilities` attribute to channel response data #741
+- Add `team` filter for query flagged messages #754
+- `queryChannel` support `user_id` for server-side queries #753
+
+### Fix
+
+- Campaign namespace update #760
+
 ## Augest 12, 2021 - 4.0.0
 
 ### Breaking ⚠️
