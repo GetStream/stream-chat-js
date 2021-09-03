@@ -1798,7 +1798,7 @@ export type ExportChannelRequest = {
 };
 
 export type ExportChannelOptions = {
-  clear_delete_message_text?: boolean;
+  clear_deleted_message_text?: boolean;
 };
 
 export type Field = {
