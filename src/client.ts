@@ -56,6 +56,7 @@ import {
   EndpointName,
   Event,
   EventHandler,
+  ExportChannelOptions,
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
@@ -3056,9 +3057,13 @@ export class StreamChat<
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 
-  exportChannels(request: Array<ExportChannelRequest>) {
+  exportChannels(
+    request: Array<ExportChannelRequest>,
+    options: ExportChannelOptions = {},
+  ) {
     const payload = {
       channels: request,
+      ...options,
     };
     return this.post<APIResponse & ExportChannelResponse>(
       `${this.baseURL}/export_channels`,
@@ -3066,8 +3071,8 @@ export class StreamChat<
     );
   }
 
-  exportChannel(request: ExportChannelRequest) {
-    return this.exportChannels([request]);
+  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
+    return this.exportChannels([request], options);
   }
 
   getExportChannelStatus(id: string) {
@@ -3130,7 +3135,7 @@ export class StreamChat<
   async updateSegment(id: string, params: Partial<SegmentData>) {
     const { segment } = await this.put<{ segment: Segment }>(
       this.baseURL + `/segments/${id}`,
-      params,
+      { segment: params },
     );
     return segment;
   }
@@ -3200,7 +3205,7 @@ export class StreamChat<
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     const { campaign } = await this.put<{ campaign: Campaign }>(
       this.baseURL + `/campaigns/${id}`,
-      params,
+      { campaign: params },
     );
     return campaign;
   }
