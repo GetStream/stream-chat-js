@@ -585,6 +585,7 @@ export class StableWSConnection<
       this.consecutiveFailures += 1;
       this.totalFailures += 1;
       this._setHealth(false);
+      this.isConnecting = false;
 
       this.rejectPromise?.(this._errorFromWSEvent(event));
 
@@ -608,6 +609,7 @@ export class StableWSConnection<
     this.consecutiveFailures += 1;
     this.totalFailures += 1;
     this._setHealth(false);
+    this.isConnecting = false;
 
     this.rejectPromise?.(this._errorFromWSEvent(event));
     this.logger('info', `connection:onerror() - WS connection resulted into error`, {
