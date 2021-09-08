@@ -201,6 +201,7 @@ export type ChannelResponse<
   members?: ChannelMemberResponse<StreamChatGenerics>[];
   muted?: boolean;
   name?: string;
+  own_capabilities?: string[];
   team?: string;
   updated_at?: string;
 };
@@ -1685,6 +1686,10 @@ export type ExportChannelRequest = {
   type: string;
   messages_since?: Date;
   messages_until?: Date;
+};
+
+export type ExportChannelOptions = {
+  clear_deleted_message_text?: boolean;
 };
 
 export type Field = {
