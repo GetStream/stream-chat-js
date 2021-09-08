@@ -163,7 +163,6 @@ export class StableWSConnection<
 
     try {
       const healthCheck = await this._connect();
-      this.isConnecting = false;
       this.consecutiveFailures = 0;
 
       this.logger(
@@ -174,7 +173,6 @@ export class StableWSConnection<
         },
       );
     } catch (error) {
-      this.isConnecting = false;
       this.isHealthy = false;
       this.consecutiveFailures += 1;
 
@@ -350,23 +348,29 @@ export class StableWSConnection<
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async _connect() {
-    await this.tokenManager.tokenReady();
-    this._setupConnectionPromise();
-    const wsURL = this._buildUrl();
-    this.ws = new WebSocket(wsURL);
-    this.ws.onopen = this.onopen.bind(this, this.wsID);
-    this.ws.onclose = this.onclose.bind(this, this.wsID);
-    this.ws.onerror = this.onerror.bind(this, this.wsID);
-    this.ws.onmessage = this.onmessage.bind(this, this.wsID);
-    const response = await this.connectionOpen;
+    if (this.isConnecting) return; // simply ignore _connect if it's currently trying to connect
+    this.isConnecting = true;
 
-    if (response) {
-      this.connectionID = response.connection_id;
+    try {
+      await this.tokenManager.tokenReady();
+      this._setupConnectionPromise();
+      const wsURL = this._buildUrl();
+      this.ws = new WebSocket(wsURL);
+      this.ws.onopen = this.onopen.bind(this, this.wsID);
+      this.ws.onclose = this.onclose.bind(this, this.wsID);
+      this.ws.onerror = this.onerror.bind(this, this.wsID);
+      this.ws.onmessage = this.onmessage.bind(this, this.wsID);
+      const response = await this.connectionOpen;
+      this.isConnecting = false;
 
-      return response;
+      if (response) {
+        this.connectionID = response.connection_id;
+        return response;
+      }
+    } catch (err) {
+      this.isConnecting = false;
+      throw err;
     }
-
-    return undefined;
   }
 
   /**
@@ -417,8 +421,6 @@ export class StableWSConnection<
       return;
     }
 
-    this.isConnecting = true;
-
     // cleanup the old connection
     this.logger('info', 'connection:_reconnect() - Destroying current WS connection', {
       tags: ['connection'],
@@ -441,10 +443,8 @@ export class StableWSConnection<
           tags: ['connection'],
         });
       }
-      this.isConnecting = false;
       this.consecutiveFailures = 0;
     } catch (error) {
-      this.isConnecting = false;
       this.isHealthy = false;
       this.consecutiveFailures += 1;
       if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
