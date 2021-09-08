@@ -530,12 +530,12 @@ export class StableWSConnection<
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
     // after that a ws.onclose..
     if (!this.isResolved && data) {
+      this.isResolved = true;
       if (data.error != null) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
       } else {
         this.resolvePromise?.(event);
-        // set healthy..
         this._setHealth(true);
       }
     }
