@@ -132,6 +132,8 @@ export class StableWSConnection<
     this.totalFailures = 0;
     /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
+    /** Boolean that indicates if the connection promise is resolved */
+    this.isResolved = false;
     /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
     /** Callback when the connection fails and recovers */
