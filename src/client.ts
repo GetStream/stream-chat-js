@@ -3305,4 +3305,22 @@ export class StreamChat<
   async getTask(id: string) {
     return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
   }
+
+  /**
+   * deleteChannels - Deletes a list of channel
+   *
+   * @param {string[]} cids Channel CIDs
+   * @param {hard_delete?: boolean} hard_delete Defines if the channel is hard deleted or not
+   *
+   * @return {APIResponse} A task ID
+   */
+   async deleteChannels(
+    cids: string[],
+    hard_delete?: boolean,
+  ) {
+    return await this.post<APIResponse>(this.baseURL + `/channels/delete`, {
+      cids,
+      hard_delete,
+    });
+  }
 }
