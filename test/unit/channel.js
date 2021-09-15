@@ -488,3 +488,46 @@ describe('Channel search', async () => {
 		).to.be.rejectedWith(Error);
 	});
 });
+
+describe('Channels - getStateData', function () {
+	const client = new StreamChat('key', 'secret');
+
+	it('should return correct data', function () {
+		const channel = client.channel('messaging', '123', { cool: true });
+		const stateData = channel.getStateData();
+
+		expect(stateData.data).to.be.deep.equal(channel.data);
+		expect(stateData._data).to.be.deep.equal(channel._data);
+		expect(stateData.id).to.be.deep.equal(channel.id);
+		expect(stateData.type).to.be.deep.equal(channel.type);
+	});
+});
+
+describe('Channels - reInitializeWithState', function () {
+	const client = new StreamChat('key', 'secret');
+
+	it('should return correct data', function () {
+		const channel = client.channel('messaging', '123');
+		channel.reInitializeWithState({
+			state: {
+				read: {},
+				messages: [],
+				pinnedMessages: [],
+				threads: {},
+				mutedUsers: [],
+				members: {},
+				membership: {},
+				unreadCount: 0,
+				isUpToDate: true,
+				last_message_at: null,
+			},
+			data: { cool: true },
+			_data: { cool: true },
+			id: '123',
+			type: 'messaging',
+		});
+
+		expect(channel.data).to.be.deep.equal({ cool: true });
+		expect(channel._data).to.be.deep.equal({ cool: true });
+	});
+});

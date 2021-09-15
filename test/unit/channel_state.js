@@ -490,3 +490,108 @@ describe('updateUserMessages', () => {
 		expect(state.messages[3].user.name).to.be.equal(user2.name);
 	});
 });
+
+describe('getStateData', () => {
+	it('should return current channel state', () => {
+		const state = new ChannelState();
+		let user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({ user: user1 });
+		const m1u2 = generateMsg({ user: user2 });
+
+		state.addMessagesSorted([m1u1, m1u2]);
+
+		const stateData = state.getStateData();
+
+		expect(stateData.read).to.be.equal(state.read);
+		expect(stateData.messages).to.be.equal(state.messages);
+		expect(stateData.pinnedMessages).to.be.equal(state.pinnedMessages);
+		expect(stateData.threads).to.be.equal(state.threads);
+		expect(stateData.mutedUsers).to.be.equal(state.mutedUsers);
+		expect(stateData.members).to.be.equal(state.members);
+		expect(stateData.membership).to.be.equal(state.membership);
+		expect(stateData.unreadCount).to.be.equal(state.unreadCount);
+		expect(stateData.isUpToDate).to.be.equal(state.isUpToDate);
+		expect(stateData.last_message_at).to.be.equal(state.last_message_at);
+	});
+});
+
+describe('getStateData', () => {
+	it('should return current channel state', () => {
+		const state = new ChannelState();
+		let user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({ user: user1 });
+		const m1u2 = generateMsg({ user: user2 });
+
+		state.addMessagesSorted([m1u1, m1u2]);
+
+		const stateData = state.getStateData();
+
+		console.log(JSON.stringify(stateData));
+
+		expect(stateData.read).to.be.equal(state.read);
+		expect(stateData.messages).to.be.equal(state.messages);
+		expect(stateData.pinnedMessages).to.be.equal(state.pinnedMessages);
+		expect(stateData.threads).to.be.equal(state.threads);
+		expect(stateData.mutedUsers).to.be.equal(state.mutedUsers);
+		expect(stateData.members).to.be.equal(state.members);
+		expect(stateData.membership).to.be.equal(state.membership);
+		expect(stateData.unreadCount).to.be.equal(state.unreadCount);
+		expect(stateData.isUpToDate).to.be.equal(state.isUpToDate);
+		expect(stateData.last_message_at).to.be.equal(state.last_message_at);
+	});
+});
+
+describe('reInitializeWithState', () => {
+	it('should initialize state with correct data', () => {
+		const state = new ChannelState();
+		let user1 = generateUser();
+		const user2 = generateUser();
+
+		const m1u1 = generateMsg({
+			user: user1,
+			created_at: '2021-09-15T19:28:29.458Z',
+			updated_at: '2021-09-15T19:28:29.458Z',
+		});
+		const m1u2 = generateMsg({
+			user: user2,
+			created_at: '2020-04-27T13:39:49.331742Z',
+			updated_at: '2020-04-27T13:39:49.331742Z',
+		});
+
+		const data = {
+			read: {},
+			messages: [m1u2, m1u1],
+			pinnedMessages: [],
+			threads: {},
+			mutedUsers: [],
+			members: {},
+			membership: {},
+			unreadCount: 0,
+			isUpToDate: true,
+			last_message_at: '2021-09-15T19:28:29.458Z',
+		};
+
+		const expectedData = {
+			...data,
+			messages: [state.formatMessage(m1u2), state.formatMessage(m1u1)],
+			last_message_at: new Date('2021-09-15T19:28:29.458Z'),
+		};
+
+		state.reInitializeWithState(data);
+
+		expect(state.read).to.be.deep.equal(expectedData.read);
+		expect(state.messages).to.be.deep.equal(expectedData.messages);
+		expect(state.pinnedMessages).to.be.deep.equal(expectedData.pinnedMessages);
+		expect(state.threads).to.be.deep.equal(expectedData.threads);
+		expect(state.mutedUsers).to.be.deep.equal(expectedData.mutedUsers);
+		expect(state.members).to.be.deep.equal(expectedData.members);
+		expect(state.membership).to.be.deep.equal(expectedData.membership);
+		expect(state.unreadCount).to.be.deep.equal(expectedData.unreadCount);
+		expect(state.isUpToDate).to.be.deep.equal(expectedData.isUpToDate);
+		expect(state.last_message_at).to.be.deep.equal(expectedData.last_message_at);
+	});
+});

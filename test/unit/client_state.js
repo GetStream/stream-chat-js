@@ -27,4 +27,44 @@ describe('ClientState', () => {
 			user3: { ch1: true, ch4: true },
 		});
 	});
+
+	it('getStateData should return correct data', () => {
+		state.userChannelReferences = {
+			user1: { ch1: true, ch2: true },
+			user2: { ch1: true, ch3: true },
+			user3: { ch1: true, ch4: true },
+		};
+
+		// it should return whatever the user object is so no need to mock the exact user object
+		state.users = {
+			user1: { key: 'value' },
+		};
+
+		const stateData = state.getStateData();
+
+		expect(state.users).to.be.deep.equal(stateData.users);
+		expect(state.userChannelReferences).to.be.deep.equal(
+			stateData.userChannelReferences,
+		);
+	});
+
+	it('reInitializeWithState should initialize with correct data', () => {
+		const stateData = {
+			users: {
+				user1: { key: 'value' },
+			},
+			userChannelReferences: {
+				user1: { ch1: true, ch2: true },
+				user2: { ch1: true, ch3: true },
+				user3: { ch1: true, ch4: true },
+			},
+		};
+
+		state.reInitializeWithState(stateData);
+
+		expect(state.users).to.be.deep.equal(stateData.users);
+		expect(state.userChannelReferences).to.be.deep.equal(
+			stateData.userChannelReferences,
+		);
+	});
 });

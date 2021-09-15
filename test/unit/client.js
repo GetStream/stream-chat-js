@@ -1,5 +1,6 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import sinon from 'sinon';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
@@ -328,5 +329,97 @@ describe('Client setLocalDevice', async () => {
 		expect(() =>
 			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
 		).to.throw();
+	});
+});
+
+describe('getStateData should return correct value', () => {
+	it('should return correct value', () => {
+		const client = StreamChat.getInstance();
+
+		client.userID = 'user';
+		client._getToken = () => 'token';
+		client.user = { id: 'user' };
+
+		const channel = client.channel('messaging', '123');
+
+		const stateData = client.getStateData();
+
+		expect(stateData.client.user).to.be.equal(client.user);
+		expect(stateData.client.token).to.be.equal('token');
+		// No need to test the properties once the channel state tests are already doing it
+		expect(stateData.channels.length).to.be.equal(1);
+	});
+});
+
+describe('reInitializeWithState', () => {
+	it('should initialize client with correct data', () => {
+		const data = {
+			client: {
+				state: { users: {}, userChannelReferences: {} },
+				user: { id: 'user' },
+				token: 'token',
+			},
+			channels: [
+				{
+					state: {
+						read: {},
+						messages: [],
+						pinnedMessages: [],
+						threads: {},
+						mutedUsers: [],
+						members: {},
+						membership: {},
+						unreadCount: 0,
+						isUpToDate: true,
+						last_message_at: null,
+					},
+					data: {},
+					_data: {},
+					id: '123',
+					type: 'messaging',
+				},
+			],
+		};
+
+		const client = StreamChat.getInstance();
+		client.state.reInitializeWithState = sinon.spy();
+		const channelReinitialize = sinon.spy();
+		client.channel = () => ({ reInitializeWithState: channelReinitialize });
+
+		client.userID = 'user';
+		client._getToken = () => 'token';
+		client.user = { id: 'user' };
+
+		client.reInitializeWithState(data.client, data.channels);
+
+		expect(client.state.reInitializeWithState.calledOnce).to.be.true;
+		expect(client.state.reInitializeWithState.firstCall.args[0]).to.be.equal(
+			data.client.state,
+		);
+		expect(channelReinitialize.calledOnce).to.be.true;
+		expect(channelReinitialize.firstCall.args[0]).to.be.equal(data.channels[0]);
+	});
+});
+
+describe('reInitializeAuthState', () => {
+	it('should initialize client with correct data', async () => {
+		const data = {
+			user: { id: 'user' },
+			token: 'token',
+		};
+
+		const client = StreamChat.getInstance();
+		client._setToken = sinon.spy();
+		client._setUser = sinon.spy();
+
+		await client.reInitializeAuthState(data.user, data.token);
+
+		expect(client.userID).to.be.equal('user');
+		expect(client.anonymous).to.be.false;
+		expect(client._setToken.calledOnce).to.be.true;
+		expect(client._setToken.firstCall.args[0]).to.be.equal(data.user);
+		expect(client._setToken.firstCall.args[1]).to.be.equal(data.token);
+		expect(client._setUser.calledOnce).to.be.true;
+		expect(client._setUser.firstCall.args[0]).to.be.equal(data.user);
 	});
 });
