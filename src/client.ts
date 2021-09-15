@@ -147,7 +147,6 @@ export class StreamChat<
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
   configs: Configs<CommandType>;
-  connecting?: boolean;
   connectionID?: string;
   failures?: number;
   key: string;
@@ -1592,7 +1591,6 @@ export class StreamChat<
    * @private
    */
   async connect() {
-    this.connecting = true;
     const client = this;
     this.failures = 0;
 
