@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## September 15, 2021 - 4.2.0
+
+### Fixes
+
+- Fixed the behavior of `isConnecting` flag in `StableWSConnection` class. Also `client.connecting` flag has been removed, so this could potentially be a breaking change for you, although this flag was never properly set so ideally you shouldn't be using
+  this flag. [bb165f8](https://github.com/GetStream/stream-chat-js/commit/bb165f8c48a140c06c6811a337955cd5258877f9)
+
+### Features
+
+- Added option `clear_deleted_message_text` in `exportChannels` endpoint [33f627f](https://github.com/GetStream/stream-chat-js/commit/33f627f0f8b8b669d463b5393ec93a37f53d6415)
+
 ## Augest 24, 2021 - 4.1.0
 
 ### Feature
