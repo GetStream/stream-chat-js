@@ -111,6 +111,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  OGResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3278,5 +3279,15 @@ export class StreamChat<
       { users },
     );
     return campaign;
+  }
+
+  /**
+   * og - Get OpenGraph data of the given link
+   *
+   * @param {string} url link
+   * @return {OGResponse} OG Response
+   */
+  async og(url: string) {
+    return this.get<OGResponse>(this.baseURL + `/og`, { url });
   }
 }

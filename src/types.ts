@@ -2146,3 +2146,41 @@ export type Campaign = {
   updated_at: string;
 } & CampaignData &
   CampaignStatus;
+
+type OGResource = {
+  secure_url?: string;
+  type?: string;
+  url?: string;
+};
+
+type OGAudio = OGResource & {
+  audio?: string;
+};
+
+type OGImage = OGResource & {
+  alt?: string;
+  height?: number;
+  image?: string;
+  width?: number;
+};
+
+type OGVideo = OGResource & {
+  height?: number;
+  video?: string;
+  width?: number;
+};
+
+export type OGResponse = {
+  audios?: OGAudio[];
+  description?: string;
+  determiner?: string;
+  favicon?: string;
+  images?: OGImage[];
+  locale?: string;
+  site?: string;
+  site_name?: string;
+  title?: string;
+  type?: string;
+  url?: string;
+  videos?: OGVideo[];
+};
