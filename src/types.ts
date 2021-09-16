@@ -2092,6 +2092,13 @@ export type User<UserType = UnknownType> = UserType & {
   username?: string;
 };
 
+export type DeleteUserOptions = {
+  delete_user: string;
+  user_id: string;
+  delete_conversations?: string;
+  delete_messages?: string;
+};
+
 export type SegmentData = {
   description: string;
   // TODO: define this type in more detail

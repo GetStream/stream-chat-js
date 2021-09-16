@@ -111,6 +111,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  DeleteUserOptions,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3281,24 +3282,15 @@ export class StreamChat<
   }
 
   /**
-   * deleteUsers - Batch delete Users
+   * deleteUsers - Batch Delete Users
    *
-   * @param {string[]} userIDs User IDs
-   * @param {{delete_conversation_channels?: boolean, hard_delete?: boolean, mark_messages_deleted?: boolean}} params User delete parameters
+   * @param {DeleteUserOptions[]} options An array of Delete User options
    *
    * @return {APIResponse} A task ID
    */
-  async deleteUsers(
-    userIDs: string[],
-    params?: {
-      delete_conversation_channels?: boolean;
-      hard_delete?: boolean;
-      mark_messages_deleted?: boolean;
-    },
-  ) {
+  async deleteUsers(options: DeleteUserOptions[]) {
     return await this.post<APIResponse>(this.baseURL + `/async/delete/users`, {
-      user_ids: userIDs,
-      ...params,
+      options,
     });
   }
 
