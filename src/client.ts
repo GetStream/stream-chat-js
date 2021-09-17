@@ -111,6 +111,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  TaskStatus,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3278,5 +3279,16 @@ export class StreamChat<
       { users },
     );
     return campaign;
+  }
+
+  /**
+   * getTask - Gets status of a long running task
+   *
+   * @param {string} id Task ID
+   *
+   * @return {TaskStatus} The task status
+   */
+  async getTask(id: string) {
+    return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
   }
 }

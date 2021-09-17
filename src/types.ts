@@ -2146,3 +2146,15 @@ export type Campaign = {
   updated_at: string;
 } & CampaignData &
   CampaignStatus;
+
+export type TaskStatus = {
+  created_at: string;
+  status: string;
+  task_id: string;
+  updated_at: string;
+  error?: {
+    description: string;
+    type: string;
+  };
+  result?: UnknownType;
+};
