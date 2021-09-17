@@ -1557,6 +1557,19 @@ export type Attachment<T = UnknownType> = T & {
   type?: string;
 };
 
+export type OGAttachment = {
+  og_scrape_url: string;
+  asset_url?: string; // og:video | og:audio
+  author_link?: string; // og:site
+  author_name?: string; // og:site_name
+  image_url?: string; // og:image
+  text?: string; // og:title
+  thumb_url?: string; // og:image
+  title?: string; // og:title
+  title_link?: string; // og:url
+  type?: string | 'video' | 'audio' | 'image';
+};
+
 export type BlockList = {
   name: string;
   words: string[];
@@ -2146,43 +2159,3 @@ export type Campaign = {
   updated_at: string;
 } & CampaignData &
   CampaignStatus;
-
-type OGResource = {
-  secure_url?: string;
-  type?: string;
-  url?: string;
-};
-
-type OGAudio = OGResource & {
-  audio?: string;
-};
-
-type OGImage = OGResource & {
-  alt?: string;
-  height?: number;
-  image?: string;
-  width?: number;
-};
-
-type OGVideo = OGResource & {
-  height?: number;
-  video?: string;
-  width?: number;
-};
-
-export type OGResponse = {
-  audios?: OGAudio[];
-  description?: string;
-  determiner?: string;
-  favicon?: string;
-  images?: OGImage[];
-  locale?: string;
-  og_scrape_url?: string;
-  original_url?: string;
-  site?: string;
-  site_name?: string;
-  title?: string;
-  type?: string;
-  url?: string;
-  videos?: OGVideo[];
-};
