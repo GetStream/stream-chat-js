@@ -111,6 +111,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  TaskStatus,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3285,9 +3286,9 @@ export class StreamChat<
    *
    * @param {string} id Task ID
    *
-   * @return {APIResponse} The task status
+   * @return {TaskStatus} The task status
    */
   async getTask(id: string) {
-    return this.get<APIResponse>(`${this.baseURL}/tasks/${id}`);
+    return this.get<TaskStatus>(`${this.baseURL}/tasks/${id}`);
   }
 }
