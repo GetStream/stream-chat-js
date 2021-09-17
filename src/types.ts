@@ -99,6 +99,7 @@ export type AppSettingsAPIResponse<
       version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
+      huawei?: HuaweiConfig;
     };
     revoke_tokens_issued_before?: string | null;
     sqs_key?: string;
@@ -262,6 +263,7 @@ export type CheckPushResponse = APIResponse & {
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
+  rendered_huawei_template?: string;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -1523,6 +1525,11 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
+  huawei_config?: {
+    id: string;
+    secret: string;
+    data_template?: string;
+  };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   multi_tenant_enabled?: boolean;
@@ -1653,6 +1660,8 @@ export type CheckPushInput<UserType = UnknownType> = {
   user_id?: string;
 };
 
+export type PushProvider = 'apn' | 'firebase' | 'huawei';
+
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
@@ -1695,7 +1704,7 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 
 export type BaseDeviceFields = {
   id: string;
-  push_provider: 'apn' | 'firebase';
+  push_provider: PushProvider;
 };
 
 export type DeviceFields = BaseDeviceFields & {
@@ -1819,6 +1828,11 @@ export type FirebaseConfig = {
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
+};
+
+export type HuaweiConfig = {
+  data_template?: string;
+  enabled?: boolean;
 };
 
 export type LiteralStringForUnion = string & {};
@@ -1990,6 +2004,7 @@ export type TestPushDataInput = {
   apnTemplate?: string;
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
+  huaweiDataTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
 };
