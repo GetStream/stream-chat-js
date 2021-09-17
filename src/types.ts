@@ -2152,5 +2152,9 @@ export type TaskStatus = {
   status: string;
   task_id: string;
   updated_at: string;
+  error?: {
+    description: string;
+    type: string;
+  };
   result?: object;
 };
