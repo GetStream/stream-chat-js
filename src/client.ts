@@ -731,7 +731,7 @@ export class StreamChat<
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
 				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
-          huaweiDataTemplate: '{}' //if app doesn't have huawei configured it will error
+				  huaweiDataTemplate: '{}' //if app doesn't have huawei configured it will error
 				  skipDevices: true, // skip config/device checks and sending to real devices
 			}
 	 */
