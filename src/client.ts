@@ -3285,7 +3285,7 @@ export class StreamChat<
   /**
    * deleteUsers - Batch Delete Users
    *
-   * @param {DeleteUserOptions} options Configuration to delete users
+   * @param {DeleteUserOptions} options Configuration to delete users; which users and how
    *
    * @return {APIResponse} A task ID
    */
@@ -3296,7 +3296,7 @@ export class StreamChat<
   }
 
   /**
-   * getTask - Gets a task
+   * getTask - Gets status of a long running task
    *
    * @param {string} id Task ID
    *
