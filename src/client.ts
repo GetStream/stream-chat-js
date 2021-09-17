@@ -3289,6 +3289,6 @@ export class StreamChat<
    * @return {TaskStatus} The task status
    */
   async getTask(id: string) {
-    return this.get<TaskStatus>(`${this.baseURL}/tasks/${id}`);
+    return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
   }
 }
