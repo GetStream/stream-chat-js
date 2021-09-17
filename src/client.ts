@@ -3279,4 +3279,15 @@ export class StreamChat<
     );
     return campaign;
   }
+
+  /**
+   * getTask - Gets status of a long running task
+   *
+   * @param {string} id Task ID
+   *
+   * @return {APIResponse} The task status
+   */
+  async getTask(id: string) {
+    return this.get<APIResponse>(`${this.baseURL}/tasks/${id}`);
+  }
 }
