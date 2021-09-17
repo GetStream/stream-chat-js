@@ -112,6 +112,7 @@ import {
   Campaign,
   CampaignData,
   DeleteUserOptions,
+  TaskResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3284,13 +3285,13 @@ export class StreamChat<
   /**
    * deleteUsers - Batch Delete Users
    *
-   * @param {DeleteUserOptions[]} options An array of Delete User options
+   * @param {DeleteUserOptions} options Configuration to delete users
    *
    * @return {APIResponse} A task ID
    */
-  async deleteUsers(options: DeleteUserOptions[]) {
-    return await this.post<APIResponse>(this.baseURL + `/async/delete/users`, {
-      options,
+  async deleteUsers(options: DeleteUserOptions) {
+    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
+      ...options,
     });
   }
 

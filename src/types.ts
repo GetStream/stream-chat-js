@@ -2092,11 +2092,17 @@ export type User<UserType = UnknownType> = UserType & {
   username?: string;
 };
 
+export type DeleteType = 'soft' | 'hard';
+
 export type DeleteUserOptions = {
-  delete_user: string;
-  user_id: string;
-  delete_conversations?: string;
-  delete_messages?: string;
+  user_ids: string[];
+  conversations?: DeleteType;
+  messages?: DeleteType;
+  user?: DeleteType;
+};
+
+export type TaskResponse = {
+  task_id: string;
 };
 
 export type SegmentData = {
