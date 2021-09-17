@@ -2177,6 +2177,8 @@ export type OGResponse = {
   favicon?: string;
   images?: OGImage[];
   locale?: string;
+  og_scrape_url?: string;
+  original_url?: string;
   site?: string;
   site_name?: string;
   title?: string;
