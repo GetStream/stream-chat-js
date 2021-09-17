@@ -2156,5 +2156,5 @@ export type TaskStatus = {
     description: string;
     type: string;
   };
-  result?: object;
+  result?: UnknownType;
 };
