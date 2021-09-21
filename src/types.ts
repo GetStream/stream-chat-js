@@ -875,7 +875,7 @@ export type CustomPermissionOptions = {
   action: string;
   id: string;
   name: string;
-  condition?: string;
+  condition?: object;
   description?: string;
   owner?: boolean;
   same_team?: boolean;

@@ -366,10 +366,10 @@ async function updatePermission() {
 module.exports = {
 	banUsers,
 	createBlockList,
-	createPermission,
+	// createPermission,
 	createRole,
 	deleteBlockList,
-	deletePermission,
+	// deletePermission,
 	deleteRole,
 	flagMessage,
 	flagUser,
@@ -384,7 +384,7 @@ module.exports = {
 	unflagUser,
 	unmuteUser,
 	updateBlockList,
-	updatePermission,
+	// updatePermission,
 	shadowBan,
 	removeShadowBan,
 };
