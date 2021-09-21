@@ -1907,7 +1907,7 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 
 export type PermissionAPIObject = {
   action?: string;
-  condition?: object
+  condition?: object;
   custom?: boolean;
   description?: string;
   id?: string;
