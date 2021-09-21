@@ -53,9 +53,9 @@ async function createPermission() {
 		name: 'TestCreatePermission',
 		action: 'ReadChannel',
 		condition: {
-			"$subject.magic_custom_field": {
-				"$eq": "magic_custom_value",
-			}
+			'$subject.magic_custom_field': {
+				$eq: 'magic_custom_value',
+			},
 		},
 	});
 }
@@ -87,9 +87,9 @@ async function deletePermission() {
 		name: 'TestDeletePermission',
 		action: 'ReadChannel',
 		condition: {
-			"$subject.magic_custom_field": {
-				"$eq": "magic_custom_value",
-			}
+			'$subject.magic_custom_field': {
+				$eq: 'magic_custom_value',
+			},
 		},
 	});
 	return await authClient.deletePermission('test-delete-permission');
@@ -367,16 +367,16 @@ async function updatePermission() {
 		name: 'TestUpdatePermission',
 		action: 'ReadChannel',
 		condition: {
-			"$subject.magic_custom_field": {
-				"$eq": "magic_custom_value",
-			}
+			'$subject.magic_custom_field': {
+				$eq: 'magic_custom_value',
+			},
 		},
 	});
 	return await authClient.updatePermission('test-update-permission', {
 		name: 'TestUpdatePermissionUpdated',
 		action: 'DeleteChannel',
 		condition: {
-			"$subject.magic_custom_field": "magic_custom_value",
+			'$subject.magic_custom_field': 'magic_custom_value',
 		},
 	});
 }
