@@ -195,6 +195,11 @@ async function getPermission() {
 		id: 'test-get-permission',
 		name: 'TestGetPermission',
 		action: 'ReadChannel',
+		condition: {
+			'$subject.magic_custom_field': {
+				$eq: 'magic_custom_value',
+			},
+		},
 	});
 	return await authClient.getPermission('test-get-permission');
 }
@@ -215,6 +220,11 @@ async function listPermissions() {
 		id: 'test-list-permissions',
 		name: 'TestListPermissions',
 		action: 'ReadChannel',
+		condition: {
+			'$subject.magic_custom_field': {
+				$eq: 'magic_custom_value',
+			},
+		},
 	});
 	return await authClient.listPermissions();
 }
