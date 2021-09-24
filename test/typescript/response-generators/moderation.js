@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const utils = require('../utils');
+const { sleep } = require('../utils');
 
 async function cleanupBucketList(client, name) {
 	try {
@@ -92,6 +93,7 @@ async function deletePermission() {
 			},
 		},
 	});
+	await sleep(2500);
 	return await authClient.deletePermission('test-delete-permission');
 }
 
@@ -99,6 +101,7 @@ async function deleteRole() {
 	const name = uuidv4();
 	const authClient = await utils.getTestClient(true);
 	await authClient.createRole(name);
+	await sleep(2500);
 	return await authClient.deleteRole(name);
 }
 
@@ -201,6 +204,7 @@ async function getPermission() {
 			},
 		},
 	});
+	await sleep(2500);
 	return await authClient.getPermission('test-get-permission');
 }
 
@@ -216,23 +220,12 @@ async function listBlockLists() {
 
 async function listPermissions() {
 	const authClient = await utils.getTestClient(true);
-	await authClient.createPermission({
-		id: 'test-list-permissions',
-		name: 'TestListPermissions',
-		action: 'ReadChannel',
-		condition: {
-			'$subject.magic_custom_field': {
-				$eq: 'magic_custom_value',
-			},
-		},
-	});
 	return await authClient.listPermissions();
 }
 
 async function listRoles() {
 	const authClient = await utils.getTestClient(true);
-	await authClient.createRole('TestListRole');
-	authClient.listRoles();
+	await authClient.listRoles();
 }
 
 async function muteUser() {
@@ -382,6 +375,7 @@ async function updatePermission() {
 			},
 		},
 	});
+	await sleep(2500);
 	return await authClient.updatePermission('test-update-permission', {
 		name: 'TestUpdatePermissionUpdated',
 		action: 'DeleteChannel',
