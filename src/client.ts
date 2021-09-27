@@ -3286,7 +3286,6 @@ export class StreamChat<
   }
 
   /**
-
    * og - Get OpenGraph data of the given link
    *
    * @param {string} url link
@@ -3296,6 +3295,7 @@ export class StreamChat<
     return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
   }
 
+  /**
    * getTask - Gets status of a long running task
    *
    * @param {string} id Task ID

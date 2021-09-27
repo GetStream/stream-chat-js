@@ -1570,7 +1570,7 @@ export type OGAttachment = {
   author_link?: string; // og:site
   author_name?: string; // og:site_name
   image_url?: string; // og:image
-  text?: string; // og:title
+  text?: string; // og:description
   thumb_url?: string; // og:image
   title?: string; // og:title
   title_link?: string; // og:url
