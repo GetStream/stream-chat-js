@@ -873,9 +873,9 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 
 export type CustomPermissionOptions = {
   action: string;
+  condition: object;
   id: string;
   name: string;
-  condition?: string;
   description?: string;
   owner?: boolean;
   same_team?: boolean;
@@ -1907,6 +1907,7 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 
 export type PermissionAPIObject = {
   action?: string;
+  condition?: object;
   custom?: boolean;
   description?: string;
   id?: string;
