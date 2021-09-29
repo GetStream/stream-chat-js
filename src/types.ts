@@ -102,6 +102,7 @@ export type AppSettingsAPIResponse<
       huawei?: HuaweiConfig;
     };
     revoke_tokens_issued_before?: string | null;
+    search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
