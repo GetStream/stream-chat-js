@@ -705,11 +705,7 @@ export class StableWSConnection<
   _listenForConnectionChanges = () => {
     // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
     // and thus (window === undefined) will result in ReferenceError.
-    if (
-      typeof window !== 'undefined' &&
-      window?.addEventListener &&
-      typeof window.addEventListener === 'function'
-    ) {
+    if (typeof window !== 'undefined' && window?.addEventListener) {
       window.addEventListener('offline', this.onlineStatusChanged);
       window.addEventListener('online', this.onlineStatusChanged);
     }
@@ -718,11 +714,7 @@ export class StableWSConnection<
   _removeConnectionListeners = () => {
     // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
     // and thus (window === undefined) will result in ReferenceError.
-    if (
-      typeof window !== 'undefined' &&
-      window?.removeEventListener &&
-      typeof window.removeEventListener === 'function'
-    ) {
+    if (typeof window !== 'undefined' && window?.removeEventListener) {
       window.removeEventListener('offline', this.onlineStatusChanged);
       window.removeEventListener('online', this.onlineStatusChanged);
     }
