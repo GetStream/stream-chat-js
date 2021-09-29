@@ -36,6 +36,7 @@
   ],
   "dependencies": {
     "@babel/runtime": "^7.13.10",
+    "@rollup/plugin-json": "^4.1.0",
     "@types/jsonwebtoken": "^8.5.0",
     "@types/ws": "^7.4.0",
     "axios": "^0.21.1",

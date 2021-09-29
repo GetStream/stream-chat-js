@@ -1,6 +1,7 @@
 import babel from '@rollup/plugin-babel';
 import external from 'rollup-plugin-peer-deps-external';
 import commonjs from '@rollup/plugin-commonjs';
+import json from '@rollup/plugin-json';
 import replace from 'rollup-plugin-replace';
 import { terser } from 'rollup-plugin-terser';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
@@ -106,6 +107,7 @@ const fullBrowserBundle = {
 		external(),
 		nodeResolve({ extensions, browser: true }),
 		babel(babelConfig),
+		json(),
 		commonjs(),
 		terser(),
 	],
