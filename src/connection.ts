@@ -701,25 +701,20 @@ export class StableWSConnection<
 
   /**
    * _listenForConnectionChanges - Adds an event listener for the browser going online or offline
-   *
    */
   _listenForConnectionChanges = () => {
-    if (
-      typeof window !== 'undefined' &&
-      window != null &&
-      window.addEventListener != null
-    ) {
+    // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
+    // and thus (window === undefined) will result in ReferenceError.
+    if (typeof window !== 'undefined' && window?.addEventListener) {
       window.addEventListener('offline', this.onlineStatusChanged);
       window.addEventListener('online', this.onlineStatusChanged);
     }
   };
 
   _removeConnectionListeners = () => {
-    if (
-      typeof window !== 'undefined' &&
-      window != null &&
-      window.addEventListener != null
-    ) {
+    // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
+    // and thus (window === undefined) will result in ReferenceError.
+    if (typeof window !== 'undefined' && window?.removeEventListener) {
       window.removeEventListener('offline', this.onlineStatusChanged);
       window.removeEventListener('online', this.onlineStatusChanged);
     }
