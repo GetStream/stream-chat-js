@@ -3286,12 +3286,12 @@ export class StreamChat<
   }
 
   /**
-   * og - Get OpenGraph data of the given link
+   * enrichURL - Get OpenGraph data of the given link
    *
    * @param {string} url link
    * @return {OGAttachment} OG Attachment
    */
-  async og(url: string) {
+  async enrichURL(url: string) {
     return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
   }
 
