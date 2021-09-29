@@ -112,6 +112,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  OGAttachment,
   TaskStatus,
 } from './types';
 
@@ -3282,6 +3283,16 @@ export class StreamChat<
       { users },
     );
     return campaign;
+  }
+
+  /**
+   * enrichURL - Get OpenGraph data of the given link
+   *
+   * @param {string} url link
+   * @return {OGAttachment} OG Attachment
+   */
+  async enrichURL(url: string) {
+    return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
   }
 
   /**
