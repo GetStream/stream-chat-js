@@ -84,6 +84,7 @@ import {
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  PushProvider,
   ReactionResponse,
   SearchOptions,
   SearchPayload,
@@ -111,6 +112,7 @@ import {
   Segment,
   Campaign,
   CampaignData,
+  TaskStatus,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -729,6 +731,7 @@ export class StreamChat<
 				  apnTemplate: '{}', //if app doesn't have apn configured it will error
 				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
 				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+				  huaweiDataTemplate: '{}' //if app doesn't have huawei configured it will error
 				  skipDevices: true, // skip config/device checks and sending to real devices
 			}
 	 */
@@ -741,6 +744,9 @@ export class StreamChat<
       ...(data.firebaseDataTemplate
         ? { firebase_data_template: data.firebaseDataTemplate }
         : {}),
+      ...(data.huaweiDataTemplate
+        ? { huawei_data_template: data.huaweiDataTemplate }
+        : {}),
       ...(data.skipDevices ? { skip_devices: true } : {}),
     });
   }
@@ -748,13 +754,11 @@ export class StreamChat<
   /**
    * testSQSSettings - Tests that the given or configured SQS configuration is valid
    *
-   * @param {string} userID User ID. If user has no devices, it will error
-   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
    * 		IE: {
-				  messageID: 'id-of-message',//will error if message does not exist
-				  apnTemplate: '{}', //if app doesn't have apn configured it will error
-				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
+				  sqs_key: 'auth_key',
+				  sqs_secret: 'auth_secret',
+				  sqs_url: 'url_to_queue',
 			}
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
@@ -1890,7 +1894,7 @@ export class StreamChat<
    *
    * @param {BaseDeviceFields} device the device object
    * @param {string} device.id device id
-   * @param {string} device.push_provider the push provider (apn or firebase)
+   * @param {string} device.push_provider the push provider
    *
    */
   setLocalDevice(device: BaseDeviceFields) {
@@ -1905,11 +1909,11 @@ export class StreamChat<
    * addDevice - Adds a push device for a user.
    *
    * @param {string} id the device id
-   * @param {'apn' | 'firebase'} push_provider the push provider (apn or firebase)
+   * @param {PushProvider} push_provider the push provider
    * @param {string} [userID] the user id (defaults to current user)
    *
    */
-  async addDevice(id: string, push_provider: 'apn' | 'firebase', userID?: string) {
+  async addDevice(id: string, push_provider: PushProvider, userID?: string) {
     return await this.post<APIResponse>(this.baseURL + '/devices', {
       id,
       push_provider,
@@ -3278,5 +3282,16 @@ export class StreamChat<
       { users },
     );
     return campaign;
+  }
+
+  /**
+   * getTask - Gets status of a long running task
+   *
+   * @param {string} id Task ID
+   *
+   * @return {TaskStatus} The task status
+   */
+  async getTask(id: string) {
+    return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
   }
 }
