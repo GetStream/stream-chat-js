@@ -1134,6 +1134,7 @@ export class Channel<
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
+    if (message.type === 'system') return false;
 
     if (this.muteStatus().muted) return false;
 

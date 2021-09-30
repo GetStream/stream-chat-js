@@ -60,6 +60,10 @@ describe('Channel count unread', function () {
 		expect(channel._countMessageAsUnread({ user })).not.to.be.ok;
 	});
 
+	it('_countMessageAsUnread should return false for system messages', function () {
+		expect(channel._countMessageAsUnread({ type: 'system' })).not.to.be.ok;
+	});
+
 	it('_countMessageAsUnread should return false for muted user', function () {
 		expect(channel._countMessageAsUnread({ user: { id: 'mute1' } })).not.to.be.ok;
 	});

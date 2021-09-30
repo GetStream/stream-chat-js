@@ -99,8 +99,10 @@ export type AppSettingsAPIResponse<
       version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
+      huawei?: HuaweiConfig;
     };
     revoke_tokens_issued_before?: string | null;
+    search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -262,6 +264,7 @@ export type CheckPushResponse = APIResponse & {
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
+  rendered_huawei_template?: string;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -871,9 +874,9 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 
 export type CustomPermissionOptions = {
   action: string;
+  condition: object;
   id: string;
   name: string;
-  condition?: string;
   description?: string;
   owner?: boolean;
   same_team?: boolean;
@@ -1696,6 +1699,11 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
+  huawei_config?: {
+    id: string;
+    secret: string;
+    data_template?: string;
+  };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   multi_tenant_enabled?: boolean;
@@ -1728,6 +1736,19 @@ export type Attachment<T = UnknownType> = T & {
   title?: string;
   title_link?: string;
   type?: string;
+};
+
+export type OGAttachment = {
+  og_scrape_url: string;
+  asset_url?: string; // og:video | og:audio
+  author_link?: string; // og:site
+  author_name?: string; // og:site_name
+  image_url?: string; // og:image
+  text?: string; // og:description
+  thumb_url?: string; // og:image
+  title?: string; // og:title
+  title_link?: string; // og:url
+  type?: string | 'video' | 'audio' | 'image';
 };
 
 export type BlockList = {
@@ -1826,6 +1847,8 @@ export type CheckPushInput<UserType = UnknownType> = {
   user_id?: string;
 };
 
+export type PushProvider = 'apn' | 'firebase' | 'huawei';
+
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
@@ -1868,7 +1891,7 @@ export type Device<UserType = UnknownType> = DeviceFields & {
 
 export type BaseDeviceFields = {
   id: string;
-  push_provider: 'apn' | 'firebase';
+  push_provider: PushProvider;
 };
 
 export type DeviceFields = BaseDeviceFields & {
@@ -1994,6 +2017,11 @@ export type FirebaseConfig = {
   notification_template?: string;
 };
 
+export type HuaweiConfig = {
+  data_template?: string;
+  enabled?: boolean;
+};
+
 export type LiteralStringForUnion = string & {};
 
 export type Logger = (
@@ -2066,6 +2094,7 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 
 export type PermissionAPIObject = {
   action?: string;
+  condition?: object;
   custom?: boolean;
   description?: string;
   id?: string;
@@ -2163,6 +2192,7 @@ export type TestPushDataInput = {
   apnTemplate?: string;
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
+  huaweiDataTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
 };
@@ -2319,3 +2349,15 @@ export type Campaign = {
   updated_at: string;
 } & CampaignData &
   CampaignStatus;
+
+export type TaskStatus = {
+  created_at: string;
+  status: string;
+  task_id: string;
+  updated_at: string;
+  error?: {
+    description: string;
+    type: string;
+  };
+  result?: UnknownType;
+};
