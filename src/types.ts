@@ -102,6 +102,7 @@ export type AppSettingsAPIResponse<
       huawei?: HuaweiConfig;
     };
     revoke_tokens_issued_before?: string | null;
+    search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -873,9 +874,9 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
 
 export type CustomPermissionOptions = {
   action: string;
+  condition: object;
   id: string;
   name: string;
-  condition?: string;
   description?: string;
   owner?: boolean;
   same_team?: boolean;
@@ -1564,6 +1565,19 @@ export type Attachment<T = UnknownType> = T & {
   type?: string;
 };
 
+export type OGAttachment = {
+  og_scrape_url: string;
+  asset_url?: string; // og:video | og:audio
+  author_link?: string; // og:site
+  author_name?: string; // og:site_name
+  image_url?: string; // og:image
+  text?: string; // og:description
+  thumb_url?: string; // og:image
+  title?: string; // og:title
+  title_link?: string; // og:url
+  type?: string | 'video' | 'audio' | 'image';
+};
+
 export type BlockList = {
   name: string;
   words: string[];
@@ -1907,6 +1921,7 @@ export type PartialMessageUpdate<MessageType = UnknownType> = {
 
 export type PermissionAPIObject = {
   action?: string;
+  condition?: object;
   custom?: boolean;
   description?: string;
   id?: string;
