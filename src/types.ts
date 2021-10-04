@@ -2126,9 +2126,9 @@ export type DeleteType = 'soft' | 'hard';
 
 export type DeleteUserOptions = {
   user_ids: string[];
+  user: DeleteType;
   conversations?: DeleteType;
   messages?: DeleteType;
-  user?: DeleteType;
 };
 
 export type TaskResponse = {
