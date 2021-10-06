@@ -2122,6 +2122,10 @@ export type User<UserType = UnknownType> = UserType & {
   username?: string;
 };
 
+export type TaskResponse = {
+  task_id: string;
+};
+
 export type SegmentData = {
   description: string;
   // TODO: define this type in more detail
