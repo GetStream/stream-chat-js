@@ -3311,17 +3311,14 @@ export class StreamChat<
    * deleteChannels - Deletes a list of channel
    *
    * @param {string[]} cids Channel CIDs
-   * @param {hard_delete?: boolean} hard_delete Defines if the channel is hard deleted or not
+   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
    *
    * @return {TaskResponse} A task ID
    */
-  async deleteChannels(cids: string[], options?: { hard_delete?: boolean }) {
+  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
     return await this.post<APIResponse & TaskResponse>(
       this.baseURL + `/channels/delete`,
-      {
-        cids,
-        hard_delete,
-      },
+      { cids, ...options },
     );
   }
 }
