@@ -3315,7 +3315,7 @@ export class StreamChat<
    *
    * @return {TaskResponse} A task ID
    */
-  async deleteChannels(cids: string[], hard_delete?: boolean) {
+  async deleteChannels(cids: string[], options?: { hard_delete?: boolean }) {
     return await this.post<APIResponse & TaskResponse>(
       this.baseURL + `/channels/delete`,
       {
