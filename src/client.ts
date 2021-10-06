@@ -114,6 +114,7 @@ import {
   CampaignData,
   OGAttachment,
   TaskStatus,
+  TaskResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3304,5 +3305,20 @@ export class StreamChat<
    */
   async getTask(id: string) {
     return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
+  }
+
+  /**
+   * deleteChannels - Deletes a list of channel
+   *
+   * @param {string[]} cids Channel CIDs
+   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
+   *
+   * @return {TaskResponse} A task ID
+   */
+  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
+    return await this.post<APIResponse & TaskResponse>(
+      this.baseURL + `/channels/delete`,
+      { cids, ...options },
+    );
   }
 }
