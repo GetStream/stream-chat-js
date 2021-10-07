@@ -3316,6 +3316,9 @@ export class StreamChat<
    * @return {APIResponse} A task ID
    */
   async deleteUsers(options: DeleteUserOptions) {
-    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, options);
+    return await this.post<APIResponse & TaskResponse>(
+      this.baseURL + `/users/delete`,
+      options,
+    );```
   }
 }
