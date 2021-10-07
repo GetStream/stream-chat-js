@@ -116,6 +116,7 @@ import {
   DeleteUserOptions,
   TaskResponse,
   TaskStatus,
+  TaskResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3309,6 +3310,21 @@ export class StreamChat<
   }
 
   /**
+   * deleteChannels - Deletes a list of channel
+   *
+   * @param {string[]} cids Channel CIDs
+   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
+   *
+   * @return {TaskResponse} A task ID
+   */
+  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
+    return await this.post<APIResponse & TaskResponse>(
+      this.baseURL + `/channels/delete`,
+      { cids, ...options },
+    );
+  }
+
+  /**
    * deleteUsers - Batch Delete Users
    *
    * @param {DeleteUserOptions} options Configuration to delete users; which users and how
@@ -3319,6 +3335,6 @@ export class StreamChat<
     return await this.post<APIResponse & TaskResponse>(
       this.baseURL + `/users/delete`,
       options,
-    );```
+    );
   }
 }
