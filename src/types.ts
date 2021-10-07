@@ -2135,7 +2135,6 @@ export type DeleteUserOptions = {
   messages?: DeleteType;
 };
 
-
 export type SegmentData = {
   description: string;
   // TODO: define this type in more detail

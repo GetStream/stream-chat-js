@@ -116,7 +116,6 @@ import {
   DeleteUserOptions,
   TaskResponse,
   TaskStatus,
-  TaskResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
