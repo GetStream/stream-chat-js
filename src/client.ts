@@ -3003,8 +3003,9 @@ export class StreamChat<
   /** sync - returns all events that happened for a list of channels since last sync
    * @param {string[]} channel_cids list of channel CIDs
    * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
+   * @param {boolean} with_inaccessible_cids include inaccessible_cids in response
    */
-  sync(channel_cids: string[], last_sync_at: string) {
+  sync(channel_cids: string[], last_sync_at: string, with_inaccessible_cids: boolean) {
     return this.post<
       APIResponse & {
         events: Event<
@@ -3016,10 +3017,12 @@ export class StreamChat<
           ReactionType,
           UserType
         >[];
+        inaccessible_cids: string[] | undefined;
       }
     >(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
+      with_inaccessible_cids,
     });
   }
 
