@@ -2128,7 +2128,7 @@ export type TaskResponse = {
 
 export type AsyncDeleteChannelsResponse = {
   result: Record<string, string>;
-} & TaskResponse;
+} & Partial<TaskResponse>;
 
 export type SegmentData = {
   description: string;
