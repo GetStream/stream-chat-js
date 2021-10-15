@@ -2127,7 +2127,7 @@ export type TaskResponse = {
   task_id: string;
 };
 
-export type AsyncDeleteChannelsResponse = {
+export type DeleteChannelsResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
 

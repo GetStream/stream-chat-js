@@ -114,7 +114,7 @@ import {
   CampaignData,
   OGAttachment,
   TaskStatus,
-  AsyncDeleteChannelsResponse,
+  DeleteChannelsResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3313,10 +3313,10 @@ export class StreamChat<
    * @param {string[]} cids Channel CIDs
    * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
    *
-   * @return {AsyncDeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
+   * @return {DeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
    */
   async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
-    return await this.post<APIResponse & AsyncDeleteChannelsResponse>(
+    return await this.post<APIResponse & DeleteChannelsResponse>(
       this.baseURL + `/channels/delete`,
       { cids, ...options },
     );
