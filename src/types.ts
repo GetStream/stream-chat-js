@@ -102,6 +102,7 @@ export type AppSettingsAPIResponse<
       huawei?: HuaweiConfig;
     };
     revoke_tokens_issued_before?: string | null;
+    webhook_events?: Array<string>;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
     sqs_key?: string;
     sqs_secret?: string;
@@ -1539,6 +1540,7 @@ export type AppSettings = {
     version?: string;
   };
   revoke_tokens_issued_before?: string | null;
+  webhook_events: Array<string> | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
