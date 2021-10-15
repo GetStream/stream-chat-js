@@ -1540,7 +1540,7 @@ export type AppSettings = {
     version?: string;
   };
   revoke_tokens_issued_before?: string | null;
-  webhook_events: Array<string> | null;
+  webhook_events?: Array<string> | null;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
