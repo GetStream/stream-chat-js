@@ -2129,6 +2129,10 @@ export type TaskResponse = {
   task_id: string;
 };
 
+export type DeleteChannelsResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
+
 export type SegmentData = {
   description: string;
   // TODO: define this type in more detail
