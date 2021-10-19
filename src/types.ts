@@ -79,6 +79,7 @@ export type AppSettingsAPIResponse<
         url_enrichment?: boolean;
       }
     >;
+    async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     campaign_enabled?: boolean;
@@ -1517,6 +1518,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
@@ -1827,6 +1829,7 @@ export type ExportChannelRequest = {
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  include_truncated_messages?: boolean;
 };
 
 export type Field = {
@@ -2130,6 +2133,10 @@ export type User<UserType = UnknownType> = UserType & {
 export type TaskResponse = {
   task_id: string;
 };
+
+export type DeleteChannelsResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
 
 export type SegmentData = {
   description: string;
