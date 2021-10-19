@@ -646,6 +646,8 @@ const executeAndWrite = async (func, name, type) => {
 			tsFileName,
 			`export const ${func.name}Response: ${type} = ${JSON.stringify(
 				response,
+				null,
+				`\t`,
 			)}; \n`,
 			function (err) {
 				if (err) {

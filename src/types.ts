@@ -108,7 +108,7 @@ export type AppSettingsAPIResponse<
     sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
-    user_search_disallowed_roles?: string[];
+    user_search_disallowed_roles?: string[] | null;
     webhook_url?: string;
   };
 };
@@ -193,6 +193,7 @@ export type ChannelResponse<
   created_by?: UserResponse<UserType> | null;
   created_by_id?: string;
   deleted_at?: string;
+  hidden?: boolean;
   invites?: string[];
   last_message_at?: string;
   member_count?: number;
@@ -1512,6 +1513,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
@@ -1831,10 +1833,10 @@ export type Field = {
 };
 
 export type FileUploadConfig = {
-  allowed_file_extensions?: string[];
-  allowed_mime_types?: string[];
-  blocked_file_extensions?: string[];
-  blocked_mime_types?: string[];
+  allowed_file_extensions?: string[] | null;
+  allowed_mime_types?: string[] | null;
+  blocked_file_extensions?: string[] | null;
+  blocked_mime_types?: string[] | null;
 };
 
 export type FirebaseConfig = {
@@ -2125,6 +2127,10 @@ export type User<UserType = UnknownType> = UserType & {
 export type TaskResponse = {
   task_id: string;
 };
+
+export type DeleteChannelsResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
 
 export type DeleteType = 'soft' | 'hard';
 
