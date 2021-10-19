@@ -1825,6 +1825,7 @@ export type ExportChannelRequest = {
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  include_truncated_messages?: boolean;
 };
 
 export type Field = {
