@@ -114,6 +114,7 @@
     "compile": "rollup -c",
     "build": "rm -rf dist && yarn run types && yarn run compile",
     "types": "tsc --emitDeclarationOnly true",
+    "generate-api-types": "openapi-typescript ${OPEN_API_ENDPOINT} --output src/api.ts && yarn prettier-fix",
     "prettier": "prettier --check '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "test-types": "node test/typescript/index.js && tsc --esModuleInterop true --noEmit true --strictNullChecks true --noImplicitAny true --strict true test/typescript/*.ts",
