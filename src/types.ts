@@ -1,5 +1,6 @@
 import { AxiosRequestConfig } from 'axios';
 import { Role } from './permissions';
+import { components } from './api';
 
 /**
  * Utility Types
@@ -739,23 +740,7 @@ export type UpdateCommandResponse<
     };
 };
 
-export type UpdateMessageAPIResponse<
-  AttachmentType = UnknownType,
-  ChannelType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  MessageType = UnknownType,
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
-};
+export type UpdateMessageAPIResponse = components['schemas']['MessageResponse'];
 
 export type UsersAPIResponse<UserType = UnknownType> = APIResponse & {
   users: Array<UserResponse<UserType>>;

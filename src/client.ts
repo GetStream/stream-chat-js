@@ -2772,18 +2772,12 @@ export class StreamChat<
       );
     }
 
-    return await this.post<
-      UpdateMessageAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this.baseURL + `/messages/${message.id}`, {
-      message: clonedMessage,
-    });
+    return await this.post<UpdateMessageAPIResponse>(
+      this.baseURL + `/messages/${message.id}`,
+      {
+        message: clonedMessage,
+      },
+    );
   }
 
   /**
@@ -2809,16 +2803,7 @@ export class StreamChat<
     if (userId != null && isString(userId)) {
       user = { id: userId };
     }
-    return await this.put<
-      UpdateMessageAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
-    >(this.baseURL + `/messages/${id}`, {
+    return await this.put<UpdateMessageAPIResponse>(this.baseURL + `/messages/${id}`, {
       ...partialMessageObject,
       user,
     });
