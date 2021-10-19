@@ -2136,6 +2136,14 @@ export type DeleteChannelsResponse = {
 
 export type DeleteType = 'soft' | 'hard';
 
+/*
+  DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
+
+  `user` soft|hard determines if the user needs to be hard- or soft-deleted, where hard-delete
+  implies that all related objects (messages, flags, etc) will be hard-deleted as well.
+  `conversations` soft|hard will delete any 1to1 channels that the user was a member of.
+  `messages` soft-hard will delete any messages that the user has sent.
+ */
 export type DeleteUserOptions = {
   user: DeleteType;
   user_ids: string[];
