@@ -829,7 +829,7 @@ export type ChannelQueryOptions<
   connection_id?: string;
   data?: ChannelResponse<ChannelType, CommandType, UserType>;
   members?: PaginationOptions;
-  messages?: PaginationOptions;
+  messages?: MessagePaginationOptions;
   presence?: boolean;
   state?: boolean;
   watch?: boolean;
@@ -953,6 +953,11 @@ export type PaginationOptions = {
   id_lte?: string;
   limit?: number;
   offset?: number;
+};
+
+export type MessagePaginationOptions = PaginationOptions & {
+  created_at_around?: string | Date;
+  id_around?: string;
 };
 
 export type QueryMembersOptions = {
