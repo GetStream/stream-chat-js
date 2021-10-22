@@ -110,6 +110,7 @@ export type AppSettingsAPIResponse<
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
+    webhook_events?: Array<string>;
     webhook_url?: string;
   };
 };
@@ -1549,6 +1550,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  webhook_events?: Array<string> | null;
   webhook_url?: string;
 };
 
