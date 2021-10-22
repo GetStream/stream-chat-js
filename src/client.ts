@@ -3327,14 +3327,15 @@ export class StreamChat<
   /**
    * deleteUsers - Batch Delete Users
    *
-   * @param {DeleteUserOptions} options Configuration to delete users; which users and how
+   * @param {string[]} user_ids which users to delete
+   * @param {DeleteUserOptions} options Configuration how to delete users
    *
    * @return {APIResponse} A task ID
    */
-  async deleteUsers(options: DeleteUserOptions) {
-    return await this.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/delete`,
-      options,
-    );
+  async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
+    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
+      user_ids,
+      ...options,
+    });
   }
 }
