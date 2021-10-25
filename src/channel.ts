@@ -199,13 +199,14 @@ export class Channel<
    * sendMessage - Send a message to this channel
    *
    * @param {Message<AttachmentType, MessageType, UserType>} message The Message object
-   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
+   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
+   * @param {boolean} [options.skip_push] Skip sending push notifications
    *
    * @return {Promise<SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendMessage(
     message: Message<AttachmentType, MessageType, UserType>,
-    options?: { skip_push?: boolean },
+    options?: { skip_enrich_url?: boolean; skip_push?: boolean },
   ) {
     const sendMessageResponse = await this.getClient().post<
       SendMessageAPIResponse<
