@@ -79,6 +79,7 @@ export type AppSettingsAPIResponse<
         url_enrichment?: boolean;
       }
     >;
+    async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     campaign_enabled?: boolean;
@@ -109,6 +110,7 @@ export type AppSettingsAPIResponse<
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
+    webhook_events?: Array<string>;
     webhook_url?: string;
   };
 };
@@ -828,7 +830,7 @@ export type ChannelQueryOptions<
   connection_id?: string;
   data?: ChannelResponse<ChannelType, CommandType, UserType>;
   members?: PaginationOptions;
-  messages?: PaginationOptions;
+  messages?: MessagePaginationOptions;
   presence?: boolean;
   state?: boolean;
   watch?: boolean;
@@ -960,6 +962,11 @@ export type PaginationOptions = {
   id_lte?: string;
   limit?: number;
   offset?: number;
+};
+
+export type MessagePaginationOptions = PaginationOptions & {
+  created_at_around?: string | Date;
+  id_around?: string;
 };
 
 export type QueryMembersOptions = {
@@ -1521,6 +1528,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
@@ -1550,6 +1558,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  webhook_events?: Array<string> | null;
   webhook_url?: string;
 };
 
@@ -1831,6 +1840,7 @@ export type ExportChannelRequest = {
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  include_truncated_messages?: boolean;
 };
 
 export type Field = {
