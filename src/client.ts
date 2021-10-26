@@ -2522,6 +2522,20 @@ export class StreamChat<
     });
   }
 
+  /**
+   * markChannelsRead - marks channels read -
+   * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
+   *
+   * @param {MarkAllReadOptions<UserType>} [data]
+   *
+   * @return {Promise<APIResponse>}
+   */
+  async markChannelsRead(data: MarkAllReadOptions<UserType> = {}) {
+    await this.post<APIResponse>(this.baseURL + '/channels/read', {
+      ...data,
+    });
+  }
+
   createCommand(data: CreateCommandOptions<CommandType>) {
     return this.post<CreateCommandResponse<CommandType>>(
       this.baseURL + '/commands',
