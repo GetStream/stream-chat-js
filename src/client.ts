@@ -72,7 +72,7 @@ import {
   ListCommandsResponse,
   LiteralStringForUnion,
   Logger,
-  MarkAllReadOptions,
+  MarkChannelsReadOptions,
   Message,
   MessageFilters,
   MessageResponse,
@@ -2518,11 +2518,7 @@ export class StreamChat<
    *
    * @return {Promise<APIResponse>}
    */
-  async markAllRead(data: MarkAllReadOptions<UserType> = {}) {
-    await this.post<APIResponse>(this.baseURL + '/channels/read', {
-      ...data,
-    });
-  }
+  markAllRead = this.markChannelsRead
 
   /**
    * markChannelsRead - marks channels read -
@@ -2532,7 +2528,7 @@ export class StreamChat<
    *
    * @return {Promise<APIResponse>}
    */
-  async markChannelsRead(data: MarkAllReadOptions<UserType> = {}) {
+  async markChannelsRead(data: MarkChannelsReadOptions<UserType> = {}) {
     await this.post<APIResponse>(this.baseURL + '/channels/read', {
       ...data,
     });
