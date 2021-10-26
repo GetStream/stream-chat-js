@@ -924,7 +924,7 @@ export type MarkAllReadOptions<UserType = UnknownType> = {
 export type MarkChannelsReadOptions<UserType = UnknownType> = {
   client_id?: string;
   connection_id?: string;
-  read_by_channel: Record<string, string>;
+  read_by_channel?: Record<string, string>;
   user?: UserResponse<UserType>;
   user_id?: string;
 };

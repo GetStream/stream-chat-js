@@ -2511,6 +2511,8 @@ export class StreamChat<
   }
 
   /**
+   * @deprecated use markChannelsRead instead
+   *
    * markAllRead - marks all channels for this user as read
    * @param {MarkAllReadOptions<UserType>} [data]
    *
