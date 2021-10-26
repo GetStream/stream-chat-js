@@ -2524,7 +2524,7 @@ export class StreamChat<
    * markChannelsRead - marks channels read -
    * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
    *
-   * @param {MarkAllReadOptions<UserType>} [data]
+   * @param {MarkChannelsReadOptions <UserType>} [data]
    *
    * @return {Promise<APIResponse>}
    */
