@@ -1453,6 +1453,10 @@ export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
 
+export type MemberSort<UserType = UnknownType> =
+  | Sort<Pick<UserResponse<UserType>, 'id' | 'created_at' | 'name'>>
+  | Array<Sort<Pick<UserResponse<UserType>, 'id' | 'created_at' | 'name'>>>;
+
 export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
   attachments?: AscDesc;
   'attachments.type'?: AscDesc;
