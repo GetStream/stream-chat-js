@@ -916,9 +916,15 @@ export type InviteOptions<
   user_id?: string;
 };
 
-export type MarkAllReadOptions<UserType = UnknownType> = {
+/** @deprecated use MarkChannelsReadOptions instead */
+export type MarkAllReadOptions<
+  UserType = UnknownType
+> = MarkChannelsReadOptions<UserType>;
+
+export type MarkChannelsReadOptions<UserType = UnknownType> = {
   client_id?: string;
   connection_id?: string;
+  read_by_channel?: Record<string, string>;
   user?: UserResponse<UserType>;
   user_id?: string;
 };
