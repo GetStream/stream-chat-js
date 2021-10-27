@@ -2700,6 +2700,7 @@ export class StreamChat<
    *
    * @param {Omit<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
    * @param {string | { id: string }} [userId]
+   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the message
    */
@@ -2713,6 +2714,7 @@ export class StreamChat<
       UserType
     >,
     userId?: string | { id: string },
+    options?: { skip_enrich_url?: boolean },
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
@@ -2785,6 +2787,7 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${message.id}`, {
       message: clonedMessage,
+      ...options,
     });
   }
 
@@ -2797,12 +2800,15 @@ export class StreamChat<
    *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
    * @param {string | { id: string }} [userId]
    *
+   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
+   *
    * @return {APIResponse & { message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> }} Response that includes the updated message
    */
   async partialUpdateMessage(
     id: string,
     partialMessageObject: PartialMessageUpdate<MessageType>,
     userId?: string | { id: string },
+    options?: { skip_enrich_url?: boolean },
   ) {
     if (!id) {
       throw Error('Please specify the message id when calling partialUpdateMessage');
@@ -2822,6 +2828,7 @@ export class StreamChat<
       >
     >(this.baseURL + `/messages/${id}`, {
       ...partialMessageObject,
+      ...options,
       user,
     });
   }
