@@ -2518,7 +2518,7 @@ export class StreamChat<
    *
    * @return {Promise<APIResponse>}
    */
-  markAllRead = this.markChannelsRead
+  markAllRead = this.markChannelsRead;
 
   /**
    * markChannelsRead - marks channels read -
