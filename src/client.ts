@@ -72,7 +72,7 @@ import {
   ListCommandsResponse,
   LiteralStringForUnion,
   Logger,
-  MarkAllReadOptions,
+  MarkChannelsReadOptions,
   Message,
   MessageFilters,
   MessageResponse,
@@ -2513,12 +2513,24 @@ export class StreamChat<
   }
 
   /**
+   * @deprecated use markChannelsRead instead
+   *
    * markAllRead - marks all channels for this user as read
    * @param {MarkAllReadOptions<UserType>} [data]
    *
    * @return {Promise<APIResponse>}
    */
-  async markAllRead(data: MarkAllReadOptions<UserType> = {}) {
+  markAllRead = this.markChannelsRead;
+
+  /**
+   * markChannelsRead - marks channels read -
+   * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
+   *
+   * @param {MarkChannelsReadOptions <UserType>} [data]
+   *
+   * @return {Promise<APIResponse>}
+   */
+  async markChannelsRead(data: MarkChannelsReadOptions<UserType> = {}) {
     await this.post<APIResponse>(this.baseURL + '/channels/read', {
       ...data,
     });

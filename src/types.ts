@@ -916,9 +916,15 @@ export type InviteOptions<
   user_id?: string;
 };
 
-export type MarkAllReadOptions<UserType = UnknownType> = {
+/** @deprecated use MarkChannelsReadOptions instead */
+export type MarkAllReadOptions<
+  UserType = UnknownType
+> = MarkChannelsReadOptions<UserType>;
+
+export type MarkChannelsReadOptions<UserType = UnknownType> = {
   client_id?: string;
   connection_id?: string;
+  read_by_channel?: Record<string, string>;
   user?: UserResponse<UserType>;
   user_id?: string;
 };
@@ -1452,6 +1458,10 @@ export type Sort<T> = {
 export type UserSort<UserType = UnknownType> =
   | Sort<UserResponse<UserType>>
   | Array<Sort<UserResponse<UserType>>>;
+
+export type MemberSort<UserType = UnknownType> =
+  | Sort<Pick<UserResponse<UserType>, 'id' | 'created_at' | 'name'>>
+  | Array<Sort<Pick<UserResponse<UserType>, 'id' | 'created_at' | 'name'>>>;
 
 export type SearchMessageSortBase<MessageType = UnknownType> = Sort<MessageType> & {
   attachments?: AscDesc;
