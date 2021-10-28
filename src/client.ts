@@ -3352,7 +3352,7 @@ export class StreamChat<
    * @return {APIResponse} A task ID
    */
   async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
-    if (options.user !== 'soft' && options.user !== 'hard') {
+    if (options?.user !== 'soft' && options?.user !== 'hard') {
       throw new Error('Invalid delete user options. user must be one of [soft hard]');
     }
     if (
