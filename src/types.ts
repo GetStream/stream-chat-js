@@ -1631,6 +1631,7 @@ export type ChannelConfigFields = {
   mutes?: boolean;
   name?: string;
   push_notifications?: boolean;
+  quotes?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
