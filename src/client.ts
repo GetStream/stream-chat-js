@@ -114,7 +114,9 @@ import {
   CampaignData,
   OGAttachment,
   TaskStatus,
+  DeleteUserOptions,
   DeleteChannelsResponse,
+  TaskResponse,
 } from './types';
 
 function isString(x: unknown): x is string {
@@ -3339,5 +3341,39 @@ export class StreamChat<
       this.baseURL + `/channels/delete`,
       { cids, ...options },
     );
+  }
+
+  /**
+   * deleteUsers - Batch Delete Users
+   *
+   * @param {string[]} user_ids which users to delete
+   * @param {DeleteUserOptions} options Configuration how to delete users
+   *
+   * @return {APIResponse} A task ID
+   */
+  async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
+    if (options?.user !== 'soft' && options?.user !== 'hard') {
+      throw new Error('Invalid delete user options. user must be one of [soft hard]');
+    }
+    if (
+      options.messages !== undefined &&
+      options.messages !== 'soft' &&
+      options.messages !== 'hard'
+    ) {
+      throw new Error('Invalid delete user options. messages must be one of [soft hard]');
+    }
+    if (
+      options.conversations !== undefined &&
+      options.conversations !== 'soft' &&
+      options.conversations !== 'hard'
+    ) {
+      throw new Error(
+        'Invalid delete user options. conversations must be one of [soft hard]',
+      );
+    }
+    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
+      user_ids,
+      ...options,
+    });
   }
 }
