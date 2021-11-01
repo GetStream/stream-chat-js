@@ -3371,9 +3371,12 @@ export class StreamChat<
         'Invalid delete user options. conversations must be one of [soft hard]',
       );
     }
-    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
-      user_ids,
-      ...options,
-    });
+    return await this.post<APIResponse & TaskResponse>(
+      this.baseURL + `/users/async/delete`,
+      {
+        user_ids,
+        ...options,
+      },
+    );
   }
 }
