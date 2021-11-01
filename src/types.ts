@@ -64,6 +64,7 @@ export type AppSettingsAPIResponse<
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
+        image_preupload_compression_config?: ImageSize;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -109,6 +110,7 @@ export type AppSettingsAPIResponse<
     sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
+    upload_image_sizes?: ResizeImageSizes;
     user_search_disallowed_roles?: string[] | null;
     webhook_events?: Array<string>;
     webhook_url?: string;
@@ -853,6 +855,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   connection_id?: string;
   custom_events?: boolean;
   grants?: Record<string, string[]>;
+  image_preupload_compression_config?: ImageSize;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1560,6 +1563,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  upload_image_sizes?: ResizeImageSizes;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
 };
@@ -1626,6 +1630,7 @@ export type ChannelConfigFields = {
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
+  image_preupload_compression_config?: ImageSize;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -2232,4 +2237,21 @@ export type TaskStatus = {
     type: string;
   };
   result?: UnknownType;
+};
+
+export type ResizeImageSizes = {
+  l?: ResizeImageSize;
+  m?: ResizeImageSize;
+  s?: ResizeImageSize;
+  xs?: ResizeImageSize;
+};
+
+export type ResizeImageSize = ImageSize & {
+  crop?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  resize?: 'clip' | 'crop' | 'scale' | 'fill';
+};
+
+export type ImageSize = {
+  height?: number;
+  width?: number;
 };
