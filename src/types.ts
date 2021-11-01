@@ -2239,19 +2239,17 @@ export type TaskStatus = {
   result?: UnknownType;
 };
 
+export type ImageSize = {
+  height?: number;
+  width?: number;
+};
+export type ResizeImageSize = ImageSize & {
+  crop?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+  resize?: 'clip' | 'crop' | 'scale' | 'fill';
+};
 export type ResizeImageSizes = {
   l?: ResizeImageSize;
   m?: ResizeImageSize;
   s?: ResizeImageSize;
   xs?: ResizeImageSize;
-};
-
-export type ResizeImageSize = ImageSize & {
-  crop?: 'top' | 'bottom' | 'left' | 'right' | 'center';
-  resize?: 'clip' | 'crop' | 'scale' | 'fill';
-};
-
-export type ImageSize = {
-  height?: number;
-  width?: number;
 };
