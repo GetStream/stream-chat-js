@@ -611,15 +611,10 @@ export class Channel<
    *
    * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
-  async truncate(options: { hardDelete?: boolean } = {}) {
-    let truncateUrl = this._channelURL() + '/truncate';
-    if (true === options.hardDelete) {
-      truncateUrl += '?hard_delete=true';
-    }
-
+  async truncate(options: { hard_delete?: boolean } = {}) {
     return await this.getClient().post<
       TruncateChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(truncateUrl, {});
+    >(this._channelURL() + '/truncate', options);
   }
 
   /**
