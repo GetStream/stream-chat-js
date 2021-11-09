@@ -368,7 +368,7 @@ export class StableWSConnection<
     try {
       await this.tokenManager.tokenReady();
       this._setupConnectionPromise();
-      const wsURL = this._buildUrl(randomId());
+      const wsURL = this._buildUrl(this.requestID);
       this.ws = new WebSocket(wsURL);
       this.ws.onopen = this.onopen.bind(this, this.wsID);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
