@@ -29,6 +29,7 @@ describe('connection', function () {
 		authType: 'jwt',
 		userAgent: 'agent',
 		apiKey: 'key',
+		sendInsights: true,
 	};
 	// dummy server to use instead of actual Stream API
 	const wss = new WsServer({ port: 9999 });
@@ -49,7 +50,7 @@ describe('connection', function () {
 		});
 
 		it('should create the correct url', function () {
-			const { host, pathname, query } = url.parse(ws._buildUrl(), true);
+			const { host, pathname, query } = url.parse(ws._buildUrl('random'), true);
 
 			expect(host).to.be.eq('url.com');
 			expect(pathname).to.be.eq('/connect');
@@ -67,7 +68,7 @@ describe('connection', function () {
 
 		it('should not include device if not there', function () {
 			ws.device = undefined;
-			const { query } = url.parse(ws._buildUrl(), true);
+			const { query } = url.parse(ws._buildUrl('random'), true);
 			const data = JSON.parse(query.json);
 			expect(data.device).to.deep.undefined;
 		});
@@ -159,10 +160,11 @@ describe('connection', function () {
 		});
 	});
 
-	describe('Connection connect timeout', function () {
+	describe.only('Connection connect timeout', function () {
 		const client = new StreamChat('apiKey', {
 			allowServerSideConnect: true,
 			baseURL: 'http://localhost:1111', // invalid base url
+			sendInsights: true,
 		});
 
 		const token =

@@ -2,7 +2,9 @@ import { ChannelState, StreamChat, Channel } from '../../../src';
 import { v4 as uuidv4 } from 'uuid';
 
 export const getClientWithUser = async (user) => {
-	const chatClient = new StreamChat('', '');
+	const chatClient = new StreamChat('', {
+		sendInsights: true,
+	});
 
 	const clientUser = user || { id: uuidv4() };
 	chatClient.connectUser = () => {

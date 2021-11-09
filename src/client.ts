@@ -116,6 +116,7 @@ import {
   TaskStatus,
   DeleteChannelsResponse,
 } from './types';
+import { InsightsWsEvent } from './insights';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -1614,7 +1615,13 @@ export class StreamChat<
       throw Error('clientID is not set');
     }
 
+    console.log('this.options.sendInsights,', this.options.sendInsights);
     // The StableWSConnection handles all the reconnection logic.
+
+    let postInsightMessage;
+    if (this.options.sendInsights) {
+      postInsightMessage = this._postInsightMessage;
+    }
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
@@ -1629,6 +1636,7 @@ export class StreamChat<
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
       device: this.options.device,
+      postInsightMessage,
     });
 
     let warmUpPromise;
@@ -3328,4 +3336,23 @@ export class StreamChat<
       { cids, ...options },
     );
   }
+
+  _postInsightMessage = (eventType: string, event: InsightsWsEvent) => {
+    // eslint-disable-next-line
+    const omitEmptyFields = (obj: any): any => {
+      for (const propName in obj) {
+        if (obj[propName] === null || obj[propName] === undefined) {
+          delete obj[propName];
+          continue;
+        }
+        if (typeof obj[propName] == 'object') {
+          // obj[propName] = omitEmptyFields(obj[propName]);
+        }
+      }
+      return obj;
+    };
+
+    const e = omitEmptyFields(event);
+    this.axiosInstance.post(`http://localhost:8000/insights/${eventType}`, e);
+  };
 }

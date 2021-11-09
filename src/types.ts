@@ -1000,6 +1000,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  sendInsights?: boolean;
   warmUp?: boolean;
 };
 
