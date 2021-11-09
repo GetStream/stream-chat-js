@@ -3340,20 +3340,24 @@ export class StreamChat<
   }
 
   _postInsightMessage = (eventType: string, event: InsightsWsEvent) => {
-    // eslint-disable-next-line
-    const omitEmptyFields = (obj: any): any => {
-      for (const propName in obj) {
-        if (obj[propName] === null || obj[propName] === undefined) {
-          delete obj[propName];
+    try{
+      // eslint-disable-next-line
+      const omitEmptyFields = (obj: any): any => {
+        for (const propName in obj) {
+          if (obj[propName] === null || obj[propName] === undefined) {
+            delete obj[propName];
+          }
         }
-      }
-      return obj;
-    };
+        return obj;
+      };
 
-    const e = omitEmptyFields(event);
-    this.axiosInstance.post(
-      `https://insights-dev.stream-io-api.com/insights/${eventType}`,
-      e,
-    );
+      const e = omitEmptyFields(event);
+      this.axiosInstance.post(
+          `https://insights-dev.stream-io-api.com/insights/${eventType}`,
+          e,
+      );
+    }catch (e) {
+      console.log(e)
+    }
   };
 }
