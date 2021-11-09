@@ -1617,7 +1617,6 @@ export class StreamChat<
       throw Error('clientID is not set');
     }
 
-    console.log('this.options.sendInsights,', this.options.sendInsights);
     // The StableWSConnection handles all the reconnection logic.
 
     let postInsightMessage;
@@ -3352,6 +3351,9 @@ export class StreamChat<
     };
 
     const e = omitEmptyFields(event);
-    this.axiosInstance.post(`http://localhost:8000/insights/${eventType}`, e);
+    this.axiosInstance.post(
+      `https://insights-dev.stream-io-api.com/insights/${eventType}`,
+      e,
+    );
   };
 }

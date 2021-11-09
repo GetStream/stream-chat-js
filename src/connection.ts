@@ -226,8 +226,6 @@ export class StableWSConnection<
           try {
             return await this.connectionOpen;
           } catch (error) {
-            this.metrics.wsConsecutiveFailures++;
-            this.metrics.wsTotalFailures++;
             if (i === timeout) {
               throw new Error(
                 JSON.stringify({
@@ -267,7 +265,7 @@ export class StableWSConnection<
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
-    return `${this.wsBaseURL}/connects?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
+    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
   };
 
   /**
@@ -593,8 +591,9 @@ export class StableWSConnection<
   };
 
   onclose = (wsID: number, event: WebSocket.CloseEvent) => {
-    console.log(event);
     if (event.code !== 1000) {
+      this.metrics.wsConsecutiveFailures++;
+      this.metrics.wsTotalFailures++;
       this.postInsightMessage?.('ws_fatal', {
         api_key: this.apiKey,
         // @ts-ignore

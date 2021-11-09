@@ -162,7 +162,7 @@ describe('connection', function () {
 		});
 	});
 
-	describe.only('Connection connect timeout', function () {
+	describe('Connection connect timeout', function () {
 		const client = new StreamChat('apiKey', {
 			allowServerSideConnect: true,
 			baseURL: 'http://localhost:1111', // invalid base url
