@@ -8,6 +8,7 @@ import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
 import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
+import { Metrics } from '../../src/insights';
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
@@ -30,6 +31,7 @@ describe('connection', function () {
 		userAgent: 'agent',
 		apiKey: 'key',
 		sendInsights: true,
+		metrics: new Metrics(),
 	};
 	// dummy server to use instead of actual Stream API
 	const wss = new WsServer({ port: 9999 });

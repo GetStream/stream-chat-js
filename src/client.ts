@@ -116,7 +116,7 @@ import {
   TaskStatus,
   DeleteChannelsResponse,
 } from './types';
-import { InsightsWsEvent } from './insights';
+import { Metrics, InsightsWsEvent } from './insights';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -196,6 +196,7 @@ export class StreamChat<
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
+  metrics: Metrics;
 
   /**
    * Initialize a client
@@ -290,6 +291,7 @@ export class StreamChat<
     // generated from secret.
     this.tokenManager = new TokenManager(this.secret);
     this.consecutiveFailures = 0;
+    this.metrics = new Metrics();
 
     /**
      * logger function should accept 3 parameters:
@@ -1637,6 +1639,7 @@ export class StreamChat<
       logger: this.logger,
       device: this.options.device,
       postInsightMessage,
+      metrics: this.metrics,
     });
 
     let warmUpPromise;
@@ -3343,10 +3346,6 @@ export class StreamChat<
       for (const propName in obj) {
         if (obj[propName] === null || obj[propName] === undefined) {
           delete obj[propName];
-          continue;
-        }
-        if (typeof obj[propName] == 'object') {
-          // obj[propName] = omitEmptyFields(obj[propName]);
         }
       }
       return obj;
