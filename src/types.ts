@@ -916,9 +916,15 @@ export type InviteOptions<
   user_id?: string;
 };
 
-export type MarkAllReadOptions<UserType = UnknownType> = {
+/** @deprecated use MarkChannelsReadOptions instead */
+export type MarkAllReadOptions<
+  UserType = UnknownType
+> = MarkChannelsReadOptions<UserType>;
+
+export type MarkChannelsReadOptions<UserType = UnknownType> = {
   client_id?: string;
   connection_id?: string;
+  read_by_channel?: Record<string, string>;
   user?: UserResponse<UserType>;
   user_id?: string;
 };
@@ -1694,7 +1700,6 @@ export type PushProvider = 'apn' | 'firebase' | 'huawei';
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
-  | 'flag'
   | 'fun_set'
   | 'giphy'
   | 'imgur'
@@ -2145,6 +2150,22 @@ export type TaskResponse = {
 export type DeleteChannelsResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
+
+export type DeleteType = 'soft' | 'hard';
+
+/*
+  DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
+
+  `user` soft|hard determines if the user needs to be hard- or soft-deleted, where hard-delete
+  implies that all related objects (messages, flags, etc) will be hard-deleted as well.
+  `conversations` soft|hard will delete any 1to1 channels that the user was a member of.
+  `messages` soft-hard will delete any messages that the user has sent.
+ */
+export type DeleteUserOptions = {
+  user: DeleteType;
+  conversations?: DeleteType;
+  messages?: DeleteType;
+};
 
 export type SegmentData = {
   description: string;
