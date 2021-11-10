@@ -8,7 +8,7 @@ import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
 import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
-import { Metrics } from '../../src/insights';
+import { InsightMetrics } from '../../src/insights';
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
@@ -30,8 +30,8 @@ describe('connection', function () {
 		authType: 'jwt',
 		userAgent: 'agent',
 		apiKey: 'key',
-		sendInsights: true,
-		metrics: new Metrics(),
+		enableInsights: true,
+		insightMetrics: new InsightMetrics(),
 	};
 	// dummy server to use instead of actual Stream API
 	const wss = new WsServer({ port: 9999 });
@@ -166,7 +166,7 @@ describe('connection', function () {
 		const client = new StreamChat('apiKey', {
 			allowServerSideConnect: true,
 			baseURL: 'http://localhost:1111', // invalid base url
-			sendInsights: true,
+			enableInsights: true,
 		});
 
 		const token =
