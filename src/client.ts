@@ -3340,22 +3340,12 @@ export class StreamChat<
   }
 
   _postInsightMessage = async (eventType: string, event: Record<string, unknown>) => {
-    // eslint-disable-next-line
-    const omitEmptyFields = (obj: Record<string, unknown>): object => {
-      for (const propName in obj) {
-        if (obj[propName] === null || obj[propName] === undefined) {
-          delete obj[propName];
-        }
-      }
-      return obj;
-    };
-
     const maxAttempts = 3;
     for (let i = 0; i < maxAttempts; i++) {
       try {
         await this.axiosInstance.post(
-          `https://insights-dev.stream-io-api.com/insights/${eventType}`,
-          omitEmptyFields(event),
+          `https://insights.stream-io-api.com/insights/${eventType}`,
+          event,
         );
       } catch (e) {
         this.logger('warn', `failed to send insights event ${eventType}`, {
