@@ -1,7 +1,11 @@
 import WebSocket from 'isomorphic-ws';
 import { chatCodes, sleep, retryInterval, randomId } from './utils';
 import { TokenManager } from './token_manager';
-import { Metrics, InsightsWsEvent } from './insights';
+import {
+  generateWsFatalEvent,
+  generateWsSuccessAfterFailureEvent,
+  Metrics,
+} from './insights';
 import {
   BaseDeviceFields,
   ConnectAPIResponse,
@@ -43,7 +47,7 @@ type Constructor<
   userID: string;
   wsBaseURL: string;
   device?: BaseDeviceFields;
-  postInsightMessage?: (eventType: string, event: InsightsWsEvent) => void;
+  postInsightMessage?: (eventType: string, event: any) => void;
 };
 
 /**
@@ -99,13 +103,13 @@ export class StableWSConnection<
       StatusCode?: string | number;
     },
   ) => void;
-  requestID: string | undefined;
+  requestID: string;
   connectionStartTs: number | undefined;
   resolvePromise?: (value: WebSocket.MessageEvent) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
-  postInsightMessage?: (eventType: string, event: InsightsWsEvent) => void;
+  postInsightMessage?: (eventType: string, event: any) => void;
   metrics: Metrics;
   // @ts-ignore
   constructor({
@@ -159,6 +163,7 @@ export class StableWSConnection<
     this._listenForConnectionChanges();
     this.postInsightMessage = postInsightMessage;
     this.metrics = metrics;
+    this.requestID = randomId();
   }
 
   /**
@@ -378,27 +383,14 @@ export class StableWSConnection<
       this.isConnecting = false;
 
       if (response) {
-        if (this.metrics.wsConsecutiveFailures > 0) {
-          const consecutiveFailures = this.metrics.wsConsecutiveFailures;
-          this.metrics.wsConsecutiveFailures = 0;
-          this.postInsightMessage?.('ws_success_after_failure', {
-            api_key: this.apiKey,
-            start_ts: this.connectionStartTs,
-            end_ts: new Date().getTime(),
-            auth_type: this.authType,
-            token: this.tokenManager.token,
-            user_id: this.userID,
-            user_details: this.user,
-            device: this.device,
-            client_id: this.connectionID,
-            ws_details: this.ws,
-            ws_consecutive_failures: consecutiveFailures,
-            ws_total_failures: this.metrics.wsTotalFailures,
-            request_id: this.requestID,
-          });
-        }
-
         this.connectionID = response.connection_id;
+        if (this.metrics.wsConsecutiveFailures > 0) {
+          this.postInsightMessage?.(
+            'ws_success_after_failure',
+            generateWsSuccessAfterFailureEvent(this),
+          );
+          this.metrics.wsConsecutiveFailures = 0;
+        }
         return response;
       }
     } catch (err) {
@@ -594,28 +586,7 @@ export class StableWSConnection<
     if (event.code !== 1000) {
       this.metrics.wsConsecutiveFailures++;
       this.metrics.wsTotalFailures++;
-      this.postInsightMessage?.('ws_fatal', {
-        api_key: this.apiKey,
-        // @ts-ignore
-        start_ts: this.connectionStartTs,
-        end_ts: new Date().getTime(),
-        err: {
-          wasClean: event.wasClean,
-          code: event.code,
-          reason: event.reason,
-        },
-        auth_type: this.authType,
-        token: this.tokenManager.token,
-        user_id: this.userID,
-        user_details: this.user,
-        device: this.device,
-        client_id: this.connectionID,
-        ws_details: this.ws,
-        ws_consecutive_failures: this.metrics.wsConsecutiveFailures,
-        ws_total_failures: this.metrics.wsTotalFailures,
-        // @ts-ignore
-        request_id: this.requestID,
-      });
+      this.postInsightMessage?.('ws_fatal', generateWsFatalEvent(this, event));
     }
 
     this.logger('info', 'connection:onclose() - onclose callback - ' + event.code, {

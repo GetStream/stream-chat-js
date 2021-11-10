@@ -116,7 +116,7 @@ import {
   TaskStatus,
   DeleteChannelsResponse,
 } from './types';
-import { Metrics, InsightsWsEvent } from './insights';
+import { Metrics } from './insights';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -3339,8 +3339,8 @@ export class StreamChat<
     );
   }
 
-  _postInsightMessage = (eventType: string, event: InsightsWsEvent) => {
-    try{
+  _postInsightMessage = (eventType: string, event: any) => {
+    try {
       // eslint-disable-next-line
       const omitEmptyFields = (obj: any): any => {
         for (const propName in obj) {
@@ -3350,14 +3350,12 @@ export class StreamChat<
         }
         return obj;
       };
-
-      const e = omitEmptyFields(event);
       this.axiosInstance.post(
-          `https://insights-dev.stream-io-api.com/insights/${eventType}`,
-          e,
+        `https://insights-dev.stream-io-api.com/insights/${eventType}`,
+        omitEmptyFields(event),
       );
-    }catch (e) {
-      console.log(e)
+    } catch (e) {
+      console.log(e);
     }
   };
 }
