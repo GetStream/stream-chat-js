@@ -800,7 +800,6 @@ export class StableWSConnection<
         }
       },
       (error) => {
-        console.log('resolved connectionOpen error', error);
         throw error;
       },
     );
