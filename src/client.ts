@@ -118,6 +118,7 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
 } from './types';
+import { InsightTypes, InsightMetrics } from './insights';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -197,6 +198,7 @@ export class StreamChat<
   wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
+  insightMetrics: InsightMetrics;
 
   /**
    * Initialize a client
@@ -291,6 +293,7 @@ export class StreamChat<
     // generated from secret.
     this.tokenManager = new TokenManager(this.secret);
     this.consecutiveFailures = 0;
+    this.insightMetrics = new InsightMetrics();
 
     /**
      * logger function should accept 3 parameters:
@@ -1617,6 +1620,7 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
+
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
@@ -1631,6 +1635,8 @@ export class StreamChat<
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
       device: this.options.device,
+      postInsights: this.options.enableInsights ? this.postInsights : undefined,
+      insightMetrics: this.insightMetrics,
     });
 
     let warmUpPromise;
@@ -3342,6 +3348,27 @@ export class StreamChat<
       { cids, ...options },
     );
   }
+
+  postInsights = async (insightType: InsightTypes, insights: Record<string, unknown>) => {
+    const maxAttempts = 3;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        await this.axiosInstance.post(
+          `https://insights.stream-io-api.com/insights/${insightType}`,
+          insights,
+        );
+      } catch (e) {
+        this.logger('warn', `failed to send insights event ${insightType}`, {
+          tags: ['insights', 'connection'],
+          error: e,
+          insights,
+        });
+        await sleep((i + 1) * 3000);
+        continue;
+      }
+      break;
+    }
+  };
 
   /**
    * deleteUsers - Batch Delete Users

@@ -997,6 +997,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
   baseURL?: string;
   browser?: boolean;
   device?: BaseDeviceFields;
+  enableInsights?: boolean;
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
