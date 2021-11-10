@@ -2159,11 +2159,13 @@ export type DeleteType = 'soft' | 'hard';
   implies that all related objects (messages, flags, etc) will be hard-deleted as well.
   `conversations` soft|hard will delete any 1to1 channels that the user was a member of.
   `messages` soft-hard will delete any messages that the user has sent.
+  `new_channel_owner_id` any channels owned by the hard-deleted user will be transferred to this user ID
  */
 export type DeleteUserOptions = {
   user: DeleteType;
   conversations?: DeleteType;
   messages?: DeleteType;
+  new_channel_owner_id?: string;
 };
 
 export type SegmentData = {
