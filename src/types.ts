@@ -1700,7 +1700,6 @@ export type PushProvider = 'apn' | 'firebase' | 'huawei';
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
-  | 'flag'
   | 'fun_set'
   | 'giphy'
   | 'imgur'
