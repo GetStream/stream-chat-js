@@ -1,11 +1,7 @@
 import WebSocket from 'isomorphic-ws';
 import { chatCodes, sleep, retryInterval, randomId } from './utils';
 import { TokenManager } from './token_manager';
-import {
-  generateWsFatalEvent,
-  generateWsSuccessAfterFailureEvent,
-  Metrics,
-} from './insights';
+import { buildWsFatalEvent, buildWsSuccessAfterFailureEvent, Metrics } from './insights';
 import {
   BaseDeviceFields,
   ConnectAPIResponse,
@@ -390,7 +386,7 @@ export class StableWSConnection<
         if (this.metrics.wsConsecutiveFailures > 0) {
           this.postInsightMessage?.(
             'ws_success_after_failure',
-            generateWsSuccessAfterFailureEvent(this),
+            buildWsSuccessAfterFailureEvent(this),
           );
           this.metrics.wsConsecutiveFailures = 0;
         }
@@ -586,10 +582,10 @@ export class StableWSConnection<
   };
 
   onclose = (wsID: number, event: WebSocket.CloseEvent) => {
-    if (event.code !== 1000) {
+    if (event.code !== chatCodes.WS_CLOSED_SUCCESS) {
       this.metrics.wsConsecutiveFailures++;
       this.metrics.wsTotalFailures++;
-      this.postInsightMessage?.('ws_fatal', generateWsFatalEvent(this, event));
+      this.postInsightMessage?.('ws_fatal', buildWsFatalEvent(this, event));
     }
 
     this.logger('info', 'connection:onclose() - onclose callback - ' + event.code, {

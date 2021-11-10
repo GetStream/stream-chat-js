@@ -10,7 +10,7 @@ export class Metrics {
   }
 }
 
-export function generateWsFatalEvent<
+export function buildWsFatalEvent<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
@@ -19,34 +19,22 @@ export function generateWsFatalEvent<
   event: WebSocket.CloseEvent,
 ) {
   return {
-    url: connection._buildUrl(connection.requestID),
-    api_key: connection.apiKey,
-    start_ts: connection.connectionStartTs,
-    end_ts: new Date().getTime(),
     err: {
       wasClean: event.wasClean,
       code: event.code,
       reason: event.reason,
     },
-    auth_type: connection.authType,
-    token: connection.tokenManager.token,
-    user_id: connection.userID,
-    user_details: connection.user,
-    device: connection.device,
-    client_id: connection.connectionID,
-    ws_details: connection.ws,
-    ws_consecutive_failures: connection.metrics.wsConsecutiveFailures,
-    ws_total_failures: connection.metrics.wsTotalFailures,
-    request_id: connection.requestID,
+    ...buildWsBaseInsight(connection),
   };
 }
 
-export function generateWsSuccessAfterFailureEvent<
+function buildWsBaseInsight<
   ChannelType extends UnknownType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
   UserType extends UnknownType = UnknownType
 >(connection: StableWSConnection<ChannelType, CommandType, UserType>) {
   return {
+    ready_state: connection.ws?.readyState,
     url: connection._buildUrl(connection.requestID),
     api_key: connection.apiKey,
     start_ts: connection.connectionStartTs,
@@ -61,5 +49,15 @@ export function generateWsSuccessAfterFailureEvent<
     ws_consecutive_failures: connection.metrics.wsConsecutiveFailures,
     ws_total_failures: connection.metrics.wsTotalFailures,
     request_id: connection.requestID,
+    online: typeof navigator !== 'undefined' ? navigator?.onLine : null,
+    user_agent: typeof navigator !== 'undefined' ? navigator?.userAgent : null,
   };
+}
+
+export function buildWsSuccessAfterFailureEvent<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(connection: StableWSConnection<ChannelType, CommandType, UserType>) {
+  return buildWsBaseInsight(connection);
 }
