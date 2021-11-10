@@ -69,6 +69,7 @@ export type AppSettingsAPIResponse<
         mutes?: boolean;
         name?: string;
         push_notifications?: boolean;
+        quotes?: boolean;
         reactions?: boolean;
         read_events?: boolean;
         replies?: boolean;
@@ -859,6 +860,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   name?: string;
   permissions?: PermissionObject[];
   push_notifications?: boolean;
+  quotes?: boolean;
   reactions?: boolean;
   read_events?: boolean;
   replies?: boolean;
