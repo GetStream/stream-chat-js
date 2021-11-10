@@ -3339,10 +3339,10 @@ export class StreamChat<
     );
   }
 
-  _postInsightMessage = (eventType: string, event: any) => {
+  _postInsightMessage = (eventType: string, event: Record<string, unknown>) => {
     try {
       // eslint-disable-next-line
-      const omitEmptyFields = (obj: any): any => {
+      const omitEmptyFields = (obj: Record<string, unknown>): object => {
         for (const propName in obj) {
           if (obj[propName] === null || obj[propName] === undefined) {
             delete obj[propName];

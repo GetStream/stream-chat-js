@@ -1,6 +1,6 @@
 import { StableWSConnection } from './connection';
 import WebSocket from 'isomorphic-ws';
-
+import { LiteralStringForUnion, UnknownType } from './types';
 export class Metrics {
   wsConsecutiveFailures: number;
   wsTotalFailures: number;
@@ -10,8 +10,12 @@ export class Metrics {
   }
 }
 
-export function generateWsFatalEvent(
-  connection: StableWSConnection,
+export function generateWsFatalEvent<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(
+  connection: StableWSConnection<ChannelType, CommandType, UserType>,
   event: WebSocket.CloseEvent,
 ) {
   return {
@@ -33,12 +37,15 @@ export function generateWsFatalEvent(
     ws_details: connection.ws,
     ws_consecutive_failures: connection.metrics.wsConsecutiveFailures,
     ws_total_failures: connection.metrics.wsTotalFailures,
-    // @ts-ignore
     request_id: connection.requestID,
   };
 }
 
-export function generateWsSuccessAfterFailureEvent(connection: StableWSConnection) {
+export function generateWsSuccessAfterFailureEvent<
+  ChannelType extends UnknownType = UnknownType,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UnknownType = UnknownType
+>(connection: StableWSConnection<ChannelType, CommandType, UserType>) {
   return {
     url: connection._buildUrl(connection.requestID),
     api_key: connection.apiKey,

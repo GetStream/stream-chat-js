@@ -47,7 +47,7 @@ type Constructor<
   userID: string;
   wsBaseURL: string;
   device?: BaseDeviceFields;
-  postInsightMessage?: (eventType: string, event: any) => void;
+  postInsightMessage?: (eventType: string, event: Record<string, unknown>) => void;
 };
 
 /**
@@ -109,9 +109,12 @@ export class StableWSConnection<
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
-  postInsightMessage?: (eventType: string, event: any) => void;
+  postInsightMessage?: Constructor<
+    ChannelType,
+    CommandType,
+    UserType
+  >['postInsightMessage'];
   metrics: Metrics;
-  // @ts-ignore
   constructor({
     apiKey,
     authType,
