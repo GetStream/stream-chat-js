@@ -1,17 +1,20 @@
 import { StableWSConnection } from './connection';
 import WebSocket from 'isomorphic-ws';
 import { LiteralStringForUnion, UnknownType } from './types';
+import { randomId } from './utils';
 
 export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure';
 export class InsightMetrics {
   connectionStartTimestamp: number | null;
   wsConsecutiveFailures: number;
   wsTotalFailures: number;
+  instanceClientId: string;
 
   constructor() {
     this.connectionStartTimestamp = null;
     this.wsTotalFailures = 0;
     this.wsConsecutiveFailures = 0;
+    this.instanceClientId = randomId();
   }
 }
 
@@ -56,6 +59,7 @@ function buildWsBaseInsight<
     request_id: connection.requestID,
     online: typeof navigator !== 'undefined' ? navigator?.onLine : null,
     user_agent: typeof navigator !== 'undefined' ? navigator?.userAgent : null,
+    instance_client_id: connection.insightMetrics.instanceClientId,
   };
 }
 
