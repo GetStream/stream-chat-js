@@ -1,5 +1,4 @@
 import { StableWSConnection } from './connection';
-import WebSocket from 'isomorphic-ws';
 import { LiteralStringForUnion, UnknownType } from './types';
 import { randomId } from './utils';
 
@@ -24,14 +23,10 @@ export function buildWsFatalInsight<
   UserType extends UnknownType = UnknownType
 >(
   connection: StableWSConnection<ChannelType, CommandType, UserType>,
-  event: WebSocket.CloseEvent,
+  event: Record<string, unknown>,
 ) {
   return {
-    err: {
-      wasClean: event.wasClean,
-      code: event.code,
-      reason: event.reason,
-    },
+    ...event,
     ...buildWsBaseInsight(connection),
   };
 }

@@ -198,3 +198,16 @@ function getRandomBytes(length: number): Uint8Array {
   getRandomValues(bytes);
   return bytes;
 }
+
+export function convertErrorToJson(err: unknown) {
+  const jsonObj = {} as Record<string, unknown>;
+
+  if (!err) return jsonObj;
+
+  Object.getOwnPropertyNames(err).forEach((key) => {
+    // @ts-ignore
+    jsonObj[key] = err[key];
+  });
+
+  return jsonObj;
+}

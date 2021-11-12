@@ -1,5 +1,5 @@
 import WebSocket from 'isomorphic-ws';
-import { chatCodes, sleep, retryInterval, randomId } from './utils';
+import { chatCodes, convertErrorToJson, sleep, retryInterval, randomId } from './utils';
 import { TokenManager } from './token_manager';
 import {
   buildWsFatalInsight,
@@ -388,8 +388,8 @@ export class StableWSConnection<
 
       if (response) {
         this.connectionID = response.connection_id;
-        if (this.insightMetrics.wsConsecutiveFailures > 0) {
-          this.postInsights?.(
+        if (this.insightMetrics.wsConsecutiveFailures > 0 && this.postInsights) {
+          this.postInsights(
             'ws_success_after_failure',
             buildWsSuccessAfterFailureInsight(this),
           );
@@ -399,6 +399,15 @@ export class StableWSConnection<
       }
     } catch (err) {
       this.isConnecting = false;
+
+      if (this.postInsights) {
+        this.insightMetrics.wsConsecutiveFailures++;
+        this.insightMetrics.wsTotalFailures++;
+
+        // @ts-ignore
+        const insights = buildWsFatalInsight(this, convertErrorToJson(err));
+        this.postInsights?.('ws_fatal', insights);
+      }
       throw err;
     }
   }
@@ -587,11 +596,7 @@ export class StableWSConnection<
   };
 
   onclose = (wsID: number, event: WebSocket.CloseEvent) => {
-    if (event.code !== chatCodes.WS_CLOSED_SUCCESS) {
-      this.insightMetrics.wsConsecutiveFailures++;
-      this.insightMetrics.wsTotalFailures++;
-      this.postInsights?.('ws_fatal', buildWsFatalInsight(this, event));
-    }
+    if (this.wsID !== wsID) return;
 
     this.logger('info', 'connection:onclose() - onclose callback - ' + event.code, {
       tags: ['connection'],
@@ -599,15 +604,18 @@ export class StableWSConnection<
       wsID,
     });
 
-    if (this.wsID !== wsID) return;
-
     if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
       // this is a permanent error raised by stream..
       // usually caused by invalid auth details
       const error = new Error(
         `WS connection reject with error ${event.reason}`,
-      ) as Error & { reason?: string };
+      ) as Error & WebSocket.CloseEvent;
+
       error.reason = event.reason;
+      error.code = event.code;
+      error.wasClean = event.wasClean;
+      error.target = event.target;
+
       this.rejectPromise?.(error);
       this.logger(
         'info',
