@@ -3354,7 +3354,7 @@ export class StreamChat<
     for (let i = 0; i < maxAttempts; i++) {
       try {
         await this.axiosInstance.post(
-          `https://insights.stream-io-api.com/insights/${insightType}`,
+          `https://chat-insights.getstream.io/insights/${insightType}`,
           insights,
         );
       } catch (e) {
