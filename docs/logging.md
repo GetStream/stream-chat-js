@@ -43,7 +43,7 @@ It may also contains some extra data, some examples have been mentioned below:
 ```
 {
   "tags": ["api", "api_request", "client"],
-  "url": "https://chat-us-east-1.stream-io-api.com/channels",
+  "url": "https://chat.stream-io-api.com/channels",
   "payload": { /** payload */ },
   "config": { /** conig object */ }
 }
@@ -54,7 +54,7 @@ It may also contains some extra data, some examples have been mentioned below:
 ```
 {
   "tags": ["api", "api_response", "client"],
-  "url": "https://chat-us-east-1.stream-io-api.com/channels",
+  "url": "https://chat.stream-io-api.com/channels",
   "response": { /** object */ }
 }
 ```
@@ -64,7 +64,7 @@ It may also contains some extra data, some examples have been mentioned below:
 ```
 {
   "tags": ["api", "api_response", "client"],
-  "url": "https://chat-us-east-1.stream-io-api.com/channels",
+  "url": "https://chat.stream-io-api.com/channels",
   "error": { /** error object */ }
 }
 ```
