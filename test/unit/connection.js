@@ -8,6 +8,7 @@ import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
 import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
+import { InsightMetrics } from '../../src/insights';
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
@@ -29,6 +30,8 @@ describe('connection', function () {
 		authType: 'jwt',
 		userAgent: 'agent',
 		apiKey: 'key',
+		enableInsights: true,
+		insightMetrics: new InsightMetrics(),
 	};
 	// dummy server to use instead of actual Stream API
 	const wss = new WsServer({ port: 9999 });
@@ -49,7 +52,7 @@ describe('connection', function () {
 		});
 
 		it('should create the correct url', function () {
-			const { host, pathname, query } = url.parse(ws._buildUrl(), true);
+			const { host, pathname, query } = url.parse(ws._buildUrl('random'), true);
 
 			expect(host).to.be.eq('url.com');
 			expect(pathname).to.be.eq('/connect');
@@ -67,7 +70,7 @@ describe('connection', function () {
 
 		it('should not include device if not there', function () {
 			ws.device = undefined;
-			const { query } = url.parse(ws._buildUrl(), true);
+			const { query } = url.parse(ws._buildUrl('random'), true);
 			const data = JSON.parse(query.json);
 			expect(data.device).to.deep.undefined;
 		});
@@ -163,6 +166,7 @@ describe('connection', function () {
 		const client = new StreamChat('apiKey', {
 			allowServerSideConnect: true,
 			baseURL: 'http://localhost:1111', // invalid base url
+			enableInsights: true,
 		});
 
 		const token =

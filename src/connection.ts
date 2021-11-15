@@ -1,6 +1,12 @@
 import WebSocket from 'isomorphic-ws';
-import { chatCodes, sleep, retryInterval } from './utils';
+import { chatCodes, sleep, retryInterval, randomId } from './utils';
 import { TokenManager } from './token_manager';
+import {
+  buildWsFatalInsight,
+  buildWsSuccessAfterFailureInsight,
+  InsightMetrics,
+  InsightTypes,
+} from './insights';
 import {
   BaseDeviceFields,
   ConnectAPIResponse,
@@ -30,6 +36,7 @@ type Constructor<
   authType: 'anonymous' | 'jwt';
   clientID: string;
   eventCallback: (event: ConnectionChangeEvent) => void;
+  insightMetrics: InsightMetrics;
   logger: Logger | (() => void);
   messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
   recoverCallback: (
@@ -41,6 +48,7 @@ type Constructor<
   userID: string;
   wsBaseURL: string;
   device?: BaseDeviceFields;
+  postInsights?: (eventType: InsightTypes, event: Record<string, unknown>) => void;
 };
 
 /**
@@ -78,7 +86,6 @@ export class StableWSConnection<
   userID: Constructor<ChannelType, CommandType, UserType>['userID'];
   wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
   device: Constructor<ChannelType, CommandType, UserType>['device'];
-
   connectionID?: string;
   connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
   consecutiveFailures: number;
@@ -97,11 +104,14 @@ export class StableWSConnection<
       StatusCode?: string | number;
     },
   ) => void;
+  requestID: string | undefined;
+  connectionStartTimestamp: number | undefined;
   resolvePromise?: (value: WebSocket.MessageEvent) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
-
+  postInsights?: Constructor<ChannelType, CommandType, UserType>['postInsights'];
+  insightMetrics: InsightMetrics;
   constructor({
     apiKey,
     authType,
@@ -116,6 +126,8 @@ export class StableWSConnection<
     userID,
     wsBaseURL,
     device,
+    postInsights,
+    insightMetrics,
   }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
     this.clientID = clientID;
@@ -149,6 +161,8 @@ export class StableWSConnection<
     this.pingInterval = 25 * 1000;
     this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
     this._listenForConnectionChanges();
+    this.postInsights = postInsights;
+    this.insightMetrics = insightMetrics;
   }
 
   /**
@@ -244,13 +258,19 @@ export class StableWSConnection<
     ]);
   }
 
-  _buildUrl = () => {
+  /**
+   * Builds and returns the url for websocket.
+   * @param reqID Unique identifier generated on client side, to help tracking apis on backend.
+   * @returns url string
+   */
+  _buildUrl = (reqID?: string) => {
     const params = {
       user_id: this.user.id,
       user_details: this.user,
       user_token: this.tokenManager.getToken(),
       server_determines_connection_id: true,
       device: this.device,
+      request_id: reqID,
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
@@ -352,11 +372,12 @@ export class StableWSConnection<
   async _connect() {
     if (this.isConnecting) return; // simply ignore _connect if it's currently trying to connect
     this.isConnecting = true;
-
+    this.requestID = randomId();
+    this.insightMetrics.connectionStartTimestamp = new Date().getTime();
     try {
       await this.tokenManager.tokenReady();
       this._setupConnectionPromise();
-      const wsURL = this._buildUrl();
+      const wsURL = this._buildUrl(this.requestID);
       this.ws = new WebSocket(wsURL);
       this.ws.onopen = this.onopen.bind(this, this.wsID);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
@@ -367,6 +388,13 @@ export class StableWSConnection<
 
       if (response) {
         this.connectionID = response.connection_id;
+        if (this.insightMetrics.wsConsecutiveFailures > 0) {
+          this.postInsights?.(
+            'ws_success_after_failure',
+            buildWsSuccessAfterFailureInsight(this),
+          );
+          this.insightMetrics.wsConsecutiveFailures = 0;
+        }
         return response;
       }
     } catch (err) {
@@ -559,6 +587,12 @@ export class StableWSConnection<
   };
 
   onclose = (wsID: number, event: WebSocket.CloseEvent) => {
+    if (event.code !== chatCodes.WS_CLOSED_SUCCESS) {
+      this.insightMetrics.wsConsecutiveFailures++;
+      this.insightMetrics.wsTotalFailures++;
+      this.postInsights?.('ws_fatal', buildWsFatalInsight(this, event));
+    }
+
     this.logger('info', 'connection:onclose() - onclose callback - ' + event.code, {
       tags: ['connection'],
       event,
@@ -791,7 +825,6 @@ export class StableWSConnection<
         {
           type: 'health.check',
           client_id: this.clientID,
-          user_id: this.userID,
         },
       ];
       // try to send on the connection
