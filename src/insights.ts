@@ -2,7 +2,7 @@ import { StableWSConnection } from './connection';
 import { LiteralStringForUnion, UnknownType } from './types';
 import { randomId } from './utils';
 
-export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure' | 'http_beacon_failed';
+export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure' | 'http_hi_failed';
 export class InsightMetrics {
   connectionStartTimestamp: number | null;
   wsConsecutiveFailures: number;

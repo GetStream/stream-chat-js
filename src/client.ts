@@ -1649,7 +1649,7 @@ export class StreamChat<
     const client_request_id = randomId();
     const opts = { headers: { 'x-client-request-id': client_request_id } };
     this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
-      this.postInsights('http_beacon_failed', {
+      this.postInsights('http_hi_failed', {
         api_key: this.key,
         err: e,
         client_request_id,
