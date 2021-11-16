@@ -1621,7 +1621,7 @@ export class StreamChat<
     }
 
     if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
-      this.sendBeacon();
+      this.sayHi();
     }
 
     // The StableWSConnection handles all the reconnection logic.
@@ -1645,11 +1645,11 @@ export class StreamChat<
     return await this.wsConnection.connect();
   }
 
-  sendBeacon() {
+  sayHi() {
     const client_request_id = randomId();
     const opts = { headers: { 'x-client-request-id': client_request_id } };
-    this.doAxiosRequest('get', this.baseURL + '/beacon', null, opts).catch((e) => {
-      this.postInsights('http_beacon_failed', {
+    this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
+      this.postInsights('http_hi_failed', {
         api_key: this.key,
         err: e,
         client_request_id,
