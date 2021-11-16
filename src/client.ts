@@ -1140,6 +1140,7 @@ export class StreamChat<
       this.consecutiveFailures = 0;
       return this.handleResponse(response);
     } catch (e) {
+      e.client_request_id = requestConfig.headers?.['x-client-request-id'];
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
       if (e.response) {
@@ -1619,8 +1620,11 @@ export class StreamChat<
       throw Error('clientID is not set');
     }
 
-    // The StableWSConnection handles all the reconnection logic.
+    if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
+      this.sendBeacon();
+    }
 
+    // The StableWSConnection handles all the reconnection logic.
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
       wsBaseURL: client.wsBaseURL,
       clientID: client.clientID,
@@ -1638,21 +1642,19 @@ export class StreamChat<
       postInsights: this.options.enableInsights ? this.postInsights : undefined,
       insightMetrics: this.insightMetrics,
     });
+    return await this.wsConnection.connect();
+  }
 
-    let warmUpPromise;
-    if (this.options.warmUp) {
-      warmUpPromise = this.doAxiosRequest('options', this.baseURL + '/connect');
-    }
-    const handshake = await this.wsConnection.connect();
-    try {
-      await warmUpPromise;
-    } catch (e) {
-      this.logger('error', 'Warmup request failed', {
-        error: e,
+  sendBeacon() {
+    const client_request_id = randomId();
+    const opts = { headers: { 'x-client-request-id': client_request_id } };
+    this.doAxiosRequest('get', this.baseURL + '/beacon', null, opts).catch((e) => {
+      this.postInsights('http_beacon_failed', {
+        api_key: this.key,
+        err: e,
+        client_request_id,
       });
-    }
-
-    return handshake;
+    });
   }
 
   /**
@@ -2911,6 +2913,12 @@ export class StreamChat<
     },
   ) {
     const token = this._getToken();
+
+    if (!options.headers?.['x-client-request-id']) {
+      options.headers = {
+        'x-client-request-id': randomId(),
+      };
+    }
 
     return {
       params: {

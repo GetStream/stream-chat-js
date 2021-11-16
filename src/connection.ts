@@ -270,7 +270,7 @@ export class StableWSConnection<
       user_token: this.tokenManager.getToken(),
       server_determines_connection_id: true,
       device: this.device,
-      request_id: reqID,
+      client_request_id: reqID,
     };
     const qs = encodeURIComponent(JSON.stringify(params));
     const token = this.tokenManager.getToken();
