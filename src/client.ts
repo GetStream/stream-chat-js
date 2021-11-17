@@ -269,7 +269,7 @@ export class StreamChat<
 
     this.axiosInstance = axios.create(this.options);
 
-    this.setBaseURL(this.options.baseURL || 'https://chat-us-east-1.stream-io-api.com');
+    this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
 
     if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
@@ -1140,6 +1140,7 @@ export class StreamChat<
       this.consecutiveFailures = 0;
       return this.handleResponse(response);
     } catch (e) {
+      e.client_request_id = requestConfig.headers?.['x-client-request-id'];
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
       if (e.response) {
@@ -1624,7 +1625,6 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
-
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
       wsBaseURL: client.wsBaseURL,
       enableInsights: this.options.enableInsights,
@@ -2919,6 +2919,12 @@ export class StreamChat<
     },
   ) {
     const token = this._getToken();
+
+    if (!options.headers?.['x-client-request-id']) {
+      options.headers = {
+        'x-client-request-id': randomId(),
+      };
+    }
 
     return {
       params: {

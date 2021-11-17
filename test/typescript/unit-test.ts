@@ -107,7 +107,7 @@ const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
 const authType: string = client.getAuthType();
 
-voidReturn = client.setBaseURL('https://chat-us-east-1.stream-io-api.com/');
+voidReturn = client.setBaseURL('https://chat.stream-io-api.com/');
 const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
 const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
 voidPromise = client.disconnectUser();
@@ -149,11 +149,11 @@ userReturn = client.setGuestUser({ id: 'steven' });
 
 type X = { x: string };
 let clientRes: Promise<X>;
-clientRes = client.get<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
-clientRes = client.put<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
-clientRes = client.post<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
-clientRes = client.patch<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
-clientRes = client.delete<X>('https://chat-us-east-1.stream-io-api.com/', { id: 2 });
+clientRes = client.get<X>('https://chat.stream-io-api.com/', { id: 2 });
+clientRes = client.put<X>('https://chat.stream-io-api.com/', { id: 2 });
+clientRes = client.post<X>('https://chat.stream-io-api.com/', { id: 2 });
+clientRes = client.patch<X>('https://chat.stream-io-api.com/', { id: 2 });
+clientRes = client.delete<X>('https://chat.stream-io-api.com/', { id: 2 });
 
 const file: Promise<SendFileAPIResponse> = client.sendFile(
   'aa',
