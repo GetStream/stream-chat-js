@@ -199,15 +199,20 @@ function getRandomBytes(length: number): Uint8Array {
   return bytes;
 }
 
-export function convertErrorToJson(err: unknown) {
+export function convertErrorToJson(err: Error) {
   const jsonObj = {} as Record<string, unknown>;
 
   if (!err) return jsonObj;
 
-  Object.getOwnPropertyNames(err).forEach((key) => {
-    // @ts-ignore
-    jsonObj[key] = err[key];
-  });
+  try {
+    Object.getOwnPropertyNames(err).forEach((key) => {
+      jsonObj[key] = Object.getOwnPropertyDescriptor(err, key);
+    });
+  } catch (_) {
+    return {
+      error: 'failed to serialize the error',
+    };
+  }
 
   return jsonObj;
 }

@@ -118,7 +118,7 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
 } from './types';
-import { InsightTypes, InsightMetrics } from './insights';
+import { InsightMetrics, postInsights } from './insights';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -1619,10 +1619,15 @@ export class StreamChat<
       throw Error('clientID is not set');
     }
 
+    if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
+      this._sayHi();
+    }
+
     // The StableWSConnection handles all the reconnection logic.
 
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
       wsBaseURL: client.wsBaseURL,
+      enableInsights: this.options.enableInsights,
       clientID: client.clientID,
       userID: client.userID,
       tokenManager: client.tokenManager,
@@ -1635,24 +1640,27 @@ export class StreamChat<
       eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
       logger: this.logger,
       device: this.options.device,
-      postInsights: this.options.enableInsights ? this.postInsights : undefined,
       insightMetrics: this.insightMetrics,
     });
+  }
 
-    let warmUpPromise;
-    if (this.options.warmUp) {
-      warmUpPromise = this.doAxiosRequest('options', this.baseURL + '/connect');
-    }
-    const handshake = await this.wsConnection.connect();
-    try {
-      await warmUpPromise;
-    } catch (e) {
-      this.logger('error', 'Warmup request failed', {
-        error: e,
-      });
-    }
-
-    return handshake;
+  /**
+   * Check the connectivity with server for warmup purpose.
+   *
+   * @private
+   */
+  _sayHi() {
+    const client_request_id = randomId();
+    const opts = { headers: { 'x-client-request-id': client_request_id } };
+    this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
+      if (this.options.enableInsights) {
+        postInsights('http_hi_failed', {
+          api_key: this.key,
+          err: e,
+          client_request_id,
+        });
+      }
+    });
   }
 
   /**
@@ -3348,27 +3356,6 @@ export class StreamChat<
       { cids, ...options },
     );
   }
-
-  postInsights = async (insightType: InsightTypes, insights: Record<string, unknown>) => {
-    const maxAttempts = 3;
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        await this.axiosInstance.post(
-          `https://insights.stream-io-api.com/insights/${insightType}`,
-          insights,
-        );
-      } catch (e) {
-        this.logger('warn', `failed to send insights event ${insightType}`, {
-          tags: ['insights', 'connection'],
-          error: e,
-          insights,
-        });
-        await sleep((i + 1) * 3000);
-        continue;
-      }
-      break;
-    }
-  };
 
   /**
    * deleteUsers - Batch Delete Users

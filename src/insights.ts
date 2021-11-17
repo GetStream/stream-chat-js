@@ -1,8 +1,8 @@
+import axios from 'axios';
 import { StableWSConnection } from './connection';
-import { LiteralStringForUnion, UnknownType } from './types';
-import { randomId } from './utils';
+import { randomId, sleep } from './utils';
 
-export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure';
+export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure' | 'http_hi_failed';
 export class InsightMetrics {
   connectionStartTimestamp: number | null;
   wsConsecutiveFailures: number;
@@ -17,12 +17,34 @@ export class InsightMetrics {
   }
 }
 
-export function buildWsFatalInsight<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
->(
-  connection: StableWSConnection<ChannelType, CommandType, UserType>,
+/**
+ * postInsights is not supposed to be used by end users directly within chat application, and thus is kept isolated
+ * from all the client/connection code/logic.
+ *
+ * @param insightType
+ * @param insights
+ */
+export const postInsights = async (
+  insightType: InsightTypes,
+  insights: Record<string, unknown>,
+) => {
+  const maxAttempts = 3;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await axios.post(
+        `https://chat-insights.getstream.io/insights/${insightType}`,
+        insights,
+      );
+    } catch (e) {
+      await sleep((i + 1) * 3000);
+      continue;
+    }
+    break;
+  }
+};
+
+export function buildWsFatalInsight(
+  connection: StableWSConnection,
   event: Record<string, unknown>,
 ) {
   return {
@@ -31,11 +53,7 @@ export function buildWsFatalInsight<
   };
 }
 
-function buildWsBaseInsight<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
->(connection: StableWSConnection<ChannelType, CommandType, UserType>) {
+function buildWsBaseInsight(connection: StableWSConnection) {
   return {
     ready_state: connection.ws?.readyState,
     url: connection._buildUrl(connection.requestID),
@@ -58,10 +76,6 @@ function buildWsBaseInsight<
   };
 }
 
-export function buildWsSuccessAfterFailureInsight<
-  ChannelType extends UnknownType = UnknownType,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
->(connection: StableWSConnection<ChannelType, CommandType, UserType>) {
+export function buildWsSuccessAfterFailureInsight(connection: StableWSConnection) {
   return buildWsBaseInsight(connection);
 }

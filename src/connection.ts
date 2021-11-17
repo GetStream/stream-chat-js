@@ -5,7 +5,7 @@ import {
   buildWsFatalInsight,
   buildWsSuccessAfterFailureInsight,
   InsightMetrics,
-  InsightTypes,
+  postInsights,
 } from './insights';
 import {
   BaseDeviceFields,
@@ -48,7 +48,7 @@ type Constructor<
   userID: string;
   wsBaseURL: string;
   device?: BaseDeviceFields;
-  postInsights?: (eventType: InsightTypes, event: Record<string, unknown>) => void;
+  enableInsights?: boolean;
 };
 
 /**
@@ -110,7 +110,7 @@ export class StableWSConnection<
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
-  postInsights?: Constructor<ChannelType, CommandType, UserType>['postInsights'];
+  enableInsights?: boolean;
   insightMetrics: InsightMetrics;
   constructor({
     apiKey,
@@ -126,7 +126,7 @@ export class StableWSConnection<
     userID,
     wsBaseURL,
     device,
-    postInsights,
+    enableInsights,
     insightMetrics,
   }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
@@ -161,7 +161,7 @@ export class StableWSConnection<
     this.pingInterval = 25 * 1000;
     this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
     this._listenForConnectionChanges();
-    this.postInsights = postInsights;
+    this.enableInsights = enableInsights;
     this.insightMetrics = insightMetrics;
   }
 
@@ -388,10 +388,10 @@ export class StableWSConnection<
 
       if (response) {
         this.connectionID = response.connection_id;
-        if (this.insightMetrics.wsConsecutiveFailures > 0 && this.postInsights) {
-          this.postInsights(
+        if (this.insightMetrics.wsConsecutiveFailures > 0 && this.enableInsights) {
+          postInsights(
             'ws_success_after_failure',
-            buildWsSuccessAfterFailureInsight(this),
+            buildWsSuccessAfterFailureInsight((this as unknown) as StableWSConnection),
           );
           this.insightMetrics.wsConsecutiveFailures = 0;
         }
@@ -400,13 +400,13 @@ export class StableWSConnection<
     } catch (err) {
       this.isConnecting = false;
 
-      if (this.postInsights) {
+      if (this.enableInsights) {
         this.insightMetrics.wsConsecutiveFailures++;
         this.insightMetrics.wsTotalFailures++;
 
         // @ts-ignore
         const insights = buildWsFatalInsight(this, convertErrorToJson(err));
-        this.postInsights?.('ws_fatal', insights);
+        postInsights?.('ws_fatal', insights);
       }
       throw err;
     }
