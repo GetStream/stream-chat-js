@@ -608,7 +608,7 @@ export class Channel<
 
   /**
    * truncate - Removes all messages from the channel
-   *
+   * @param {boolean} [options.hard_delete] Defines if messages of the channel must be hard deleted
    * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
   async truncate(options: { hard_delete?: boolean } = {}) {
