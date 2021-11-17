@@ -2924,6 +2924,7 @@ export class StreamChat<
 
     if (!options.headers?.['x-client-request-id']) {
       options.headers = {
+        ...options.headers,
         'x-client-request-id': randomId(),
       };
     }
