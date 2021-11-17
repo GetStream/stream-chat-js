@@ -1642,6 +1642,8 @@ export class StreamChat<
       device: this.options.device,
       insightMetrics: this.insightMetrics,
     });
+
+    return await this.wsConnection.connect();
   }
 
   /**
