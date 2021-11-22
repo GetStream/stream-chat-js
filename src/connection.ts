@@ -17,6 +17,8 @@ import {
   UnknownType,
   UserResponse,
 } from './types';
+import { StreamChat } from './client';
+import { WSConnectionFallback } from './connection_fallback';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
@@ -34,6 +36,7 @@ type Constructor<
 > = {
   apiKey: string;
   authType: 'anonymous' | 'jwt';
+  client: StreamChat;
   clientID: string;
   eventCallback: (event: ConnectionChangeEvent) => void;
   insightMetrics: InsightMetrics;
@@ -49,6 +52,7 @@ type Constructor<
   wsBaseURL: string;
   device?: BaseDeviceFields;
   enableInsights?: boolean;
+  enableWSFallback?: boolean;
 };
 
 /**
@@ -112,9 +116,12 @@ export class StableWSConnection<
   wsID: number;
   enableInsights?: boolean;
   insightMetrics: InsightMetrics;
+  fallback?: WSConnectionFallback;
+
   constructor({
     apiKey,
     authType,
+    client,
     clientID,
     eventCallback,
     logger,
@@ -127,6 +134,7 @@ export class StableWSConnection<
     wsBaseURL,
     device,
     enableInsights,
+    enableWSFallback,
     insightMetrics,
   }: Constructor<ChannelType, CommandType, UserType>) {
     this.wsBaseURL = wsBaseURL;
@@ -163,6 +171,10 @@ export class StableWSConnection<
     this._listenForConnectionChanges();
     this.enableInsights = enableInsights;
     this.insightMetrics = insightMetrics;
+
+    if (enableWSFallback) {
+      this.fallback = new WSConnectionFallback({ client });
+    }
   }
 
   /**
@@ -272,7 +284,7 @@ export class StableWSConnection<
       device: this.device,
       client_request_id: this.requestID,
     };
-    return encodeURIComponent(JSON.stringify(params));
+    return JSON.stringify(params);
   };
 
   /**
@@ -281,7 +293,7 @@ export class StableWSConnection<
    * @returns url string
    */
   _buildUrl = () => {
-    const qs = this._buildUrlPayload();
+    const qs = encodeURIComponent(this._buildUrlPayload());
     const token = this.tokenManager.getToken();
     return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
   };
@@ -368,6 +380,10 @@ export class StableWSConnection<
       isClosedPromise = Promise.resolve();
     }
 
+    if (this.fallback) {
+      this.fallback.disconnect();
+    }
+
     delete this.ws;
 
     return isClosedPromise;
@@ -385,13 +401,19 @@ export class StableWSConnection<
     this.insightMetrics.connectionStartTimestamp = new Date().getTime();
     try {
       await this.tokenManager.tokenReady();
-      this._setupConnectionPromise();
-      const wsURL = this._buildUrl();
-      this.ws = new WebSocket(wsURL);
-      this.ws.onopen = this.onopen.bind(this, this.wsID);
-      this.ws.onclose = this.onclose.bind(this, this.wsID);
-      this.ws.onerror = this.onerror.bind(this, this.wsID);
-      this.ws.onmessage = this.onmessage.bind(this, this.wsID);
+      if (this.fallback) {
+        // TODO: temporary for testing
+        this.connectionOpen = this.fallback.connect(this._buildUrlPayload());
+      } else {
+        this._setupConnectionPromise();
+        const wsURL = this._buildUrl();
+        this.ws = new WebSocket(wsURL);
+        this.ws.onopen = this.onopen.bind(this, this.wsID);
+        this.ws.onclose = this.onclose.bind(this, this.wsID);
+        this.ws.onerror = this.onerror.bind(this, this.wsID);
+        this.ws.onmessage = this.onmessage.bind(this, this.wsID);
+      }
+
       const response = await this.connectionOpen;
       this.isConnecting = false;
 

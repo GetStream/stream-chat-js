@@ -1627,8 +1627,11 @@ export class StreamChat<
 
     // The StableWSConnection handles all the reconnection logic.
     this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
+      // @ts-expect-error
+      client: this, // TODO: fix generics after refactor
       wsBaseURL: client.wsBaseURL,
       enableInsights: this.options.enableInsights,
+      enableWSFallback: this.options.enableWSFallback,
       clientID: client.clientID,
       userID: client.userID,
       tokenManager: client.tokenManager,
