@@ -1234,7 +1234,7 @@ export class StreamChat<
       UserType
     >,
   ) => {
-    event.received_at = new Date();
+    if (!event.received_at) event.received_at = new Date();
 
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event);
