@@ -1234,6 +1234,8 @@ export class StreamChat<
       UserType
     >,
   ) => {
+    event.received_at = new Date();
+
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event);
 
@@ -1265,7 +1267,6 @@ export class StreamChat<
       ReactionType,
       UserType
     >;
-    event.received_at = new Date();
     this.dispatchEvent(event);
   };
 
