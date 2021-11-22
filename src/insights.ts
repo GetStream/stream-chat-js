@@ -56,7 +56,7 @@ export function buildWsFatalInsight(
 function buildWsBaseInsight(connection: StableWSConnection) {
   return {
     ready_state: connection.ws?.readyState,
-    url: connection._buildUrl(connection.requestID),
+    url: connection._buildUrl(),
     api_key: connection.apiKey,
     start_ts: connection.insightMetrics.connectionStartTimestamp,
     end_ts: new Date().getTime(),

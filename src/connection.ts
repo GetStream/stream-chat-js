@@ -259,20 +259,29 @@ export class StableWSConnection<
   }
 
   /**
-   * Builds and returns the url for websocket.
-   * @param reqID Unique identifier generated on client side, to help tracking apis on backend.
-   * @returns url string
+   * encode ws url payload
+   * @private
+   * @returns json string
    */
-  _buildUrl = (reqID?: string) => {
+  _buildUrlPayload = () => {
     const params = {
       user_id: this.user.id,
       user_details: this.user,
       user_token: this.tokenManager.getToken(),
       server_determines_connection_id: true,
       device: this.device,
-      client_request_id: reqID,
+      client_request_id: this.requestID,
     };
-    const qs = encodeURIComponent(JSON.stringify(params));
+    return encodeURIComponent(JSON.stringify(params));
+  };
+
+  /**
+   * Builds and returns the url for websocket.
+   * @private
+   * @returns url string
+   */
+  _buildUrl = () => {
+    const qs = this._buildUrlPayload();
     const token = this.tokenManager.getToken();
     return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
   };
@@ -377,7 +386,7 @@ export class StableWSConnection<
     try {
       await this.tokenManager.tokenReady();
       this._setupConnectionPromise();
-      const wsURL = this._buildUrl(this.requestID);
+      const wsURL = this._buildUrl();
       this.ws = new WebSocket(wsURL);
       this.ws.onopen = this.onopen.bind(this, this.wsID);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
