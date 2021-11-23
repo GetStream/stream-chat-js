@@ -699,9 +699,20 @@ export type SendMessageAPIResponse<
 export type TruncateChannelAPIResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  message?: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
 };
 
 export type UpdateChannelAPIResponse<
