@@ -35,16 +35,16 @@ import {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
+  SearchAPIResponse,
+  SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
   UnknownType,
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
-  SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
 
@@ -608,13 +608,18 @@ export class Channel<
 
   /**
    * truncate - Removes all messages from the channel
-   * @param {boolean} [options.hard_delete] Defines if messages of the channel must be hard deleted
+   * @param {{ hard_delete?: boolean, skip_push?: boolean, truncated_at?: Date}} [options] Defines truncation options
+   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional system message to insert right after truncation
    * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
-  async truncate(options: { hard_delete?: boolean } = {}) {
+  async truncate(
+    options: { hard_delete?: boolean; skip_push?: boolean; truncated_at?: Date } = {},
+    message?: Message<AttachmentType, MessageType, UserType>,
+  ) {
+    const payload = { message, ...options };
     return await this.getClient().post<
       TruncateChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(this._channelURL() + '/truncate', options);
+    >(this._channelURL() + '/truncate', payload);
   }
 
   /**
