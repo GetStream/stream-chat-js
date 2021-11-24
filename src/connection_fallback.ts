@@ -2,39 +2,45 @@ import axios, { AxiosRequestConfig, Canceler } from 'axios';
 import { StreamChat } from './client';
 import { ConnectionOpen, Event, UnknownType } from './types';
 
+enum ConnectionState {
+  Closed = 'CLOSED',
+  Connected = 'CONNECTED',
+  Connecting = 'CONNECTING',
+  Disconnectted = 'DISCONNECTTED',
+  Init = 'INIT',
+}
+
 export class WSConnectionFallback {
   client: StreamChat;
-  connecting: boolean;
-  connected: boolean;
+  state: ConnectionState;
   cancel?: Canceler;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
-    this.connecting = false;
-    this.connected = false;
+    this.state = ConnectionState.Init;
   }
 
   _newCancelToken = () => new axios.CancelToken((cancel) => (this.cancel = cancel));
 
-  _req<T>(params: UnknownType, options: AxiosRequestConfig) {
+  _req<T>(params: UnknownType, config: AxiosRequestConfig) {
     return this.client.doAxiosRequest<T>(
       'get',
       this.client.baseURL + '/longpoll',
       undefined,
       {
-        config: options,
         cancelToken: this._newCancelToken(),
+        config,
         params,
       },
     );
   }
 
-  _poll = async (json: string, connection_id: string) => {
-    while (this.connected) {
+  _poll = async (connection_id: string) => {
+    while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{ events: Event[] }>(
-          { json, connection_id }, // TODO: remove json
-          { timeout: 30 * 1000 }, // 30s
+          { connection_id },
+          { timeout: 30000 }, // 30s
         );
 
         if (data?.events?.length) {
@@ -53,30 +59,33 @@ export class WSConnectionFallback {
     }
   };
 
-  connect = async (json: string) => {
-    if (this.connecting) {
-      throw new Error('connection already in progress');
+  connect = async (jsonPayload: string) => {
+    if (this.state === ConnectionState.Connecting) {
+      throw new Error('connecting already in progress');
+    }
+    if (this.state === ConnectionState.Connected) {
+      throw new Error('already connected and polling');
     }
 
-    this.connecting = true;
+    this.state = ConnectionState.Connecting;
 
     try {
       const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
-        { json },
-        { timeout: 10 * 1000 }, // 10s
+        { json: jsonPayload },
+        { timeout: 10000 }, // 10s
       );
-      this.connecting = false;
-      this.connected = true;
-      this._poll(json, event.connection_id).then();
+
+      this.state = ConnectionState.Connected;
+      this._poll(event.connection_id).then();
       return event;
     } catch (err) {
-      this.connecting = false;
+      this.state = ConnectionState.Closed;
       return err;
     }
   };
 
   disconnect = () => {
-    this.connected = false;
+    this.state = ConnectionState.Disconnectted;
     if (this.cancel) {
       this.cancel('client.disconnect() is called');
     }
