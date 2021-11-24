@@ -205,6 +205,7 @@ export type ChannelResponse<
   name?: string;
   own_capabilities?: string[];
   team?: string;
+  truncated_at?: string;
   updated_at?: string;
 };
 
