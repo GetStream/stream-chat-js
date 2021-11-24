@@ -41,6 +41,7 @@ import {
   SearchPayload,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
+  TruncateOptions,
   UnknownType,
   UpdateChannelAPIResponse,
   UserFilters,
@@ -608,17 +609,19 @@ export class Channel<
 
   /**
    * truncate - Removes all messages from the channel
-   * @param {{ hard_delete?: boolean, skip_push?: boolean, truncated_at?: Date}} [options] Defines truncation options
-   * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional system message to insert right after truncation
-   * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
+   * @param {TruncateOptions<AttachmentType, MessageType, UserType>} [options] Defines truncation options
+   * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType, MessageType, ReactionType>>} The server response
    */
-  async truncate(
-    options: { hard_delete?: boolean; skip_push?: boolean; truncated_at?: Date } = {},
-    message?: Message<AttachmentType, MessageType, UserType>,
-  ) {
-    const payload = { message, ...options };
+  async truncate(options?: TruncateOptions<AttachmentType, MessageType, UserType>) {
+    const payload = { ...options };
     return await this.getClient().post<
-      TruncateChannelAPIResponse<ChannelType, CommandType, UserType>
+      TruncateChannelAPIResponse<
+        ChannelType,
+        CommandType,
+        UserType,
+        MessageType,
+        ReactionType
+      >
     >(this._channelURL() + '/truncate', payload);
   }
 

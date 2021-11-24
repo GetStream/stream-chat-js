@@ -2250,3 +2250,10 @@ export type TaskStatus = {
   };
   result?: UnknownType;
 };
+
+export type TruncateOptions<AttachmentType, MessageType, UserType> = {
+  hard_delete?: boolean;
+  message?: Message<AttachmentType, MessageType, UserType>;
+  skip_push?: boolean;
+  truncated_at?: Date;
+};
