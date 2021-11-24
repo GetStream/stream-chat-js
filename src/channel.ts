@@ -612,8 +612,7 @@ export class Channel<
    * @param {TruncateOptions<AttachmentType, MessageType, UserType>} [options] Defines truncation options
    * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType, MessageType, ReactionType>>} The server response
    */
-  async truncate(options?: TruncateOptions<AttachmentType, MessageType, UserType>) {
-    const payload = { ...options };
+  async truncate(options: TruncateOptions<AttachmentType, MessageType, UserType> = {}) {
     return await this.getClient().post<
       TruncateChannelAPIResponse<
         ChannelType,
@@ -622,7 +621,7 @@ export class Channel<
         MessageType,
         ReactionType
       >
-    >(this._channelURL() + '/truncate', payload);
+    >(this._channelURL() + '/truncate', options);
   }
 
   /**
