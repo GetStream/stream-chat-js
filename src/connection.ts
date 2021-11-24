@@ -401,18 +401,14 @@ export class StableWSConnection<
     this.insightMetrics.connectionStartTimestamp = new Date().getTime();
     try {
       await this.tokenManager.tokenReady();
-      if (this.fallback) {
-        // TODO: temporary for testing
-        this.connectionOpen = this.fallback.connect(this._buildUrlPayload());
-      } else {
-        this._setupConnectionPromise();
-        const wsURL = this._buildUrl();
-        this.ws = new WebSocket(wsURL);
-        this.ws.onopen = this.onopen.bind(this, this.wsID);
-        this.ws.onclose = this.onclose.bind(this, this.wsID);
-        this.ws.onerror = this.onerror.bind(this, this.wsID);
-        this.ws.onmessage = this.onmessage.bind(this, this.wsID);
-      }
+
+      this._setupConnectionPromise();
+      const wsURL = this._buildUrl();
+      this.ws = new WebSocket(wsURL);
+      this.ws.onopen = this.onopen.bind(this, this.wsID);
+      this.ws.onclose = this.onclose.bind(this, this.wsID);
+      this.ws.onerror = this.onerror.bind(this, this.wsID);
+      this.ws.onmessage = this.onmessage.bind(this, this.wsID);
 
       const response = await this.connectionOpen;
       this.isConnecting = false;
