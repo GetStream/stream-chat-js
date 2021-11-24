@@ -668,15 +668,18 @@ export class Channel<
    *
    * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {{ hide_history?: boolean }} [options] Option object, {hide_history: true} to hide channel's history for new members
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
     members: string[] | { user_id: string; channel_role?: Role }[],
     message?: Message<AttachmentType, MessageType, UserType>,
+    options?: { hide_history?: boolean },
   ) {
     return await this._update({
       add_members: members,
       message,
+      ...options,
     });
   }
 
