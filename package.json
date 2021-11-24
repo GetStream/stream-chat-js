@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "4.4.2",
+  "version": "4.4.3",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -130,7 +130,7 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "./dotgit/hooks/pre-commit-format.sh && dotgit/hooks/pre-commit-reject-binaries.py"
+      "pre-commit": "yarn run lint"
     }
   },
   "engines": {
