@@ -574,7 +574,7 @@ export class Channel<
   async inviteMembers(
     members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options?: ChannelUpdateOptions = {},
   ) {
     return await this._update({
       invites: members,
