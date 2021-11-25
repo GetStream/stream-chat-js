@@ -1643,11 +1643,9 @@ export type HuaweiConfig = {
 
 export type LiteralStringForUnion = string & {};
 
-export type Logger = (
-  logLevel: 'info' | 'error' | 'warn',
-  message: string,
-  extraData?: Record<string, unknown>,
-) => void;
+export type LogLevel = 'info' | 'error' | 'warn';
+
+export type Logger = (logLevel: LogLevel, message: string, extraData?: Record<string, unknown>) => void;
 
 export type Message<AttachmentType = UR, MessageType = UR, UserType = UR> = Partial<
   MessageBase<AttachmentType, MessageType, UserType>
