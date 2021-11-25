@@ -218,6 +218,11 @@ export type ChannelAPIResponse<
   watchers?: UserResponse<UserType>[];
 };
 
+export type ChannelUpdateOptions = {
+  hide_history?: boolean;
+  skip_push?: boolean;
+};
+
 export type ChannelMemberAPIResponse<UserType = UR> = APIResponse & {
   members: ChannelMemberResponse<UserType>[];
 };
