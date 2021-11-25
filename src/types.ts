@@ -31,7 +31,7 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<
 
 /* Unknown Record */
 export type UR = Record<string, unknown>;
-export type UR = UR; //alias to avoid breaking change
+export type UnknownType = UR; //alias to avoid breaking change
 
 export type Unpacked<T> = T extends (infer U)[]
   ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
