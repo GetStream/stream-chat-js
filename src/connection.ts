@@ -9,7 +9,7 @@ import {
   ConnectionOpen,
   LiteralStringForUnion,
   Logger,
-  UnknownType,
+  UR,
   UserResponse,
 } from './types';
 
@@ -21,9 +21,9 @@ const isErrorEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.Err
   (res as WebSocket.ErrorEvent).error !== undefined;
 
 type Constructor<
-  ChannelType extends UnknownType = UnknownType,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UR = UR
 > = {
   apiKey: string;
   authType: 'anonymous' | 'jwt';
@@ -60,9 +60,9 @@ type Constructor<
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
 export class StableWSConnection<
-  ChannelType extends UnknownType = UnknownType,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UR = UR
 > {
   apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
   authType: Constructor<ChannelType, CommandType, UserType>['authType'];

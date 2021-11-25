@@ -7,7 +7,7 @@ import {
   LiteralStringForUnion,
   MessageResponse,
   ReactionResponse,
-  UnknownType,
+  UR,
   UserResponse,
 } from './types';
 
@@ -15,13 +15,13 @@ import {
  * ChannelState - A container class for the channel state.
  */
 export class ChannelState<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
+  AttachmentType extends UR = UR,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR,
+  UserType extends UR = UR
 > {
   _channel: Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   watcher_count: number;

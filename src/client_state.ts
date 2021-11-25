@@ -1,9 +1,9 @@
-import { UnknownType, UserResponse } from './types';
+import { UR, UserResponse } from './types';
 
 /**
  * ClientState - A container class for the client state.
  */
-export class ClientState<UserType = UnknownType> {
+export class ClientState<UserType = UR> {
   users: {
     [key: string]: UserResponse<UserType>;
   };

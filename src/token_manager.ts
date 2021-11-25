@@ -1,14 +1,14 @@
 import { Secret } from 'jsonwebtoken';
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
-import { TokenOrProvider, UnknownType, UserResponse } from './types';
+import { TokenOrProvider, UR, UserResponse } from './types';
 
 /**
  * TokenManager
  *
  * Handles all the operations around user token.
  */
-export class TokenManager<UserType extends UnknownType = UnknownType> {
+export class TokenManager<UserType extends UR = UR> {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
   secret?: Secret;

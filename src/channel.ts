@@ -42,7 +42,7 @@ import {
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
   TruncateOptions,
-  UnknownType,
+  UR,
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
@@ -53,13 +53,13 @@ import { Role } from './permissions';
  * Channel - The Channel class manages it's own state.
  */
 export class Channel<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
+  AttachmentType extends UR = UR,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR,
+  UserType extends UR = UR
 > {
   _client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   type: string;

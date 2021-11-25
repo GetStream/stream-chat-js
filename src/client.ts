@@ -95,7 +95,7 @@ import {
   TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
-  UnknownType,
+  UR,
   UpdateChannelOptions,
   UpdateChannelResponse,
   UpdateCommandOptions,
@@ -125,13 +125,13 @@ function isString(x: unknown): x is string {
 }
 
 export class StreamChat<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
+  AttachmentType extends UR = UR,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR,
+  UserType extends UR = UR
 > {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
@@ -341,38 +341,38 @@ export class StreamChat<
    * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
    */
   public static getInstance<
-    AttachmentType extends UnknownType = UnknownType,
-    ChannelType extends UnknownType = UnknownType,
+    AttachmentType extends UR = UR,
+    ChannelType extends UR = UR,
     CommandType extends string = LiteralStringForUnion,
-    EventType extends UnknownType = UnknownType,
-    MessageType extends UnknownType = UnknownType,
-    ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    EventType extends UR = UR,
+    MessageType extends UR = UR,
+    ReactionType extends UR = UR,
+    UserType extends UR = UR
   >(
     key: string,
     options?: StreamChatOptions,
   ): StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   public static getInstance<
-    AttachmentType extends UnknownType = UnknownType,
-    ChannelType extends UnknownType = UnknownType,
+    AttachmentType extends UR = UR,
+    ChannelType extends UR = UR,
     CommandType extends string = LiteralStringForUnion,
-    EventType extends UnknownType = UnknownType,
-    MessageType extends UnknownType = UnknownType,
-    ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    EventType extends UR = UR,
+    MessageType extends UR = UR,
+    ReactionType extends UR = UR,
+    UserType extends UR = UR
   >(
     key: string,
     secret?: string,
     options?: StreamChatOptions,
   ): StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   public static getInstance<
-    AttachmentType extends UnknownType = UnknownType,
-    ChannelType extends UnknownType = UnknownType,
+    AttachmentType extends UR = UR,
+    ChannelType extends UR = UR,
     CommandType extends string = LiteralStringForUnion,
-    EventType extends UnknownType = UnknownType,
-    MessageType extends UnknownType = UnknownType,
-    ReactionType extends UnknownType = UnknownType,
-    UserType extends UnknownType = UnknownType
+    EventType extends UR = UR,
+    MessageType extends UR = UR,
+    ReactionType extends UR = UR,
+    UserType extends UR = UR
   >(
     key: string,
     secretOrOptions?: StreamChatOptions | string,
