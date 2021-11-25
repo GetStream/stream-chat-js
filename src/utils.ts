@@ -1,12 +1,5 @@
 import FormData from 'form-data';
-import {
-  AscDesc,
-  LiteralStringForUnion,
-  OwnUserBase,
-  OwnUserResponse,
-  UnknownType,
-  UserResponse,
-} from './types';
+import { AscDesc, LiteralStringForUnion, OwnUserBase, OwnUserResponse, UR, UserResponse } from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -42,8 +35,7 @@ function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
   return (
     obj !== null &&
     typeof obj === 'object' &&
-    ((obj as NodeJS.ReadStream).readable ||
-      typeof (obj as NodeJS.ReadStream)._read === 'function')
+    ((obj as NodeJS.ReadStream).readable || typeof (obj as NodeJS.ReadStream)._read === 'function')
   );
 }
 
@@ -63,16 +55,13 @@ function isFileWebAPI(uri: unknown): uri is File {
 }
 
 export function isOwnUser<
-  ChannelType extends UnknownType = UnknownType,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UR = UR
 >(
   user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
 ): user is OwnUserResponse<ChannelType, CommandType, UserType> {
-  return (
-    (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !==
-    undefined
-  );
+  return (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !== undefined;
 }
 
 export function isOwnUserBaseProperty(property: string) {
@@ -113,9 +102,7 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
-) {
+export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(sort: T | T[]) {
   const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {

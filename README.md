@@ -75,15 +75,9 @@ const client = StreamChat.getInstance<
  * Unused generics default to Record<string, unknown>
  * with the exception of Command which defaults to string & {}
  */
-const client = StreamChat.getInstance<
-  {},
-  ChatChannel,
-  {},
-  {},
-  UserMessage | AdminMessage,
-  {},
-  ChatUser1 | ChatUser2
->('YOUR_API_KEY');
+const client = StreamChat.getInstance<{}, ChatChannel, {}, {}, UserMessage | AdminMessage, {}, ChatUser1 | ChatUser2>(
+  'YOUR_API_KEY',
+);
 ```
 
 Query operations will return results that utilize the custom types added via generics. In addition the query filters are type checked and provide intellisense using both the key and type of the parameter to ensure accurate use.
@@ -139,10 +133,7 @@ Custom types are carried into all creation functions as well.
 ```typescript
 // Valid
 client.connectUser({ id: 'testId', nickname: 'testUser', age: 3 }, 'TestToken');
-client.connectUser(
-  { id: 'testId', nickname: 'testUser', avatar: 'testAvatar' },
-  'TestToken',
-);
+client.connectUser({ id: 'testId', nickname: 'testUser', avatar: 'testAvatar' }, 'TestToken');
 
 // Invalid
 client.connectUser({ id: 'testId' }, 'TestToken'); // Type ChatUser1 | ChatUser2 requires nickname for both types

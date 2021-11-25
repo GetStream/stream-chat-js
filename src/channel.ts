@@ -35,16 +35,17 @@ import {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
+  SearchAPIResponse,
+  SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  SearchAPIResponse,
   SendMessageAPIResponse,
   TruncateChannelAPIResponse,
-  UnknownType,
+  TruncateOptions,
+  UR,
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
-  SearchMessageSortBase,
 } from './types';
 import { Role } from './permissions';
 
@@ -52,54 +53,27 @@ import { Role } from './permissions';
  * Channel - The Channel class manages it's own state.
  */
 export class Channel<
-  AttachmentType extends UnknownType = UnknownType,
-  ChannelType extends UnknownType = UnknownType,
+  AttachmentType extends UR = UR,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  EventType extends UnknownType = UnknownType,
-  MessageType extends UnknownType = UnknownType,
-  ReactionType extends UnknownType = UnknownType,
-  UserType extends UnknownType = UnknownType
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR,
+  UserType extends UR = UR
 > {
-  _client: StreamChat<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  _client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   type: string;
   id: string | undefined;
-  data:
-    | ChannelData<ChannelType>
-    | ChannelResponse<ChannelType, CommandType, UserType>
-    | undefined;
+  data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType> | undefined;
   _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
   cid: string;
   listeners: {
     [key: string]: (
       | string
-      | EventHandler<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
+      | EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
     )[];
   };
-  state: ChannelState<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  state: ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   initialized: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
@@ -117,15 +91,7 @@ export class Channel<
    * @return {Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>} Returns a new uninitialized channel
    */
   constructor(
-    client: StreamChat<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
     type: string,
     id: string | undefined,
     data: ChannelData<ChannelType>,
@@ -170,15 +136,7 @@ export class Channel<
    *
    * @return {StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>}
    */
-  getClient(): StreamChat<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  > {
+  getClient(): StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> {
     if (this.disconnected === true) {
       throw Error(`You can't use a channel after client.disconnect() was called`);
     }
@@ -209,14 +167,7 @@ export class Channel<
     options?: { skip_enrich_url?: boolean; skip_push?: boolean },
   ) {
     const sendMessageResponse = await this.getClient().post<
-      SendMessageAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this._channelURL() + '/message', {
       message,
       ...options,
@@ -234,13 +185,7 @@ export class Channel<
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    return this.getClient().sendFile(
-      `${this._channelURL()}/file`,
-      uri,
-      name,
-      contentType,
-      user,
-    );
+    return this.getClient().sendFile(`${this._channelURL()}/file`, uri, name, contentType, user);
   }
 
   sendImage(
@@ -249,13 +194,7 @@ export class Channel<
     contentType?: string,
     user?: UserResponse<UserType>,
   ) {
-    return this.getClient().sendFile(
-      `${this._channelURL()}/image`,
-      uri,
-      name,
-      contentType,
-      user,
-    );
+    return this.getClient().sendFile(`${this._channelURL()}/image`, uri, name, contentType, user);
   }
 
   deleteFile(url: string) {
@@ -274,27 +213,11 @@ export class Channel<
    * @return {Promise<EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>>} The Server Response
    */
   async sendEvent(
-    event: Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ) {
     this._checkInitialized();
     return await this.getClient().post<
-      EventAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
     >(this._channelURL() + '/event', {
       event,
     });
@@ -309,16 +232,7 @@ export class Channel<
    * @return {Promise<SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} search messages response
    */
   async search(
-    query:
-      | MessageFilters<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
-      | string,
+    query: MessageFilters<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> | string,
     options: SearchOptions<MessageType> & {
       client_id?: string;
       connection_id?: string;
@@ -337,23 +251,10 @@ export class Channel<
       throw Error(`Cannot specify offset with sort or next parameters`);
     }
     // Return a list of channels
-    const payload: SearchPayload<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    > = {
-      filter_conditions: { cid: this.cid } as ChannelFilters<
-        ChannelType,
-        CommandType,
-        UserType
-      >,
+    const payload: SearchPayload<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {
+      filter_conditions: { cid: this.cid } as ChannelFilters<ChannelType, CommandType, UserType>,
       ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort)
-        : undefined,
+      sort: options.sort ? normalizeQuerySort<SearchMessageSortBase<MessageType>>(options.sort) : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -366,14 +267,7 @@ export class Channel<
     await this.getClient().wsPromise;
 
     return await this.getClient().get<
-      SearchAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      SearchAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this.getClient().baseURL + '/search', {
       payload,
     });
@@ -403,19 +297,16 @@ export class Channel<
       members = this.data.members;
     }
     // Return a list of members
-    return await this.getClient().get<ChannelMemberAPIResponse<UserType>>(
-      this.getClient().baseURL + '/members',
-      {
-        payload: {
-          type,
-          id,
-          members,
-          sort: normalizeQuerySort(sort),
-          filter_conditions: filterConditions,
-          ...options,
-        },
+    return await this.getClient().get<ChannelMemberAPIResponse<UserType>>(this.getClient().baseURL + '/members', {
+      payload: {
+        type,
+        id,
+        members,
+        sort: normalizeQuerySort(sort),
+        filter_conditions: filterConditions,
+        ...options,
       },
-    );
+    });
   }
 
   /**
@@ -439,14 +330,7 @@ export class Channel<
       throw Error(`Reaction object is missing`);
     }
     return await this.getClient().post<
-      ReactionAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this.getClient().baseURL + `/messages/${messageID}/reaction`, {
       reaction,
       ...options,
@@ -465,36 +349,19 @@ export class Channel<
   deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
-      throw Error(
-        'Deleting a reaction requires specifying both the message and reaction type',
-      );
+      throw Error('Deleting a reaction requires specifying both the message and reaction type');
     }
 
-    const url =
-      this.getClient().baseURL + `/messages/${messageID}/reaction/${reactionType}`;
+    const url = this.getClient().baseURL + `/messages/${messageID}/reaction/${reactionType}`;
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<
-        ReactionAPIResponse<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
+        ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
       >(url, { user_id });
     }
 
     return this.getClient().delete<
-      ReactionAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      ReactionAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(url, {});
   }
 
@@ -507,9 +374,7 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
-    channelData:
-      | Partial<ChannelData<ChannelType>>
-      | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
+    channelData: Partial<ChannelData<ChannelType>> | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
     options?: { skip_push?: boolean },
   ) {
@@ -545,9 +410,10 @@ export class Channel<
    * @return {Promise<PartialUpdateChannelAPIResponse<ChannelType,CommandType, UserType>>}
    */
   async updatePartial(update: PartialUpdateChannel<ChannelType>) {
-    return await this.getClient().patch<
-      PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(this._channelURL(), update);
+    return await this.getClient().patch<PartialUpdateChannelAPIResponse<ChannelType, CommandType, UserType>>(
+      this._channelURL(),
+      update,
+    );
   }
 
   /**
@@ -558,14 +424,7 @@ export class Channel<
    */
   async enableSlowMode(coolDownInterval: number) {
     const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this._channelURL(), {
       cooldown: coolDownInterval,
     });
@@ -580,14 +439,7 @@ export class Channel<
    */
   async disableSlowMode() {
     const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this._channelURL(), {
       cooldown: 0,
     });
@@ -601,19 +453,20 @@ export class Channel<
    * @return {Promise<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
   async delete() {
-    return await this.getClient().delete<
-      DeleteChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(this._channelURL(), {});
+    return await this.getClient().delete<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>(
+      this._channelURL(),
+      {},
+    );
   }
 
   /**
    * truncate - Removes all messages from the channel
-   * @param {boolean} [options.hard_delete] Defines if messages of the channel must be hard deleted
-   * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
+   * @param {TruncateOptions<AttachmentType, MessageType, UserType>} [options] Defines truncation options
+   * @return {Promise<TruncateChannelAPIResponse<ChannelType, CommandType, UserType, MessageType, ReactionType>>} The server response
    */
-  async truncate(options: { hard_delete?: boolean } = {}) {
+  async truncate(options: TruncateOptions<AttachmentType, MessageType, UserType> = {}) {
     return await this.getClient().post<
-      TruncateChannelAPIResponse<ChannelType, CommandType, UserType>
+      TruncateChannelAPIResponse<ChannelType, CommandType, UserType, MessageType, ReactionType>
     >(this._channelURL() + '/truncate', options);
   }
 
@@ -625,14 +478,7 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async acceptInvite(
-    options: InviteOptions<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    > = {},
+    options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
     return await this._update({
       accept_invite: true,
@@ -648,14 +494,7 @@ export class Channel<
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async rejectInvite(
-    options: InviteOptions<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    > = {},
+    options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
     return await this._update({
       reject_invite: true,
@@ -690,10 +529,7 @@ export class Channel<
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async addModerators(
-    members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
-  ) {
+  async addModerators(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
     return await this._update({
       add_moderators: members,
       message,
@@ -741,10 +577,7 @@ export class Channel<
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async removeMembers(
-    members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
-  ) {
+  async removeMembers(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
     return await this._update({
       remove_members: members,
       message,
@@ -758,10 +591,7 @@ export class Channel<
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async demoteModerators(
-    members: string[],
-    message?: Message<AttachmentType, MessageType, UserType>,
-  ) {
+  async demoteModerators(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
     return await this._update({
       demote_moderators: members,
       message,
@@ -776,14 +606,7 @@ export class Channel<
    */
   async _update(payload: Object) {
     const data = await this.getClient().post<
-      UpdateChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this._channelURL(), payload);
     this.data = data.channel;
     return data;
@@ -802,12 +625,13 @@ export class Channel<
    *
    */
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<
-      MuteChannelAPIResponse<ChannelType, CommandType, UserType>
-    >(this.getClient().baseURL + '/moderation/mute/channel', {
-      channel_cid: this.cid,
-      ...opts,
-    });
+    return await this.getClient().post<MuteChannelAPIResponse<ChannelType, CommandType, UserType>>(
+      this.getClient().baseURL + '/moderation/mute/channel',
+      {
+        channel_cid: this.cid,
+        ...opts,
+      },
+    );
   }
 
   /**
@@ -819,13 +643,10 @@ export class Channel<
    * await channel.unmute({user_id: userId});
    */
   async unmute(opts: { user_id?: string } = {}) {
-    return await this.getClient().post<APIResponse>(
-      this.getClient().baseURL + '/moderation/unmute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
-    );
+    return await this.getClient().post<APIResponse>(this.getClient().baseURL + '/moderation/unmute/channel', {
+      channel_cid: this.cid,
+      ...opts,
+    });
   }
 
   /**
@@ -847,14 +668,7 @@ export class Channel<
       throw Error(`Message id is missing`);
     }
     return this.getClient().post<
-      SendMessageAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      SendMessageAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this.getClient().baseURL + `/messages/${messageID}/action`, {
       message_id: messageID,
       form_data: formData,
@@ -939,15 +753,7 @@ export class Channel<
     }
 
     return await this.getClient().post<
-      EventAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      EventAPIResponse<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
     >(this._channelURL() + '/read', {
       ...data,
     });
@@ -994,14 +800,10 @@ export class Channel<
     this.initialized = true;
     this.data = state.channel;
 
-    this._client.logger(
-      'info',
-      `channel:watch() - started watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
+    this._client.logger('info', `channel:watch() - started watching channel ${this.cid}`, {
+      tags: ['channel'],
+      channel: this,
+    });
     return state;
   }
 
@@ -1011,19 +813,12 @@ export class Channel<
    * @return {Promise<APIResponse>} The server response
    */
   async stopWatching() {
-    const response = await this.getClient().post<APIResponse>(
-      this._channelURL() + '/stop-watching',
-      {},
-    );
+    const response = await this.getClient().post<APIResponse>(this._channelURL() + '/stop-watching', {});
 
-    this._client.logger(
-      'info',
-      `channel:watch() - stopped watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
+    this._client.logger('info', `channel:watch() - stopped watching channel ${this.cid}`, {
+      tags: ['channel'],
+      channel: this,
+    });
 
     return response;
   }
@@ -1041,14 +836,7 @@ export class Channel<
     options: PaginationOptions & { user?: UserResponse<UserType>; user_id?: string },
   ) {
     const data = await this.getClient().get<
-      GetRepliesAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this.getClient().baseURL + `/messages/${parent_id}/replies`, {
       ...options,
     });
@@ -1087,14 +875,7 @@ export class Channel<
    */
   getMessagesById(messageIds: string[]) {
     return this.getClient().get<
-      GetMultipleMessagesAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      GetMultipleMessagesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(this._channelURL() + '/messages', {
       ids: messageIds.join(','),
     });
@@ -1114,28 +895,13 @@ export class Channel<
 
   _countMessageAsUnread(
     message:
-      | FormatMessageResponse<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
-      | MessageResponse<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          MessageType,
-          ReactionType,
-          UserType
-        >,
+      | FormatMessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
+      | MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.user?.id === this.getClient().userID) return false;
-    if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
-      return false;
+    if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
     if (message.type === 'system') return false;
 
     if (this.muteStatus().muted) return false;
@@ -1217,14 +983,7 @@ export class Channel<
     }
 
     const state = await this.getClient().post<
-      ChannelAPIResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >
+      ChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
     >(queryURL + '/query', {
       data: this._data,
       state: true,
@@ -1364,38 +1123,14 @@ export class Channel<
    */
   on(
     eventType: EventTypes,
-    callback: EventHandler<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    callback: EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ): { unsubscribe: () => void };
   on(
-    callback: EventHandler<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    callback: EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ): { unsubscribe: () => void };
   on(
     callbackOrString:
-      | EventHandler<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
+      | EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
       | EventTypes,
     callbackOrNothing?: EventHandler<
       AttachmentType,
@@ -1416,24 +1151,19 @@ export class Channel<
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
-    this._client.logger(
-      'info',
-      `Attaching listener for ${key} event on channel ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
-    );
+    this._client.logger('info', `Attaching listener for ${key} event on channel ${this.cid}`, {
+      tags: ['event', 'channel'],
+      channel: this,
+    });
 
     this.listeners[key].push(callback);
 
     return {
       unsubscribe: () => {
-        this._client.logger(
-          'info',
-          `Removing listener for ${key} event from channel ${this.cid}`,
-          { tags: ['event', 'channel'], channel: this },
-        );
+        this._client.logger('info', `Removing listener for ${key} event from channel ${this.cid}`, {
+          tags: ['event', 'channel'],
+          channel: this,
+        });
 
         this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
@@ -1446,38 +1176,14 @@ export class Channel<
    */
   off(
     eventType: EventTypes,
-    callback: EventHandler<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    callback: EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ): void;
   off(
-    callback: EventHandler<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    callback: EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ): void;
   off(
     callbackOrString:
-      | EventHandler<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >
+      | EventHandler<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
       | EventTypes,
     callbackOrNothing?: EventHandler<
       AttachmentType,
@@ -1499,25 +1205,16 @@ export class Channel<
       this.listeners[key] = [];
     }
 
-    this._client.logger(
-      'info',
-      `Removing listener for ${key} event from channel ${this.cid}`,
-      { tags: ['event', 'channel'], channel: this },
-    );
+    this._client.logger('info', `Removing listener for ${key} event from channel ${this.cid}`, {
+      tags: ['event', 'channel'],
+      channel: this,
+    });
     this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(
-    event: Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ) {
     const channel = this;
     this._client.logger(
@@ -1581,8 +1278,7 @@ export class Channel<
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          const isThreadMessage =
-            event.message.parent_id && !event.message.show_in_channel;
+          const isThreadMessage = event.message.parent_id && !event.message.show_in_channel;
 
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
@@ -1663,15 +1359,7 @@ export class Channel<
   }
 
   _callChannelListeners = (
-    event: Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ) => {
     const channel = this;
     // gather and call the listeners
@@ -1713,14 +1401,7 @@ export class Channel<
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
   _initializeState(
-    state: ChannelAPIResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    state: ChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     const { state: clientState, user, userID } = this.getClient();
 
@@ -1789,14 +1470,10 @@ export class Channel<
   }
 
   _disconnect() {
-    this._client.logger(
-      'info',
-      `channel:disconnect() - Disconnecting the channel ${this.cid}`,
-      {
-        tags: ['connection', 'channel'],
-        channel: this,
-      },
-    );
+    this._client.logger('info', `channel:disconnect() - Disconnecting the channel ${this.cid}`, {
+      tags: ['connection', 'channel'],
+      channel: this,
+    });
 
     this.disconnected = true;
     this.state.setIsUpToDate(false);

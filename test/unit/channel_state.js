@@ -15,13 +15,9 @@ describe('ChannelState addMessagesSorted', function () {
 	it('empty state add single messages', async function () {
 		const state = new ChannelState();
 		expect(state.messages).to.have.length(0);
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
 		expect(state.messages).to.have.length(1);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:01.000Z' }),
-		]);
+		state.addMessagesSorted([generateMsg({ id: '1', date: '2020-01-01T00:00:01.000Z' })]);
 
 		expect(state.messages).to.have.length(2);
 		expect(state.messages[0].id).to.be.equal('0');
@@ -94,22 +90,16 @@ describe('ChannelState addMessagesSorted', function () {
 		const state = new ChannelState();
 
 		for (let i = 0; i < 10; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` }),
-			]);
+			state.addMessagesSorted([generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` })]);
 		}
 
 		for (let i = 10; i < state.messages.length - 1; i++) {
 			for (let j = i + 1; i < state.messages.length - 1; j++)
-				expect(state.messages[i].created_at.getTime()).to.be.lessThan(
-					state.messages[j].created_at.getTime(),
-				);
+				expect(state.messages[i].created_at.getTime()).to.be.lessThan(state.messages[j].created_at.getTime());
 		}
 
 		expect(state.messages).to.have.length(10);
-		state.addMessagesSorted([
-			generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` }),
-		]);
+		state.addMessagesSorted([generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` })]);
 		expect(state.messages).to.have.length(11);
 		expect(state.messages[7].id).to.be.equal('7');
 		expect(state.messages[8].id).to.be.equal('id');
@@ -119,17 +109,13 @@ describe('ChannelState addMessagesSorted', function () {
 		const state = new ChannelState();
 
 		for (let i = 100; i < 300; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` }),
-			]);
+			state.addMessagesSorted([generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` })]);
 		}
 
 		expect(state.messages).to.have.length(200);
 		for (let i = 100; i < state.messages.length - 1; i++) {
 			for (let j = i + 1; j < state.messages.length - 1; j++)
-				expect(state.messages[i].created_at.getTime()).to.be.lessThan(
-					state.messages[j].created_at.getTime(),
-				);
+				expect(state.messages[i].created_at.getTime()).to.be.lessThan(state.messages[j].created_at.getTime());
 		}
 	});
 
@@ -156,9 +142,7 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should avoid duplicates if message.created_at changes', async function () {
 		const state = new ChannelState();
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
+		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
 		expect(state.messages).to.have.length(1);
 
 		state.addMessageSorted(
@@ -171,9 +155,7 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 		expect(state.messages).to.have.length(1);
 		expect(state.messages[0].text).to.be.equal('update 0');
-		expect(state.messages[0].created_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.044Z').getTime(),
-		);
+		expect(state.messages[0].created_at.getTime()).to.be.equal(new Date('2020-01-01T00:00:00.044Z').getTime());
 	});
 
 	it('should respect order and avoid duplicates if message.created_at changes', async function () {
@@ -218,25 +200,13 @@ describe('ChannelState addMessagesSorted', function () {
 	it('updates last_message_at correctly', async function () {
 		const state = new ChannelState();
 		expect(state.last_message_at).to.be.null;
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
+		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
+		expect(state.last_message_at.getTime()).to.be.equal(new Date('2020-01-01T00:00:00.000Z').getTime());
+		state.addMessagesSorted([generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' })]);
+		expect(state.last_message_at.getTime()).to.be.equal(new Date('2020-01-01T00:00:00.000Z').getTime());
 
-		state.addMessagesSorted([
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.001Z').getTime(),
-		);
+		state.addMessagesSorted([generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' })]);
+		expect(state.last_message_at.getTime()).to.be.equal(new Date('2020-01-01T00:00:00.001Z').getTime());
 	});
 
 	it('sets pinnedMessages correctly', async function () {
@@ -334,8 +304,7 @@ describe('ChannelState isUpToDate', () => {
 		});
 
 		// to mock the channel.watch call
-		chatClient.post = () =>
-			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		chatClient.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 		const channel = chatClient.channel('messaging', channelId);
 
 		await channel.watch();
