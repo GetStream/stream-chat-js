@@ -534,7 +534,7 @@ export class Channel<
   async addModerators(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options?: ChannelUpdateOptions = {},
   ) {
     return await this._update({
       add_moderators: members,
