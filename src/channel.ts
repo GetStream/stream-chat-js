@@ -594,7 +594,7 @@ export class Channel<
   async removeMembers(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options?: ChannelUpdateOptions = {},
   ) {
     return await this._update({
       remove_members: members,
