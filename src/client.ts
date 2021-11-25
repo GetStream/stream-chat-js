@@ -45,7 +45,6 @@ import {
   CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
-  ConnectionChangeEvent,
   CreateChannelOptions,
   CreateChannelResponse,
   CreateCommandOptions,
@@ -177,7 +176,15 @@ export class StreamChat<
   userAgent?: string;
   userID?: string;
   wsBaseURL?: string;
-  wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
+  wsConnection: StableWSConnection<
+    ChannelType,
+    CommandType,
+    UserType,
+    AttachmentType,
+    EventType,
+    MessageType,
+    ReactionType
+  > | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
@@ -1423,24 +1430,15 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
-      wsBaseURL: client.wsBaseURL,
-      enableInsights: this.options.enableInsights,
-      clientID: client.clientID,
-      userID: client.userID,
-      tokenManager: client.tokenManager,
-      user: this._user,
-      authType: this.getAuthType(),
-      userAgent: this.getUserAgent(),
-      apiKey: this.key,
-      recoverCallback: this.recoverState,
-      messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
-      logger: this.logger,
-      device: this.options.device,
-      insightMetrics: this.insightMetrics,
-    });
-
+    this.wsConnection = new StableWSConnection<
+      ChannelType,
+      CommandType,
+      UserType,
+      AttachmentType,
+      EventType,
+      MessageType,
+      ReactionType
+    >({ client: this });
     return await this.wsConnection.connect();
   }
 

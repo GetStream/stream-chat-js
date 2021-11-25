@@ -45,25 +45,26 @@ export function buildWsFatalInsight(connection: StableWSConnection, event: Recor
 }
 
 function buildWsBaseInsight(connection: StableWSConnection) {
+  const { client } = connection;
   return {
     ready_state: connection.ws?.readyState,
     url: connection._buildUrl(connection.requestID),
-    api_key: connection.apiKey,
-    start_ts: connection.insightMetrics.connectionStartTimestamp,
+    api_key: client.key,
+    start_ts: client.insightMetrics.connectionStartTimestamp,
     end_ts: new Date().getTime(),
-    auth_type: connection.authType,
-    token: connection.tokenManager.token,
-    user_id: connection.userID,
-    user_details: connection.user,
-    device: connection.device,
+    auth_type: client.getAuthType(),
+    token: client.tokenManager.token,
+    user_id: client.userID,
+    user_details: client.user,
+    device: client.options.device,
     client_id: connection.connectionID,
     ws_details: connection.ws,
-    ws_consecutive_failures: connection.insightMetrics.wsConsecutiveFailures,
-    ws_total_failures: connection.insightMetrics.wsTotalFailures,
+    ws_consecutive_failures: client.insightMetrics.wsConsecutiveFailures,
+    ws_total_failures: client.insightMetrics.wsTotalFailures,
     request_id: connection.requestID,
     online: typeof navigator !== 'undefined' ? navigator?.onLine : null,
     user_agent: typeof navigator !== 'undefined' ? navigator?.userAgent : null,
-    instance_client_id: connection.insightMetrics.instanceClientId,
+    instance_client_id: client.insightMetrics.instanceClientId,
   };
 }
 
