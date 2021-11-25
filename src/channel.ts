@@ -554,7 +554,7 @@ export class Channel<
   async assignRoles(
     roles: { channel_role: Role; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options?: ChannelUpdateOptions = {},
   ) {
     return await this._update({
       assign_roles: roles,
