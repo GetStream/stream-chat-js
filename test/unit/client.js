@@ -44,9 +44,7 @@ describe('StreamChat getInstance', () => {
 		await client1.connectUser({ id: 'vishal' }, 'token');
 		const client2 = StreamChat.getInstance('key2');
 
-		await expect(client2.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
-			/connectUser was called twice/,
-		);
+		await expect(client2.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(/connectUser was called twice/);
 	});
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
@@ -152,9 +150,7 @@ describe('Client connectUser', () => {
 
 	it('should throw error if connectUser called twice on the client with different user', async () => {
 		await client.connectUser({ id: 'vishal' }, 'token');
-		await expect(client.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
-			/connectUser was called twice/,
-		);
+		await expect(client.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(/connectUser was called twice/);
 	});
 
 	it('should work for multiple call for the same user', async () => {
@@ -275,9 +271,7 @@ describe('Client search', async () => {
 
 	it('search with sorting by defined field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([
-				{ field: 'updated_at', direction: -1 },
-			]);
+			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
 			sort: [{ updated_at: -1 }],
@@ -285,9 +279,7 @@ describe('Client search', async () => {
 	});
 	it('search with sorting by custom field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([
-				{ field: 'custom_field', direction: -1 },
-			]);
+			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
 			sort: [{ custom_field: -1 }],
@@ -325,8 +317,6 @@ describe('Client setLocalDevice', async () => {
 	it('should throw error when updating device with ws open', async () => {
 		client.wsConnection = true;
 
-		expect(() =>
-			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
-		).to.throw();
+		expect(() => client.setLocalDevice({ id: 'id3', push_provider: 'firebase' })).to.throw();
 	});
 });

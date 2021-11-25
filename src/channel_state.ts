@@ -23,27 +23,11 @@ export class ChannelState<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > {
-  _channel: Channel<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  _channel: Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   watcher_count: number;
   typing: Record<
     string,
-    Event<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >
+    Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
   >;
   read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
   messages: Array<
@@ -102,15 +86,7 @@ export class ChannelState<
    */
   isUpToDate: boolean;
   constructor(
-    channel: Channel<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      EventType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    channel: Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ) {
     this._channel = channel;
     this.watcher_count = 0;
@@ -132,10 +108,7 @@ export class ChannelState<
      * be pushed on to message list.
      */
     this.isUpToDate = true;
-    this.last_message_at =
-      channel?.state?.last_message_at != null
-        ? new Date(channel.state.last_message_at)
-        : null;
+    this.last_message_at = channel?.state?.last_message_at != null ? new Date(channel.state.last_message_at) : null;
   }
 
   /**
@@ -147,23 +120,11 @@ export class ChannelState<
    *
    */
   addMessageSorted(
-    newMessage: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    newMessage: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
     timestampChanged = false,
     addIfDoesNotExist = true,
   ) {
-    return this.addMessagesSorted(
-      [newMessage],
-      timestampChanged,
-      false,
-      addIfDoesNotExist,
-    );
+    return this.addMessagesSorted([newMessage], timestampChanged, false, addIfDoesNotExist);
   }
 
   /**
@@ -174,22 +135,8 @@ export class ChannelState<
    *
    */
   formatMessage(
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
-  ): FormatMessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  > {
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
+  ): FormatMessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> {
     return {
       ...message,
       /**
@@ -214,14 +161,7 @@ export class ChannelState<
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >[],
+    newMessages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[],
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
@@ -235,9 +175,7 @@ export class ChannelState<
          * handle updates to user, we can use the reference map, to determine which
          * channels need to be updated with updated user object.
          */
-        this._channel
-          .getClient()
-          .state.updateUserReference(message.user, this._channel.cid);
+        this._channel.getClient().state.updateUserReference(message.user, this._channel.cid);
       }
 
       if (initializing && message.id && this.threads[message.id]) {
@@ -300,14 +238,7 @@ export class ChannelState<
    *
    */
   addPinnedMessages(
-    pinnedMessages: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >[],
+    pinnedMessages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[],
   ) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
       this.addPinnedMessage(pinnedMessages[i]);
@@ -321,14 +252,7 @@ export class ChannelState<
    *
    */
   addPinnedMessage(
-    pinnedMessage: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    pinnedMessage: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     this.pinnedMessages = this._addToMessageList(
       this.pinnedMessages,
@@ -345,14 +269,7 @@ export class ChannelState<
    *
    */
   removePinnedMessage(
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
     this.pinnedMessages = result;
@@ -360,24 +277,13 @@ export class ChannelState<
 
   addReaction(
     reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
     enforce_unique?: boolean,
   ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
-        msg.own_reactions,
-        reaction,
-        enforce_unique,
-      );
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforce_unique);
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
@@ -407,45 +313,26 @@ export class ChannelState<
     reaction: ReactionResponse<ReactionType, UserType>,
   ) {
     if (ownReactions) {
-      return ownReactions.filter(
-        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
-      );
+      return ownReactions.filter((item) => item.user_id !== reaction.user_id || item.type !== reaction.type);
     }
     return ownReactions;
   }
 
   removeReaction(
     reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
-        msg.own_reactions,
-        reaction,
-      );
+      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(msg.own_reactions, reaction);
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
   }
 
   removeQuotedMessageReferences(
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >,
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   ) {
     const parseMessage = (
       m: ReturnType<
@@ -465,14 +352,7 @@ export class ChannelState<
         created_at: m.created_at.toString(),
         pinned_at: m.pinned_at?.toString(),
         updated_at: m.updated_at?.toString(),
-      } as unknown) as MessageResponse<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        MessageType,
-        ReactionType,
-        UserType
-      >);
+      } as unknown) as MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>);
 
     const updatedMessages = this.messages
       .filter((msg) => msg.quoted_message_id === message.id)
@@ -614,8 +494,7 @@ export class ChannelState<
     }
 
     const messageTime = (message[sortBy] as Date).getTime();
-    const messageIsNewest =
-      (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
+    const messageIsNewest = (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
 
     // if message is newer than last item in the list concat and return unless it's an update or deletion
     if (messageIsNewest && addMessageToList) {
@@ -630,8 +509,7 @@ export class ChannelState<
     let right = messageArrayLength - 1;
     while (left <= right) {
       middle = Math.floor((right + left) / 2);
-      if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime)
-        left = middle + 1;
+      if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime) left = middle + 1;
       else right = middle - 1;
     }
 
@@ -674,10 +552,7 @@ export class ChannelState<
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const { removed, result: messages } = this.removeMessageFromArray(
-        this.messages,
-        messageToRemove,
-      );
+      const { removed, result: messages } = this.removeMessageFromArray(this.messages, messageToRemove);
       this.messages = messages;
       isRemoved = removed;
     }
@@ -701,9 +576,7 @@ export class ChannelState<
     >,
     msg: { id: string; parent_id?: string },
   ) => {
-    const result = msgArray.filter(
-      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
-    );
+    const result = msgArray.filter((message) => !(!!message.id && !!msg.id && message.id === msg.id));
 
     return { removed: result.length < msgArray.length, result };
   };

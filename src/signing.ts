@@ -36,10 +36,7 @@ export function JWTUserToken(
     );
   }
 
-  const opts: SignOptions = Object.assign(
-    { algorithm: 'HS256', noTimestamp: true },
-    jwtOptions,
-  );
+  const opts: SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
 
   if (payload.iat) {
     opts.noTimestamp = false;
@@ -52,10 +49,7 @@ export function JWTServerToken(apiSecret: Secret, jwtOptions: SignOptions = {}) 
     server: true,
   };
 
-  const opts: SignOptions = Object.assign(
-    { algorithm: 'HS256', noTimestamp: true },
-    jwtOptions,
-  );
+  const opts: SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
   return jwt.sign(payload, apiSecret, opts);
 }
 

@@ -17,10 +17,7 @@ function isMapStringCallback<T, U>(
 // source - https://github.com/beatgammit/base64-js/blob/master/test/convert.js#L72
 function map<T, U>(array: T[], callback: MapGenericCallback<T, U>): U[];
 function map<U>(string: string, callback: MapStringCallback<U>): U[];
-function map<T, U>(
-  arrayOrString: string | T[],
-  callback: MapGenericCallback<T, U> | MapStringCallback<U>,
-): U[] {
+function map<T, U>(arrayOrString: string | T[], callback: MapGenericCallback<T, U> | MapStringCallback<U>): U[] {
   const res = [];
 
   if (isString(arrayOrString) && isMapStringCallback(arrayOrString, callback)) {
