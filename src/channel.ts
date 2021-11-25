@@ -8,6 +8,7 @@ import {
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
+  ChannelUpdateOptions,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
@@ -370,13 +371,13 @@ export class Channel<
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
    * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
-   * @param {{ skip_push?: boolean }} [options] Option object, {skip_push: true} to skip sending push notifications
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
     channelData: Partial<ChannelData<ChannelType>> | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
-    options?: { skip_push?: boolean },
+    options?: ChannelUpdateOptions,
   ) {
     // Strip out reserved names that will result in API errors.
     const reserved = [
@@ -480,10 +481,7 @@ export class Channel<
   async acceptInvite(
     options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
-    return await this._update({
-      accept_invite: true,
-      ...options,
-    });
+    return await this._update({ accept_invite: true, ...options });
   }
 
   /**
@@ -496,10 +494,7 @@ export class Channel<
   async rejectInvite(
     options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
-    return await this._update({
-      reject_invite: true,
-      ...options,
-    });
+    return await this._update({ reject_invite: true, ...options });
   }
 
   /**
@@ -507,19 +502,15 @@ export class Channel<
    *
    * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {{ hide_history?: boolean }} [options] Option object, {hide_history: true} to hide channel's history for new members
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
     members: string[] | { user_id: string; channel_role?: Role }[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: { hide_history?: boolean },
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      add_members: members,
-      message,
-      ...options,
-    });
+    return await this._update({ add_members: members, message, ...options });
   }
 
   /**
@@ -527,13 +518,15 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async addModerators(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
-    return await this._update({
-      add_moderators: members,
-      message,
-    });
+  async addModerators(
+    members: string[],
+    message?: Message<AttachmentType, MessageType, UserType>,
+    options: ChannelUpdateOptions = {},
+  ) {
+    return await this._update({ add_moderators: members, message, ...options });
   }
 
   /**
@@ -541,16 +534,15 @@ export class Channel<
    *
    * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async assignRoles(
     roles: { channel_role: Role; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      assign_roles: roles,
-      message,
-    });
+    return await this._update({ assign_roles: roles, message, ...options });
   }
 
   /**
@@ -558,16 +550,15 @@ export class Channel<
    *
    * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
     members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      invites: members,
-      message,
-    });
+    return await this._update({ invites: members, message, ...options });
   }
 
   /**
@@ -575,13 +566,15 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async removeMembers(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
-    return await this._update({
-      remove_members: members,
-      message,
-    });
+  async removeMembers(
+    members: string[],
+    message?: Message<AttachmentType, MessageType, UserType>,
+    options: ChannelUpdateOptions = {},
+  ) {
+    return await this._update({ remove_members: members, message, ...options });
   }
 
   /**
@@ -589,13 +582,15 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
-  async demoteModerators(members: string[], message?: Message<AttachmentType, MessageType, UserType>) {
-    return await this._update({
-      demote_moderators: members,
-      message,
-    });
+  async demoteModerators(
+    members: string[],
+    message?: Message<AttachmentType, MessageType, UserType>,
+    options: ChannelUpdateOptions = {},
+  ) {
+    return await this._update({ demote_moderators: members, message, ...options });
   }
 
   /**
@@ -627,10 +622,7 @@ export class Channel<
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
     return await this.getClient().post<MuteChannelAPIResponse<ChannelType, CommandType, UserType>>(
       this.getClient().baseURL + '/moderation/mute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
+      { channel_cid: this.cid, ...opts },
     );
   }
 
