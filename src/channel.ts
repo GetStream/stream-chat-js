@@ -481,10 +481,7 @@ export class Channel<
   async acceptInvite(
     options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
-    return await this._update({
-      accept_invite: true,
-      ...options,
-    });
+    return await this._update({ accept_invite: true, ...options });
   }
 
   /**
@@ -497,10 +494,7 @@ export class Channel<
   async rejectInvite(
     options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
   ) {
-    return await this._update({
-      reject_invite: true,
-      ...options,
-    });
+    return await this._update({ reject_invite: true, ...options });
   }
 
   /**
@@ -514,13 +508,9 @@ export class Channel<
   async addMembers(
     members: string[] | { user_id: string; channel_role?: Role }[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      add_members: members,
-      message,
-      ...options,
-    });
+    return await this._update({ add_members: members, message, ...options });
   }
 
   /**
@@ -534,13 +524,9 @@ export class Channel<
   async addModerators(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions = {},
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      add_moderators: members,
-      message,
-      ...options,
-    });
+    return await this._update({ add_moderators: members, message, ...options });
   }
 
   /**
@@ -554,13 +540,9 @@ export class Channel<
   async assignRoles(
     roles: { channel_role: Role; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions = {},
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      assign_roles: roles,
-      message,
-      ...options,
-    });
+    return await this._update({ assign_roles: roles, message, ...options });
   }
 
   /**
@@ -574,13 +556,9 @@ export class Channel<
   async inviteMembers(
     members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions = {},
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      invites: members,
-      message,
-      ...options,
-    });
+    return await this._update({ invites: members, message, ...options });
   }
 
   /**
@@ -594,13 +572,9 @@ export class Channel<
   async removeMembers(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions = {},
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      remove_members: members,
-      message,
-      ...options,
-    });
+    return await this._update({ remove_members: members, message, ...options });
   }
 
   /**
@@ -614,13 +588,9 @@ export class Channel<
   async demoteModerators(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions = {},
+    options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({
-      demote_moderators: members,
-      message,
-      ...options,
-    });
+    return await this._update({ demote_moderators: members, message, ...options });
   }
 
   /**
@@ -652,10 +622,7 @@ export class Channel<
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
     return await this.getClient().post<MuteChannelAPIResponse<ChannelType, CommandType, UserType>>(
       this.getClient().baseURL + '/moderation/mute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
+      { channel_cid: this.cid, ...opts },
     );
   }
 
