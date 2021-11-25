@@ -1,5 +1,5 @@
 import FormData from 'form-data';
-import { AscDesc, LiteralStringForUnion, OwnUserBase, OwnUserResponse, UnknownType, UserResponse } from './types';
+import { AscDesc, LiteralStringForUnion, OwnUserBase, OwnUserResponse, UR, UserResponse } from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -55,9 +55,9 @@ function isFileWebAPI(uri: unknown): uri is File {
 }
 
 export function isOwnUser<
-  ChannelType extends UnknownType = UnknownType,
+  ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UnknownType = UnknownType
+  UserType extends UR = UR
 >(
   user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
 ): user is OwnUserResponse<ChannelType, CommandType, UserType> {

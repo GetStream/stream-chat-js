@@ -12,7 +12,7 @@ import {
   AppSettingsAPIResponse,
   UserResponse,
   SendFileAPIResponse,
-  UnknownType,
+  UR,
   Channel,
   EventTypes,
   ChannelState,
@@ -35,10 +35,10 @@ type ChannelType = {
   color: string;
 };
 
-type AttachmentType = UnknownType;
-type EventType = UnknownType;
-type MessageType = UnknownType;
-type ReactionType = UnknownType;
+type AttachmentType = UR;
+type EventType = UR;
+type MessageType = UR;
+type ReactionType = UR;
 type CommandType = string & {};
 
 let voidReturn: void | { unsubscribe: () => void };
