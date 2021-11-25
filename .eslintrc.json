@@ -1,18 +1,6 @@
 {
-  "plugins": [
-    "babel",
-    "markdown",
-    "sonarjs",
-    "prettier",
-    "@typescript-eslint",
-    "typescript-sort-keys"
-  ],
-  "extends": [
-    "eslint:recommended",
-    "plugin:sonarjs/recommended",
-    "plugin:@typescript-eslint/recommended",
-    "prettier"
-  ],
+  "plugins": ["babel", "markdown", "sonarjs", "prettier", "@typescript-eslint", "typescript-sort-keys"],
+  "extends": ["eslint:recommended", "plugin:sonarjs/recommended", "plugin:@typescript-eslint/recommended", "prettier"],
   "rules": {
     "@typescript-eslint/ban-ts-comment": 0,
     "@typescript-eslint/explicit-module-boundary-types": 0,
@@ -47,11 +35,7 @@
       "asc",
       { "caseSensitive": false, "natural": true, "requiredFirst": true }
     ],
-    "typescript-sort-keys/string-enum": [
-      "error",
-      "asc",
-      { "caseSensitive": false, "natural": true }
-    ]
+    "typescript-sort-keys/string-enum": ["error", "asc", { "caseSensitive": false, "natural": true }]
   },
   "env": {
     "es6": true,

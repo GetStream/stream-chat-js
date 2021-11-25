@@ -24,10 +24,7 @@ export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<keyof T, K>>>;
 }[keyof T];
 
-export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<
-  T,
-  Exclude<keyof T, Keys>
-> &
+export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<keyof T, Keys>> &
   {
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
@@ -50,9 +47,7 @@ export type APIResponse = {
   duration: string;
 };
 
-export type AppSettingsAPIResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
+export type AppSettingsAPIResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
   app?: {
     channel_configs: Record<
       string,
@@ -137,14 +132,7 @@ export type MessageFlagsResponse<
   ReactionType = UnknownType
 > = APIResponse & {
   flags?: Array<{
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >;
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
     user: UserResponse<UserType>;
     approved_at?: string;
     created_at?: string;
@@ -219,22 +207,8 @@ export type ChannelAPIResponse<
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
-  pinned_messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  messages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[];
+  pinned_messages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[];
   hidden?: boolean;
   membership?: ChannelMembership<UserType> | null;
   read?: ReadResponse<UserType>[];
@@ -278,9 +252,7 @@ export type CheckSQSResponse = APIResponse & {
   error?: string;
 };
 
-export type CommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = Partial<CreatedAtUpdatedAt> & {
+export type CommandResponse<CommandType extends string = LiteralStringForUnion> = Partial<CreatedAtUpdatedAt> & {
   args?: string;
   description?: string;
   name?: CommandVariants<CommandType>;
@@ -293,18 +265,16 @@ export type ConnectAPIResponse<
   UserType extends UnknownType = UnknownType
 > = Promise<void | ConnectionOpen<ChannelType, CommandType, UserType>>;
 
-export type CreateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
+export type CreateChannelResponse<CommandType extends string = LiteralStringForUnion> = APIResponse &
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
     grants?: Record<string, string[]>;
   };
 
-export type CreateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & { command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt };
+export type CreateCommandResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
+  command: CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
+};
 
 export type DeleteChannelAPIResponse<
   ChannelType = UnknownType,
@@ -314,9 +284,7 @@ export type DeleteChannelAPIResponse<
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
 };
 
-export type DeleteCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
+export type DeleteCommandResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
   name?: CommandVariants<CommandType>;
 };
 
@@ -329,15 +297,7 @@ export type EventAPIResponse<
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
 > = APIResponse & {
-  event: Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
 };
 
 export type ExportChannelResponse = {
@@ -397,9 +357,7 @@ export type FormatMessageResponse<
     updated_at: Date;
   };
 
-export type GetChannelTypeResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
+export type GetChannelTypeResponse<CommandType extends string = LiteralStringForUnion> = APIResponse &
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id' | 'commands'> & {
     created_at: string;
     updated_at: string;
@@ -407,9 +365,9 @@ export type GetChannelTypeResponse<
     grants?: Record<string, string[]>;
   };
 
-export type GetCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & CreateCommandOptions<CommandType> & CreatedAtUpdatedAt;
+export type GetCommandResponse<CommandType extends string = LiteralStringForUnion> = APIResponse &
+  CreateCommandOptions<CommandType> &
+  CreatedAtUpdatedAt;
 
 export type GetMultipleMessagesAPIResponse<
   AttachmentType = UnknownType,
@@ -419,14 +377,7 @@ export type GetMultipleMessagesAPIResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = APIResponse & {
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  messages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[];
 };
 
 export type GetRateLimitsResponse = APIResponse & {
@@ -436,10 +387,7 @@ export type GetRateLimitsResponse = APIResponse & {
   web?: RateLimitsMap;
 };
 
-export type GetReactionsAPIResponse<
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = APIResponse & {
+export type GetReactionsAPIResponse<ReactionType = UnknownType, UserType = UnknownType> = APIResponse & {
   reactions: ReactionResponse<ReactionType, UserType>[];
 };
 
@@ -451,25 +399,13 @@ export type GetRepliesAPIResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = APIResponse & {
-  messages: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[];
+  messages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[];
 };
 
-export type ListChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
+export type ListChannelResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
   channel_types: Record<
     string,
-    Omit<
-      CreateChannelOptions<CommandType>,
-      'client_id' | 'connection_id' | 'commands'
-    > & {
+    Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id' | 'commands'> & {
       commands: CommandResponse<CommandType>[];
       created_at: string;
       updated_at: string;
@@ -482,9 +418,7 @@ export type ListChannelTypesAPIResponse<
   CommandType extends string = LiteralStringForUnion
 > = ListChannelResponse<CommandType>;
 
-export type ListCommandsResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
+export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
   commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
 };
 
@@ -506,22 +440,8 @@ export type MessageResponse<
   MessageType = UnknownType,
   ReactionType = UnknownType,
   UserType = UnknownType
-> = MessageResponseBase<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  MessageType,
-  ReactionType,
-  UserType
-> & {
-  quoted_message?: MessageResponseBase<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+> = MessageResponseBase<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> & {
+  quoted_message?: MessageResponseBase<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
 };
 
 export type MessageResponseBase<
@@ -623,21 +543,11 @@ export type ReactionAPIResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   reaction: ReactionResponse<ReactionType, UserType>;
 };
 
-export type ReactionResponse<
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = Reaction<ReactionType, UserType> & {
+export type ReactionResponse<ReactionType = UnknownType, UserType = UnknownType> = Reaction<ReactionType, UserType> & {
   created_at: string;
   updated_at: string;
 };
@@ -657,14 +567,7 @@ export type SearchAPIResponse<
   UserType = UnknownType
 > = APIResponse & {
   results: {
-    message: MessageResponse<
-      AttachmentType,
-      ChannelType,
-      CommandType,
-      MessageType,
-      ReactionType,
-      UserType
-    >;
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   }[];
   next?: string;
   previous?: string;
@@ -687,14 +590,7 @@ export type SendMessageAPIResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
 };
 
 export type TruncateChannelAPIResponse<
@@ -706,14 +602,7 @@ export type TruncateChannelAPIResponse<
   ReactionType = UnknownType
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
 };
 
 export type UpdateChannelAPIResponse<
@@ -726,27 +615,16 @@ export type UpdateChannelAPIResponse<
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
   members: ChannelMemberResponse<UserType>[];
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
 };
 
-export type UpdateChannelResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse &
+export type UpdateChannelResponse<CommandType extends string = LiteralStringForUnion> = APIResponse &
   Omit<CreateChannelOptions<CommandType>, 'client_id' | 'connection_id'> & {
     created_at: string;
     updated_at: string;
   };
 
-export type UpdateCommandResponse<
-  CommandType extends string = LiteralStringForUnion
-> = APIResponse & {
+export type UpdateCommandResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
   command: UpdateCommandOptions<CommandType> &
     CreatedAtUpdatedAt & {
       name: CommandVariants<CommandType>;
@@ -761,14 +639,7 @@ export type UpdateMessageAPIResponse<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = APIResponse & {
-  message: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
 };
 
 export type UsersAPIResponse<UserType = UnknownType> = APIResponse & {
@@ -801,10 +672,7 @@ export type MessageFlagsPaginationOptions = {
   offset?: number;
 };
 
-export type BannedUsersPaginationOptions = Omit<
-  PaginationOptions,
-  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
->;
+export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
 
 export type BanUserOptions<UserType = UnknownType> = UnBanUserOptions & {
   banned_by?: UserResponse<UserType>;
@@ -916,14 +784,7 @@ export type InviteOptions<
   data?: Omit<ChannelResponse<ChannelType, CommandType, UserType>, 'id' | 'cid'>;
   demote_moderators?: string[];
   invites?: string[];
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   reject_invite?: boolean;
   remove_members?: string[];
   user?: UserResponse<UserType>;
@@ -931,9 +792,7 @@ export type InviteOptions<
 };
 
 /** @deprecated use MarkChannelsReadOptions instead */
-export type MarkAllReadOptions<
-  UserType = UnknownType
-> = MarkChannelsReadOptions<UserType>;
+export type MarkAllReadOptions<UserType = UnknownType> = MarkChannelsReadOptions<UserType>;
 
 export type MarkChannelsReadOptions<UserType = UnknownType> = {
   client_id?: string;
@@ -1034,9 +893,10 @@ export type UnBanUserOptions = {
 };
 
 // TODO: rename to UpdateChannelTypeOptions in the next major update
-export type UpdateChannelOptions<
-  CommandType extends string = LiteralStringForUnion
-> = Omit<CreateChannelOptions<CommandType>, 'name'> & {
+export type UpdateChannelOptions<CommandType extends string = LiteralStringForUnion> = Omit<
+  CreateChannelOptions<CommandType>,
+  'name'
+> & {
   created_at?: string;
   updated_at?: string;
 };
@@ -1083,14 +943,7 @@ export type Event<
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<ChannelType, CommandType, UserType>;
   member?: ChannelMemberResponse<UserType>;
-  message?: MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >;
+  message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   online?: boolean;
   parent_id?: string;
   reaction?: ReactionResponse<ReactionType, UserType>;
@@ -1116,17 +969,7 @@ export type EventHandler<
   MessageType extends UnknownType = UnknownType,
   ReactionType extends UnknownType = UnknownType,
   UserType extends UnknownType = UnknownType
-> = (
-  event: Event<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >,
-) => void;
+> = (event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>) => void;
 
 export type EventTypes =
   | 'all'
@@ -1188,27 +1031,18 @@ export type MessageFlagsFiltersOptions = {
 export type MessageFlagsFilters = QueryFilters<
   {
     channel_cid?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
       | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
   } & {
     team?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>>
       | PrimitiveFilter<MessageFlagsFiltersOptions['team']>;
   } & {
     user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
   } & {
-      [Key in keyof Omit<
-        MessageFlagsFiltersOptions,
-        'channel_cid' | 'user_id' | 'is_reviewed'
-      >]:
+      [Key in keyof Omit<MessageFlagsFiltersOptions, 'channel_cid' | 'user_id' | 'is_reviewed'>]:
         | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
         | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
     }
@@ -1225,9 +1059,7 @@ export type BannedUsersFilterOptions = {
 export type BannedUsersFilters = QueryFilters<
   {
     channel_cid?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>>
       | PrimitiveFilter<BannedUsersFilterOptions['channel_cid']>;
   } & {
     reason?:
@@ -1263,10 +1095,7 @@ export type ChannelFilters<
         >
       | PrimitiveFilter<ChannelResponse<ChannelType, CommandType, UserType>['name']>;
   } & {
-      [Key in keyof Omit<
-        ChannelResponse<{}, CommandType, UserType>,
-        'name' | 'members'
-      >]:
+      [Key in keyof Omit<ChannelResponse<{}, CommandType, UserType>, 'name' | 'members'>]:
         | RequireOnlyOne<QueryFilter<ChannelResponse<{}, CommandType, UserType>[Key]>>
         | PrimitiveFilter<ChannelResponse<{}, CommandType, UserType>[Key]>;
     }
@@ -1306,78 +1135,29 @@ export type MessageFilters<
               ReactionType,
               UserType
             >['text'];
-            $q?: MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['text'];
+            $q?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>['text'];
           } & QueryFilter<
-            MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['text']
+            MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>['text']
           >
         >
       | PrimitiveFilter<
-          MessageResponse<
-            AttachmentType,
-            ChannelType,
-            CommandType,
-            MessageType,
-            ReactionType,
-            UserType
-          >['text']
+          MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>['text']
         >;
   } & {
       [Key in keyof Omit<
-        MessageResponse<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          {},
-          ReactionType,
-          UserType
-        >,
+        MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>,
         'text'
       >]?:
         | RequireOnlyOne<
-            QueryFilter<
-              MessageResponse<
-                AttachmentType,
-                ChannelType,
-                CommandType,
-                {},
-                ReactionType,
-                UserType
-              >[Key]
-            >
+            QueryFilter<MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>[Key]>
           >
-        | PrimitiveFilter<
-            MessageResponse<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              {},
-              ReactionType,
-              UserType
-            >[Key]
-          >;
+        | PrimitiveFilter<MessageResponse<AttachmentType, ChannelType, CommandType, {}, ReactionType, UserType>[Key]>;
     }
 >;
 
 export type PrimitiveFilter<ObjectType> = ObjectType | null;
 
-export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends
-  | string
-  | number
-  | boolean
+export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends string | number | boolean
   ? {
       $eq?: PrimitiveFilter<ObjectType>;
       $exists?: boolean;
@@ -1411,18 +1191,10 @@ export type QueryLogicalOperators<Operators> = {
 export type UserFilters<UserType = UnknownType> = QueryFilters<
   ContainsOperator<UserType> & {
     id?:
-      | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['id'] } & QueryFilter<
-            UserResponse<UserType>['id']
-          >
-        >
+      | RequireOnlyOne<{ $autocomplete?: UserResponse<UserType>['id'] } & QueryFilter<UserResponse<UserType>['id']>>
       | PrimitiveFilter<UserResponse<UserType>['id']>;
     name?:
-      | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['name'] } & QueryFilter<
-            UserResponse<UserType>['name']
-          >
-        >
+      | RequireOnlyOne<{ $autocomplete?: UserResponse<UserType>['name'] } & QueryFilter<UserResponse<UserType>['name']>>
       | PrimitiveFilter<UserResponse<UserType>['name']>;
     teams?:
       | RequireOnlyOne<{
@@ -1432,9 +1204,7 @@ export type UserFilters<UserType = UnknownType> = QueryFilters<
       | PrimitiveFilter<UserResponse<UserType>['teams']>;
     username?:
       | RequireOnlyOne<
-          { $autocomplete?: UserResponse<UserType>['username'] } & QueryFilter<
-            UserResponse<UserType>['username']
-          >
+          { $autocomplete?: UserResponse<UserType>['username'] } & QueryFilter<UserResponse<UserType>['username']>
         >
       | PrimitiveFilter<UserResponse<UserType>['username']>;
   } & {
@@ -1452,9 +1222,7 @@ export type BannedUsersSort = BannedUsersSortBase | Array<BannedUsersSortBase>;
 
 export type BannedUsersSortBase = { created_at?: AscDesc };
 
-export type ChannelSort<ChannelType = UnknownType> =
-  | ChannelSortBase<ChannelType>
-  | Array<ChannelSortBase<ChannelType>>;
+export type ChannelSort<ChannelType = UnknownType> = ChannelSortBase<ChannelType> | Array<ChannelSortBase<ChannelType>>;
 
 export type ChannelSortBase<ChannelType = UnknownType> = Sort<ChannelType> & {
   created_at?: AscDesc;
@@ -1470,9 +1238,7 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
-export type UserSort<UserType = UnknownType> =
-  | Sort<UserResponse<UserType>>
-  | Array<Sort<UserResponse<UserType>>>;
+export type UserSort<UserType = UnknownType> = Sort<UserResponse<UserType>> | Array<Sort<UserResponse<UserType>>>;
 
 export type MemberSort<UserType = UnknownType> =
   | Sort<Pick<UserResponse<UserType>, 'id' | 'created_at' | 'name'>>
@@ -1498,11 +1264,7 @@ export type SearchMessageSort<MessageType = UnknownType> =
   | SearchMessageSortBase<MessageType>
   | Array<SearchMessageSortBase<MessageType>>;
 
-export type QuerySort<
-  ChannelType = UnknownType,
-  UserType = UnknownType,
-  MessageType = UnknownType
-> =
+export type QuerySort<ChannelType = UnknownType, UserType = UnknownType, MessageType = UnknownType> =
   | BannedUsersSort
   | ChannelSort<ChannelType>
   | SearchMessageSort<MessageType>
@@ -1618,9 +1380,7 @@ export type BlockList = {
   words: string[];
 };
 
-export type ChannelConfig<
-  CommandType extends string = LiteralStringForUnion
-> = ChannelConfigFields &
+export type ChannelConfig<CommandType extends string = LiteralStringForUnion> = ChannelConfigFields &
   CreatedAtUpdatedAt & {
     commands?: CommandVariants<CommandType>[];
   };
@@ -1656,9 +1416,7 @@ export type ChannelConfigFields = {
   url_enrichment?: boolean;
 };
 
-export type ChannelConfigWithInfo<
-  CommandType extends string = LiteralStringForUnion
-> = ChannelConfigFields &
+export type ChannelConfigWithInfo<CommandType extends string = LiteralStringForUnion> = ChannelConfigFields &
   CreatedAtUpdatedAt & {
     commands?: CommandResponse<CommandType>[];
   };
@@ -1893,11 +1651,9 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message<
-  AttachmentType = UnknownType,
-  MessageType = UnknownType,
-  UserType = UnknownType
-> = Partial<MessageBase<AttachmentType, MessageType, UserType>> & {
+export type Message<AttachmentType = UnknownType, MessageType = UnknownType, UserType = UnknownType> = Partial<
+  MessageBase<AttachmentType, MessageType, UserType>
+> & {
   mentioned_users?: string[];
 };
 
@@ -1919,13 +1675,7 @@ export type MessageBase<
   user_id?: string;
 };
 
-export type MessageLabel =
-  | 'deleted'
-  | 'ephemeral'
-  | 'error'
-  | 'regular'
-  | 'reply'
-  | 'system';
+export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
 
 export type Mute<UserType = UnknownType> = {
   created_at: string;
@@ -1994,10 +1744,7 @@ export type RateLimitsInfo = {
 
 export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
-export type Reaction<
-  ReactionType = UnknownType,
-  UserType = UnknownType
-> = ReactionType & {
+export type Reaction<ReactionType = UnknownType, UserType = UnknownType> = ReactionType & {
   type: string;
   message_id?: string;
   score?: number;
@@ -2138,14 +1885,7 @@ export type UpdatedMessage<
   ReactionType = UnknownType,
   UserType = UnknownType
 > = Omit<
-  MessageResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >,
+  MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
   'mentioned_users'
 > & { mentioned_users?: string[] };
 
@@ -2215,14 +1955,7 @@ export type CampaignData = {
 
 export type CampaignStatus = {
   errors: string[];
-  status:
-    | 'draft'
-    | 'stopped'
-    | 'scheduled'
-    | 'completed'
-    | 'failed'
-    | 'canceled'
-    | 'in_progress';
+  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'canceled' | 'in_progress';
   completed_at?: string;
   failed_at?: string;
   progress?: number;

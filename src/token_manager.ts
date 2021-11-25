@@ -40,10 +40,7 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
    * @param {TokenOrProvider} tokenOrProvider
    * @param {UserResponse<UserType>} user
    */
-  setTokenOrProvider = async (
-    tokenOrProvider: TokenOrProvider,
-    user: UserResponse<UserType>,
-  ) => {
+  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse<UserType>) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -85,11 +82,7 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
       throw new Error('User token can not be empty');
     }
 
-    if (
-      tokenOrProvider &&
-      typeof tokenOrProvider !== 'string' &&
-      !isFunction(tokenOrProvider)
-    ) {
+    if (tokenOrProvider && typeof tokenOrProvider !== 'string' && !isFunction(tokenOrProvider)) {
       throw new Error('user token should either be a string or a function');
     }
 
@@ -98,13 +91,8 @@ export class TokenManager<UserType extends UnknownType = UnknownType> {
       if (user.anon && tokenOrProvider === '') return;
 
       const tokenUserId = UserFromToken(tokenOrProvider);
-      if (
-        tokenOrProvider != null &&
-        (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)
-      ) {
-        throw new Error(
-          'userToken does not have a user_id or is not matching with user.id',
-        );
+      if (tokenOrProvider != null && (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)) {
+        throw new Error('userToken does not have a user_id or is not matching with user.id');
       }
     }
   };

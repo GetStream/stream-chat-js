@@ -37,33 +37,12 @@ export class Permission {
 }
 
 // deprecated
-export const AllowAll = new Permission(
-  'Allow all',
-  MaxPriority,
-  AnyResource,
-  AnyRole,
-  false,
-  Allow,
-);
+export const AllowAll = new Permission('Allow all', MaxPriority, AnyResource, AnyRole, false, Allow);
 
 // deprecated
-export const DenyAll = new Permission(
-  'Deny all',
-  MinPriority,
-  AnyResource,
-  AnyRole,
-  false,
-  Deny,
-);
+export const DenyAll = new Permission('Deny all', MinPriority, AnyResource, AnyRole, false, Deny);
 
-export type Role =
-  | 'admin'
-  | 'user'
-  | 'guest'
-  | 'anonymous'
-  | 'channel_member'
-  | 'channel_moderator'
-  | string;
+export type Role = 'admin' | 'user' | 'guest' | 'anonymous' | 'channel_member' | 'channel_moderator' | string;
 
 export const BuiltinRoles = {
   Admin: 'admin',

@@ -52,20 +52,16 @@ const client: StreamChat<
   MessageType,
   ReactionType,
   UserType
-> = new StreamChat<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
->(apiKey, undefined, {
-  timeout: 3000,
-  logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
-});
+> = new StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>(
+  apiKey,
+  undefined,
+  {
+    timeout: 3000,
+    logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
+  },
+);
 
-const clientWithoutSecret: StreamChat<
+const clientWithoutSecret: StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType> = new StreamChat<
   {},
   ChannelType,
   string & {},
@@ -73,7 +69,7 @@ const clientWithoutSecret: StreamChat<
   {},
   {},
   UserType
-> = new StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey, {
+>(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
 });
@@ -88,7 +84,7 @@ const singletonClient = StreamChat.getInstance<
   UserType
 >(apiKey);
 
-const singletonClient1: StreamChat<
+const singletonClient1: StreamChat<{}, ChannelType, string & {}, {}, {}, {}, UserType> = StreamChat.getInstance<
   {},
   ChannelType,
   string & {},
@@ -96,12 +92,9 @@ const singletonClient1: StreamChat<
   {},
   {},
   UserType
-> = StreamChat.getInstance<{}, ChannelType, string & {}, {}, {}, {}, UserType>(apiKey);
+>(apiKey);
 
-const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<
-  {},
-  ChannelType
->(apiKey, '', {});
+const singletonClient2: StreamChat<{}, ChannelType> = StreamChat.getInstance<{}, ChannelType>(apiKey, '', {});
 
 const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
@@ -155,24 +148,10 @@ clientRes = client.post<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.patch<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.delete<X>('https://chat.stream-io-api.com/', { id: 2 });
 
-const file: Promise<SendFileAPIResponse> = client.sendFile(
-  'aa',
-  'bb',
-  'text.jpg',
-  'image/jpg',
-  { id: 'james' },
-);
+const file: Promise<SendFileAPIResponse> = client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', { id: 'james' });
 
 const type: EventTypes = 'user.updated';
-const event: Event<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = {
+const event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> = {
   type,
   cid: 'channelid',
   message: {
@@ -202,15 +181,7 @@ voidReturn = client.dispatchEvent(event);
 voidPromise = client.recoverState();
 
 const channels: Promise<
-  Channel<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    EventType,
-    MessageType,
-    ReactionType,
-    UserType
-  >[]
+  Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>[]
 > = client.queryChannels({}, {}, {});
 channels.then((response) => {
   const type: string = response[0].type;
@@ -239,25 +210,11 @@ const chUser1: ChannelMemberResponse<UserType> = channelState.members.someUser12
 const chUser2: ChannelMemberResponse<UserType> = channelState.members.someUser124332221;
 
 const chUser3: UserResponse<UserType> = channelState.read.someUserId.user;
-const typing: Event<
-  AttachmentType,
-  ChannelType,
-  CommandType,
-  EventType,
-  MessageType,
-  ReactionType,
-  UserType
-> = channelState.typing['someUserId'];
+const typing: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType> =
+  channelState.typing['someUserId'];
 
 const acceptInvite: Promise<
-  UpdateChannelAPIResponse<
-    AttachmentType,
-    ChannelType,
-    CommandType,
-    MessageType,
-    ReactionType,
-    UserType
-  >
+  UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
 > = channel.acceptInvite({});
 
 voidReturn = channel.on(eventHandler);
@@ -268,39 +225,11 @@ voidReturn = channel.off('message.new', eventHandler);
 channel.sendMessage({ text: 'text' }); // send a msg without id
 
 const permissions = [
-  new Permission(
-    'Admin users can perform any action',
-    MaxPriority,
-    AnyResource,
-    AnyRole,
-    false,
-    Allow,
-  ),
-  new Permission(
-    'Anonymous users are not allowed',
-    500,
-    AnyResource,
-    ['anonymous'],
-    false,
-    Deny,
-  ),
-  new Permission(
-    'Users can modify their own messages',
-    400,
-    AnyResource,
-    ['user'],
-    true,
-    Allow,
-  ),
+  new Permission('Admin users can perform any action', MaxPriority, AnyResource, AnyRole, false, Allow),
+  new Permission('Anonymous users are not allowed', 500, AnyResource, ['anonymous'], false, Deny),
+  new Permission('Users can modify their own messages', 400, AnyResource, ['user'], true, Allow),
   new Permission('Users can create channels', 300, AnyResource, ['user'], false, Allow),
-  new Permission(
-    'Channel Members',
-    200,
-    ['ReadChannel', 'CreateMessage'],
-    ['channel_member'],
-    false,
-    Allow,
-  ),
+  new Permission('Channel Members', 200, ['ReadChannel', 'CreateMessage'], ['channel_member'], false, Allow),
   new Permission('Discard all', 100, AnyResource, AnyRole, false, Deny),
 ];
 
