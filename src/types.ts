@@ -205,6 +205,7 @@ export type ChannelResponse<
   name?: string;
   own_capabilities?: string[];
   team?: string;
+  truncated_at?: string;
   updated_at?: string;
 };
 
@@ -699,9 +700,20 @@ export type SendMessageAPIResponse<
 export type TruncateChannelAPIResponse<
   ChannelType = UnknownType,
   CommandType extends string = LiteralStringForUnion,
-  UserType = UnknownType
+  UserType = UnknownType,
+  AttachmentType = UnknownType,
+  MessageType = UnknownType,
+  ReactionType = UnknownType
 > = APIResponse & {
   channel: ChannelResponse<ChannelType, CommandType, UserType>;
+  message?: MessageResponse<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
 };
 
 export type UpdateChannelAPIResponse<
@@ -2237,4 +2249,11 @@ export type TaskStatus = {
     type: string;
   };
   result?: UnknownType;
+};
+
+export type TruncateOptions<AttachmentType, MessageType, UserType> = {
+  hard_delete?: boolean;
+  message?: Message<AttachmentType, MessageType, UserType>;
+  skip_push?: boolean;
+  truncated_at?: Date;
 };
