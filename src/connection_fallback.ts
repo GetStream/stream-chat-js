@@ -20,8 +20,12 @@ export class WSConnectionFallback {
     this.state = ConnectionState.Init;
   }
 
-  _newCancelToken = () => new axios.CancelToken((cancel) => (this.cancel = cancel));
+  /** @private */
+  _newCancelToken = () => {
+    return new axios.CancelToken((cancel) => (this.cancel = cancel));
+  };
 
+  /** @private */
   _req<T>(params: UnknownType, config: AxiosRequestConfig) {
     return this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
       cancelToken: this._newCancelToken(),
@@ -30,6 +34,14 @@ export class WSConnectionFallback {
     });
   }
 
+  /** @private */
+  _setConnectionID = (id: string) => {
+    if (this.client.wsConnection) {
+      this.client.wsConnection.connectionID = id;
+    }
+  };
+
+  /** @private */
   _poll = async (connection_id: string) => {
     while (this.state === ConnectionState.Connected) {
       try {
@@ -71,6 +83,7 @@ export class WSConnectionFallback {
       );
 
       this.state = ConnectionState.Connected;
+      this._setConnectionID(event.connection_id);
       this._poll(event.connection_id).then();
       return event;
     } catch (err) {

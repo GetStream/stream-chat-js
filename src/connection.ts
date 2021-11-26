@@ -185,15 +185,14 @@ export class StableWSConnection<
    * @returns json string
    */
   _buildUrlPayload = () => {
-    const params = {
+    return JSON.stringify({
       user_id: this.client.userID,
       user_details: this.client._user,
       user_token: this.client.tokenManager.getToken(),
       server_determines_connection_id: true,
       device: this.client.options.device,
       client_request_id: this.requestID,
-    };
-    return JSON.stringify(params);
+    });
   };
 
   /**
