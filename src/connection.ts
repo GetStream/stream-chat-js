@@ -57,7 +57,7 @@ export class StableWSConnection<
     reason?: Error & { code?: string | number; isWSFailure?: boolean; StatusCode?: string | number },
   ) => void;
   requestID: string | undefined;
-  resolvePromise?: (value: WebSocket.MessageEvent) => void;
+  resolvePromise?: (value: ConnectionOpen<ChannelType, CommandType, UserType>) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
@@ -403,11 +403,11 @@ export class StableWSConnection<
     // after that a ws.onclose..
     if (!this.isResolved && data) {
       this.isResolved = true;
-      if (data.error != null) {
+      if (data.error) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
       } else {
-        this.resolvePromise?.(event);
+        this.resolvePromise?.(data);
         this._setHealth(true);
       }
     }
@@ -578,18 +578,9 @@ export class StableWSConnection<
   _setupConnectionPromise = () => {
     this.isResolved = false;
     /** a promise that is resolved once ws.open is called */
-    this.connectionOpen = new Promise<WebSocket.MessageEvent>((resolve, reject) => {
+    this.connectionOpen = new Promise<ConnectionOpen<ChannelType, CommandType, UserType>>((resolve, reject) => {
       this.resolvePromise = resolve;
       this.rejectPromise = reject;
-    }).then((e) => {
-      if (!e.data || typeof e.data !== 'string') return;
-
-      const data = JSON.parse(e.data) as ConnectionOpen<ChannelType, CommandType, UserType> & { error?: unknown };
-      if (data?.error) {
-        throw new Error(JSON.stringify(data.error));
-      }
-
-      return data;
     });
   };
 
