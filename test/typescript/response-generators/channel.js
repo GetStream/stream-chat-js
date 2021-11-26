@@ -62,9 +62,7 @@ async function deleteChannel() {
 
 async function deleteFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/index.js'),
-	);
+	const rs = fs.createReadStream(url.pathToFileURL('./test/typescript/response-generators/index.js'));
 	const file = await channel.sendFile(rs, 'testFile');
 	return channel.deleteFile(file.file);
 }
@@ -72,9 +70,7 @@ async function deleteFile() {
 async function deleteImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/stream.png'),
-	);
+	const rs = fs.createReadStream(url.pathToFileURL('./test/typescript/response-generators/stream.png'));
 	const image = await channel.sendImage(rs, 'testImage');
 	return channel.deleteImage(image.file);
 }
@@ -168,18 +164,14 @@ async function removeMembers() {
 
 async function sendFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/index.js'),
-	);
+	const rs = fs.createReadStream(url.pathToFileURL('./test/typescript/response-generators/index.js'));
 	return await channel.sendFile(rs, 'testFile');
 }
 
 async function sendImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/stream.png'),
-	);
+	const rs = fs.createReadStream(url.pathToFileURL('./test/typescript/response-generators/stream.png'));
 	return await channel.sendImage(rs, 'testImage');
 }
 

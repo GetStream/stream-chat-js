@@ -23,16 +23,11 @@ export class WSConnectionFallback {
   _newCancelToken = () => new axios.CancelToken((cancel) => (this.cancel = cancel));
 
   _req<T>(params: UnknownType, config: AxiosRequestConfig) {
-    return this.client.doAxiosRequest<T>(
-      'get',
-      this.client.baseURL + '/longpoll',
-      undefined,
-      {
-        cancelToken: this._newCancelToken(),
-        config,
-        params,
-      },
-    );
+    return this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
+      cancelToken: this._newCancelToken(),
+      config,
+      params,
+    });
   }
 
   _poll = async (connection_id: string) => {
