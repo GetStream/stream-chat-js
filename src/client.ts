@@ -1021,6 +1021,7 @@ export class StreamChat<
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
       if (e.response) {
+        /** connection_fallback depends on this token expiration logic */
         if (e.response.data.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
           if (this.consecutiveFailures > 1) {
             await sleep(retryInterval(this.consecutiveFailures));

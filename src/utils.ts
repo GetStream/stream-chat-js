@@ -28,6 +28,7 @@ export function isFunction<T>(value: Function | T): value is Function {
 
 export const chatCodes = {
   TOKEN_EXPIRED: 40,
+  CONNECTION_ID_ERROR: 46,
   WS_CLOSED_SUCCESS: 1000,
 };
 

@@ -1,4 +1,6 @@
 import axios, { AxiosRequestConfig, Canceler } from 'axios';
+import { StableWSConnection } from './connection';
+import { chatCodes } from './utils';
 import { StreamChat } from './client';
 import { ConnectionOpen, Event, UnknownType } from './types';
 
@@ -12,11 +14,15 @@ enum ConnectionState {
 
 export class WSConnectionFallback {
   client: StreamChat;
+  wsConnection: StableWSConnection;
   state: ConnectionState;
   cancel?: Canceler;
 
   constructor({ client }: { client: StreamChat }) {
+    if (!client.wsConnection) throw new Error('missing wsConnection, this class depends on client.wsConnection');
+
     this.client = client;
+    this.wsConnection = client.wsConnection;
     this.state = ConnectionState.Init;
   }
 
@@ -59,14 +65,18 @@ export class WSConnectionFallback {
         if (axios.isCancel(err)) {
           return;
         }
-        console.error(err);
-        // TODO: handle consequent failures
-        //TODO: check for error.code 46 and reset the client, for random failures fallback to loop
+
+        /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
+        if (err.code === chatCodes.CONNECTION_ID_ERROR) {
+          this.state = ConnectionState.Disconnectted;
+          this.connect();
+          return;
+        }
       }
     }
   };
 
-  connect = async (jsonPayload: string) => {
+  connect = async () => {
     if (this.state === ConnectionState.Connecting) {
       throw new Error('connecting already in progress');
     }
@@ -75,10 +85,10 @@ export class WSConnectionFallback {
     }
 
     this.state = ConnectionState.Connecting;
-
+    const payload = this.wsConnection._buildUrlPayload();
     try {
       const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
-        { json: jsonPayload },
+        { json: payload },
         { timeout: 10000 }, // 10s
       );
 
