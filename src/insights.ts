@@ -55,7 +55,7 @@ function buildWsBaseInsight(connection: StableWSConnection) {
     auth_type: client.getAuthType(),
     token: client.tokenManager.token,
     user_id: client.userID,
-    user_details: client.user,
+    user_details: client._user,
     device: client.options.device,
     client_id: connection.connectionID,
     ws_details: connection.ws,

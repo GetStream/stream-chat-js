@@ -1,7 +1,7 @@
 import WebSocket from 'isomorphic-ws';
 import { chatCodes, convertErrorToJson, sleep, retryInterval, randomId } from './utils';
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
-import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel, UserResponse } from './types';
+import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel } from './types';
 import { StreamChat } from './client';
 
 // Type guards to check WebSocket error type
@@ -179,8 +179,8 @@ export class StableWSConnection<
    */
   _buildUrl = (reqID?: string) => {
     const params = {
-      user_id: (this.client.user as UserResponse).id,
-      user_details: this.client.user,
+      user_id: this.client.userID,
+      user_details: this.client._user,
       user_token: this.client.tokenManager.getToken(),
       server_determines_connection_id: true,
       device: this.client.options.device,
