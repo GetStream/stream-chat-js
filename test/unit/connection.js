@@ -16,13 +16,13 @@ const expect = chai.expect;
 describe('connection', function () {
 	const wsBaseURL = 'http://localhost:9999';
 	const tokenManager = new TokenManager('secret');
-	const user = { name: 'amin' };
+	const user = { name: 'amin', id: 'amin' };
 	const newStreamChat = () => {
 		const client = new StreamChat('key');
 		client.wsBaseURL = wsBaseURL;
 		client.tokenManager = tokenManager;
-		client.user = user;
-		client.userID = user.name;
+		client._user = user;
+		client.userID = user.id;
 		client.logger = () => null;
 		client.options.enableInsights = true;
 		client.userAgent = 'agent';
