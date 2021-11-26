@@ -406,10 +406,10 @@ export class StableWSConnection<
       if (data.error) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
-      } else {
-        this.resolvePromise?.(data);
-        this._setHealth(true);
       }
+
+      this.resolvePromise?.(data);
+      this._setHealth(true);
     }
 
     // trigger the event..
