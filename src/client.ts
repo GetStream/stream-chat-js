@@ -146,7 +146,6 @@ export class StreamChat<
   clientID?: string;
   configs: Configs<CommandType>;
   connectionID?: string;
-  failures?: number;
   key: string;
   listeners: {
     [key: string]: Array<
@@ -1410,18 +1409,13 @@ export class StreamChat<
    * @private
    */
   async connect() {
-    const client = this;
-    this.failures = 0;
-
-    if (client.userID == null || this._user == null) {
+    if (!this.userID || !this._user) {
       throw Error('Call connectUser or connectAnonymousUser before starting the connection');
     }
-
-    if (client.wsBaseURL == null) {
+    if (!this.wsBaseURL) {
       throw Error('Websocket base url not set');
     }
-
-    if (client.clientID == null) {
+    if (!this.clientID) {
       throw Error('clientID is not set');
     }
 
@@ -1439,6 +1433,7 @@ export class StreamChat<
       MessageType,
       ReactionType
     >({ client: this });
+
     return await this.wsConnection.connect();
   }
 
