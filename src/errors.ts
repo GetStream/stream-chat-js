@@ -20,6 +20,7 @@ export const APIErrorCodes = {
   '43': { name: 'AuthErrorTokenSignatureInvalid', retryable: false },
   '44': { name: 'CustomCommandEndpointMissingError', retryable: false },
   '45': { name: 'CustomCommandEndpointCallError', retryable: true },
+  '46': { name: 'ConnectionIDNotFoundError', retryable: false },
   '60': { name: 'CoolDownError', retryable: true },
   '69': { name: 'ErrWrongRegion', retryable: false },
   '70': { name: 'ErrQueryChannelPermissions', retryable: false },
