@@ -1,18 +1,8 @@
 import WebSocket from 'isomorphic-ws';
 import { chatCodes, convertErrorToJson, sleep, retryInterval, randomId } from './utils';
-import { TokenManager } from './token_manager';
-import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, InsightMetrics, postInsights } from './insights';
-import {
-  BaseDeviceFields,
-  ConnectAPIResponse,
-  ConnectionChangeEvent,
-  ConnectionOpen,
-  LiteralStringForUnion,
-  Logger,
-  UR,
-  UserResponse,
-  LogLevel,
-} from './types';
+import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
+import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel } from './types';
+import { StreamChat } from './client';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent): res is WebSocket.CloseEvent =>
@@ -20,28 +10,6 @@ const isCloseEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.Err
 
 const isErrorEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent): res is WebSocket.ErrorEvent =>
   (res as WebSocket.ErrorEvent).error !== undefined;
-
-type Constructor<
-  ChannelType extends UR = UR,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UR = UR
-> = {
-  apiKey: string;
-  authType: 'anonymous' | 'jwt';
-  clientID: string;
-  eventCallback: (event: ConnectionChangeEvent) => void;
-  insightMetrics: InsightMetrics;
-  logger: Logger | (() => void);
-  messageCallback: (messageEvent: WebSocket.MessageEvent) => void;
-  recoverCallback: (open?: ConnectionOpen<ChannelType, CommandType, UserType>) => Promise<void>;
-  tokenManager: TokenManager<UserType>;
-  user: UserResponse<UserType>;
-  userAgent: string;
-  userID: string;
-  wsBaseURL: string;
-  device?: BaseDeviceFields;
-  enableInsights?: boolean;
-};
 
 /**
  * StableWSConnection - A WS connection that reconnects upon failure.
@@ -61,23 +29,19 @@ type Constructor<
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
 export class StableWSConnection<
+  // CAUTION: generics are out of usual order here
   ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
-  UserType extends UR = UR
+  UserType extends UR = UR,
+  AttachmentType extends UR = UR,
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR
 > {
-  apiKey: Constructor<ChannelType, CommandType, UserType>['apiKey'];
-  authType: Constructor<ChannelType, CommandType, UserType>['authType'];
-  clientID: Constructor<ChannelType, CommandType, UserType>['clientID'];
-  eventCallback: Constructor<ChannelType, CommandType, UserType>['eventCallback'];
-  logger: Constructor<ChannelType, CommandType, UserType>['logger'];
-  messageCallback: Constructor<ChannelType, CommandType, UserType>['messageCallback'];
-  recoverCallback: Constructor<ChannelType, CommandType, UserType>['recoverCallback'];
-  tokenManager: Constructor<ChannelType, CommandType, UserType>['tokenManager'];
-  user: Constructor<ChannelType, CommandType, UserType>['user'];
-  userAgent: Constructor<ChannelType, CommandType, UserType>['userAgent'];
-  userID: Constructor<ChannelType, CommandType, UserType>['userID'];
-  wsBaseURL: Constructor<ChannelType, CommandType, UserType>['wsBaseURL'];
-  device: Constructor<ChannelType, CommandType, UserType>['device'];
+  // global from constructor
+  client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+
+  // local vars
   connectionID?: string;
   connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
   consecutiveFailures: number;
@@ -90,46 +54,21 @@ export class StableWSConnection<
   connectionCheckTimeout: number;
   connectionCheckTimeoutRef?: NodeJS.Timeout;
   rejectPromise?: (
-    reason?: Error & {
-      code?: string | number;
-      isWSFailure?: boolean;
-      StatusCode?: string | number;
-    },
+    reason?: Error & { code?: string | number; isWSFailure?: boolean; StatusCode?: string | number },
   ) => void;
   requestID: string | undefined;
-  connectionStartTimestamp: number | undefined;
-  resolvePromise?: (value: WebSocket.MessageEvent) => void;
+  resolvePromise?: (value: ConnectionOpen<ChannelType, CommandType, UserType>) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
-  enableInsights?: boolean;
-  insightMetrics: InsightMetrics;
+
   constructor({
-    apiKey,
-    authType,
-    clientID,
-    eventCallback,
-    logger,
-    messageCallback,
-    recoverCallback,
-    tokenManager,
-    user,
-    userAgent,
-    userID,
-    wsBaseURL,
-    device,
-    enableInsights,
-    insightMetrics,
-  }: Constructor<ChannelType, CommandType, UserType>) {
-    this.wsBaseURL = wsBaseURL;
-    this.clientID = clientID;
-    this.userID = userID;
-    this.user = user;
-    this.authType = authType;
-    this.userAgent = userAgent;
-    this.apiKey = apiKey;
-    this.tokenManager = tokenManager;
-    this.device = device;
+    client,
+  }: {
+    client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+  }) {
+    /** StreamChat client */
+    this.client = client;
     /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
@@ -140,11 +79,6 @@ export class StableWSConnection<
     this.isResolved = false;
     /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
-    /** Callback when the connection fails and recovers */
-    this.recoverCallback = recoverCallback;
-    this.messageCallback = messageCallback;
-    this.eventCallback = eventCallback;
-    this.logger = logger;
     /** Incremented when a new WS connection is made */
     this.wsID = 1;
     /** Store the last event time for health checks */
@@ -153,12 +87,10 @@ export class StableWSConnection<
     this.pingInterval = 25 * 1000;
     this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
     this._listenForConnectionChanges();
-    this.enableInsights = enableInsights;
-    this.insightMetrics = insightMetrics;
   }
 
   _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
-    this.logger(level, 'connection:' + msg, { tags: ['connection'], ...extra });
+    this.client.logger(level, 'connection:' + msg, { tags: ['connection'], ...extra });
   }
 
   /**
@@ -180,7 +112,7 @@ export class StableWSConnection<
       this.isHealthy = false;
       this.consecutiveFailures += 1;
 
-      if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
+      if (error.code === chatCodes.TOKEN_EXPIRED && !this.client.tokenManager.isStatic()) {
         this._log('connect() - WS failure due to expired token, so going to try to reload token and reconnect');
         this._reconnect({ refreshToken: true });
       } else if (!error.isWSFailure) {
@@ -247,16 +179,18 @@ export class StableWSConnection<
    */
   _buildUrl = (reqID?: string) => {
     const params = {
-      user_id: this.user.id,
-      user_details: this.user,
-      user_token: this.tokenManager.getToken(),
+      user_id: this.client.userID,
+      user_details: this.client._user,
+      user_token: this.client.tokenManager.getToken(),
       server_determines_connection_id: true,
-      device: this.device,
+      device: this.client.options.device,
       client_request_id: reqID,
     };
     const qs = encodeURIComponent(JSON.stringify(params));
-    const token = this.tokenManager.getToken();
-    return `${this.wsBaseURL}/connect?json=${qs}&api_key=${this.apiKey}&authorization=${token}&stream-auth-type=${this.authType}&X-Stream-Client=${this.userAgent}`;
+    const token = this.client.tokenManager.getToken();
+    return `${this.client.wsBaseURL}/connect?json=${qs}&api_key=${
+      this.client.key
+    }&authorization=${token}&stream-auth-type=${this.client.getAuthType()}&X-Stream-Client=${this.client.getUserAgent()}`;
   };
 
   /**
@@ -325,9 +259,9 @@ export class StableWSConnection<
     if (this.isConnecting) return; // simply ignore _connect if it's currently trying to connect
     this.isConnecting = true;
     this.requestID = randomId();
-    this.insightMetrics.connectionStartTimestamp = new Date().getTime();
+    this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
     try {
-      await this.tokenManager.tokenReady();
+      await this.client.tokenManager.tokenReady();
       this._setupConnectionPromise();
       const wsURL = this._buildUrl(this.requestID);
       this.ws = new WebSocket(wsURL);
@@ -340,21 +274,21 @@ export class StableWSConnection<
 
       if (response) {
         this.connectionID = response.connection_id;
-        if (this.insightMetrics.wsConsecutiveFailures > 0 && this.enableInsights) {
+        if (this.client.insightMetrics.wsConsecutiveFailures > 0 && this.client.options.enableInsights) {
           postInsights(
             'ws_success_after_failure',
             buildWsSuccessAfterFailureInsight((this as unknown) as StableWSConnection),
           );
-          this.insightMetrics.wsConsecutiveFailures = 0;
+          this.client.insightMetrics.wsConsecutiveFailures = 0;
         }
         return response;
       }
     } catch (err) {
       this.isConnecting = false;
 
-      if (this.enableInsights) {
-        this.insightMetrics.wsConsecutiveFailures++;
-        this.insightMetrics.wsTotalFailures++;
+      if (this.client.options.enableInsights) {
+        this.client.insightMetrics.wsConsecutiveFailures++;
+        this.client.insightMetrics.wsTotalFailures++;
 
         const insights = buildWsFatalInsight((this as unknown) as StableWSConnection, convertErrorToJson(err as Error));
         postInsights?.('ws_fatal', insights);
@@ -401,21 +335,20 @@ export class StableWSConnection<
     this._destroyCurrentWSConnection();
 
     if (options.refreshToken) {
-      await this.tokenManager.loadToken();
+      await this.client.tokenManager.loadToken();
     }
 
     try {
-      const open = await this._connect();
-      if (this.recoverCallback) {
-        this._log('_reconnect() - Waiting for recoverCallBack');
-        await this.recoverCallback(open);
-        this._log('_reconnect() - Finished recoverCallBack');
-      }
+      await this._connect();
+      this._log('_reconnect() - Waiting for recoverCallBack');
+      await this.client.recoverState();
+      this._log('_reconnect() - Finished recoverCallBack');
+
       this.consecutiveFailures = 0;
     } catch (error) {
       this.isHealthy = false;
       this.consecutiveFailures += 1;
-      if (error.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
+      if (error.code === chatCodes.TOKEN_EXPIRED && !this.client.tokenManager.isStatic()) {
         this._log('_reconnect() - WS failure due to expired token, so going to try to reload token and reconnect');
 
         return this._reconnect({ refreshToken: true });
@@ -470,13 +403,13 @@ export class StableWSConnection<
     // after that a ws.onclose..
     if (!this.isResolved && data) {
       this.isResolved = true;
-      if (data.error != null) {
+      if (data.error) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
-      } else {
-        this.resolvePromise?.(event);
-        this._setHealth(true);
       }
+
+      this.resolvePromise?.(data);
+      this._setHealth(true);
     }
 
     // trigger the event..
@@ -487,7 +420,7 @@ export class StableWSConnection<
       this.scheduleNextPing();
     }
 
-    this.messageCallback(event);
+    this.client.handleEvent(event);
     this.scheduleConnectionCheck();
   };
 
@@ -545,21 +478,22 @@ export class StableWSConnection<
    *
    */
   _setHealth = (healthy: boolean) => {
-    if (healthy && !this.isHealthy) {
-      // yes we are online:
-      this.isHealthy = true;
-      this.eventCallback({ type: 'connection.changed', online: true });
+    if (healthy === this.isHealthy) return;
+
+    this.isHealthy = healthy;
+
+    if (this.isHealthy) {
+      //@ts-expect-error
+      this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
+      return;
     }
 
-    if (!healthy && this.isHealthy) {
-      // bummer we are offline
-      this.isHealthy = false;
-      setTimeout(() => {
-        if (!this.isHealthy) {
-          this.eventCallback({ type: 'connection.changed', online: false });
-        }
-      }, 5000);
-    }
+    // we're offline, wait few seconds and fire and event if still offline
+    setTimeout(() => {
+      if (this.isHealthy) return;
+      //@ts-expect-error
+      this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
+    }, 5000);
   };
 
   /**
@@ -631,13 +565,8 @@ export class StableWSConnection<
     this.wsID += 1;
 
     try {
-      if (this.ws && this.ws.removeAllListeners) {
-        this.ws.removeAllListeners();
-      }
-
-      if (this.ws && this.ws.close) {
-        this.ws.close();
-      }
+      this?.ws?.removeAllListeners();
+      this?.ws?.close();
     } catch (e) {
       // we don't care
     }
@@ -647,30 +576,12 @@ export class StableWSConnection<
    * _setupPromise - sets up the this.connectOpen promise
    */
   _setupConnectionPromise = () => {
-    const that = this;
     this.isResolved = false;
     /** a promise that is resolved once ws.open is called */
-    this.connectionOpen = new Promise<WebSocket.MessageEvent>(function (resolve, reject) {
-      that.resolvePromise = resolve;
-      that.rejectPromise = reject;
-    }).then(
-      (e) => {
-        if (e.data && typeof e.data === 'string') {
-          const data = JSON.parse(e.data) as ConnectionOpen<ChannelType, CommandType, UserType> & {
-            error?: unknown;
-          };
-          if (data && data.error != null) {
-            throw new Error(JSON.stringify(data.error));
-          }
-          return data;
-        } else {
-          return undefined;
-        }
-      },
-      (error) => {
-        throw error;
-      },
-    );
+    this.connectionOpen = new Promise<ConnectionOpen<ChannelType, CommandType, UserType>>((resolve, reject) => {
+      this.resolvePromise = resolve;
+      this.rejectPromise = reject;
+    });
   };
 
   /**
@@ -684,7 +595,7 @@ export class StableWSConnection<
     // 30 seconds is the recommended interval (messenger uses this)
     this.healthCheckTimeoutRef = setTimeout(() => {
       // send the healthcheck.., server replies with a health check event
-      const data = [{ type: 'health.check', client_id: this.clientID }];
+      const data = [{ type: 'health.check', client_id: this.client.clientID }];
       // try to send on the connection
       try {
         this.ws?.send(JSON.stringify(data));

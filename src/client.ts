@@ -45,7 +45,6 @@ import {
   CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
-  ConnectionChangeEvent,
   CreateChannelOptions,
   CreateChannelResponse,
   CreateCommandOptions,
@@ -147,7 +146,6 @@ export class StreamChat<
   clientID?: string;
   configs: Configs<CommandType>;
   connectionID?: string;
-  failures?: number;
   key: string;
   listeners: {
     [key: string]: Array<
@@ -177,7 +175,15 @@ export class StreamChat<
   userAgent?: string;
   userID?: string;
   wsBaseURL?: string;
-  wsConnection: StableWSConnection<ChannelType, CommandType, UserType> | null;
+  wsConnection: StableWSConnection<
+    ChannelType,
+    CommandType,
+    UserType,
+    AttachmentType,
+    EventType,
+    MessageType,
+    ReactionType
+  > | null;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
@@ -1403,18 +1409,13 @@ export class StreamChat<
    * @private
    */
   async connect() {
-    const client = this;
-    this.failures = 0;
-
-    if (client.userID == null || this._user == null) {
+    if (!this.userID || !this._user) {
       throw Error('Call connectUser or connectAnonymousUser before starting the connection');
     }
-
-    if (client.wsBaseURL == null) {
+    if (!this.wsBaseURL) {
       throw Error('Websocket base url not set');
     }
-
-    if (client.clientID == null) {
+    if (!this.clientID) {
       throw Error('clientID is not set');
     }
 
@@ -1423,23 +1424,15 @@ export class StreamChat<
     }
 
     // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection<ChannelType, CommandType, UserType>({
-      wsBaseURL: client.wsBaseURL,
-      enableInsights: this.options.enableInsights,
-      clientID: client.clientID,
-      userID: client.userID,
-      tokenManager: client.tokenManager,
-      user: this._user,
-      authType: this.getAuthType(),
-      userAgent: this.getUserAgent(),
-      apiKey: this.key,
-      recoverCallback: this.recoverState,
-      messageCallback: this.handleEvent,
-      eventCallback: this.dispatchEvent as (event: ConnectionChangeEvent) => void,
-      logger: this.logger,
-      device: this.options.device,
-      insightMetrics: this.insightMetrics,
-    });
+    this.wsConnection = new StableWSConnection<
+      ChannelType,
+      CommandType,
+      UserType,
+      AttachmentType,
+      EventType,
+      MessageType,
+      ReactionType
+    >({ client: this });
 
     return await this.wsConnection.connect();
   }
