@@ -102,10 +102,10 @@ export class StableWSConnection<
 
   /**
    * connect - Connect to the WS URL
-   *
+   * the default 15s timeout allows between 2~3 tries
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
-  async connect() {
+  async connect(timeout = 15000) {
     if (this.isConnecting) {
       throw Error(`You've called connect twice, can only attempt 1 connection at the time`);
     }
@@ -135,7 +135,7 @@ export class StableWSConnection<
       }
     }
 
-    return await this._waitForHealthy();
+    return await this._waitForHealthy(timeout);
   }
 
   /**
