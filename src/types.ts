@@ -1874,6 +1874,20 @@ export type TranslationLanguages =
 
 export type TypingStartEvent = Event;
 
+export type ReservedMessageFields =
+  | 'command'
+  | 'created_at'
+  | 'html'
+  | 'latest_reactions'
+  | 'own_reactions'
+  | 'quoted_message'
+  | 'reaction_counts'
+  | 'reply_count'
+  | 'type'
+  | 'updated_at'
+  | 'user'
+  | '__html';
+
 export type UpdatedMessage<
   AttachmentType = UR,
   ChannelType = UR,

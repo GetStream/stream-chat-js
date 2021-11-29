@@ -118,6 +118,7 @@ import {
   DeleteUserOptions,
   DeleteChannelsResponse,
   TaskResponse,
+  ReservedMessageFields,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2420,24 +2421,13 @@ export class StreamChat<
     const clonedMessage: Message = Object.assign({}, message);
     delete clonedMessage.id;
 
-    const reservedMessageFields: Array<
-      | 'command'
-      | 'created_at'
-      | 'html'
-      | 'latest_reactions'
-      | 'own_reactions'
-      | 'reaction_counts'
-      | 'reply_count'
-      | 'type'
-      | 'updated_at'
-      | 'user'
-      | '__html'
-    > = [
+    const reservedMessageFields: Array<ReservedMessageFields> = [
       'command',
       'created_at',
       'html',
       'latest_reactions',
       'own_reactions',
+      'quoted_message',
       'reaction_counts',
       'reply_count',
       'type',
