@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, Canceler } from 'axios';
 import { StableWSConnection } from './connection';
-import { chatCodes } from './utils';
+import { chatCodes, retryInterval, sleep } from './utils';
 import { StreamChat } from './client';
 import { ConnectionOpen, Event, UnknownType } from './types';
 
@@ -14,16 +14,14 @@ enum ConnectionState {
 
 export class WSConnectionFallback {
   client: StreamChat;
-  wsConnection: StableWSConnection;
   state: ConnectionState;
+  consecutiveFailures: number;
   cancel?: Canceler;
 
   constructor({ client }: { client: StreamChat }) {
-    if (!client.wsConnection) throw new Error('missing wsConnection, this class depends on client.wsConnection');
-
     this.client = client;
-    this.wsConnection = client.wsConnection;
     this.state = ConnectionState.Init;
+    this.consecutiveFailures = 0;
   }
 
   /** @private */
@@ -32,13 +30,13 @@ export class WSConnectionFallback {
   };
 
   /** @private */
-  _req<T>(params: UnknownType, config: AxiosRequestConfig) {
+  _req = <T>(params: UnknownType, config: AxiosRequestConfig) => {
     return this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
       cancelToken: this._newCancelToken(),
       config,
       params,
     });
-  }
+  };
 
   /** @private */
   _setConnectionID = (id: string) => {
@@ -49,6 +47,8 @@ export class WSConnectionFallback {
 
   /** @private */
   _poll = async (connection_id: string) => {
+    this.consecutiveFailures = 0;
+
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{ events: Event[] }>(
@@ -72,6 +72,9 @@ export class WSConnectionFallback {
           this.connect();
           return;
         }
+
+        this.consecutiveFailures += 1;
+        await sleep(retryInterval(this.consecutiveFailures));
       }
     }
   };
@@ -85,7 +88,7 @@ export class WSConnectionFallback {
     }
 
     this.state = ConnectionState.Connecting;
-    const payload = this.wsConnection._buildUrlPayload();
+    const payload = (this.client.wsConnection as StableWSConnection)._buildUrlPayload();
     try {
       const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
         { json: payload },
