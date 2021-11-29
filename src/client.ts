@@ -189,6 +189,8 @@ export class StreamChat<
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
+  defaultWSTimeoutWithFallback: number;
+  defaultWSTimeout: number;
 
   /**
    * Initialize a client
@@ -273,6 +275,9 @@ export class StreamChat<
     this.tokenManager = new TokenManager(this.secret);
     this.consecutiveFailures = 0;
     this.insightMetrics = new InsightMetrics();
+
+    this.defaultWSTimeoutWithFallback = 6000;
+    this.defaultWSTimeout = 15000;
 
     /**
      * logger function should accept 3 parameters:
@@ -1435,7 +1440,9 @@ export class StreamChat<
 
     try {
       // if WSFallback is enabled, ws connect should timeout faster so fallback can try
-      return await this.wsConnection.connect(this.options.enableWSFallback ? 6000 : 15000); // 6s vs 15s
+      return await this.wsConnection.connect(
+        this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
+      );
     } catch (err) {
       // run fallback only if it's WS/Network error and not a normal API error
       if (this.options.enableWSFallback && isWSFailure(err)) {

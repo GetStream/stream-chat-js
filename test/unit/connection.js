@@ -140,7 +140,7 @@ describe('connection', function () {
 			const c = new StableWSConnection({ client });
 
 			expect(c.isConnecting).to.be.false;
-			const connection = c.connect();
+			const connection = c.connect(1000);
 			expect(c.isConnecting).to.be.true;
 			try {
 				await connection;
@@ -163,22 +163,28 @@ describe('connection', function () {
 	});
 
 	describe('Connection connect timeout', function () {
-		const client = new StreamChat('apiKey', {
-			allowServerSideConnect: true,
-			baseURL: 'http://localhost:1111', // invalid base url
-			enableInsights: true,
-		});
-
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';
 
 		it('should fail with invalid URL', async function () {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:1111', // invalid base url
+			});
+			client.defaultWSTimeout = 2000;
+
 			await expect(client.connectUser({ id: 'amin' }, token)).to.be.rejectedWith(
 				/initial WS connection could not be established/,
 			);
 		});
 
-		it('should retry until connection is establsihed', async function () {
+		it('should retry until connection is established', async function () {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:1111', // invalid base url
+			});
+			client.defaultWSTimeout = 5000;
+
 			await Promise.all([
 				client.connectUser({ id: 'amin' }, token).then((health) => {
 					expect(health.type).to.be.equal('health.check');
