@@ -165,6 +165,7 @@ export class StableWSConnection<
       })(),
       (async () => {
         await sleep(timeout);
+        this.isConnecting = false;
         throw new Error(
           JSON.stringify({
             code: '',
@@ -199,6 +200,7 @@ export class StableWSConnection<
     this._log(`disconnect() - Closing the websocket connection for wsID ${this.wsID}`);
 
     this.wsID += 1;
+    this.isConnecting = false;
     this.isDisconnected = true;
 
     // start by removing all the listeners
