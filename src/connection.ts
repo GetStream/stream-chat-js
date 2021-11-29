@@ -3,7 +3,6 @@ import { chatCodes, convertErrorToJson, sleep, retryInterval, randomId } from '.
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
 import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel } from './types';
 import { StreamChat } from './client';
-import { WSConnectionFallback } from './connection_fallback';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent): res is WebSocket.CloseEvent =>
@@ -63,8 +62,6 @@ export class StableWSConnection<
   ws?: WebSocket;
   wsID: number;
 
-  fallback?: WSConnectionFallback;
-
   constructor({
     client,
   }: {
@@ -90,10 +87,6 @@ export class StableWSConnection<
     this.pingInterval = 25 * 1000;
     this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
     this._listenForConnectionChanges();
-
-    if (this.client.options.enableWSFallback) {
-      this.fallback = new WSConnectionFallback({ client: (client as unknown) as StreamChat });
-    }
   }
 
   _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
@@ -246,10 +239,6 @@ export class StableWSConnection<
     }
 
     delete this.ws;
-
-    if (this.fallback) {
-      this.fallback.disconnect();
-    }
 
     return isClosedPromise;
   }
