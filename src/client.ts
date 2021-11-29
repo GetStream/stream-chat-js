@@ -1680,7 +1680,7 @@ export class StreamChat<
    *
    */
   setLocalDevice(device: BaseDeviceFields) {
-    if (this.wsConnection) {
+    if (this.wsConnection || this.wsFallback) {
       throw new Error('you can only set device before opening a websocket connection');
     }
 
