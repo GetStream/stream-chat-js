@@ -2581,6 +2581,22 @@ export class StreamChat<
     }, 500);
   }
 
+  /**
+   * encode ws url payload
+   * @private
+   * @returns json string
+   */
+  _buildWSPayload = (client_request_id?: string) => {
+    return JSON.stringify({
+      user_id: this.userID,
+      user_details: this._user,
+      user_token: this.tokenManager.getToken(),
+      server_determines_connection_id: true,
+      device: this.options.device,
+      client_request_id,
+    });
+  };
+
   verifyWebhook(requestBody: string, xSignature: string) {
     return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
   }

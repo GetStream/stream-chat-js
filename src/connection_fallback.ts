@@ -1,5 +1,4 @@
 import axios, { AxiosRequestConfig, Canceler } from 'axios';
-import { StableWSConnection } from './connection';
 import { chatCodes, retryInterval, sleep } from './utils';
 import { StreamChat } from './client';
 import { ConnectionOpen, Event, UnknownType } from './types';
@@ -88,10 +87,9 @@ export class WSConnectionFallback {
     }
 
     this.state = ConnectionState.Connecting;
-    const payload = (this.client.wsConnection as StableWSConnection)._buildUrlPayload();
     try {
       const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
-        { json: payload },
+        { json: this.client._buildWSPayload() },
         { timeout: 10000 }, // 10s
       );
 

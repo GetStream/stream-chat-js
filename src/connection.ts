@@ -180,28 +180,12 @@ export class StableWSConnection<
   }
 
   /**
-   * encode ws url payload
-   * @private
-   * @returns json string
-   */
-  _buildUrlPayload = () => {
-    return JSON.stringify({
-      user_id: this.client.userID,
-      user_details: this.client._user,
-      user_token: this.client.tokenManager.getToken(),
-      server_determines_connection_id: true,
-      device: this.client.options.device,
-      client_request_id: this.requestID,
-    });
-  };
-
-  /**
    * Builds and returns the url for websocket.
    * @private
    * @returns url string
    */
   _buildUrl = () => {
-    const qs = encodeURIComponent(this._buildUrlPayload());
+    const qs = encodeURIComponent(this.client._buildWSPayload(this.requestID));
     const token = this.client.tokenManager.getToken();
 
     return `${this.client.wsBaseURL}/connect?json=${qs}&api_key=${
