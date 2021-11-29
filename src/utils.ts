@@ -204,3 +204,15 @@ export function convertErrorToJson(err: Error) {
 
   return jsonObj;
 }
+
+export function isWSFailure(err: Error & { isWSFailure?: boolean }): boolean {
+  if (typeof err.isWSFailure === 'boolean') {
+    return err.isWSFailure;
+  }
+
+  try {
+    return JSON.parse(err.message).isWSFailure;
+  } catch (_) {
+    return false;
+  }
+}

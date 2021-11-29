@@ -21,6 +21,7 @@ import {
   randomId,
   sleep,
   retryInterval,
+  isWSFailure,
 } from './utils';
 
 import {
@@ -1433,9 +1434,11 @@ export class StreamChat<
 
     try {
       // if WSFallback is enabled, ws connect should timeout faster so fallback can try
-      return await this.wsConnection.connect(this.options.enableWSFallback ? 7000 : 15000); // 7s vs 15s
+      return await this.wsConnection.connect(this.options.enableWSFallback ? 6000 : 15000); // 6s vs 15s
     } catch (err) {
-      if (this.options.enableWSFallback) {
+      // run fallback only if it's WS/Network error and not a normal API error
+      if (this.options.enableWSFallback && isWSFailure(err)) {
+        this.wsConnection.disconnect().then(); // close WS so no retry
         this.wsFallback = new WSConnectionFallback({ client: (this as unknown) as StreamChat });
         return await this.wsFallback.connect();
       }
