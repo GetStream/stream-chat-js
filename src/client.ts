@@ -537,13 +537,14 @@ export class StreamChat<
    * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  closeConnection = (timeout?: number) => {
+  closeConnection = async (timeout?: number) => {
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
     }
 
-    return Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
+    await Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
+    return Promise.resolve();
   };
 
   /**
