@@ -48,6 +48,7 @@ export class StableWSConnection<
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
+  isDisconnected: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
@@ -75,6 +76,8 @@ export class StableWSConnection<
     this.totalFailures = 0;
     /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
+    /** To avoid reconnect if client is disconnected */
+    this.isDisconnected = false;
     /** Boolean that indicates if the connection promise is resolved */
     this.isResolved = false;
     /** Boolean that indicates if we have a working connection to the server */
@@ -102,6 +105,8 @@ export class StableWSConnection<
     if (this.isConnecting) {
       throw Error(`You've called connect twice, can only attempt 1 connection at the time`);
     }
+
+    this.isDisconnected = false;
 
     try {
       const healthCheck = await this._connect();
@@ -194,6 +199,7 @@ export class StableWSConnection<
     this._log(`disconnect() - Closing the websocket connection for wsID ${this.wsID}`);
 
     this.wsID += 1;
+    this.isDisconnected = true;
 
     // start by removing all the listeners
     if (this.healthCheckTimeoutRef) {
@@ -249,7 +255,7 @@ export class StableWSConnection<
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async _connect() {
-    if (this.isConnecting) return; // simply ignore _connect if it's currently trying to connect
+    if (this.isConnecting || this.isDisconnected) return; // simply ignore _connect if it's currently trying to connect
     this.isConnecting = true;
     this.requestID = randomId();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
@@ -300,6 +306,12 @@ export class StableWSConnection<
    */
   async _reconnect(options: { interval?: number; refreshToken?: boolean } = {}): Promise<void> {
     this._log('_reconnect() - Initiating the reconnect');
+
+    if (this.isDisconnected) {
+      this._log('_reconnect() - Abort (0) since disconnect() is called');
+      return;
+    }
+
     // only allow 1 connection at the time
     if (this.isConnecting || this.isHealthy) {
       this._log('_reconnect() - Abort (1) since already connecting or healthy');

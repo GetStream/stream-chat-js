@@ -1438,6 +1438,7 @@ export class StreamChat<
     } catch (err) {
       // run fallback only if it's WS/Network error and not a normal API error
       if (this.options.enableWSFallback && isWSFailure(err)) {
+        this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry
         this.wsFallback = new WSConnectionFallback({ client: (this as unknown) as StreamChat });
         return await this.wsFallback.connect();
