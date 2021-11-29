@@ -118,6 +118,7 @@ import {
   TaskResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { WSConnectionFallback } from 'connection_fallback';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -145,7 +146,6 @@ export class StreamChat<
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
   configs: Configs<CommandType>;
-  connectionID?: string;
   key: string;
   listeners: {
     [key: string]: Array<
@@ -184,6 +184,7 @@ export class StreamChat<
     MessageType,
     ReactionType
   > | null;
+  wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
@@ -432,7 +433,9 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
+  _getConnectionID = () => this.wsConnection?.connectionID || this.wsFallback?.connectionID;
+
+  _hasConnectionID = () => Boolean(this._getConnectionID());
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -1370,13 +1373,9 @@ export class StreamChat<
   };
 
   recoverState = async () => {
-    this.logger(
-      'info',
-      `client:recoverState() - Start of recoverState with connectionID ${this.wsConnection?.connectionID}`,
-      {
-        tags: ['connection'],
-      },
-    );
+    this.logger('info', `client:recoverState() - Start of recoverState with connectionID ${this._getConnectionID()}`, {
+      tags: ['connection'],
+    });
 
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
@@ -2550,7 +2549,7 @@ export class StreamChat<
         user_id: this.userID,
         ...options.params,
         api_key: this.key,
-        connection_id: this.wsConnection?.connectionID,
+        connection_id: this._getConnectionID(),
       },
       headers: {
         Authorization: token,

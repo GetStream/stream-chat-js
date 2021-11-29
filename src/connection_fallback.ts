@@ -15,6 +15,7 @@ export class WSConnectionFallback {
   client: StreamChat;
   state: ConnectionState;
   consecutiveFailures: number;
+  connectionID?: string;
   cancel?: Canceler;
 
   constructor({ client }: { client: StreamChat }) {
@@ -38,20 +39,13 @@ export class WSConnectionFallback {
   };
 
   /** @private */
-  _setConnectionID = (id: string) => {
-    if (this.client.wsConnection) {
-      this.client.wsConnection.connectionID = id;
-    }
-  };
-
-  /** @private */
-  _poll = async (connection_id: string) => {
+  _poll = async () => {
     this.consecutiveFailures = 0;
 
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{ events: Event[] }>(
-          { connection_id },
+          { connection_id: this.connectionID },
           { timeout: 30000 }, // 30s
         );
 
@@ -94,8 +88,8 @@ export class WSConnectionFallback {
       );
 
       this.state = ConnectionState.Connected;
-      this._setConnectionID(event.connection_id);
-      this._poll(event.connection_id).then();
+      this.connectionID = event.connection_id;
+      this._poll();
       return event;
     } catch (err) {
       this.state = ConnectionState.Closed;
