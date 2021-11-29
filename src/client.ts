@@ -557,7 +557,7 @@ export class StreamChat<
       throw Error('User is not set on client, use client.connectUser or client.connectAnonymousUser instead');
     }
 
-    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+    if ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) && this._hasConnectionID()) {
       this.logger('info', 'client:openConnection() - openConnection called twice, healthy connection already exists', {
         tags: ['connection', 'client'],
       });

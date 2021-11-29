@@ -97,6 +97,10 @@ export class WSConnectionFallback {
     }
   };
 
+  isHealthy = () => {
+    return this.connectionID && this.state === ConnectionState.Connected;
+  };
+
   disconnect = () => {
     this.state = ConnectionState.Disconnectted;
     if (this.cancel) {
