@@ -1,7 +1,7 @@
-import axios, { AxiosRequestConfig, Canceler } from 'axios';
+import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { chatCodes, retryInterval, sleep } from './utils';
 import { StreamChat } from './client';
-import { ConnectionOpen, Event, UnknownType } from './types';
+import { ConnectionOpen, Event, UnknownType, UR } from './types';
 
 enum ConnectionState {
   Closed = 'CLOSED',
@@ -16,7 +16,7 @@ export class WSConnectionFallback {
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
-  cancel?: Canceler;
+  cancelToken?: CancelTokenSource;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
@@ -25,16 +25,17 @@ export class WSConnectionFallback {
   }
 
   /** @private */
-  _newCancelToken = () => {
-    return new axios.CancelToken((cancel) => (this.cancel = cancel));
-  };
+  _req = <T = UR>(params: UnknownType, config: AxiosRequestConfig) => {
+    if (!this.cancelToken && !params.close) {
+      this.cancelToken = axios.CancelToken.source();
+    }
 
-  /** @private */
-  _req = <T>(params: UnknownType, config: AxiosRequestConfig) => {
     return this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
-      cancelToken: this._newCancelToken(),
-      config,
       params,
+      config: {
+        ...config,
+        cancelToken: this.cancelToken?.token,
+      },
     });
   };
 
@@ -45,7 +46,7 @@ export class WSConnectionFallback {
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{ events: Event[] }>(
-          { connection_id: this.connectionID },
+          {},
           { timeout: 30000 }, // 30s
         );
 
@@ -65,6 +66,8 @@ export class WSConnectionFallback {
           this.connect();
           return;
         }
+
+        //TODO: check for non-retryable errors
 
         this.consecutiveFailures += 1;
         await sleep(retryInterval(this.consecutiveFailures));
@@ -101,10 +104,17 @@ export class WSConnectionFallback {
     return this.connectionID && this.state === ConnectionState.Connected;
   };
 
-  disconnect = () => {
+  disconnect = async (timeout = 2000) => {
     this.state = ConnectionState.Disconnectted;
-    if (this.cancel) {
-      this.cancel('client.disconnect() is called');
+
+    this.cancelToken?.cancel('disconnect() is called');
+    this.cancelToken = undefined;
+
+    try {
+      await this._req({ close: true }, { timeout });
+      this.connectionID = undefined;
+    } catch (err) {
+      console.error(err); //TODO: fire in logger
     }
   };
 }

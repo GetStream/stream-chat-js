@@ -542,13 +542,7 @@ export class StreamChat<
       this.cleaningIntervalRef = undefined;
     }
 
-    this.wsFallback?.disconnect();
-
-    if (!this.wsConnection) {
-      return Promise.resolve();
-    }
-
-    return this.wsConnection.disconnect(timeout);
+    return Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
   };
 
   /**
@@ -740,7 +734,7 @@ export class StreamChat<
     // reset client state
     this.state = new ClientState();
     // reset token manager
-    this.tokenManager.reset();
+    setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
 
     // close the WS connection
     return closePromise;
