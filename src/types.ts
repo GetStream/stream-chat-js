@@ -698,12 +698,11 @@ export type BanUserOptions<UserType = UR> = UnBanUserOptions & {
 };
 
 export type ChannelOptions = {
-  last_message_ids?: { [key: string]: string };
   limit?: number;
+  member_limit?: number;
   message_limit?: number;
   offset?: number;
   presence?: boolean;
-  recovery?: boolean;
   state?: boolean;
   user_id?: string;
   watch?: boolean;
