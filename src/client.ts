@@ -11,6 +11,7 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
+import { WSConnectionFallback } from './connection_fallback';
 import {
   isFunction,
   isOwnUserBaseProperty,
@@ -118,7 +119,6 @@ import {
   TaskResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
-import { WSConnectionFallback } from 'connection_fallback';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -541,6 +541,8 @@ export class StreamChat<
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
     }
+
+    this.wsFallback?.disconnect();
 
     if (!this.wsConnection) {
       return Promise.resolve();
@@ -1435,7 +1437,17 @@ export class StreamChat<
       ReactionType
     >({ client: this });
 
-    return await this.wsConnection.connect();
+    try {
+      // if WSFallback is enabled, ws connect should timeout faster so fallback can try
+      return await this.wsConnection.connect(this.options.enableWSFallback ? 7000 : 15000); // 7s vs 15s
+    } catch (err) {
+      if (this.options.enableWSFallback) {
+        this.wsFallback = new WSConnectionFallback({ client: (this as unknown) as StreamChat });
+        return await this.wsFallback.connect();
+      }
+
+      throw err;
+    }
   }
 
   /**
