@@ -98,7 +98,7 @@ export class WSConnectionFallback<
           return;
         }
 
-        //TODO: check for non-retryable errors
+        await sleep(retryInterval(this.consecutiveFailures));
       }
     }
   };
