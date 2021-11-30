@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
-import { chatCodes, retryInterval, sleep } from './utils';
 import { StreamChat } from './client';
-import { ConnectionOpen, Event, UnknownType, UR } from './types';
+import { retryInterval, sleep } from './utils';
+import { isConnectionIDError, isErrorRetryable } from './errors';
+import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion } from './types';
 
 enum ConnectionState {
   Closed = 'CLOSED',
@@ -11,43 +12,67 @@ enum ConnectionState {
   Init = 'INIT',
 }
 
-export class WSConnectionFallback {
-  client: StreamChat;
+export class WSConnectionFallback<
+  AttachmentType extends UR = UR,
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  EventType extends UR = UR,
+  MessageType extends UR = UR,
+  ReactionType extends UR = UR,
+  UserType extends UR = UR
+> {
+  client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
   cancelToken?: CancelTokenSource;
 
-  constructor({ client }: { client: StreamChat }) {
+  constructor({
+    client,
+  }: {
+    client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+  }) {
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
   }
 
   /** @private */
-  _req = <T = UR>(params: UnknownType, config: AxiosRequestConfig) => {
+  _req = async <T = UR>(params: UnknownType, config: AxiosRequestConfig, retry: boolean): Promise<T> => {
     if (!this.cancelToken && !params.close) {
       this.cancelToken = axios.CancelToken.source();
     }
 
-    return this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
-      params,
-      config: {
-        ...config,
-        cancelToken: this.cancelToken?.token,
-      },
-    });
+    try {
+      const res = await this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
+        config: { ...config, cancelToken: this.cancelToken?.token },
+        params,
+      });
+
+      this.consecutiveFailures = 0; // always reset in case of no error
+      return res;
+    } catch (err) {
+      this.consecutiveFailures += 1;
+
+      if (retry && isErrorRetryable(err)) {
+        await sleep(retryInterval(this.consecutiveFailures));
+        return this._req<T>(params, config, retry);
+      }
+
+      throw err;
+    }
   };
 
   /** @private */
   _poll = async () => {
-    this.consecutiveFailures = 0;
-
     while (this.state === ConnectionState.Connected) {
       try {
-        const data = await this._req<{ events: Event[] }>(
+        const data = await this._req<{
+          events: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>[];
+        }>(
           {},
           { timeout: 30000 }, // 30s
+          true,
         );
 
         if (data?.events?.length) {
@@ -61,21 +86,22 @@ export class WSConnectionFallback {
         }
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
-        if (err.code === chatCodes.CONNECTION_ID_ERROR) {
+        if (isConnectionIDError(err)) {
           this.state = ConnectionState.Disconnectted;
-          this.connect();
+          this.connect(true);
           return;
         }
 
         //TODO: check for non-retryable errors
-
-        this.consecutiveFailures += 1;
-        await sleep(retryInterval(this.consecutiveFailures));
       }
     }
   };
 
-  connect = async () => {
+  /**
+   * connect try to open a longpoll request
+   * @param retry keep trying to connect until it succeed
+   */
+  connect = async (retry = false) => {
     if (this.state === ConnectionState.Connecting) {
       throw new Error('connecting already in progress');
     }
@@ -84,11 +110,12 @@ export class WSConnectionFallback {
     }
 
     this.state = ConnectionState.Connecting;
-    this.connectionID = undefined; // connect should be sent with empty connection_id so API gives us one
+    this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
-      const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
+      const { event } = await this._req<{ event: ConnectionOpen<ChannelType, CommandType, UserType> }>(
         { json: this.client._buildWSPayload() },
-        { timeout: 10000 }, // 10s
+        { timeout: 8000 }, // 8s
+        retry,
       );
 
       this.state = ConnectionState.Connected;
@@ -97,10 +124,13 @@ export class WSConnectionFallback {
       return event;
     } catch (err) {
       this.state = ConnectionState.Closed;
-      return err;
+      throw err;
     }
   };
 
+  /**
+   * isHealthy checks if there is a connectionID and connection is in Connected state
+   */
   isHealthy = () => {
     return this.connectionID && this.state === ConnectionState.Connected;
   };
@@ -112,7 +142,7 @@ export class WSConnectionFallback {
     this.cancelToken = undefined;
 
     try {
-      await this._req({ close: true }, { timeout });
+      await this._req({ close: true }, { timeout }, false);
       this.connectionID = undefined;
     } catch (err) {
       console.error(err); //TODO: fire in logger

@@ -186,7 +186,15 @@ export class StreamChat<
     MessageType,
     ReactionType
   > | null;
-  wsFallback?: WSConnectionFallback;
+  wsFallback?: WSConnectionFallback<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
@@ -1449,7 +1457,15 @@ export class StreamChat<
       if (this.options.enableWSFallback && isWSFailure(err)) {
         this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback({ client: (this as unknown) as StreamChat });
+        this.wsFallback = new WSConnectionFallback<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >({ client: this });
         return await this.wsFallback.connect();
       }
 
