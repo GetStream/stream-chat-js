@@ -1017,7 +1017,8 @@ export class StreamChat<
       this._logApiResponse<T>(type, url, response);
       this.consecutiveFailures = 0;
       return this.handleResponse(response);
-    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (e: any /**TODO: generalize error types  */) {
       e.client_request_id = requestConfig.headers?.['x-client-request-id'];
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
@@ -2523,8 +2524,9 @@ export class StreamChat<
       headers: {},
       config: {},
     },
-  ) {
+  ): AxiosRequestConfig {
     const token = this._getToken();
+    const authorization = token ? { Authorization: token } : undefined;
 
     if (!options.headers?.['x-client-request-id']) {
       options.headers = {
@@ -2541,7 +2543,7 @@ export class StreamChat<
         connection_id: this.wsConnection?.connectionID,
       },
       headers: {
-        Authorization: token,
+        ...authorization,
         'stream-auth-type': this.getAuthType(),
         'X-Stream-Client': this.getUserAgent(),
         ...options.headers,
