@@ -22,10 +22,7 @@ describe('Channel count unread', function () {
 	client.userID = 'user';
 	client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
-	const channel = client.channel(
-		channelResponse.channel.type,
-		channelResponse.channel.id,
-	);
+	const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 	channel.initialized = true;
 	channel.lastRead = () => lastRead;
 
@@ -209,10 +206,7 @@ describe('Channel _handleChannelEvent', function () {
 			message: { ...originalMessage, deleted_at: new Date().toISOString() },
 		});
 
-		expect(
-			channel.state.messages.find((msg) => msg.id === quotingMessage.id)
-				.quoted_message.deleted_at,
-		).to.be.ok;
+		expect(channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message.deleted_at).to.be.ok;
 	});
 });
 
@@ -306,8 +300,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () =>
-			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
 		const cid = `${channelType}:${channelVishId}`;
@@ -331,8 +324,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () =>
-			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
@@ -363,17 +355,14 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () =>
-			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', {
 			members: [userAmin.id, userVish.id],
 		});
 
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id]
-			.sort()
-			.join(',')}`;
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
 		// activeChannels should have tmpCid now.
 		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
@@ -384,9 +373,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		// tempCid should be replaced with actual cid at this point.
 		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
 		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(
-			channelVish_copy1,
-		);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
 
 		const channelVish_copy2 = clientVish.channel('messaging', {
 			members: [userVish.id, userAmin.id],
@@ -414,17 +401,14 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () =>
-			getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', {
 			members: [userAmin.id, userVish.id],
 		});
 
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id]
-			.sort()
-			.join(',')}`;
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
 		// activeChannels should have tmpCid now.
 		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
@@ -467,28 +451,20 @@ describe('Channel search', async () => {
 
 	it('search with sorting by defined field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([
-				{ field: 'updated_at', direction: -1 },
-			]);
+			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
 		};
 		await channel.search('query', { sort: [{ updated_at: -1 }] });
 	});
 	it('search with sorting by custom field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([
-				{ field: 'custom_field', direction: -1 },
-			]);
+			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
 	it('sorting and offset fails', async () => {
-		await expect(
-			channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }),
-		).to.be.rejectedWith(Error);
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.rejectedWith(Error);
 	});
 	it('next and offset fails', async () => {
-		await expect(
-			channel.search('query', { offset: 1, next: 'next' }),
-		).to.be.rejectedWith(Error);
+		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
 	});
 });

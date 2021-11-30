@@ -10,20 +10,12 @@ import pkg from './package.json';
 import process from 'process';
 process.env.NODE_ENV = 'production';
 
-const externalPackages = [
-	'axios',
-	'form-data',
-	'isomorphic-ws',
-	'base64-js',
-	/@babel\/runtime/,
-];
+const externalPackages = ['axios', 'form-data', 'isomorphic-ws', 'base64-js', /@babel\/runtime/];
 
 const browserIgnore = {
 	name: 'browser-remapper',
-	resolveId: (importee) =>
-		['jsonwebtoken', 'https', 'crypto'].includes(importee) ? importee : null,
-	load: (id) =>
-		['jsonwebtoken', 'https', 'crypto'].includes(id) ? 'export default null;' : null,
+	resolveId: (importee) => (['jsonwebtoken', 'https', 'crypto'].includes(importee) ? importee : null),
+	load: (id) => (['jsonwebtoken', 'https', 'crypto'].includes(id) ? 'export default null;' : null),
 };
 
 const extensions = ['.mjs', '.json', '.node', '.js', '.ts'];
@@ -112,6 +104,4 @@ const fullBrowserBundle = {
 };
 
 export default () =>
-	process.env.ROLLUP_WATCH
-		? [normalBundle, browserBundle]
-		: [normalBundle, browserBundle, fullBrowserBundle];
+	process.env.ROLLUP_WATCH ? [normalBundle, browserBundle] : [normalBundle, browserBundle, fullBrowserBundle];
