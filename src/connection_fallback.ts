@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
 import { retryInterval, sleep } from './utils';
-import { isConnectionIDError, isErrorRetryable } from './errors';
+import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
 import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion } from './types';
 
 enum ConnectionState {
@@ -35,6 +35,10 @@ export class WSConnectionFallback<
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
+  }
+
+  _setState(state: ConnectionState) {
+    this.state = state;
   }
 
   /** @private */
@@ -93,8 +97,13 @@ export class WSConnectionFallback<
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
         if (isConnectionIDError(err)) {
-          this.state = ConnectionState.Disconnected;
+          this._setState(ConnectionState.Disconnected);
           this.connect(true);
+          return;
+        }
+
+        if (isAPIError(err) && !isErrorRetryable(err)) {
+          this._setState(ConnectionState.Closed);
           return;
         }
 
@@ -115,7 +124,7 @@ export class WSConnectionFallback<
       throw new Error('already connected and polling');
     }
 
-    this.state = ConnectionState.Connecting;
+    this._setState(ConnectionState.Connecting);
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
       const { event } = await this._req<{ event: ConnectionOpen<ChannelType, CommandType, UserType> }>(
@@ -124,12 +133,12 @@ export class WSConnectionFallback<
         retry,
       );
 
-      this.state = ConnectionState.Connected;
+      this._setState(ConnectionState.Connected);
       this.connectionID = event.connection_id;
       this._poll();
       return event;
     } catch (err) {
-      this.state = ConnectionState.Closed;
+      this._setState(ConnectionState.Closed);
       throw err;
     }
   };
@@ -142,7 +151,7 @@ export class WSConnectionFallback<
   };
 
   disconnect = async (timeout = 2000) => {
-    this.state = ConnectionState.Disconnected;
+    this._setState(ConnectionState.Disconnected);
 
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;

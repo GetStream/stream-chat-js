@@ -30,6 +30,10 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
 
 type APIError = Error & { code?: number; isWSFailure?: boolean };
 
+export function isAPIError(error: Error): error is APIError {
+  return (error as APIError).code !== undefined;
+}
+
 export function isErrorRetryable(error: APIError) {
   if (!error.code) return false;
   const err = APIErrorCodes[`${error.code}`];
