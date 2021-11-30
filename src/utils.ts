@@ -28,7 +28,6 @@ export function isFunction<T>(value: Function | T): value is Function {
 
 export const chatCodes = {
   TOKEN_EXPIRED: 40,
-  CONNECTION_ID_ERROR: 46,
   WS_CLOSED_SUCCESS: 1000,
 };
 
@@ -203,16 +202,4 @@ export function convertErrorToJson(err: Error) {
   }
 
   return jsonObj;
-}
-
-export function isWSFailure(err: Error & { isWSFailure?: boolean }): boolean {
-  if (typeof err.isWSFailure === 'boolean') {
-    return err.isWSFailure;
-  }
-
-  try {
-    return JSON.parse(err.message).isWSFailure;
-  } catch (_) {
-    return false;
-  }
 }

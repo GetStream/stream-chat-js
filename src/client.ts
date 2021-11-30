@@ -12,6 +12,7 @@ import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
+import { isWSFailure } from './errors';
 import {
   isFunction,
   isOwnUserBaseProperty,
@@ -21,7 +22,6 @@ import {
   randomId,
   sleep,
   retryInterval,
-  isWSFailure,
 } from './utils';
 
 import {
