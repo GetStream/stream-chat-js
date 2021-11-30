@@ -1,5 +1,13 @@
 import WebSocket from 'isomorphic-ws';
-import { chatCodes, convertErrorToJson, sleep, retryInterval, randomId } from './utils';
+import {
+  chatCodes,
+  convertErrorToJson,
+  sleep,
+  retryInterval,
+  randomId,
+  removeConnectionEventListeners,
+  addConnectionEventListeners,
+} from './utils';
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
 import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel } from './types';
 import { StreamChat } from './client';
@@ -89,7 +97,8 @@ export class StableWSConnection<
     /** Send a health check message every 25 seconds */
     this.pingInterval = 25 * 1000;
     this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
-    this._listenForConnectionChanges();
+
+    addConnectionEventListeners(this.onlineStatusChanged);
   }
 
   _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
@@ -211,7 +220,7 @@ export class StableWSConnection<
       clearInterval(this.connectionCheckTimeoutRef);
     }
 
-    this._removeConnectionListeners();
+    removeConnectionEventListeners(this.onlineStatusChanged);
 
     this.isHealthy = false;
 
@@ -539,27 +548,6 @@ export class StableWSConnection<
     error.StatusCode = statusCode;
     error.isWSFailure = isWSFailure;
     return error;
-  };
-
-  /**
-   * _listenForConnectionChanges - Adds an event listener for the browser going online or offline
-   */
-  _listenForConnectionChanges = () => {
-    // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
-    // and thus (window === undefined) will result in ReferenceError.
-    if (typeof window !== 'undefined' && window?.addEventListener) {
-      window.addEventListener('offline', this.onlineStatusChanged);
-      window.addEventListener('online', this.onlineStatusChanged);
-    }
-  };
-
-  _removeConnectionListeners = () => {
-    // (typeof window !== 'undefined') check is for environments where window is not defined, such as nextjs environment,
-    // and thus (window === undefined) will result in ReferenceError.
-    if (typeof window !== 'undefined' && window?.removeEventListener) {
-      window.removeEventListener('offline', this.onlineStatusChanged);
-      window.removeEventListener('online', this.onlineStatusChanged);
-    }
   };
 
   /**

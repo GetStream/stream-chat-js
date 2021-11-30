@@ -219,3 +219,20 @@ export function isOnline() {
   if (!nav) return true;
   return nav.onLine;
 }
+
+/**
+ * listenForConnectionChanges - Adds an event listener fired on browser going online or offline
+ */
+export function addConnectionEventListeners(cb: (e: Event) => void) {
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('offline', cb);
+    window.addEventListener('online', cb);
+  }
+}
+
+export function removeConnectionEventListeners(cb: (e: Event) => void) {
+  if (typeof window !== 'undefined' && window.removeEventListener) {
+    window.removeEventListener('offline', cb);
+    window.removeEventListener('online', cb);
+  }
+}
