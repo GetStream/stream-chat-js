@@ -114,9 +114,9 @@ export class WSConnectionFallback<
 
   /**
    * connect try to open a longpoll request
-   * @param retry keep trying to connect until it succeed
+   * @param reconnect should be false for first call and true for subsequent calls to keep the connection alive and call recoverState
    */
-  connect = async (retry = false) => {
+  connect = async (reconnect = false) => {
     if (this.state === ConnectionState.Connecting) {
       throw new Error('connecting already in progress');
     }
@@ -130,12 +130,15 @@ export class WSConnectionFallback<
       const { event } = await this._req<{ event: ConnectionOpen<ChannelType, CommandType, UserType> }>(
         { json: this.client._buildWSPayload() },
         { timeout: 8000 }, // 8s
-        retry,
+        reconnect,
       );
 
       this._setState(ConnectionState.Connected);
       this.connectionID = event.connection_id;
       this._poll();
+      if (reconnect) {
+        this.client.recoverState();
+      }
       return event;
     } catch (err) {
       this._setState(ConnectionState.Closed);
