@@ -22,6 +22,7 @@ import {
   randomId,
   sleep,
   retryInterval,
+  isOnline,
 } from './utils';
 
 import {
@@ -1455,7 +1456,8 @@ export class StreamChat<
       );
     } catch (err) {
       // run fallback only if it's WS/Network error and not a normal API error
-      if (this.options.enableWSFallback && isWSFailure(err)) {
+      // make sure browser is online before even trying the longpoll
+      if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
         this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry
         this.wsFallback = new WSConnectionFallback<

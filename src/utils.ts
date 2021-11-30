@@ -203,3 +203,19 @@ export function convertErrorToJson(err: Error) {
 
   return jsonObj;
 }
+
+/**
+ * isOnline safely return the navigator.online value
+ * if navigator is not in global object, it always return true
+ */
+export function isOnline() {
+  const nav =
+    typeof navigator !== 'undefined'
+      ? navigator
+      : typeof window !== 'undefined' && window.navigator
+      ? window.navigator
+      : undefined;
+
+  if (!nav) return true;
+  return nav.onLine;
+}
