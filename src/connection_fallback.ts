@@ -84,6 +84,7 @@ export class WSConnectionFallback {
     }
 
     this.state = ConnectionState.Connecting;
+    this.connectionID = undefined; // connect should be sent with empty connection_id so API gives us one
     try {
       const { event } = await this._req<{ event: ConnectionOpen<UnknownType> }>(
         { json: this.client._buildWSPayload() },
