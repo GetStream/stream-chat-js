@@ -8,7 +8,7 @@ enum ConnectionState {
   Closed = 'CLOSED',
   Connected = 'CONNECTED',
   Connecting = 'CONNECTING',
-  Disconnectted = 'DISCONNECTTED',
+  Disconnected = 'DISCONNECTED',
   Init = 'INIT',
 }
 
@@ -93,7 +93,7 @@ export class WSConnectionFallback<
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
         if (isConnectionIDError(err)) {
-          this.state = ConnectionState.Disconnectted;
+          this.state = ConnectionState.Disconnected;
           this.connect(true);
           return;
         }
@@ -142,7 +142,7 @@ export class WSConnectionFallback<
   };
 
   disconnect = async (timeout = 2000) => {
-    this.state = ConnectionState.Disconnectted;
+    this.state = ConnectionState.Disconnected;
 
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;
