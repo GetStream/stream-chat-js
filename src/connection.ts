@@ -309,11 +309,6 @@ export class StableWSConnection<
   async _reconnect(options: { interval?: number; refreshToken?: boolean } = {}): Promise<void> {
     this._log('_reconnect() - Initiating the reconnect');
 
-    if (this.isDisconnected) {
-      this._log('_reconnect() - Abort (0) since disconnect() is called');
-      return;
-    }
-
     // only allow 1 connection at the time
     if (this.isConnecting || this.isHealthy) {
       this._log('_reconnect() - Abort (1) since already connecting or healthy');
@@ -333,6 +328,11 @@ export class StableWSConnection<
     // already restored, then no need to proceed.
     if (this.isConnecting || this.isHealthy) {
       this._log('_reconnect() - Abort (2) since already connecting or healthy');
+      return;
+    }
+
+    if (this.isDisconnected) {
+      this._log('_reconnect() - Abort (3) since disconnect() is called');
       return;
     }
 
