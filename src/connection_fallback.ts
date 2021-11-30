@@ -44,10 +44,15 @@ export class WSConnectionFallback<
     }
 
     try {
-      const res = await this.client.doAxiosRequest<T>('get', this.client.baseURL + '/longpoll', undefined, {
-        config: { ...config, cancelToken: this.cancelToken?.token },
-        params,
-      });
+      const res = await this.client.doAxiosRequest<T>(
+        'get',
+        (this.client.baseURL as string).replace(':3030', ':8900') + '/longpoll', // replace port if present for testing with local API
+        undefined,
+        {
+          config: { ...config, cancelToken: this.cancelToken?.token },
+          params,
+        },
+      );
 
       this.consecutiveFailures = 0; // always reset in case of no error
       return res;
@@ -71,11 +76,11 @@ export class WSConnectionFallback<
           events: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>[];
         }>(
           {},
-          { timeout: 30000 }, // 30s
+          { timeout: 30000 }, // 30s => API responds in 20s if there is no event
           true,
         );
 
-        if (data?.events?.length) {
+        if (data.events?.length) {
           for (let i = 0; i < data.events.length; i++) {
             this.client.dispatchEvent(data.events[i]);
           }
@@ -86,6 +91,7 @@ export class WSConnectionFallback<
         }
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
+
         if (isConnectionIDError(err)) {
           this.state = ConnectionState.Disconnectted;
           this.connect(true);
