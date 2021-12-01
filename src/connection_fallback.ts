@@ -46,7 +46,8 @@ export class WSConnectionFallback<
   _setState(state: ConnectionState) {
     this._log(`_setState() - ${state}`);
 
-    if (state === ConnectionState.Connected || this.state === ConnectionState.Connecting) {
+    // transition from connecting => connected
+    if (this.state === ConnectionState.Connecting && state === ConnectionState.Connected) {
       //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: true });
     }
