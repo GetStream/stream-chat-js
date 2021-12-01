@@ -199,7 +199,7 @@ export class WSConnectionFallback<
       this.connectionID = undefined;
       this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
-      this._log(`disconnect() - Failed`, { err });
+      this._log(`disconnect() - Failed`, { err }, 'error');
     }
   };
 }

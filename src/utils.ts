@@ -205,7 +205,7 @@ export function convertErrorToJson(err: Error) {
 }
 
 /**
- * isOnline safely return the navigator.online value
+ * isOnline safely return the navigator.online value for browser env
  * if navigator is not in global object, it always return true
  */
 export function isOnline() {
@@ -216,7 +216,11 @@ export function isOnline() {
       ? window.navigator
       : undefined;
 
-  if (!nav) return true;
+  if (!nav) {
+    console.warn('isOnline failed to access window.navigator and assume browser is online');
+    return true;
+  }
+
   return nav.onLine;
 }
 
