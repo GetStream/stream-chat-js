@@ -198,7 +198,7 @@ export class WSConnectionFallback<
       this.connectionID = undefined;
       this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
-      console.error(err); //TODO: fire in logger
+      this._log(`disconnect() - Failed`, { err });
     }
   };
 }
