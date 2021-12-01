@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
 import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion } from './types';
+import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion, LogLevel } from './types';
 
 enum ConnectionState {
   Closed = 'CLOSED',
@@ -39,7 +39,13 @@ export class WSConnectionFallback<
     addConnectionEventListeners(this._onlineStatusChanged);
   }
 
+  _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
+    this.client.logger(level, 'WSConnectionFallback:' + msg, { tags: ['connection_fallback', 'connection'], ...extra });
+  }
+
   _setState(state: ConnectionState) {
+    this._log(`_setState() - ${state}`);
+
     if (state === ConnectionState.Connected || this.state === ConnectionState.Connecting) {
       //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: true });
@@ -55,6 +61,8 @@ export class WSConnectionFallback<
 
   /** @private */
   _onlineStatusChanged = (event: { type: string }) => {
+    this._log(`_onlineStatusChanged() - ${event.type}`);
+
     if (event.type === 'offline') {
       this._setState(ConnectionState.Closed);
       this.cancelToken?.cancel('disconnect() is called');
@@ -90,6 +98,7 @@ export class WSConnectionFallback<
       this.consecutiveFailures += 1;
 
       if (retry && isErrorRetryable(err)) {
+        this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
         return this._req<T>(params, config, retry);
       }
@@ -104,11 +113,7 @@ export class WSConnectionFallback<
       try {
         const data = await this._req<{
           events: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>[];
-        }>(
-          {},
-          { timeout: 30000 }, // 30s => API responds in 20s if there is no event
-          true,
-        );
+        }>({}, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
 
         if (data.events?.length) {
           for (let i = 0; i < data.events.length; i++) {
@@ -117,12 +122,14 @@ export class WSConnectionFallback<
         }
       } catch (err) {
         if (axios.isCancel(err)) {
+          this._log(`_poll() - axios canceled request`);
           return;
         }
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
         if (isConnectionIDError(err)) {
+          this._log(`_poll() - ConnectionID error, connecting without ID...`);
           this._setState(ConnectionState.Disconnected);
           this.connect(true);
           return;
@@ -189,6 +196,7 @@ export class WSConnectionFallback<
     try {
       await this._req({ close: true }, { timeout }, false);
       this.connectionID = undefined;
+      this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
       console.error(err); //TODO: fire in logger
     }

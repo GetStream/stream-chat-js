@@ -1458,6 +1458,8 @@ export class StreamChat<
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
       if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
+        this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
+
         this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry
         this.wsFallback = new WSConnectionFallback<
