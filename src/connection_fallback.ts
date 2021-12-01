@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
-import { retryInterval, sleep } from './utils';
+import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
 import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion } from './types';
 
@@ -35,11 +35,37 @@ export class WSConnectionFallback<
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
+
+    addConnectionEventListeners(this._onlineStatusChanged);
   }
 
   _setState(state: ConnectionState) {
+    if (state === ConnectionState.Connected || this.state === ConnectionState.Connecting) {
+      //@ts-expect-error
+      this.client.dispatchEvent({ type: 'connection.changed', online: true });
+    }
+
+    if (state === ConnectionState.Closed || state === ConnectionState.Disconnected) {
+      //@ts-expect-error
+      this.client.dispatchEvent({ type: 'connection.changed', online: false });
+    }
+
     this.state = state;
   }
+
+  /** @private */
+  _onlineStatusChanged = (event: { type: string }) => {
+    if (event.type === 'offline') {
+      this._setState(ConnectionState.Closed);
+      this.cancelToken?.cancel('disconnect() is called');
+      this.cancelToken = undefined;
+      return;
+    }
+
+    if (event.type === 'online' && this.state === ConnectionState.Closed) {
+      this.connect(true);
+    }
+  };
 
   /** @private */
   _req = async <T = UR>(params: UnknownType, config: AxiosRequestConfig, retry: boolean): Promise<T> => {
@@ -154,8 +180,9 @@ export class WSConnectionFallback<
   };
 
   disconnect = async (timeout = 2000) => {
-    this._setState(ConnectionState.Disconnected);
+    removeConnectionEventListeners(this._onlineStatusChanged);
 
+    this._setState(ConnectionState.Disconnected);
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;
 
