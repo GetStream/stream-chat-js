@@ -64,8 +64,6 @@ describe('connection', function () {
 			const data = JSON.parse(query.json);
 			expect(data.user_details).to.deep.equal(user);
 			expect(data.device).to.deep.equal(device);
-			expect(data.user_token).to.be.eq(tokenManager.token);
-			expect(data.server_determines_connection_id).to.be.ok;
 		});
 
 		it('should not include device if not there', function () {
