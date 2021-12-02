@@ -140,4 +140,38 @@ describe('connection_fallback', () => {
 			expect(c.isHealthy()).to.be.true;
 		});
 	});
+
+	describe('disconnect', () => {
+		it('should unregister window event listeners', async () => {
+			sinon.spy(utils, 'removeConnectionEventListeners');
+			const c = new WSConnectionFallback({ client: newClient() });
+			c._req = () => null;
+			await c.disconnect();
+			expect(utils.removeConnectionEventListeners.calledOnceWithExactly(c._onlineStatusChanged)).to.be.true;
+			sinon.restore();
+		});
+
+		it('should cancel requests and set the state correctly', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.spy();
+			const connection_id = 'id';
+			c.connectionID = connection_id;
+			const cancel = sinon.spy();
+			c.cancelToken = { cancel };
+			const timeout = 500;
+			await c.disconnect(timeout);
+
+			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.connectionID).to.be.undefined;
+			expect(c.cancelToken).to.be.undefined;
+			expect(cancel.calledOnce).to.be.true;
+			expect(c._req.calledOnceWithExactly({ close: true, connection_id }, { timeout }, false)).to.be.true;
+		});
+
+		it('should ingore request errors', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c._req = () => Promise.reject('error');
+			await c.disconnect();
+		});
+	});
 });
