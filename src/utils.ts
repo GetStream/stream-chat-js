@@ -221,6 +221,11 @@ export function isOnline() {
     return true;
   }
 
+  // RN navigator has undefined for onLine
+  if (typeof nav.onLine !== 'boolean') {
+    return true;
+  }
+
   return nav.onLine;
 }
 
