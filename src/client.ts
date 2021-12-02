@@ -2619,8 +2619,6 @@ export class StreamChat<
     return JSON.stringify({
       user_id: this.userID,
       user_details: this._user,
-      user_token: this.tokenManager.getToken(),
-      server_determines_connection_id: true,
       device: this.options.device,
       client_request_id,
     });
