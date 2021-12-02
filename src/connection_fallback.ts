@@ -194,9 +194,11 @@ export class WSConnectionFallback<
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;
 
+    const connection_id = this.connectionID;
+    this.connectionID = undefined;
+
     try {
-      await this._req({ close: true }, { timeout }, false);
-      this.connectionID = undefined;
+      await this._req({ close: true, connection_id }, { timeout }, false);
       this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
       this._log(`disconnect() - Failed`, { err }, 'error');

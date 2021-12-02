@@ -395,4 +395,16 @@ describe('Client WSFallback', () => {
 
 		expect(client.wsFallback).to.be.undefined;
 	});
+
+	it('should reuse the fallback if already created', async () => {
+		client.options.enableWSFallback = true;
+		const fallback = { isHealthy: () => false, connect: sinon.stub().returns({ connection_id: 'id' }) };
+		client.wsFallback = fallback;
+		sinon.stub(utils, 'isOnline').returns(false);
+
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(health).to.be.eql({ connection_id: 'id' });
+		expect(client.wsFallback).to.be.equal(fallback);
+	});
 });
