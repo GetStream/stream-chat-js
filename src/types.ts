@@ -977,6 +977,7 @@ export type EventTypes =
   | 'channel.unmuted'
   | 'channel.updated'
   | 'channel.visible'
+  | 'transport.changed' // ws vs longpoll
   | 'connection.changed'
   | 'connection.recovered'
   | 'health.check'
