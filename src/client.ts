@@ -1450,6 +1450,11 @@ export class StreamChat<
     >({ client: this });
 
     try {
+      // if fallback is used before, continue using it instead of waiting for WS to fail
+      if (this.wsFallback) {
+        return await this.wsFallback.connect();
+      }
+
       // if WSFallback is enabled, ws connect should timeout faster so fallback can try
       return await this.wsConnection.connect(
         this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
@@ -2567,9 +2572,9 @@ export class StreamChat<
     return {
       params: {
         user_id: this.userID,
-        ...options.params,
-        api_key: this.key,
         connection_id: this._getConnectionID(),
+        api_key: this.key,
+        ...options.params,
       },
       headers: {
         ...authorization,

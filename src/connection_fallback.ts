@@ -152,10 +152,12 @@ export class WSConnectionFallback<
    */
   connect = async (reconnect = false) => {
     if (this.state === ConnectionState.Connecting) {
-      throw new Error('connecting already in progress');
+      this._log('connect() - connecting already in progress', { reconnect }, 'warn');
+      return;
     }
     if (this.state === ConnectionState.Connected) {
-      throw new Error('already connected and polling');
+      this._log('connect() - already connected and polling', { reconnect }, 'warn');
+      return;
     }
 
     this._setState(ConnectionState.Connecting);
@@ -194,9 +196,11 @@ export class WSConnectionFallback<
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;
 
+    const connection_id = this.connectionID;
+    this.connectionID = undefined;
+
     try {
-      await this._req({ close: true }, { timeout }, false);
-      this.connectionID = undefined;
+      await this._req({ close: true, connection_id }, { timeout }, false);
       this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
       this._log(`disconnect() - Failed`, { err }, 'error');
