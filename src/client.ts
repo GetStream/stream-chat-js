@@ -1464,6 +1464,8 @@ export class StreamChat<
       // make sure browser is online before even trying the longpoll
       if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
         this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
+        // @ts-expect-error
+        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
 
         this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry

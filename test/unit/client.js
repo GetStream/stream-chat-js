@@ -373,6 +373,16 @@ describe('Client WSFallback', () => {
 		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
 	});
 
+	it('should fire transport.changed event', async () => {
+		sinon.spy(client, 'dispatchEvent');
+		client.doAxiosRequest = () => ({ event: { connection_id: 'new_id' } });
+		client.wsBaseURL = 'ws://invalidWS.xyz';
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+		await client.disconnectUser();
+		expect(health).to.be.eql({ connection_id: 'new_id' });
+		expect(client.dispatchEvent.calledWithMatch({ type: 'transport.changed', mode: 'longpoll' })).to.be.true;
+	});
+
 	it('should ignore fallback if flag is false', async () => {
 		client.wsBaseURL = 'ws://invalidWS.xyz';
 		client.options.enableWSFallback = false;
