@@ -1,9 +1,12 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
+import sinon from 'sinon';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
+import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
+import { ConnectionState } from '../../src/connection_fallback';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -169,6 +172,14 @@ describe('Client connectUser', () => {
 		const connection = await client.connectUser({ id: 'amin' }, 'token');
 		expect(connection).to.equal('openConnection');
 	});
+
+	it('_getConnectionID, _hasConnectionID', () => {
+		expect(client._hasConnectionID()).to.be.false;
+		expect(client._getConnectionID()).to.equal(undefined);
+		client.wsConnection = { connectionID: 'ID' };
+		expect(client._getConnectionID()).to.equal('ID');
+		expect(client._hasConnectionID()).to.be.true;
+	});
 });
 
 describe('Detect node environment', () => {
@@ -318,5 +329,70 @@ describe('Client setLocalDevice', async () => {
 		client.wsConnection = true;
 
 		expect(() => client.setLocalDevice({ id: 'id3', push_provider: 'firebase' })).to.throw();
+	});
+});
+
+describe('Client WSFallback', () => {
+	let client;
+	const userToken =
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+	beforeEach(() => {
+		sinon.restore();
+		client = new StreamChat('', { allowServerSideConnect: true, enableWSFallback: true });
+		client.defaultWSTimeout = 500;
+		client.defaultWSTimeoutWithFallback = 500;
+	});
+
+	it('_getConnectionID, _hasConnectionID', () => {
+		expect(client._hasConnectionID()).to.be.false;
+		expect(client._getConnectionID()).to.equal(undefined);
+		client.wsFallback = { connectionID: 'ID' };
+		expect(client._getConnectionID()).to.equal('ID');
+		expect(client._hasConnectionID()).to.be.true;
+	});
+
+	it('should try wsFallback if WebSocket fails', async () => {
+		const stub = sinon
+			.stub()
+			.onCall(0)
+			.resolves({ event: { connection_id: 'new_id' } })
+			.resolves({});
+		client.doAxiosRequest = stub;
+		client.wsBaseURL = 'ws://invalidWS.xyz';
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+		expect(health).to.be.eql({ connection_id: 'new_id' });
+		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
+		expect(client.wsFallback.connectionID).to.be.eql('new_id');
+		expect(client.wsFallback.consecutiveFailures).to.be.eql(0);
+
+		expect(client.wsConnection.isHealthy).to.be.false;
+		expect(client.wsConnection.isDisconnected).to.be.true;
+		expect(client.wsConnection.connectionID).to.be.undefined;
+		expect(client.wsConnection.totalFailures).to.be.greaterThan(1);
+		await client.disconnectUser();
+		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
+	});
+
+	it('should ignore fallback if flag is false', async () => {
+		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.options.enableWSFallback = false;
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).to.be.rejectedWith(
+			/"initial WS connection could not be established","isWSFailure":true/,
+		);
+
+		expect(client.wsFallback).to.be.undefined;
+	});
+
+	it('should ignore fallback if browser is offline', async () => {
+		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.options.enableWSFallback = true;
+		sinon.stub(utils, 'isOnline').returns(false);
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).to.be.rejectedWith(
+			/"initial WS connection could not be established","isWSFailure":true/,
+		);
+
+		expect(client.wsFallback).to.be.undefined;
 	});
 });
