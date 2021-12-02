@@ -11,6 +11,8 @@ import { StableWSConnection } from './connection';
 import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
+import { WSConnectionFallback } from './connection_fallback';
+import { isWSFailure } from './errors';
 import {
   isFunction,
   isOwnUserBaseProperty,
@@ -20,6 +22,7 @@ import {
   randomId,
   sleep,
   retryInterval,
+  isOnline,
 } from './utils';
 
 import {
@@ -146,7 +149,6 @@ export class StreamChat<
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
   configs: Configs<CommandType>;
-  connectionID?: string;
   key: string;
   listeners: {
     [key: string]: Array<
@@ -185,9 +187,20 @@ export class StreamChat<
     MessageType,
     ReactionType
   > | null;
+  wsFallback?: WSConnectionFallback<
+    AttachmentType,
+    ChannelType,
+    CommandType,
+    EventType,
+    MessageType,
+    ReactionType,
+    UserType
+  >;
   wsPromise: ConnectAPIResponse<ChannelType, CommandType, UserType> | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
+  defaultWSTimeoutWithFallback: number;
+  defaultWSTimeout: number;
 
   /**
    * Initialize a client
@@ -272,6 +285,9 @@ export class StreamChat<
     this.tokenManager = new TokenManager(this.secret);
     this.consecutiveFailures = 0;
     this.insightMetrics = new InsightMetrics();
+
+    this.defaultWSTimeoutWithFallback = 6000;
+    this.defaultWSTimeout = 15000;
 
     /**
      * logger function should accept 3 parameters:
@@ -433,7 +449,9 @@ export class StreamChat<
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _hasConnectionID = () => Boolean(this.wsConnection?.connectionID);
+  _getConnectionID = () => this.wsConnection?.connectionID || this.wsFallback?.connectionID;
+
+  _hasConnectionID = () => Boolean(this._getConnectionID());
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -534,17 +552,14 @@ export class StreamChat<
    * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
    *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
    */
-  closeConnection = (timeout?: number) => {
+  closeConnection = async (timeout?: number) => {
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
     }
 
-    if (!this.wsConnection) {
-      return Promise.resolve();
-    }
-
-    return this.wsConnection.disconnect(timeout);
+    await Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
+    return Promise.resolve();
   };
 
   /**
@@ -555,7 +570,7 @@ export class StreamChat<
       throw Error('User is not set on client, use client.connectUser or client.connectAnonymousUser instead');
     }
 
-    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+    if ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) && this._hasConnectionID()) {
       this.logger('info', 'client:openConnection() - openConnection called twice, healthy connection already exists', {
         tags: ['connection', 'client'],
       });
@@ -736,7 +751,7 @@ export class StreamChat<
     // reset client state
     this.state = new ClientState();
     // reset token manager
-    this.tokenManager.reset();
+    setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
 
     // close the WS connection
     return closePromise;
@@ -1023,6 +1038,7 @@ export class StreamChat<
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
       if (e.response) {
+        /** connection_fallback depends on this token expiration logic */
         if (e.response.data.code === chatCodes.TOKEN_EXPIRED && !this.tokenManager.isStatic()) {
           if (this.consecutiveFailures > 1) {
             await sleep(retryInterval(this.consecutiveFailures));
@@ -1100,6 +1116,8 @@ export class StreamChat<
   dispatchEvent = (
     event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
   ) => {
+    if (!event.received_at) event.received_at = new Date();
+
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event);
 
@@ -1131,7 +1149,6 @@ export class StreamChat<
       ReactionType,
       UserType
     >;
-    event.received_at = new Date();
     this.dispatchEvent(event);
   };
 
@@ -1370,13 +1387,9 @@ export class StreamChat<
   };
 
   recoverState = async () => {
-    this.logger(
-      'info',
-      `client:recoverState() - Start of recoverState with connectionID ${this.wsConnection?.connectionID}`,
-      {
-        tags: ['connection'],
-      },
-    );
+    this.logger('info', `client:recoverState() - Start of recoverState with connectionID ${this._getConnectionID()}`, {
+      tags: ['connection'],
+    });
 
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
@@ -1436,7 +1449,33 @@ export class StreamChat<
       ReactionType
     >({ client: this });
 
-    return await this.wsConnection.connect();
+    try {
+      // if WSFallback is enabled, ws connect should timeout faster so fallback can try
+      return await this.wsConnection.connect(
+        this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
+      );
+    } catch (err) {
+      // run fallback only if it's WS/Network error and not a normal API error
+      // make sure browser is online before even trying the longpoll
+      if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
+        this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
+
+        this.wsConnection._destroyCurrentWSConnection();
+        this.wsConnection.disconnect().then(); // close WS so no retry
+        this.wsFallback = new WSConnectionFallback<
+          AttachmentType,
+          ChannelType,
+          CommandType,
+          EventType,
+          MessageType,
+          ReactionType,
+          UserType
+        >({ client: this });
+        return await this.wsFallback.connect();
+      }
+
+      throw err;
+    }
   }
 
   /**
@@ -1672,7 +1711,7 @@ export class StreamChat<
    *
    */
   setLocalDevice(device: BaseDeviceFields) {
-    if (this.wsConnection) {
+    if (this.wsConnection || this.wsFallback) {
       throw new Error('you can only set device before opening a websocket connection');
     }
 
@@ -2540,7 +2579,7 @@ export class StreamChat<
         user_id: this.userID,
         ...options.params,
         api_key: this.key,
-        connection_id: this.wsConnection?.connectionID,
+        connection_id: this._getConnectionID(),
       },
       headers: {
         ...authorization,
@@ -2570,6 +2609,22 @@ export class StreamChat<
       }
     }, 500);
   }
+
+  /**
+   * encode ws url payload
+   * @private
+   * @returns json string
+   */
+  _buildWSPayload = (client_request_id?: string) => {
+    return JSON.stringify({
+      user_id: this.userID,
+      user_details: this._user,
+      user_token: this.tokenManager.getToken(),
+      server_determines_connection_id: true,
+      device: this.options.device,
+      client_request_id,
+    });
+  };
 
   verifyWebhook(requestBody: string, xSignature: string) {
     return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
