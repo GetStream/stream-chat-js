@@ -687,14 +687,6 @@ export type BanUserOptions<UserType = UR> = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
-  /**
-   * @deprecated please use banned_by
-   */
-  user?: UserResponse<UserType>;
-  /**
-   * @deprecated please use banned_by_id
-   */
-  user_id?: string;
 };
 
 export type ChannelOptions = {
