@@ -4,7 +4,7 @@ import { addConnectionEventListeners, removeConnectionEventListeners, retryInter
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
 import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion, LogLevel } from './types';
 
-enum ConnectionState {
+export enum ConnectionState {
   Closed = 'CLOSED',
   Connected = 'CONNECTED',
   Connecting = 'CONNECTING',
