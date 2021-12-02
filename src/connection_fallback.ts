@@ -186,7 +186,7 @@ export class WSConnectionFallback<
    * isHealthy checks if there is a connectionID and connection is in Connected state
    */
   isHealthy = () => {
-    return this.connectionID && this.state === ConnectionState.Connected;
+    return !!this.connectionID && this.state === ConnectionState.Connected;
   };
 
   disconnect = async (timeout = 2000) => {
