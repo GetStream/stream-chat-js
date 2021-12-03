@@ -116,8 +116,6 @@ import {
   DeleteUserOptions,
   DeleteChannelsResponse,
   TaskResponse,
-  ExportRequest,
-  ExportResponse,
   ReservedMessageFields,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
@@ -2707,8 +2705,12 @@ export class StreamChat<
     return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export_channels`, payload);
   }
 
-  export(request: ExportRequest, type: string) {
-    return this.post<APIResponse & ExportResponse>(`${this.baseURL}/export/${type}`, request);
+  exportChannelsV2(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
+    const payload = {
+      channels: request,
+      ...options,
+    };
+    return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export/channels`, payload);
   }
 
   exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {

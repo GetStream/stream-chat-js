@@ -311,10 +311,6 @@ export type ExportChannelResponse = {
   task_id: string;
 };
 
-export type ExportResponse = {
-  task_id: string;
-};
-
 export type ExportChannelStatusResponse = {
   created_at?: string;
   error?: {};
@@ -1619,15 +1615,9 @@ export type ExportChannelRequest = {
   messages_until?: Date;
 };
 
-export type ExportRequest = {
-  format: string;
-  ids: string[];
-  since?: Date;
-  until?: Date;
-};
-
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  export_users?: boolean;
   include_truncated_messages?: boolean;
 };
 
