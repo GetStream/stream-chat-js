@@ -3,20 +3,26 @@ import sinon from 'sinon';
 import chaiAsPromised from 'chai-as-promised';
 
 import * as utils from '../../src/utils';
+import * as errors from '../../src/errors';
 import { ConnectionState, WSConnectionFallback } from '../../src/connection_fallback';
 
 chai.use(chaiAsPromised);
 const expect = chai.expect;
 
 describe('connection_fallback', () => {
-	const newClient = () => ({
-		baseURL: 'url.com',
+	const newClient = (overrides) => ({
+		baseURL: '',
 		logger: () => null,
-		doAxiosRequest: () => null,
+		doAxiosRequest: sinon.spy(),
 		_buildWSPayload: () => sinon.stub().returns('payload'),
 		dispatchEvent: sinon.spy(),
 		handleEvent: sinon.spy(),
 		recoverState: sinon.spy(),
+		...overrides,
+	});
+
+	afterEach(() => {
+		sinon.restore();
 	});
 
 	describe('constructor', () => {
@@ -172,6 +178,89 @@ describe('connection_fallback', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			c._req = () => Promise.reject('error');
 			await c.disconnect();
+		});
+	});
+
+	describe('_req', () => {
+		it('should set cancel token', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			expect(c.cancelToken).to.be.undefined;
+			await c._req({}, {});
+			expect(c.cancelToken).to.not.be.undefined;
+			expect(c.cancelToken.cancel).to.be.a('function');
+
+			c.cancelToken = undefined;
+			await c._req({ close: true }, {});
+			expect(c.cancelToken).to.be.undefined;
+		});
+
+		it('should send the request correctly', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+
+			const params = { json: 'hi' };
+			const config = { timeout: 100 };
+			await c._req(params, config);
+			expect(
+				c.client.doAxiosRequest.calledOnceWithExactly('get', '/longpoll', undefined, {
+					params,
+					config: { ...config, cancelToken: c.cancelToken.token },
+				}),
+			).to.be.true;
+		});
+
+		it('should keep track of consecutive failures', async () => {
+			// ok-err-err-ok-ok...
+			const doAxiosRequest = sinon.stub().onCall(0).resolves().onCall(1).rejects().onCall(2).rejects().resolves();
+			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
+
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await c._req({});
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await expect(c._req({})).to.throw;
+			expect(c.consecutiveFailures).to.be.eql(1);
+			await expect(c._req({})).to.throw;
+			expect(c.consecutiveFailures).to.be.eql(2);
+			await c._req({});
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await c._req({});
+			expect(c.consecutiveFailures).to.be.eql(0);
+		});
+
+		it('should not retry for non-retryable errors', async () => {
+			const doAxiosRequest = sinon.stub().rejects();
+			sinon.stub(errors, 'isErrorRetryable').returns(false);
+			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
+			sinon.spy(c);
+
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await expect(c._req({}, {}, true)).to.be.rejected;
+			expect(c.consecutiveFailures).to.be.eql(1);
+			expect(c._req.calledOnce).to.be.true;
+		});
+
+		it('should not retry when retry flag is false', async () => {
+			const doAxiosRequest = sinon.stub().rejects();
+			sinon.stub(errors, 'isErrorRetryable').returns(true);
+			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
+			sinon.spy(c);
+
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await expect(c._req({}, {}, false)).to.be.rejected;
+			expect(c.consecutiveFailures).to.be.eql(1);
+			expect(c._req.calledOnce).to.be.true;
+		});
+
+		it('should retry errors if it is retryable', async () => {
+			const doAxiosRequest = sinon.stub().rejects();
+			sinon.stub(errors, 'isErrorRetryable').onCall(0).returns(true).onCall(1).returns(true).returns(false);
+			sinon.stub(utils, 'sleep').resolves();
+			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
+			sinon.spy(c, '_req');
+
+			expect(c.consecutiveFailures).to.be.eql(0);
+			await expect(c._req({}, {}, true)).to.be.rejected;
+			expect(c.consecutiveFailures).to.be.eql(3);
+			expect(c._req.calledThrice).to.be.true;
 		});
 	});
 });
