@@ -14,7 +14,7 @@ describe('connection_fallback', () => {
 		baseURL: '',
 		logger: () => null,
 		doAxiosRequest: sinon.spy(),
-		_buildWSPayload: () => sinon.stub().returns('payload'),
+		_buildWSPayload: sinon.stub().returns('payload'),
 		dispatchEvent: sinon.spy(),
 		handleEvent: sinon.spy(),
 		recoverState: sinon.spy(),
@@ -261,6 +261,87 @@ describe('connection_fallback', () => {
 			await expect(c._req({}, {}, true)).to.be.rejected;
 			expect(c.consecutiveFailures).to.be.eql(3);
 			expect(c._req.calledThrice).to.be.true;
+		});
+	});
+
+	describe('connect', () => {
+		const health = { connection_id: 'connectionID' };
+		it('should skip connect if already connecting or connected', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			sinon.spy(c);
+			c.state = ConnectionState.Connecting;
+			expect(await c.connect()).to.be.undefined;
+			c.state = ConnectionState.Connected;
+			expect(await c.connect()).to.be.undefined;
+			expect(c._setState.called).to.be.false;
+			expect(c._req.called).to.be.false;
+		});
+
+		it('should send request in correct format', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().resolves({ event: health });
+			c._poll = sinon.spy();
+
+			expect(await c.connect()).to.be.eql(health);
+			expect(c.client._buildWSPayload.calledOnce).to.be.true;
+			expect(c._poll.calledOnce).to.be.true;
+			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false)).to.be.true;
+
+			c.state = ConnectionState.Init;
+			c._req = sinon.stub().resolves({ event: health });
+			expect(await c.connect(true)).to.be.eql(health);
+			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, true)).to.be.true;
+		});
+
+		it('should update state and connectionID', async () => {
+			let c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().resolves({ event: health });
+			c._poll = sinon.spy();
+			expect(await c.connect()).to.be.eql(health);
+			expect(c.state).to.be.eql(ConnectionState.Connected);
+			expect(c.connectionID).to.be.eql(health.connection_id);
+
+			c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().rejects();
+			c._poll = sinon.spy();
+			await expect(c.connect()).to.be.rejected;
+			expect(c._poll.called).to.be.false;
+			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.connectionID).to.be.undefined;
+		});
+
+		it('should only start polling after connect', async () => {
+			let c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().resolves({ event: health });
+			c._poll = sinon.spy();
+			expect(await c.connect()).to.be.eql(health);
+			expect(c._poll.calledOnce).to.be.true;
+
+			c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().rejects();
+			c._poll = sinon.spy();
+			await expect(c.connect()).to.be.rejected;
+			expect(c._poll.called).to.be.false;
+		});
+
+		it('should recoverState correctly', async () => {
+			let c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().resolves({ event: health });
+			c._poll = sinon.spy();
+			await c.connect();
+			expect(c.client.recoverState.called).to.be.false;
+
+			c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().rejects();
+			c._poll = sinon.spy();
+			await expect(c.connect()).to.be.rejected;
+			expect(c.client.recoverState.called).to.be.false;
+
+			c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.stub().resolves({ event: health });
+			c._poll = sinon.spy();
+			await c.connect(true);
+			expect(c.client.recoverState.called).to.be.true;
 		});
 	});
 });
