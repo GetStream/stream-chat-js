@@ -344,4 +344,84 @@ describe('connection_fallback', () => {
 			expect(c.client.recoverState.called).to.be.true;
 		});
 	});
+
+	describe('_poll', () => {
+		it('should do nothing if not in connect state', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c._req = sinon.spy();
+			expect(await c._poll()).to.be.undefined;
+			expect(c._req.called).to.be.false;
+
+			c.state = ConnectionState.Connecting;
+			expect(await c._poll()).to.be.undefined;
+			expect(c._req.called).to.be.false;
+		});
+
+		it('should send request in correct format', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c.state = ConnectionState.Connected;
+			c._req = async () => {
+				c.state = ConnectionState.Closed;
+				return {};
+			};
+			sinon.spy(c, '_req');
+			await c._poll();
+			expect(c._req.calledOnceWithExactly({}, { timeout: 30000 }, true)).to.be.true;
+		});
+
+		it('should dispatch incoming events', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c.state = ConnectionState.Connected;
+
+			c._req = async () => {
+				c.state = ConnectionState.Closed;
+				return { events: ['1', '2'] };
+			};
+			await c._poll();
+			expect(c.client.dispatchEvent.calledTwice).to.be.true;
+			expect(c.client.dispatchEvent.getCall(0).args).to.be.eql(['1']);
+			expect(c.client.dispatchEvent.getCall(1).args).to.be.eql(['2']);
+		});
+
+		it('should reconnect if ConnectionID err', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c.state = ConnectionState.Connected;
+			c.connect = sinon.spy();
+			c._req = async () => {
+				const err = new Error();
+				err.code = 46;
+				throw err;
+			};
+
+			await c._poll();
+			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.connect.calledOnceWithExactly(true)).to.be.true;
+		});
+
+		it('should stop for non-retryable errors', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c.state = ConnectionState.Connected;
+			c._req = sinon.stub().rejects();
+			sinon.stub(errors, 'isErrorRetryable').returns(false);
+			sinon.stub(errors, 'isAPIError').returns(true);
+
+			await c._poll();
+			expect(c.state).to.be.eql(ConnectionState.Closed);
+		});
+
+		it('should continue retrying for random errors', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			c.state = ConnectionState.Connected;
+			c._req = sinon.stub().rejects();
+
+			let counter = 0;
+			sinon.stub(utils, 'sleep').callsFake(() => {
+				if (++counter > 2) c.state = ConnectionState.Disconnected;
+			});
+
+			await c._poll();
+			expect(c._req.calledThrice).to.be.true;
+			expect(utils.sleep.calledThrice).to.be.true;
+		});
+	});
 });
