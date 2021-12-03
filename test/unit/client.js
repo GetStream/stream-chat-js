@@ -358,7 +358,7 @@ describe('Client WSFallback', () => {
 			.resolves({ event: { connection_id: 'new_id' } })
 			.resolves({});
 		client.doAxiosRequest = stub;
-		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		expect(health).to.be.eql({ connection_id: 'new_id' });
 		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
@@ -376,7 +376,7 @@ describe('Client WSFallback', () => {
 	it('should fire transport.changed event', async () => {
 		sinon.spy(client, 'dispatchEvent');
 		client.doAxiosRequest = () => ({ event: { connection_id: 'new_id' } });
-		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		await client.disconnectUser();
 		expect(health).to.be.eql({ connection_id: 'new_id' });
@@ -384,7 +384,7 @@ describe('Client WSFallback', () => {
 	});
 
 	it('should ignore fallback if flag is false', async () => {
-		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.wsBaseURL = 'ws://getstream.io';
 		client.options.enableWSFallback = false;
 
 		await expect(client.connectUser({ id: 'amin' }, userToken)).to.be.rejectedWith(
@@ -395,7 +395,7 @@ describe('Client WSFallback', () => {
 	});
 
 	it('should ignore fallback if browser is offline', async () => {
-		client.wsBaseURL = 'ws://invalidWS.xyz';
+		client.wsBaseURL = 'ws://getstream.io';
 		client.options.enableWSFallback = true;
 		sinon.stub(utils, 'isOnline').returns(false);
 
