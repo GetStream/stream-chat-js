@@ -12,7 +12,7 @@ import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
-import { isWSFailure } from './errors';
+import { APIError, isWSFailure } from './errors';
 import {
   isFunction,
   isOwnUserBaseProperty,
@@ -43,7 +43,6 @@ import {
   ChannelMute,
   ChannelOptions,
   ChannelSort,
-  ChannelStateOptions,
   CheckPushResponse,
   CheckSQSResponse,
   Configs,
@@ -1462,7 +1461,7 @@ export class StreamChat<
     } catch (err) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
+      if (this.options.enableWSFallback && isWSFailure(err as APIError) && isOnline()) {
         this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
         // @ts-expect-error
         this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
@@ -1600,8 +1599,6 @@ export class StreamChat<
    * @param {ChannelSort<ChannelType>} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object
-   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
-   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    *
    * @return {Promise<APIResponse & { channels: Array<ChannelAPIResponse<AttachmentType,ChannelType,CommandType,MessageType,ReactionType,UserType>>}> } search channels response
    */
@@ -1609,9 +1606,7 @@ export class StreamChat<
     filterConditions: ChannelFilters<ChannelType, CommandType, UserType>,
     sort: ChannelSort<ChannelType> = [],
     options: ChannelOptions = {},
-    stateOptions: ChannelStateOptions = {},
   ) {
-    const { skipInitialization } = stateOptions;
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1656,18 +1651,32 @@ export class StreamChat<
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
       c.initialized = true;
+      c.state.clearMessages();
 
-      if (skipInitialization === undefined) {
-        c._initializeState(channelState);
-      } else if (!skipInitialization.includes(channelState.channel.id)) {
-        c.state.clearMessages();
-        c._initializeState(channelState);
+      if (c.messageFilters?.created_at_after) {
+        const { created_at_after } = c.messageFilters;
+        const createdAfterTime =
+          typeof created_at_after === 'string' ? Date.parse(created_at_after) : created_at_after.getTime();
+        channelState.messages = channelState.messages.filter((message) =>
+          this.filterMessagesAfterTime(message, createdAfterTime),
+        );
+        channelState.pinned_messages = channelState.pinned_messages.filter((message) =>
+          this.filterMessagesAfterTime(message, createdAfterTime),
+        );
       }
 
+      c._initializeState(channelState);
       channels.push(c);
     }
     return channels;
   }
+
+  filterMessagesAfterTime = (
+    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
+    createdAfter: number,
+  ) => {
+    return message.created_at ? Date.parse(message.created_at) > createdAfter : true;
+  };
 
   /**
    * search - Query messages

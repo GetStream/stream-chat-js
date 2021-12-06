@@ -28,7 +28,7 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '99': { name: 'AppSuspendedError', retryable: false },
 };
 
-type APIError = Error & { code: number; isWSFailure?: boolean };
+export type APIError = Error & { code: number; isWSFailure?: boolean };
 
 export function isAPIError(error: Error): error is APIError {
   return (error as APIError).code !== undefined;

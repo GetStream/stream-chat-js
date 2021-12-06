@@ -49,6 +49,7 @@ import {
   UserResponse,
 } from './types';
 import { Role } from './permissions';
+import { MessagePaginationOptions } from 'index';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -80,6 +81,7 @@ export class Channel<
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  messageFilters: MessagePaginationOptions | undefined;
 
   /**
    * constructor - Create a channel
@@ -789,6 +791,7 @@ export class Channel<
 
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined);
+    this.messageFilters = combined.messages;
     this.initialized = true;
     this.data = state.channel;
 
