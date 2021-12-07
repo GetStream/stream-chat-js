@@ -81,7 +81,7 @@ export class Channel<
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
-  messageFilters: MessagePaginationOptions | undefined;
+  messageFilters?: MessagePaginationOptions;
 
   /**
    * constructor - Create a channel
