@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [10, 12, 14, 16, 17]
+        node: [12, 14, 16, 17]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2-beta
@@ -24,7 +24,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.node }}-modules-${{ hashFiles('**/yarn.lock') }}
 
       - name: Install Dependencies & Build
-        run: yarn install --frozen-lockfile --ignore-engines
+        run: yarn install --frozen-lockfile
 
       - name: Lint
         if: matrix.node == 16
