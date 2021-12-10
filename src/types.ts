@@ -673,7 +673,7 @@ export type UserResponse<UserType = UR> = User<UserType> & {
 
 export type PushNotificationSettings = {
   disabled?: boolean;
-  disabled_until?: Date | null;
+  disabled_until?: string | null;
 };
 
 /**
