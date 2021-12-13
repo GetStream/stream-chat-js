@@ -578,9 +578,15 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PushNotificationSettings = {
+  disabled?: boolean;
+  disabled_until?: string | null;
 };
 
 /**
