@@ -1708,6 +1708,7 @@ export type PermissionAPIObject = {
   custom?: boolean;
   description?: string;
   id?: string;
+  level?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;
