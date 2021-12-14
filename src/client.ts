@@ -117,6 +117,8 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
   ReservedMessageFields,
+  QueryFlagReportsResponse,
+  ReviewFlagReportResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2213,6 +2215,40 @@ export class StreamChat<
   async unflagUser(targetID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagUserResponse<UserType>>(this.baseURL + '/moderation/unflag', {
       target_user_id: targetID,
+      ...options,
+    });
+  }
+
+  /**
+   * queryFlagReports - query flag reports
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<QueryFlagReportsResponse>>}
+   */
+  async queryFlagReports(
+    options: {
+      report_id?: string;
+      report_ids?: Array<string>;
+    } = {},
+  ) {
+    // TODO: update options when known.
+    return await this.post<QueryFlagReportsResponse<UserType>>(this.baseURL + '/moderation/reports', {
+      ...options,
+    });
+  }
+
+  /**
+   * reviewFlagReport - review flag report
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<QueryFlagReportsResponse>>}
+   */
+  async reviewFlagReport(
+    report_id: string,
+    result: string,
+    options: {
+      details?: string;
+    } = {},
+  ) {
+    return await this.post<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${report_id}`, {
       ...options,
     });
   }

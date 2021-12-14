@@ -323,12 +323,8 @@ export type FlagMessageResponse<UserType = UR> = APIResponse & {
     created_at: string;
     created_by_automod: boolean;
     target_message_id: string;
-    updated_at: string;
     user: UserResponse<UserType>;
-    approved_at?: string;
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
+    details?: Object; // Any JSON
   };
 };
 
@@ -337,13 +333,29 @@ export type FlagUserResponse<UserType = UR> = APIResponse & {
     created_at: string;
     created_by_automod: boolean;
     target_user: UserResponse<UserType>;
-    updated_at: string;
     user: UserResponse<UserType>;
-    approved_at?: string;
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
+    details?: Object; // Any JSON
   };
+};
+
+export type FlagReport<UserType = UR> = {
+  created_at: string;
+  created_by_automod: boolean;
+  target_user: UserResponse<UserType>;
+  updated_at: string;
+  user: UserResponse<UserType>;
+  review_details?: Object; // Any JSON
+  review_result?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+};
+
+export type QueryFlagReportsResponse<UserType = UR> = APIResponse & {
+  reports: Array<FlagReport<UserType>>;
+};
+
+export type ReviewFlagReportResponse<UserType = UR> = APIResponse & {
+  report: FlagReport<UserType>;
 };
 
 export type FormatMessageResponse<
