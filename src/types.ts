@@ -404,6 +404,7 @@ export type ListChannelTypesAPIResponse<
 
 export type ListCommandsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   commands: Array<CreateCommandOptions<StreamChatGenerics> & Partial<CreatedAtUpdatedAt>>;
+};
 
 export type MuteChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel_mute: ChannelMute<StreamChatGenerics>;
