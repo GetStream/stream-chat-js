@@ -426,7 +426,7 @@ export type ListChannelTypesAPIResponse<
 > = ListChannelResponse<CommandType>;
 
 export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<CommandType> & Partial<CreatedAtUpdatedAt>>;
 };
 
 export type MuteChannelAPIResponse<
