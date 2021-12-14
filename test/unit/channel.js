@@ -9,44 +9,51 @@ import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { StreamChat } from '../../src/client';
+import { ChannelState } from '../../src';
 
 const expect = chai.expect;
 
 describe('Channel count unread', function () {
-	const user = { id: 'user' };
-	const lastRead = new Date('2020-01-01T00:00:00');
-	const channelResponse = generateChannel();
+	let lastRead;
+	let user;
+	let channel;
+	let client;
+	beforeEach(() => {
+		user = { id: 'user' };
+		lastRead = new Date('2020-01-01T00:00:00');
+		const channelResponse = generateChannel();
 
-	const client = new StreamChat('apiKey');
-	client.user = user;
-	client.userID = 'user';
-	client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = 'user';
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
-	const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
-	channel.initialized = true;
-	channel.lastRead = () => lastRead;
+		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel.initialized = true;
+		channel.lastRead = () => lastRead;
 
-	const ignoredMessages = [
-		generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
-		generateMsg({ date: '2019-01-01T00:00:00' }),
-		generateMsg({ date: '2020-01-01T00:00:00' }),
-		generateMsg({
-			date: '2023-01-01T00:00:00',
-			shadowed: true,
-			mentioned_users: [user],
-		}),
-		generateMsg({
-			date: '2024-01-01T00:00:00',
-			silent: true,
-			mentioned_users: [user],
-		}),
-		generateMsg({
-			date: '2025-01-01T00:00:00',
-			user: { id: 'mute1' },
-			mentioned_users: [user],
-		}),
-	];
-	channel.state.addMessagesSorted(ignoredMessages);
+		const ignoredMessages = [
+			generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
+			generateMsg({ date: '2019-01-01T00:00:00' }),
+			generateMsg({ date: '2020-01-01T00:00:00' }),
+			generateMsg({
+				date: '2023-01-01T00:00:00',
+				shadowed: true,
+				mentioned_users: [user],
+			}),
+			generateMsg({
+				date: '2024-01-01T00:00:00',
+				silent: true,
+				mentioned_users: [user],
+			}),
+			generateMsg({
+				date: '2025-01-01T00:00:00',
+				user: { id: 'mute1' },
+				mentioned_users: [user],
+			}),
+		];
+		channel.state.addMessagesSorted(ignoredMessages);
+	});
 
 	it('_countMessageAsUnread should return false shadowed or silent messages', function () {
 		expect(channel._countMessageAsUnread({ shadowed: true })).not.to.be.ok;
@@ -110,6 +117,19 @@ describe('Channel count unread', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
+	it('countUnread should return correct count when multiple message sets are loaded into state', () => {
+		expect(channel.countUnread(lastRead)).to.be.equal(0);
+		channel.state.addMessagesSorted([
+			generateMsg({ date: '2021-01-01T00:00:00' }),
+			generateMsg({ date: '2022-01-01T00:00:00' }),
+		]);
+		channel.state.addMessagesSorted([generateMsg({ date: '2020-01-01T00:00:00' })], false, true, true, 'new');
+		channel.state.messageSets[0].isCurrent = false;
+		channel.state.messageSets[1].isCurrent = true;
+
+		expect(channel.countUnread(lastRead)).to.be.equal(2);
+	});
+
 	it('countUnreadMentions should return correct count', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
 		channel.state.addMessageSorted(
@@ -122,6 +142,19 @@ describe('Channel count unread', function () {
 				mentioned_users: [{ id: 'random' }],
 			}),
 		);
+		expect(channel.countUnreadMentions()).to.be.equal(1);
+	});
+
+	it('countUnreadMentions should return correct count when multiple message sets are loaded into state', () => {
+		expect(channel.countUnreadMentions()).to.be.equal(0);
+		channel.state.addMessagesSorted([
+			generateMsg({ date: '2021-01-01T00:00:00', mentioned_users: [user, { id: 'random' }] }),
+			generateMsg({ date: '2022-01-01T00:00:00' }),
+		]);
+		channel.state.addMessagesSorted([generateMsg({ date: '2020-01-01T00:00:00' })], false, true, true, 'new');
+		channel.state.messageSets[0].isCurrent = false;
+		channel.state.messageSets[1].isCurrent = true;
+
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});
 });
@@ -533,5 +566,52 @@ describe('Channel search', async () => {
 	});
 	it('next and offset fails', async () => {
 		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
+	});
+});
+
+describe('Channel lastMessage', async () => {
+	const client = await getClientWithUser();
+	const channel = client.channel('messaging', uuidv4());
+
+	it('should return last message - messages are in order', () => {
+		channel.state = new ChannelState();
+		const latestMessageDate = '2018-01-01T00:13:24';
+		channel.state.addMessagesSorted([
+			generateMsg({ date: '2018-01-01T00:00:00' }),
+			generateMsg({ date: '2018-01-01T00:02:00' }),
+			generateMsg({ date: latestMessageDate }),
+		]);
+
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
+	});
+
+	it('should return last message - messages are out of order', () => {
+		channel.state = new ChannelState();
+		const latestMessageDate = '2018-01-01T00:13:24';
+		channel.state.addMessagesSorted([
+			generateMsg({ date: latestMessageDate }),
+			generateMsg({ date: '2018-01-01T00:02:00' }),
+			generateMsg({ date: '2018-01-01T00:00:00' }),
+		]);
+
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
+	});
+
+	it('should return last message - state has more message sets loaded', () => {
+		channel.state = new ChannelState();
+		const latestMessageDate = '2018-01-01T00:13:24';
+		const latestMessages = [
+			generateMsg({ date: latestMessageDate }),
+			generateMsg({ date: '2018-01-01T00:02:00' }),
+			generateMsg({ date: '2018-01-01T00:00:00' }),
+		];
+		const otherMessages = [
+			generateMsg({ date: '2017-11-21T00:05:33' }),
+			generateMsg({ date: '2017-11-21T00:05:35' }),
+		];
+		channel.state.addMessagesSorted(latestMessages);
+		channel.state.addMessagesSorted(otherMessages, 'new');
+
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
 	});
 });

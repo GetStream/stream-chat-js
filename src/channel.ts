@@ -28,6 +28,7 @@ import {
   Message,
   MessageFilters,
   MessageResponse,
+  MessageSetType,
   MuteChannelAPIResponse,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
@@ -668,12 +669,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   lastMessage() {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
-    let min = this.state.messages.length - 5;
+    let min = this.state.latestMessages.length - 5;
     if (min < 0) {
       min = 0;
     }
-    const max = this.state.messages.length + 1;
-    const messageSlice = this.state.messages.slice(min, max);
+    const max = this.state.latestMessages.length + 1;
+    const messageSlice = this.state.latestMessages.slice(min, max);
 
     // sort by pk desc
     messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
@@ -736,7 +737,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     const combined = { ...defaultOptions, ...options };
-    const state = await this.query(combined);
+    const state = await this.query(combined, 'latest');
     this.initialized = true;
     this.data = state.channel;
 
@@ -767,7 +768,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * getReplies - List the message replies for a parent message
    *
    * @param {string} parent_id The message parent id, ie the top of the thread
-   * @param {PaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
+   * @param {MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
    *
    * @return {Promise<GetRepliesAPIResponse<StreamChatGenerics>>} A response with a list of messages
    */
@@ -883,8 +884,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!lastRead) return this.state.unreadCount;
 
     let count = 0;
-    for (let i = 0; i < this.state.messages.length; i += 1) {
-      const message = this.state.messages[i];
+    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
+      const message = this.state.latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
@@ -893,7 +894,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
-   * countUnread - Count the number of unread messages mentioning the current user
+   * countUnreadMentions - Count the number of unread messages mentioning the current user
    *
    * @return {number} Unread mentions count
    */
@@ -902,8 +903,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const userID = this.getClient().userID;
 
     let count = 0;
-    for (let i = 0; i < this.state.messages.length; i += 1) {
-      const message = this.state.messages[i];
+    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
+      const message = this.state.latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
@@ -926,17 +927,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       state: false,
       presence: false,
     };
-    return await this.query(options);
+    return await this.query(options, 'latest');
   };
 
   /**
    * query - Query the API, get messages, members or other channel fields
    *
    * @param {ChannelQueryOptions<StreamChatGenerics>} options The query options
+   * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
    *
    * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} Returns a query response
    */
-  async query(options: ChannelQueryOptions<StreamChatGenerics>) {
+  async query(
+    options: ChannelQueryOptions<StreamChatGenerics>,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+  ) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -977,7 +982,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.getClient()._addChannelConfig(state);
 
     // add any messages to our channel state
-    this._initializeState(state);
+    this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
     return state;
   }
@@ -1340,7 +1345,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
-  _initializeState(state: ChannelAPIResponse<StreamChatGenerics>) {
+  _initializeState(
+    state: ChannelAPIResponse<StreamChatGenerics>,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
+  ) {
     const { state: clientState, user, userID } = this.getClient();
 
     // add the Users
@@ -1356,9 +1364,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
     const messages = state.messages || [];
     if (!this.state.messages) {
-      this.state.messages = [];
+      this.state.initMessages();
     }
-    this.state.addMessagesSorted(messages, false, true);
+    this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
     }
