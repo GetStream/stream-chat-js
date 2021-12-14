@@ -403,8 +403,7 @@ export type ListChannelTypesAPIResponse<
 > = ListChannelResponse<StreamChatGenerics>;
 
 export type ListCommandsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
-  commands: Array<CreateCommandOptions<StreamChatGenerics> & CreatedAtUpdatedAt>;
-};
+  commands: Array<CreateCommandOptions<StreamChatGenerics> & Partial<CreatedAtUpdatedAt>>;
 
 export type MuteChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel_mute: ChannelMute<StreamChatGenerics>;
@@ -1694,6 +1693,7 @@ export type PermissionAPIObject = {
   custom?: boolean;
   description?: string;
   id?: string;
+  level?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;
