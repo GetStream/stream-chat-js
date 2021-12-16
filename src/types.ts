@@ -147,6 +147,48 @@ export type MessageFlagsResponse<
   }>;
 };
 
+export type FlagReport<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = {
+  flags_count: number;
+  id: string;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
+  user: UserResponse<UserType>;
+  created_at?: string;
+  review_details?: Object;
+  review_result?: string;
+  reviewed_at?: string;
+  reviewed_by?: UserResponse<UserType>;
+  updated_at?: string;
+};
+
+export type FlagReportsResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  reports: Array<FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>>;
+};
+
+export type ReviewFlagReportResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  report: FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>;
+};
+
 export type BannedUsersResponse<
   ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
@@ -336,26 +378,6 @@ export type FlagUserResponse<UserType = UR> = APIResponse & {
     user: UserResponse<UserType>;
     details?: Object; // Any JSON
   };
-};
-
-export type FlagReport<UserType = UR> = {
-  created_at: string;
-  created_by_automod: boolean;
-  target_user: UserResponse<UserType>;
-  updated_at: string;
-  user: UserResponse<UserType>;
-  review_details?: Object; // Any JSON
-  review_result?: string;
-  reviewed_at?: string;
-  reviewed_by?: string;
-};
-
-export type QueryFlagReportsResponse<UserType = UR> = APIResponse & {
-  reports: Array<FlagReport<UserType>>;
-};
-
-export type ReviewFlagReportResponse<UserType = UR> = APIResponse & {
-  report: FlagReport<UserType>;
 };
 
 export type FormatMessageResponse<
@@ -687,6 +709,11 @@ export type UserResponse<UserType = UR> = User<UserType> & {
  */
 
 export type MessageFlagsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type FlagReportsPaginationOptions = {
   limit?: number;
   offset?: number;
 };
@@ -1062,6 +1089,32 @@ export type MessageFlagsFilters = QueryFilters<
     }
 >;
 
+export type FlagReportsFiltersOptions = {
+  is_reviewed?: boolean;
+  message_id?: string;
+  report_id?: string;
+  user_id?: string;
+};
+
+export type FlagReportsFilters = QueryFilters<
+  {
+    report_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
+  } & {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+      [Key in keyof Omit<FlagReportsFiltersOptions, 'report_id' | 'user_id' | 'message_id' | 'is_reviewed'>]:
+        | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
+        | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+    }
+>;
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
   channel_cid?: string;

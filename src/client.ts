@@ -117,8 +117,10 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
   ReservedMessageFields,
-  QueryFlagReportsResponse,
   ReviewFlagReportResponse,
+  FlagReportsFilters,
+  FlagReportsPaginationOptions,
+  FlagReportsResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2220,26 +2222,28 @@ export class StreamChat<
   }
 
   /**
-   * queryFlagReports - query flag reports
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<QueryFlagReportsResponse>>}
+   * queryFlagReports - Query flag reports
+   *
+   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
+   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<FlagReportsResponse<ChannelType, CommandType, UserType>>} Flag Reports Response
    */
-  async queryFlagReports(
-    options: {
-      report_id?: string;
-      report_ids?: Array<string>;
-    } = {},
-  ) {
-    // TODO: update options when known.
-    return await this.post<QueryFlagReportsResponse<UserType>>(this.baseURL + '/moderation/reports', {
-      ...options,
-    });
+  async queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
+    // Return a list of message flags
+    return await this.post<FlagReportsResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/moderation/reports',
+      {
+        filter_conditions: filterConditions,
+        ...options,
+      },
+    );
   }
 
   /**
    * reviewFlagReport - review flag report
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<QueryFlagReportsResponse>>}
+   * @returns {Promise<ReviewFlagReportResponse>>}
    */
   async reviewFlagReport(
     report_id: string,
