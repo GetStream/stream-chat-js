@@ -1317,7 +1317,11 @@ export class Channel<
         break;
       case 'channel.updated':
         if (event.channel) {
-          channel.data = event.channel;
+          channel.data = {
+            ...event.channel,
+            own_capabilities: channel.data?.own_capabilities,
+            hidden: channel.data?.hidden,
+          };
         }
         break;
       case 'reaction.new':
