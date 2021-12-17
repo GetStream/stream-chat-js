@@ -2705,14 +2705,6 @@ export class StreamChat<
     return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export_channels`, payload);
   }
 
-  exportChannelsV2(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
-    const payload = {
-      channels: request,
-      ...options,
-    };
-    return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export/channels`, payload);
-  }
-
   exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
     return this.exportChannels([request], options);
   }
