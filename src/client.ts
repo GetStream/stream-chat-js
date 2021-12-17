@@ -2242,17 +2242,20 @@ export class StreamChat<
 
   /**
    * reviewFlagReport - review flag report
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {string} [id] flag report to review
+   * @param {string} [review_result] flag report review result
+   * @param {string} [options.review_details] custom information about review result
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
   async reviewFlagReport(
-    report_id: string,
-    result: string,
+    id: string,
+    review_result: string,
     options: {
-      details?: string;
+      review_details?: Object;
     } = {},
   ) {
-    return await this.post<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${report_id}`, {
+    return await this.patch<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${id}`, {
+      review_result,
       ...options,
     });
   }
