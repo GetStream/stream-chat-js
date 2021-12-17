@@ -460,7 +460,7 @@ export type ListChannelTypesAPIResponse<
 > = ListChannelResponse<CommandType>;
 
 export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<CommandType> & Partial<CreatedAtUpdatedAt>>;
 };
 
 export type MuteChannelAPIResponse<
@@ -699,9 +699,15 @@ export type UserResponse<UserType = UR> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PushNotificationSettings = {
+  disabled?: boolean;
+  disabled_until?: string | null;
 };
 
 /**
@@ -726,14 +732,6 @@ export type BanUserOptions<UserType = UR> = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
-  /**
-   * @deprecated please use banned_by
-   */
-  user?: UserResponse<UserType>;
-  /**
-   * @deprecated please use banned_by_id
-   */
-  user_id?: string;
 };
 
 export type ChannelOptions = {
@@ -910,6 +908,8 @@ export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
   device?: BaseDeviceFields;
   enableInsights?: boolean;
+  /** experimental feature, please contact support if you want this feature enabled for you */
+  enableWSFallback?: boolean;
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -1022,6 +1022,7 @@ export type EventTypes =
   | 'channel.unmuted'
   | 'channel.updated'
   | 'channel.visible'
+  | 'transport.changed' // ws vs longpoll
   | 'connection.changed'
   | 'connection.recovered'
   | 'health.check'
@@ -1772,6 +1773,7 @@ export type PermissionAPIObject = {
   custom?: boolean;
   description?: string;
   id?: string;
+  level?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;

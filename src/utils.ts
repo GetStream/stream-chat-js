@@ -203,3 +203,45 @@ export function convertErrorToJson(err: Error) {
 
   return jsonObj;
 }
+
+/**
+ * isOnline safely return the navigator.online value for browser env
+ * if navigator is not in global object, it always return true
+ */
+export function isOnline() {
+  const nav =
+    typeof navigator !== 'undefined'
+      ? navigator
+      : typeof window !== 'undefined' && window.navigator
+      ? window.navigator
+      : undefined;
+
+  if (!nav) {
+    console.warn('isOnline failed to access window.navigator and assume browser is online');
+    return true;
+  }
+
+  // RN navigator has undefined for onLine
+  if (typeof nav.onLine !== 'boolean') {
+    return true;
+  }
+
+  return nav.onLine;
+}
+
+/**
+ * listenForConnectionChanges - Adds an event listener fired on browser going online or offline
+ */
+export function addConnectionEventListeners(cb: (e: Event) => void) {
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('offline', cb);
+    window.addEventListener('online', cb);
+  }
+}
+
+export function removeConnectionEventListeners(cb: (e: Event) => void) {
+  if (typeof window !== 'undefined' && window.removeEventListener) {
+    window.removeEventListener('offline', cb);
+    window.removeEventListener('online', cb);
+  }
+}
