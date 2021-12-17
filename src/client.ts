@@ -2243,19 +2243,19 @@ export class StreamChat<
   /**
    * reviewFlagReport - review flag report
    * @param {string} [id] flag report to review
-   * @param {string} [review_result] flag report review result
+   * @param {string} [reviewResult] flag report review result
    * @param {string} [options.review_details] custom information about review result
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
   async reviewFlagReport(
     id: string,
-    review_result: string,
+    reviewResult: string,
     options: {
       review_details?: Object;
     } = {},
   ) {
     return await this.patch<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${id}`, {
-      review_result,
+      review_result: reviewResult,
       ...options,
     });
   }
