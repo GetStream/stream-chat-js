@@ -1319,8 +1319,8 @@ export class Channel<
         if (event.channel) {
           channel.data = {
             ...event.channel,
-            own_capabilities: channel.data?.own_capabilities,
-            hidden: channel.data?.hidden,
+            hidden: event.channel?.hidden ?? channel.data?.hidden,
+            own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
         }
         break;
