@@ -1093,6 +1093,8 @@ export type FlagReportsFiltersOptions = {
   is_reviewed?: boolean;
   message_id?: string;
   report_id?: string;
+  review_result?: string;
+  reviewed_by?: string;
   user_id?: string;
 };
 
@@ -1102,6 +1104,14 @@ export type FlagReportsFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
   } & {
+    review_result?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
+  } & {
+    reviewed_by?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
+  } & {
     user_id?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
@@ -1110,9 +1120,10 @@ export type FlagReportsFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
   } & {
-      [Key in keyof Omit<FlagReportsFiltersOptions, 'report_id' | 'user_id' | 'message_id' | 'is_reviewed'>]:
-        | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
-        | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+      [Key in keyof Omit<
+        FlagReportsFiltersOptions,
+        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+      >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
     }
 >;
 export type BannedUsersFilterOptions = {
