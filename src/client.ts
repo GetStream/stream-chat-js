@@ -2697,16 +2697,20 @@ export class StreamChat<
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 
-  exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
+  exportChannels(request: Array<ExportChannelRequest>, version?: string, options: ExportChannelOptions = {}) {
     const payload = {
       channels: request,
       ...options,
     };
-    return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export_channels`, payload);
+    let url = `${this.baseURL}/export_channels`;
+    if (version !== undefined) {
+      url += `?version=${version}`;
+    }
+    return this.post<APIResponse & ExportChannelResponse>(url, payload);
   }
 
-  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
-    return this.exportChannels([request], options);
+  exportChannel(request: ExportChannelRequest, version?: string, options?: ExportChannelOptions) {
+    return this.exportChannels([request], version, options);
   }
 
   getExportChannelStatus(id: string) {
