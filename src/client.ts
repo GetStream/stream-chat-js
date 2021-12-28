@@ -52,7 +52,6 @@ import {
   CreateChannelResponse,
   CreateCommandOptions,
   CreateCommandResponse,
-  CustomPermissionOptions,
   DeleteCommandResponse,
   Device,
   EndpointName,
@@ -120,8 +119,11 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
   ReservedMessageFields,
+  RoleAPIResponse,
+  RolesAPIResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { Permission, RoleName } from './permissions';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -2639,24 +2641,24 @@ export class StreamChat<
 
   /** createPermission - creates a custom permission
    *
-   * @param {CustomPermissionOptions} permissionData the permission data
-   * @returns {Promise<APIResponse>}
+   * @param {Permission} permission the permission data
+   * @returns {Promise<PermissionAPIResponse>}
    */
-  createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
-      ...permissionData,
+  createPermission(permission: Permission) {
+    return this.post<PermissionAPIResponse>(`${this.baseURL}/permissions`, {
+      ...permission,
     });
   }
 
   /** updatePermission - updates an existing custom permission
    *
    * @param {string} id
-   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
-   * @returns {Promise<APIResponse>}
+   * @param {Omit<Permission, 'id'>} permission the permission data
+   * @returns {Promise<PermissionAPIResponse>}
    */
-  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.put<APIResponse>(`${this.baseURL}/permissions/${id}`, {
-      ...permissionData,
+  updatePermission(id: string, permission: Omit<Permission, 'id'>) {
+    return this.put<PermissionAPIResponse>(`${this.baseURL}/permissions/${id}`, {
+      ...permission,
     });
   }
 
@@ -2671,7 +2673,7 @@ export class StreamChat<
 
   /** listPermissions - returns the list of all permissions for this application
    *
-   * @returns {Promise<APIResponse>}
+   * @returns {Promise<PermissionsAPIResponse>}
    */
   listPermissions() {
     return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
@@ -2679,27 +2681,27 @@ export class StreamChat<
 
   /** createRole - creates a custom role
    *
-   * @param {string} name the new role name
-   * @returns {Promise<APIResponse>}
+   * @param {RoleName} name the new role name
+   * @returns {Promise<RoleAPIResponse>}
    */
-  createRole(name: string) {
-    return this.post<APIResponse>(`${this.baseURL}/roles`, { name });
+  createRole(name: RoleName) {
+    return this.post<RoleAPIResponse>(`${this.baseURL}/roles`, { name });
   }
 
   /** listRoles - returns the list of all roles for this application
    *
-   * @returns {Promise<APIResponse>}
+   * @returns {Promise<RolesAPIResponse>}
    */
   listRoles() {
-    return this.get<APIResponse>(`${this.baseURL}/roles`);
+    return this.get<RolesAPIResponse>(`${this.baseURL}/roles`);
   }
 
   /** deleteRole - deletes a custom role
    *
-   * @param {string} name the role name
+   * @param {RoleName} name the role name
    * @returns {Promise<APIResponse>}
    */
-  deleteRole(name: string) {
+  deleteRole(name: RoleName) {
     return this.delete<APIResponse>(`${this.baseURL}/roles/${name}`);
   }
 

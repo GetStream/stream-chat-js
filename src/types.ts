@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from 'axios';
+import { Permission, Policy, Role, RoleName } from './permissions';
 
 /**
  * Utility Types
@@ -92,7 +93,7 @@ export type AppSettingsAPIResponse<CommandType extends string = LiteralStringFor
     name?: string;
     organization?: string;
     permission_version?: string;
-    policies?: Record<string, PolicyObject[]>;
+    policies?: Record<string, Policy[]>;
     push_notifications?: {
       version: string;
       apn?: APNConfig;
@@ -223,7 +224,7 @@ export type ChannelMemberAPIResponse<UserType = UR> = APIResponse & {
 
 export type ChannelMemberResponse<UserType = UR> = {
   banned?: boolean;
-  channel_role?: Role;
+  channel_role?: RoleName;
   created_at?: string;
   invite_accepted_at?: string;
   invite_rejected_at?: string;
@@ -724,7 +725,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   message_retention?: string;
   mutes?: boolean;
   name?: string;
-  permissions?: PolicyObject[];
+  permissions?: Policy[];
   push_notifications?: boolean;
   quotes?: boolean;
   reactions?: boolean;
@@ -743,19 +744,9 @@ export type CreateCommandOptions<CommandType extends string = LiteralStringForUn
   set?: CommandVariants<CommandType>;
 };
 
-export type CustomPermissionOptions = {
-  action: string;
-  condition: object;
-  id: string;
-  name: string;
-  description?: string;
-  owner?: boolean;
-  same_team?: boolean;
-};
-
 export type UpdateChannelMember = {
   user_id: string;
-  channel_role?: Role;
+  channel_role?: RoleName;
 };
 
 export type AddChannelMember = UpdateChannelMember | string;
@@ -1440,7 +1431,7 @@ export type ChannelData<ChannelType = UR> = ChannelType & {
 
 export type ChannelMembership<UserType = UR> = {
   banned?: boolean;
-  channel_role?: Role;
+  channel_role?: RoleName;
   created_at?: string;
   is_moderator?: boolean;
   role?: string;
@@ -1962,39 +1953,18 @@ export type TruncateOptions<AttachmentType, MessageType, UserType> = {
   truncated_at?: Date;
 };
 
-/*
- * Role can have any custom string value depending on application configuration. Please do not check role value directly
- * and consider using channel capabilities to detect available features
- */
-export type Role = string;
-
-export type Permission = {
-  action?: string;
-  condition?: object;
-  custom?: boolean;
-  description?: string;
-  id?: string;
-  level?: string;
-  name?: string;
-  owner?: boolean;
-  same_team?: boolean;
-};
-
-export type PolicyObject = {
-  action?: 'Deny' | 'Allow';
-  created_at?: string;
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[];
-  updated_at?: string;
-};
-
 export type PermissionAPIResponse = APIResponse & {
-  permission?: Permission;
+  permission: Permission;
 };
 
 export type PermissionsAPIResponse = APIResponse & {
-  permissions?: Permission[];
+  permissions: Permission[];
+};
+
+export type RolesAPIResponse = APIResponse & {
+  roles: Role[];
+};
+
+export type RoleAPIResponse = APIResponse & {
+  role: Role;
 };

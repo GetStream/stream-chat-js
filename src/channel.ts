@@ -49,8 +49,8 @@ import {
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   AddChannelMember,
-  Role,
 } from './types';
+import { RoleName } from './permissions';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -502,7 +502,7 @@ export class Channel<
   /**
    * addMembers - add members to the channel
    *
-   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
+   * @param {{user_id: string, channel_role?: RoleName}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
@@ -534,13 +534,13 @@ export class Channel<
   /**
    * assignRoles - sets member roles in a channel
    *
-   * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
+   * @param {{channel_role: RoleName, user_id: string}[]} roles List of role assignments
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async assignRoles(
-    roles: { channel_role: Role; user_id: string }[],
+    roles: { channel_role: RoleName; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
     options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
@@ -550,13 +550,13 @@ export class Channel<
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
+   * @param {{user_id: string, channel_role?: RoleName}[]} members An array of members to invite to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
    * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
-    members: { user_id: string; channel_role?: Role }[] | string[],
+    members: { user_id: string; channel_role?: RoleName }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
     options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
