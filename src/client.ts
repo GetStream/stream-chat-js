@@ -2697,7 +2697,7 @@ export class StreamChat<
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
   }
 
-  exportChannels(request: Array<ExportChannelRequest>, version?: string, options: ExportChannelOptions = {}) {
+  exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}, version?: string) {
     const payload = {
       channels: request,
       ...options,
@@ -2709,8 +2709,8 @@ export class StreamChat<
     return this.post<APIResponse & ExportChannelResponse>(url, payload);
   }
 
-  exportChannel(request: ExportChannelRequest, version?: string, options?: ExportChannelOptions) {
-    return this.exportChannels([request], version, options);
+  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions, version?: string) {
+    return this.exportChannels([request], options, version);
   }
 
   getExportChannelStatus(id: string) {
