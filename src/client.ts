@@ -2258,7 +2258,11 @@ export class StreamChat<
   }
 
   /**
-   * queryFlagReports - Query flag reports
+   * queryFlagReports - Query flag reports.
+   *
+   * Note: Do not use this.
+   * It is present for internal testing only.
+   * This function can, and will, break and/or be removed at any point in time.
    *
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
    * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
@@ -2278,6 +2282,11 @@ export class StreamChat<
 
   /**
    * reviewFlagReport - review flag report
+   *
+   * Note: Do not use this.
+   * It is present for internal testing only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
    * @param {string} [id] flag report to review
    * @param {string} [reviewResult] flag report review result
    * @param {string} [options.review_details] custom information about review result
