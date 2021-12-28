@@ -8,7 +8,6 @@ import {
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
-  ChannelUpdateOptions,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
@@ -22,7 +21,7 @@ import {
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
-  InviteOptions,
+  UpdateChannelOptions,
   LiteralStringForUnion,
   MarkReadOptions,
   MemberSort,
@@ -49,8 +48,9 @@ import {
   UserResponse,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
+  AddChannelMember,
+  Role,
 } from './types';
-import { Role } from './permissions';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -373,13 +373,13 @@ export class Channel<
    *
    * @param {ChannelData<ChannelType>} channelData The object to update the custom properties of this channel with
    * @param {Message<AttachmentType, MessageType, UserType>} [updateMessage] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async update(
     channelData: Partial<ChannelData<ChannelType>> | Partial<ChannelResponse<ChannelType, CommandType, UserType>> = {},
     updateMessage?: Message<AttachmentType, MessageType, UserType>,
-    options?: ChannelUpdateOptions,
+    options?: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType>,
   ) {
     // Strip out reserved names that will result in API errors.
     const reserved = [
@@ -476,12 +476,12 @@ export class Channel<
   /**
    * acceptInvite - accept invitation to the channel
    *
-   * @param {InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
+   * @param {UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
    *
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async acceptInvite(
-    options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ accept_invite: true, ...options });
   }
@@ -489,12 +489,12 @@ export class Channel<
   /**
    * rejectInvite - reject invitation to the channel
    *
-   * @param {InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
+   * @param {UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} [options] The object to update the custom properties of this channel with
    *
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async rejectInvite(
-    options: InviteOptions<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ reject_invite: true, ...options });
   }
@@ -504,13 +504,13 @@ export class Channel<
    *
    * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addMembers(
-    members: string[] | { user_id: string; channel_role?: Role }[],
+    members: AddChannelMember[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ add_members: members, message, ...options });
   }
@@ -520,13 +520,13 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async addModerators(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ add_moderators: members, message, ...options });
   }
@@ -536,13 +536,13 @@ export class Channel<
    *
    * @param {{channel_role: Role, user_id: string}[]} roles List of role assignments
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async assignRoles(
     roles: { channel_role: Role; user_id: string }[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ assign_roles: roles, message, ...options });
   }
@@ -552,13 +552,13 @@ export class Channel<
    *
    * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async inviteMembers(
     members: { user_id: string; channel_role?: Role }[] | string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ invites: members, message, ...options });
   }
@@ -568,13 +568,13 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async removeMembers(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ remove_members: members, message, ...options });
   }
@@ -584,27 +584,27 @@ export class Channel<
    *
    * @param {string[]} members An array of member identifiers
    * @param {Message<AttachmentType, MessageType, UserType>} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @param {UpdateChannelOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    */
   async demoteModerators(
     members: string[],
     message?: Message<AttachmentType, MessageType, UserType>,
-    options: ChannelUpdateOptions = {},
+    options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType> = {},
   ) {
     return await this._update({ demote_moderators: members, message, ...options });
   }
 
   /**
    * _update - executes channel update request
-   * @param payload Object Update Channel payload
+   * @param {UpdateChannelOptions} options Update Channel options
    * @return {Promise<UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} The server response
    * TODO: introduce new type instead of Object in the next major update
    */
-  async _update(payload: Object) {
+  async _update(options: UpdateChannelOptions<AttachmentType, ChannelType, CommandType, MessageType, UserType>) {
     const data = await this.getClient().post<
       UpdateChannelAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
-    >(this._channelURL(), payload);
+    >(this._channelURL(), options);
     this.data = data.channel;
     return data;
   }

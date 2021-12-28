@@ -1,5 +1,4 @@
 import { AxiosRequestConfig } from 'axios';
-import { Role } from './permissions';
 
 /**
  * Utility Types
@@ -93,7 +92,7 @@ export type AppSettingsAPIResponse<CommandType extends string = LiteralStringFor
     name?: string;
     organization?: string;
     permission_version?: string;
-    policies?: Record<string, Policy[]>;
+    policies?: Record<string, PolicyObject[]>;
     push_notifications?: {
       version: string;
       apn?: APNConfig;
@@ -216,11 +215,6 @@ export type ChannelAPIResponse<
   read?: ReadResponse<UserType>[];
   watcher_count?: number;
   watchers?: UserResponse<UserType>[];
-};
-
-export type ChannelUpdateOptions = {
-  hide_history?: boolean;
-  skip_push?: boolean;
 };
 
 export type ChannelMemberAPIResponse<UserType = UR> = APIResponse & {
@@ -534,14 +528,6 @@ export type PartialUpdateChannelAPIResponse<
   members: ChannelMemberResponse<UserType>[];
 };
 
-export type PermissionAPIResponse = APIResponse & {
-  permission?: PermissionAPIObject;
-};
-
-export type PermissionsAPIResponse = APIResponse & {
-  permissions?: PermissionAPIObject[];
-};
-
 export type ReactionAPIResponse<
   AttachmentType = UR,
   ChannelType = UR,
@@ -738,7 +724,7 @@ export type CreateChannelOptions<CommandType extends string = LiteralStringForUn
   message_retention?: string;
   mutes?: boolean;
   name?: string;
-  permissions?: PermissionObject[];
+  permissions?: PolicyObject[];
   push_notifications?: boolean;
   quotes?: boolean;
   reactions?: boolean;
@@ -767,24 +753,30 @@ export type CustomPermissionOptions = {
   same_team?: boolean;
 };
 
-// TODO: rename to UpdateChannelOptions in the next major update and use it in channel._update and/or channel.update
-export type InviteOptions<
+export type UpdateChannelMember = {
+  user_id: string;
+  channel_role?: Role;
+};
+
+export type AddChannelMember = UpdateChannelMember | string;
+
+export type UpdateChannelOptions<
   AttachmentType = UR,
   ChannelType = UR,
   CommandType extends string = LiteralStringForUnion,
   MessageType = UR,
-  ReactionType = UR,
   UserType = UR
 > = {
   accept_invite?: boolean;
-  add_members?: string[];
-  add_moderators?: string[];
+  add_members?: AddChannelMember[];
+  add_moderators?: AddChannelMember[];
+  assign_roles?: UpdateChannelMember[];
   client_id?: string;
   connection_id?: string;
-  data?: Omit<ChannelResponse<ChannelType, CommandType, UserType>, 'id' | 'cid'>;
+  data?: Partial<ChannelData<ChannelType>> | Partial<ChannelResponse<ChannelType, CommandType, UserType>>;
   demote_moderators?: string[];
-  invites?: string[];
-  message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
+  invites?: AddChannelMember[];
+  message?: Message<AttachmentType, MessageType, UserType>;
   reject_invite?: boolean;
   remove_members?: string[];
   user?: UserResponse<UserType>;
@@ -909,8 +901,7 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
-// TODO: rename to UpdateChannelTypeOptions in the next major update
-export type UpdateChannelOptions<CommandType extends string = LiteralStringForUnion> = Omit<
+export type UpdateChannelTypeOptions<CommandType extends string = LiteralStringForUnion> = Omit<
   CreateChannelOptions<CommandType>,
   'name'
 > & {
@@ -1722,38 +1713,6 @@ export type PartialMessageUpdate<MessageType = UR> = {
   unset?: Array<keyof MessageUpdatableFields<MessageType>>;
 };
 
-export type PermissionAPIObject = {
-  action?: string;
-  condition?: object;
-  custom?: boolean;
-  description?: string;
-  id?: string;
-  level?: string;
-  name?: string;
-  owner?: boolean;
-  same_team?: boolean;
-};
-
-export type PermissionObject = {
-  action?: 'Deny' | 'Allow';
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[];
-};
-
-export type Policy = {
-  action?: 0 | 1;
-  created_at?: string;
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[];
-  updated_at?: string;
-};
-
 export type RateLimitsInfo = {
   limit: number;
   remaining: number;
@@ -1769,26 +1728,6 @@ export type Reaction<ReactionType = UR, UserType = UR> = ReactionType & {
   user?: UserResponse<UserType> | null;
   user_id?: string;
 };
-
-export type Resource =
-  | 'AddLinks'
-  | 'BanUser'
-  | 'CreateChannel'
-  | 'CreateMessage'
-  | 'CreateReaction'
-  | 'DeleteAttachment'
-  | 'DeleteChannel'
-  | 'DeleteMessage'
-  | 'DeleteReaction'
-  | 'EditUser'
-  | 'MuteUser'
-  | 'ReadChannel'
-  | 'RunMessageAction'
-  | 'UpdateChannel'
-  | 'UpdateChannelMembers'
-  | 'UpdateMessage'
-  | 'UpdateUser'
-  | 'UploadAttachment';
 
 export type SearchPayload<
   AttachmentType = UR,
@@ -2021,4 +1960,41 @@ export type TruncateOptions<AttachmentType, MessageType, UserType> = {
   message?: Message<AttachmentType, MessageType, UserType>;
   skip_push?: boolean;
   truncated_at?: Date;
+};
+
+/*
+ * Role can have any custom string value depending on application configuration. Please do not check role value directly
+ * and consider using channel capabilities to detect available features
+ */
+export type Role = string;
+
+export type Permission = {
+  action?: string;
+  condition?: object;
+  custom?: boolean;
+  description?: string;
+  id?: string;
+  level?: string;
+  name?: string;
+  owner?: boolean;
+  same_team?: boolean;
+};
+
+export type PolicyObject = {
+  action?: 'Deny' | 'Allow';
+  created_at?: string;
+  name?: string;
+  owner?: boolean;
+  priority?: number;
+  resources?: string[];
+  roles?: string[];
+  updated_at?: string;
+};
+
+export type PermissionAPIResponse = APIResponse & {
+  permission?: Permission;
+};
+
+export type PermissionsAPIResponse = APIResponse & {
+  permissions?: Permission[];
 };

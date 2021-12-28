@@ -98,7 +98,7 @@ import {
   TokenOrProvider,
   UnBanUserOptions,
   UR,
-  UpdateChannelOptions,
+  UpdateChannelTypeOptions,
   UpdateChannelResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
@@ -2306,7 +2306,7 @@ export class StreamChat<
     return this.get<GetChannelTypeResponse<CommandType>>(this.baseURL + `/channeltypes/${channelType}`);
   }
 
-  updateChannelType(channelType: string, data: UpdateChannelOptions<CommandType>) {
+  updateChannelType(channelType: string, data: UpdateChannelTypeOptions<CommandType>) {
     return this.put<UpdateChannelResponse<CommandType>>(this.baseURL + `/channeltypes/${channelType}`, data);
   }
 
