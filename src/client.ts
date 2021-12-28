@@ -2261,7 +2261,7 @@ export class StreamChat<
    * queryFlagReports - Query flag reports.
    *
    * Note: Do not use this.
-   * It is present for internal testing only.
+   * It is present for internal usage only.
    * This function can, and will, break and/or be removed at any point in time.
    *
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
@@ -2284,7 +2284,7 @@ export class StreamChat<
    * reviewFlagReport - review flag report
    *
    * Note: Do not use this.
-   * It is present for internal testing only.
+   * It is present for internal usage only.
    * This function can, and will, break and/or be removed at any point in time.
    *
    * @param {string} [id] flag report to review
