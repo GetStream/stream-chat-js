@@ -175,7 +175,7 @@ export type FlagReportsResponse<
   MessageType = UR,
   ReactionType = UR
 > = APIResponse & {
-  reports: Array<FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>>;
+  flag_reports: Array<FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>>;
 };
 
 export type ReviewFlagReportResponse<
@@ -186,7 +186,7 @@ export type ReviewFlagReportResponse<
   MessageType = UR,
   ReactionType = UR
 > = APIResponse & {
-  report: FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>;
+  flag_report: FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>;
 };
 
 export type BannedUsersResponse<
