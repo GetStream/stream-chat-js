@@ -2701,12 +2701,9 @@ export class StreamChat<
     const payload = {
       channels: request,
       ...options,
+      version,
     };
-    let url = `${this.baseURL}/export_channels`;
-    if (version !== undefined) {
-      url += `?version=${version}`;
-    }
-    return this.post<APIResponse & ExportChannelResponse>(url, payload);
+    return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export_channels`, payload);
   }
 
   exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions, version?: string) {
