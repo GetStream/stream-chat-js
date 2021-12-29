@@ -48,7 +48,7 @@ function buildWsBaseInsight(connection: StableWSConnection) {
   const { client } = connection;
   return {
     ready_state: connection.ws?.readyState,
-    url: connection._buildUrl(connection.requestID),
+    url: connection._buildUrl(),
     api_key: client.key,
     start_ts: client.insightMetrics.connectionStartTimestamp,
     end_ts: new Date().getTime(),

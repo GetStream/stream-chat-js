@@ -426,7 +426,7 @@ export type ListChannelTypesAPIResponse<
 > = ListChannelResponse<CommandType>;
 
 export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<CommandType> & Partial<CreatedAtUpdatedAt>>;
 };
 
 export type MuteChannelAPIResponse<
@@ -665,9 +665,15 @@ export type UserResponse<UserType = UR> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PushNotificationSettings = {
+  disabled?: boolean;
+  disabled_until?: string | null;
 };
 
 /**
@@ -687,14 +693,6 @@ export type BanUserOptions<UserType = UR> = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
-  /**
-   * @deprecated please use banned_by
-   */
-  user?: UserResponse<UserType>;
-  /**
-   * @deprecated please use banned_by_id
-   */
-  user_id?: string;
 };
 
 export type ChannelOptions = {
@@ -842,6 +840,21 @@ export type MessagePaginationOptions = PaginationOptions & {
   id_around?: string;
 };
 
+export type PinnedMessagePaginationOptions = {
+  id_around?: string;
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
+  limit?: number;
+  offset?: number;
+  pinned_at_after?: string | Date;
+  pinned_at_after_or_equal?: string | Date;
+  pinned_at_around?: string | Date;
+  pinned_at_before?: string | Date;
+  pinned_at_before_or_equal?: string | Date;
+};
+
 export type QueryMembersOptions = {
   limit?: number;
   offset?: number;
@@ -871,6 +884,8 @@ export type StreamChatOptions = AxiosRequestConfig & {
   browser?: boolean;
   device?: BaseDeviceFields;
   enableInsights?: boolean;
+  /** experimental feature, please contact support if you want this feature enabled for you */
+  enableWSFallback?: boolean;
   logger?: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -983,6 +998,7 @@ export type EventTypes =
   | 'channel.unmuted'
   | 'channel.updated'
   | 'channel.visible'
+  | 'transport.changed' // ws vs longpoll
   | 'connection.changed'
   | 'connection.recovered'
   | 'health.check'
@@ -1235,6 +1251,9 @@ export type ChannelSortBase<ChannelType = UR> = Sort<ChannelType> & {
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };
+
+export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
+export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
 
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
@@ -1665,7 +1684,9 @@ export type MessageBase<AttachmentType = UR, MessageType = UR, UserType = UR> = 
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string;
   pinned?: boolean;
+  pinned_at?: string;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
@@ -1709,6 +1730,7 @@ export type PermissionAPIObject = {
   custom?: boolean;
   description?: string;
   id?: string;
+  level?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;
