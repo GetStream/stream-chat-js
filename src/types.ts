@@ -890,6 +890,21 @@ export type MessagePaginationOptions = PaginationOptions & {
   id_around?: string;
 };
 
+export type PinnedMessagePaginationOptions = {
+  id_around?: string;
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
+  limit?: number;
+  offset?: number;
+  pinned_at_after?: string | Date;
+  pinned_at_after_or_equal?: string | Date;
+  pinned_at_around?: string | Date;
+  pinned_at_before?: string | Date;
+  pinned_at_before_or_equal?: string | Date;
+};
+
 export type QueryMembersOptions = {
   limit?: number;
   offset?: number;
@@ -1324,6 +1339,9 @@ export type ChannelSortBase<ChannelType = UR> = Sort<ChannelType> & {
   updated_at?: AscDesc;
 };
 
+export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
+export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
+
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
@@ -1751,7 +1769,9 @@ export type MessageBase<AttachmentType = UR, MessageType = UR, UserType = UR> = 
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string;
   pinned?: boolean;
+  pinned_at?: string;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
