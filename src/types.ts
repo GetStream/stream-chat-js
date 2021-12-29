@@ -719,9 +719,20 @@ export type MessageFlagsPaginationOptions = {
   offset?: number;
 };
 
+export type QueryFlagReportsOptions =
+  | FlagReportsPaginationOptions
+  | {
+      user_id?: string;
+    };
+
 export type FlagReportsPaginationOptions = {
   limit?: number;
   offset?: number;
+};
+
+export type ReviewFlagReportOptions = {
+  review_details?: Object;
+  user_id?: string;
 };
 
 export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;

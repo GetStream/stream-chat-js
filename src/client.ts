@@ -122,8 +122,9 @@ import {
   ReservedMessageFields,
   ReviewFlagReportResponse,
   FlagReportsFilters,
-  FlagReportsPaginationOptions,
   FlagReportsResponse,
+  QueryFlagReportsOptions,
+  ReviewFlagReportOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2265,11 +2266,13 @@ export class StreamChat<
    * This function can, and will, break and/or be removed at any point in time.
    *
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
    * @return {Promise<FlagReportsResponse<ChannelType, CommandType, UserType>>} Flag Reports Response
    */
-  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
+  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: QueryFlagReportsOptions = {}) {
     // Return a list of message flags
     return await this.post<FlagReportsResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/moderation/reports',
@@ -2289,16 +2292,11 @@ export class StreamChat<
    *
    * @param {string} [id] flag report to review
    * @param {string} [reviewResult] flag report review result
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @param {string} [options.review_details] custom information about review result
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
-  async _reviewFlagReport(
-    id: string,
-    reviewResult: string,
-    options: {
-      review_details?: Object;
-    } = {},
-  ) {
+  async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
     return await this.patch<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${id}`, {
       review_result: reviewResult,
       ...options,
