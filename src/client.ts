@@ -2258,7 +2258,7 @@ export class StreamChat<
   }
 
   /**
-   * queryFlagReports - Query flag reports.
+   * _queryFlagReports - Query flag reports.
    *
    * Note: Do not use this.
    * It is present for internal usage only.
@@ -2269,7 +2269,7 @@ export class StreamChat<
    *
    * @return {Promise<FlagReportsResponse<ChannelType, CommandType, UserType>>} Flag Reports Response
    */
-  async queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
+  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
     // Return a list of message flags
     return await this.post<FlagReportsResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/moderation/reports',
@@ -2281,7 +2281,7 @@ export class StreamChat<
   }
 
   /**
-   * reviewFlagReport - review flag report
+   * _reviewFlagReport - review flag report
    *
    * Note: Do not use this.
    * It is present for internal usage only.
@@ -2292,7 +2292,7 @@ export class StreamChat<
    * @param {string} [options.review_details] custom information about review result
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
-  async reviewFlagReport(
+  async _reviewFlagReport(
     id: string,
     reviewResult: string,
     options: {
