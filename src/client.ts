@@ -120,6 +120,11 @@ import {
   DeleteChannelsResponse,
   TaskResponse,
   ReservedMessageFields,
+  ReviewFlagReportResponse,
+  FlagReportsFilters,
+  FlagReportsResponse,
+  QueryFlagReportsOptions,
+  ReviewFlagReportOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2249,6 +2254,51 @@ export class StreamChat<
   async unflagUser(targetID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagUserResponse<UserType>>(this.baseURL + '/moderation/unflag', {
       target_user_id: targetID,
+      ...options,
+    });
+  }
+
+  /**
+   * _queryFlagReports - Query flag reports.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
+   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<FlagReportsResponse<ChannelType, CommandType, UserType>>} Flag Reports Response
+   */
+  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: QueryFlagReportsOptions = {}) {
+    // Return a list of message flags
+    return await this.post<FlagReportsResponse<ChannelType, CommandType, UserType>>(
+      this.baseURL + '/moderation/reports',
+      {
+        filter_conditions: filterConditions,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * _reviewFlagReport - review flag report
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @param {string} [id] flag report to review
+   * @param {string} [reviewResult] flag report review result
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {string} [options.review_details] custom information about review result
+   * @returns {Promise<ReviewFlagReportResponse>>}
+   */
+  async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
+    return await this.patch<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${id}`, {
+      review_result: reviewResult,
       ...options,
     });
   }

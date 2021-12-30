@@ -147,6 +147,48 @@ export type MessageFlagsResponse<
   }>;
 };
 
+export type FlagReport<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = {
+  flags_count: number;
+  id: string;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
+  user: UserResponse<UserType>;
+  created_at?: string;
+  review_details?: Object;
+  review_result?: string;
+  reviewed_at?: string;
+  reviewed_by?: UserResponse<UserType>;
+  updated_at?: string;
+};
+
+export type FlagReportsResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  flag_reports: Array<FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>>;
+};
+
+export type ReviewFlagReportResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  flag_report: FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>;
+};
+
 export type BannedUsersResponse<
   ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
@@ -326,6 +368,7 @@ export type FlagMessageResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    details?: Object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -340,6 +383,7 @@ export type FlagUserResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    details?: Object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -683,6 +727,22 @@ export type PushNotificationSettings = {
 export type MessageFlagsPaginationOptions = {
   limit?: number;
   offset?: number;
+};
+
+export type QueryFlagReportsOptions =
+  | FlagReportsPaginationOptions
+  | {
+      user_id?: string;
+    };
+
+export type FlagReportsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type ReviewFlagReportOptions = {
+  review_details?: Object;
+  user_id?: string;
 };
 
 export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
@@ -1066,6 +1126,43 @@ export type MessageFlagsFilters = QueryFilters<
     }
 >;
 
+export type FlagReportsFiltersOptions = {
+  is_reviewed?: boolean;
+  message_id?: string;
+  report_id?: string;
+  review_result?: string;
+  reviewed_by?: string;
+  user_id?: string;
+};
+
+export type FlagReportsFilters = QueryFilters<
+  {
+    report_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
+  } & {
+    review_result?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
+  } & {
+    reviewed_by?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
+  } & {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+      [Key in keyof Omit<
+        FlagReportsFiltersOptions,
+        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+      >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+    }
+>;
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
   channel_cid?: string;
