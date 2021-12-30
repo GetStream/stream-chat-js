@@ -123,8 +123,8 @@ import {
   ReviewFlagReportResponse,
   FlagReportsFilters,
   FlagReportsResponse,
-  QueryFlagReportsOptions,
   ReviewFlagReportOptions,
+  FlagReportsPaginationOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2266,13 +2266,11 @@ export class StreamChat<
    * This function can, and will, break and/or be removed at any point in time.
    *
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
    * @return {Promise<FlagReportsResponse<ChannelType, CommandType, UserType>>} Flag Reports Response
    */
-  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: QueryFlagReportsOptions = {}) {
+  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
     // Return a list of message flags
     return await this.post<FlagReportsResponse<ChannelType, CommandType, UserType>>(
       this.baseURL + '/moderation/reports',

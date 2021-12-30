@@ -729,12 +729,6 @@ export type MessageFlagsPaginationOptions = {
   offset?: number;
 };
 
-export type QueryFlagReportsOptions =
-  | FlagReportsPaginationOptions
-  | {
-      user_id?: string;
-    };
-
 export type FlagReportsPaginationOptions = {
   limit?: number;
   offset?: number;
