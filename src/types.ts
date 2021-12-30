@@ -1727,13 +1727,16 @@ export type EndpointName =
 export type ExportChannelRequest = {
   id: string;
   type: string;
+  cid?: string;
   messages_since?: Date;
   messages_until?: Date;
 };
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  export_users?: boolean;
   include_truncated_messages?: boolean;
+  version?: string;
 };
 
 export type Field = {
