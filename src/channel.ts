@@ -47,6 +47,8 @@ import {
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
+  PinnedMessagePaginationOptions,
+  PinnedMessagesSort,
 } from './types';
 import { Role } from './permissions';
 
@@ -839,6 +841,28 @@ export class Channel<
     }
 
     return data;
+  }
+
+  /**
+   * getPinnedMessages - List list pinned messages of the channel
+   *
+   * @param {PinnedMessagePaginationOptions & { user?: UserResponse<UserType>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
+   * @param {PinnedMessagesSort} sort defines sorting direction of pinned messages
+   *
+   * @return {Promise<GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} A response with a list of messages
+   */
+  async getPinnedMessages(
+    options: PinnedMessagePaginationOptions & { user?: UserResponse<UserType>; user_id?: string },
+    sort: PinnedMessagesSort = [],
+  ) {
+    return await this.getClient().get<
+      GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
+    >(this.getClient().baseURL + `/channels/${this.type}/${this.id}/pinned_messages`, {
+      payload: {
+        ...options,
+        sort: normalizeQuerySort(sort),
+      },
+    });
   }
 
   /**
