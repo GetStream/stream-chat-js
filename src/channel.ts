@@ -47,6 +47,8 @@ import {
   UserResponse,
   ExtendableGenerics,
   DefaultGenerics,
+  PinnedMessagePaginationOptions,
+  PinnedMessagesSort,
 } from './types';
 import { Role } from './permissions';
 
@@ -782,6 +784,29 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     return data;
+  }
+
+  /**
+   * getPinnedMessages - List list pinned messages of the channel
+   *
+   * @param {PinnedMessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
+   * @param {PinnedMessagesSort} sort defines sorting direction of pinned messages
+   *
+   * @return {Promise<GetRepliesAPIResponse<StreamChatGenerics>>} A response with a list of messages
+   */
+  async getPinnedMessages(
+    options: PinnedMessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string },
+    sort: PinnedMessagesSort = [],
+  ) {
+    return await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
+      this.getClient().baseURL + `/channels/${this.type}/${this.id}/pinned_messages`,
+      {
+        payload: {
+          ...options,
+          sort: normalizeQuerySort(sort),
+        },
+      },
+    );
   }
 
   /**

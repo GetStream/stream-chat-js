@@ -120,6 +120,11 @@ import {
   ReservedMessageFields,
   ExtendableGenerics,
   DefaultGenerics,
+  ReviewFlagReportResponse,
+  FlagReportsFilters,
+  FlagReportsResponse,
+  ReviewFlagReportOptions,
+  FlagReportsPaginationOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2007,6 +2012,46 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * _queryFlagReports - Query flag reports.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
+   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<FlagReportsResponse<StreamChatGenerics>>} Flag Reports Response
+   */
+  async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
+    // Return a list of message flags
+    return await this.post<FlagReportsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/reports', {
+      filter_conditions: filterConditions,
+      ...options,
+    });
+  }
+
+  /**
+   * _reviewFlagReport - review flag report
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @param {string} [id] flag report to review
+   * @param {string} [reviewResult] flag report review result
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {string} [options.review_details] custom information about review result
+   * @returns {Promise<ReviewFlagReportResponse>>}
+   */
+  async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
+    return await this.patch<ReviewFlagReportResponse<StreamChatGenerics>>(this.baseURL + `/moderation/reports/${id}`, {
+      review_result: reviewResult,
+      ...options,
+    });
+  }
+
+  /**
    * @deprecated use markChannelsRead instead
    *
    * markAllRead - marks all channels for this user as read
@@ -2089,7 +2134,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
   _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
-    let pinExpires: undefined | string;
+    let pinExpires: null | string = null;
     if (typeof timeoutOrExpirationDate === 'number') {
       const now = new Date();
       now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
@@ -2124,12 +2169,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * pinMessage - pins the message
    * @param {string | { id: string }} messageOrMessageId message object or message id
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   * @param {string | { id: string }} [userId]
+   * @param {undefined|string | { id: string }} [pinnedBy] who will appear as a user who pinned a message. Only for server-side use. Provide `undefined` when pinning message client-side
+   * @param {undefined|number|string|Date} pinnedAt date when message should be pinned. It affects the order of pinned messages. Use negative number to set relative time in the past, string or Date to set exact date of pin
    */
   pinMessage(
     messageOrMessageId: string | { id: string },
     timeoutOrExpirationDate?: null | number | string | Date,
-    userId?: string | { id: string },
+    pinnedBy?: string | { id: string },
+    pinnedAt?: number | string | Date,
   ) {
     const messageId = this._validateAndGetMessageId(
       messageOrMessageId,
@@ -2141,9 +2188,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         set: {
           pinned: true,
           pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+          pinned_at: this._normalizeExpiration(pinnedAt),
         },
       } as unknown) as PartialMessageUpdate<StreamChatGenerics>,
-      userId,
+      pinnedBy,
     );
   }
 

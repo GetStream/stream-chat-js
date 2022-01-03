@@ -160,6 +160,27 @@ export type MessageFlagsResponse<StreamChatGenerics extends ExtendableGenerics =
   }>;
 };
 
+export type FlagReport<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  flags_count: number;
+  id: string;
+  message: MessageResponse<StreamChatGenerics>;
+  user: UserResponse<StreamChatGenerics>;
+  created_at?: string;
+  review_details?: Object;
+  review_result?: string;
+  reviewed_at?: string;
+  reviewed_by?: UserResponse<StreamChatGenerics>;
+  updated_at?: string;
+};
+
+export type FlagReportsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  flag_reports: Array<FlagReport<StreamChatGenerics>>;
+};
+
+export type ReviewFlagReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  flag_report: FlagReport<StreamChatGenerics>;
+};
+
 export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   bans?: Array<{
     user: UserResponse<StreamChatGenerics>;
@@ -314,6 +335,7 @@ export type FlagMessageResponse<StreamChatGenerics extends ExtendableGenerics = 
     updated_at: string;
     user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
+    details?: Object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -328,6 +350,7 @@ export type FlagUserResponse<StreamChatGenerics extends ExtendableGenerics = Def
     updated_at: string;
     user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
+    details?: Object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -598,6 +621,16 @@ export type MessageFlagsPaginationOptions = {
   offset?: number;
 };
 
+export type FlagReportsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type ReviewFlagReportOptions = {
+  review_details?: Object;
+  user_id?: string;
+};
+
 export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
 
 export type BanUserOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = UnBanUserOptions & {
@@ -746,6 +779,21 @@ export type PaginationOptions = {
 export type MessagePaginationOptions = PaginationOptions & {
   created_at_around?: string | Date;
   id_around?: string;
+};
+
+export type PinnedMessagePaginationOptions = {
+  id_around?: string;
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
+  limit?: number;
+  offset?: number;
+  pinned_at_after?: string | Date;
+  pinned_at_after_or_equal?: string | Date;
+  pinned_at_around?: string | Date;
+  pinned_at_before?: string | Date;
+  pinned_at_before_or_equal?: string | Date;
 };
 
 export type QueryMembersOptions = {
@@ -947,6 +995,43 @@ export type MessageFlagsFilters = QueryFilters<
     }
 >;
 
+export type FlagReportsFiltersOptions = {
+  is_reviewed?: boolean;
+  message_id?: string;
+  report_id?: string;
+  review_result?: string;
+  reviewed_by?: string;
+  user_id?: string;
+};
+
+export type FlagReportsFilters = QueryFilters<
+  {
+    report_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
+  } & {
+    review_result?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
+  } & {
+    reviewed_by?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
+  } & {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+      [Key in keyof Omit<
+        FlagReportsFiltersOptions,
+        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+      >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+    }
+>;
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
   channel_cid?: string;
@@ -1218,6 +1303,9 @@ export type ChannelSortBase<
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };
+
+export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
+export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
 
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
@@ -1596,13 +1684,16 @@ export type EndpointName =
 export type ExportChannelRequest = {
   id: string;
   type: string;
+  cid?: string;
   messages_since?: Date;
   messages_until?: Date;
 };
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  export_users?: boolean;
   include_truncated_messages?: boolean;
+  version?: string;
 };
 
 export type Field = {
@@ -1650,7 +1741,9 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string;
   pinned?: boolean;
+  pinned_at?: string;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
