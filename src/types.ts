@@ -335,7 +335,9 @@ export type FlagMessageResponse<StreamChatGenerics extends ExtendableGenerics = 
     updated_at: string;
     user: UserResponse<StreamChatGenerics>;
     approved_at?: string;
+    channel_cid?: string;
     details?: Object; // Any JSON
+    message_user_id?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -1741,9 +1743,9 @@ export type MessageBase<
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string;
+  pin_expires?: string | null;
   pinned?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
