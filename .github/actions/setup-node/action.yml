@@ -21,3 +21,4 @@ runs:
         restore-keys: ${{ runner.os }}-${{ inputs.node-version }}-modules-
     - name: Install Dependencies & Build
       run: yarn install --frozen-lockfile --ignore-engines
+      shell: bash
