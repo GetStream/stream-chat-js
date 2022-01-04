@@ -147,6 +147,48 @@ export type MessageFlagsResponse<
   }>;
 };
 
+export type FlagReport<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = {
+  flags_count: number;
+  id: string;
+  message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
+  user: UserResponse<UserType>;
+  created_at?: string;
+  review_details?: Object;
+  review_result?: string;
+  reviewed_at?: string;
+  reviewed_by?: UserResponse<UserType>;
+  updated_at?: string;
+};
+
+export type FlagReportsResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  flag_reports: Array<FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>>;
+};
+
+export type ReviewFlagReportResponse<
+  ChannelType extends UR = UR,
+  CommandType extends string = LiteralStringForUnion,
+  UserType extends UR = UR,
+  AttachmentType = UR,
+  MessageType = UR,
+  ReactionType = UR
+> = APIResponse & {
+  flag_report: FlagReport<ChannelType, CommandType, UserType, AttachmentType, MessageType, ReactionType>;
+};
+
 export type BannedUsersResponse<
   ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
@@ -326,6 +368,9 @@ export type FlagMessageResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    channel_cid?: string;
+    details?: Object; // Any JSON
+    message_user_id?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -340,6 +385,7 @@ export type FlagUserResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    details?: Object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -426,7 +472,7 @@ export type ListChannelTypesAPIResponse<
 > = ListChannelResponse<CommandType>;
 
 export type ListCommandsResponse<CommandType extends string = LiteralStringForUnion> = APIResponse & {
-  commands: Array<CreateCommandOptions<CommandType> & CreatedAtUpdatedAt>;
+  commands: Array<CreateCommandOptions<CommandType> & Partial<CreatedAtUpdatedAt>>;
 };
 
 export type MuteChannelAPIResponse<
@@ -665,9 +711,15 @@ export type UserResponse<UserType = UR> = User<UserType> & {
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PushNotificationSettings = {
+  disabled?: boolean;
+  disabled_until?: string | null;
 };
 
 /**
@@ -677,6 +729,16 @@ export type UserResponse<UserType = UR> = User<UserType> & {
 export type MessageFlagsPaginationOptions = {
   limit?: number;
   offset?: number;
+};
+
+export type FlagReportsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type ReviewFlagReportOptions = {
+  review_details?: Object;
+  user_id?: string;
 };
 
 export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
@@ -832,6 +894,21 @@ export type PaginationOptions = {
 export type MessagePaginationOptions = PaginationOptions & {
   created_at_around?: string | Date;
   id_around?: string;
+};
+
+export type PinnedMessagePaginationOptions = {
+  id_around?: string;
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
+  limit?: number;
+  offset?: number;
+  pinned_at_after?: string | Date;
+  pinned_at_after_or_equal?: string | Date;
+  pinned_at_around?: string | Date;
+  pinned_at_before?: string | Date;
+  pinned_at_before_or_equal?: string | Date;
 };
 
 export type QueryMembersOptions = {
@@ -1045,6 +1122,43 @@ export type MessageFlagsFilters = QueryFilters<
     }
 >;
 
+export type FlagReportsFiltersOptions = {
+  is_reviewed?: boolean;
+  message_id?: string;
+  report_id?: string;
+  review_result?: string;
+  reviewed_by?: string;
+  user_id?: string;
+};
+
+export type FlagReportsFilters = QueryFilters<
+  {
+    report_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
+  } & {
+    review_result?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
+  } & {
+    reviewed_by?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
+  } & {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+      [Key in keyof Omit<
+        FlagReportsFiltersOptions,
+        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+      >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+    }
+>;
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
   channel_cid?: string;
@@ -1230,6 +1344,9 @@ export type ChannelSortBase<ChannelType = UR> = Sort<ChannelType> & {
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };
+
+export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
+export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
 
 export type Sort<T> = {
   [P in keyof T]?: AscDesc;
@@ -1606,13 +1723,16 @@ export type EndpointName =
 export type ExportChannelRequest = {
   id: string;
   type: string;
+  cid?: string;
   messages_since?: Date;
   messages_until?: Date;
 };
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
+  export_users?: boolean;
   include_truncated_messages?: boolean;
+  version?: string;
 };
 
 export type Field = {
@@ -1658,7 +1778,9 @@ export type MessageBase<AttachmentType = UR, MessageType = UR, UserType = UR> = 
   html?: string;
   mml?: string;
   parent_id?: string;
+  pin_expires?: string | null;
   pinned?: boolean;
+  pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
@@ -1702,6 +1824,7 @@ export type PermissionAPIObject = {
   custom?: boolean;
   description?: string;
   id?: string;
+  level?: string;
   name?: string;
   owner?: boolean;
   same_team?: boolean;

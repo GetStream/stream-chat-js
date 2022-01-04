@@ -47,6 +47,8 @@ import {
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
+  PinnedMessagePaginationOptions,
+  PinnedMessagesSort,
 } from './types';
 import { Role } from './permissions';
 
@@ -842,6 +844,28 @@ export class Channel<
   }
 
   /**
+   * getPinnedMessages - List list pinned messages of the channel
+   *
+   * @param {PinnedMessagePaginationOptions & { user?: UserResponse<UserType>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
+   * @param {PinnedMessagesSort} sort defines sorting direction of pinned messages
+   *
+   * @return {Promise<GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} A response with a list of messages
+   */
+  async getPinnedMessages(
+    options: PinnedMessagePaginationOptions & { user?: UserResponse<UserType>; user_id?: string },
+    sort: PinnedMessagesSort = [],
+  ) {
+    return await this.getClient().get<
+      GetRepliesAPIResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>
+    >(this.getClient().baseURL + `/channels/${this.type}/${this.id}/pinned_messages`, {
+      payload: {
+        ...options,
+        sort: normalizeQuerySort(sort),
+      },
+    });
+  }
+
+  /**
    * getReactions - List the reactions, supports pagination
    *
    * @param {string} message_id The message id
@@ -1317,7 +1341,11 @@ export class Channel<
         break;
       case 'channel.updated':
         if (event.channel) {
-          channel.data = event.channel;
+          channel.data = {
+            ...event.channel,
+            hidden: event.channel?.hidden ?? channel.data?.hidden,
+            own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
+          };
         }
         break;
       case 'reaction.new':
