@@ -448,18 +448,6 @@ const executables = [
 		type: "Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, {}>['unbanUser']>>",
 	},
 	{
-		f: rg.unflagMessage,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['unflagMessage']>>",
-	},
-	{
-		f: rg.unflagUser,
-		imports: ['StreamChat', 'Unpacked'],
-		type:
-			"Unpacked<ReturnType<StreamChat<{}, {}, string & {}, {}, {}, {}, { image: string, status: string }>['unflagUser']>>",
-	},
-	{
 		f: rg.unmute,
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel<{}, { description?: string }, string & {}, {}, {}, {}, {}>['unmute']>>",

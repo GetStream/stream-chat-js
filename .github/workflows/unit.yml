@@ -1,0 +1,20 @@
+name: Unit Test
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [12, 14, 16, 17]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Unit tests
+        run: yarn run test-unit
