@@ -60,6 +60,10 @@ export function isOwnUser<StreamChatGenerics extends ExtendableGenerics = Defaul
   return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
 }
 
+function isBlobWebAPI(uri: unknown): uri is Blob {
+  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
+}
+
 export function isOwnUserBaseProperty(property: string) {
   const ownUserBaseProperties: {
     [Property in keyof Required<OwnUserBase>]: boolean;
@@ -84,7 +88,7 @@ export function addFileToFormData(
 ) {
   const data = new FormData();
 
-  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri)) {
+  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri) || isBlobWebAPI(uri)) {
     if (name) data.append('file', uri, name);
     else data.append('file', uri);
   } else {
