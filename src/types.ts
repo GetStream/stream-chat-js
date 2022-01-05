@@ -353,6 +353,10 @@ export type ExportChannelResponse = {
   task_id: string;
 };
 
+export type ExportUsersResponse = {
+  task_id: string;
+};
+
 export type ExportChannelStatusResponse = {
   created_at?: string;
   error?: {};
@@ -1733,6 +1737,10 @@ export type ExportChannelOptions = {
   export_users?: boolean;
   include_truncated_messages?: boolean;
   version?: string;
+};
+
+export type ExportUsersRequest = {
+  user_ids: string[];
 };
 
 export type Field = {
