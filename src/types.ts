@@ -1466,6 +1466,8 @@ export type Attachment<T = UR> = T & {
   footer_icon?: string;
   image_url?: string;
   og_scrape_url?: string;
+  original_height?: number;
+  original_width?: number;
   pretext?: string;
   text?: string;
   thumb_url?: string;
