@@ -368,7 +368,9 @@ export type FlagMessageResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    channel_cid?: string;
     details?: Object; // Any JSON
+    message_user_id?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -1778,9 +1780,9 @@ export type MessageBase<AttachmentType = UR, MessageType = UR, UserType = UR> = 
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string;
+  pin_expires?: string | null;
   pinned?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;

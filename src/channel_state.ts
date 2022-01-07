@@ -167,6 +167,10 @@ export class ChannelState<
     addIfDoesNotExist = true,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
+      const isFromShadowBannedUser = newMessages[i].shadowed;
+      if (isFromShadowBannedUser) {
+        continue;
+      }
       const message = this.formatMessage(newMessages[i]);
 
       if (message.user && this._channel?.cid) {
