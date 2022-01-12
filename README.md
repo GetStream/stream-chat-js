@@ -1,7 +1,6 @@
 # Stream Chat JS
 
 [![NPM](https://img.shields.io/npm/v/stream-chat.svg)](https://www.npmjs.com/package/stream-chat)
-[![Actions Status](https://github.com/GetStream/stream-chat-js/workflows/build/badge.svg)](https://github.com/GetStream/stream-chat-js/actions)
 
 stream-chat-js is the official JavaScript client for Stream Chat, a service for building chat applications.
 
