@@ -55,7 +55,7 @@ type AdminMessage = { priorityLevel: number };
 type ChatAttachment = { originalURL?: string };
 type CustomReaction = { size?: number };
 type ChatEvent = { quitChannel?: boolean };
-type CustomCommands = 'imgur';
+type CustomCommands = 'giphy';
 
 // Instantiate a new client (server side)
 // you can also use `new StreamChat<T,T,...>()`

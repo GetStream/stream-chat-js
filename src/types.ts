@@ -1595,7 +1595,6 @@ export type CommandVariants<CommandType extends string = LiteralStringForUnion> 
   | 'ban'
   | 'fun_set'
   | 'giphy'
-  | 'imgur'
   | 'moderation_set'
   | 'mute'
   | 'unban'
