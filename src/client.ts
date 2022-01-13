@@ -125,6 +125,8 @@ import {
   FlagReportsResponse,
   ReviewFlagReportOptions,
   FlagReportsPaginationOptions,
+  ExportUsersRequest,
+  ExportUsersResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2531,6 +2533,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
     const payload = { channels: request, ...options };
     return this.post<APIResponse & ExportChannelResponse>(`${this.baseURL}/export_channels`, payload);
+  }
+
+  exportUsers(request: ExportUsersRequest) {
+    return this.post<APIResponse & ExportUsersResponse>(`${this.baseURL}/export/users`, request);
   }
 
   exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
