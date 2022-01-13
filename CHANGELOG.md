@@ -1,4 +1,14 @@
-# CHANGELOG
+# Changelog
+
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+### [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
+
+- Types: Fix some missing attributes by @mahboubii in #857
+- Chore: Break CI into multiple workflow by @mahboubii in #858
+- Fix: FormData accepts browser Blob by @mahboubii in #856
+- Fix: Don't add messages from shadow banned users to state by @madsroskar in #859
+- Types: Image attachment's dimensions by @vishalnarkhede in #861
 
 ## September 15, 2021 - 4.2.0
 
