@@ -2304,6 +2304,24 @@ export class StreamChat<
   }
 
   /**
+   * unblockMessage - unblocks message blocked by automod
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @param {string} targetMessageID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async _unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
+    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock', {
+      target_message_id: targetMessageID,
+      ...options,
+    });
+  }
+
+  /**
    * @deprecated use markChannelsRead instead
    *
    * markAllRead - marks all channels for this user as read
