@@ -1837,6 +1837,7 @@ export type PermissionAPIObject = {
   name?: string;
   owner?: boolean;
   same_team?: boolean;
+  tags?: string[];
 };
 
 export type PermissionObject = {
