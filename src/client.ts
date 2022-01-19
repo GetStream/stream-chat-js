@@ -2318,7 +2318,7 @@ export class StreamChat<
    * @returns {Promise<APIResponse>}
    */
   async _unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock', {
+    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
       target_message_id: targetMessageID,
       ...options,
     });
