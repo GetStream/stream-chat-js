@@ -145,17 +145,26 @@ client.connectUser({ id: 'testId', nickname: 'testUser', country: 'NL' }, 'TestT
 - [Logging](docs/logging.md)
 - [User Token](docs/userToken.md)
 
-## Publishing a new version
-
-Note that you need 2FA enabled on NPM, publishing with Yarn gives error, use NPM directly for this:
-
-```bash
-npm version patch|minor|major
-```
-
 ## Contributing
 
 We welcome code changes that improve this library or fix a problem, please make sure to follow all best practices and add tests if applicable before submitting a Pull Request on Github. We are very happy to merge your code in the official repository. Make sure to sign our [Contributor License Agreement (CLA)](https://docs.google.com/forms/d/e/1FAIpQLScFKsKkAJI7mhCr7K9rEIOpqIDThrWxuvxnwUq2XkHyG154vQ/viewform) first. See our license file for more details.
+
+### Commit message convention
+
+Since we're autogenerating our [CHANGELOG](./CHANGELOG.md), we need to follow a specific commit message convention.
+You can read about conventional commits [here](https://www.conventionalcommits.org/). Here's how a usual commit message looks like for a new feature: `feat: allow provided config object to extend other configs`. A bugfix: `fix: prevent racing of requests`.
+
+## Release (for Stream developers)
+
+Releasing this package involves two GitHub Action steps:
+
+- Kick off a job called `initiate_release` ([link](https://github.com/GetStream/stream-chat-js/actions/workflows/initiate_release.yml)).
+
+The job creates a pull request with the changelog. Check if it looks good.
+
+- Merge the pull request.
+
+Once the PR is merged, it automatically kicks off another job which will create the tag and created a GitHub release.
 
 ## We are hiring
 

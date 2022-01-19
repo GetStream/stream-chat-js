@@ -93,7 +93,7 @@ async function deletePermission() {
 			},
 		},
 	});
-	await sleep(2500);
+	await sleep(5000);
 	return await authClient.deletePermission('test-delete-permission');
 }
 
