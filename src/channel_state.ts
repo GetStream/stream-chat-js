@@ -11,7 +11,10 @@ import {
   UserResponse,
 } from './types';
 
-type ChannelReadStatus<UserType> = Record<string, { last_read: Date; user: UserResponse<UserType> }>;
+type ChannelReadStatus<UserType> = Record<
+  string,
+  { last_read: Date; unread_messages: number; user: UserResponse<UserType> }
+>;
 
 /**
  * ChannelState - A container class for the channel state.
