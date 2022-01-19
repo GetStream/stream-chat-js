@@ -1332,8 +1332,6 @@ export class Channel<
           channelState.addMessageSorted(event.message);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
-          } else {
-            channelState.removePinnedMessage(event.message);
           }
         }
         break;
