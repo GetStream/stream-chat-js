@@ -1327,6 +1327,13 @@ export class Channel<
       case 'channel.truncated':
         channelState.clearMessages();
         channelState.unreadCount = 0;
+        // system messages don't increment unread counts
+        if (event.message) {
+          channelState.addMessageSorted(event.message);
+          if (event.message.pinned) {
+            channelState.addPinnedMessage(event.message);
+          }
+        }
         break;
       case 'member.added':
       case 'member.updated':
