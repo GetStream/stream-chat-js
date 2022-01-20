@@ -41,13 +41,14 @@ jobs:
         uses: actions/github-script@v5
         env:
           VERSION: ${{ github.event.inputs.version }}
-        with: |
-          npm run changelog
-          git config --global user.name 'github-actions' 
-          git config --global user.email 'release@getstream.io'
-          git checkout -q -b "release-$VERSION"
-          git commit -am "chore(release): $VERSION"
-          git push -q -u origin "release-$VERSION"
+        with:
+          script: |
+            npm run changelog
+            git config --global user.name 'github-actions' 
+            git config --global user.email 'release@getstream.io'
+            git checkout -q -b "release-$VERSION"
+            git commit -am "chore(release): $VERSION"
+            git push -q -u origin "release-$VERSION"
 
       - name: Get changelog diff
         uses: actions/github-script@v5
