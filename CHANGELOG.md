@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [5.1.3](https://github.com/GetStream/stream-chat-js/compare/v5.1.2...v5.1.3) (2022-01-20)
+
+
+### Features
+
+* Add async user export endpoint support ([#860](https://github.com/GetStream/stream-chat-js/pull/860))
+* Add permission tags support ([#867](https://github.com/GetStream/stream-chat-js/pull/867))
+* Add automated release flow ([#866](https://github.com/GetStream/stream-chat-js/issues/866))
+* Remove imgur from commands ([#865](https://github.com/GetStream/stream-chat-js/issues/865))
+
+### Fixes
+
+* Fix flickering and out-of-order events on truncate.channel with system message ([#870](https://github.com/GetStream/stream-chat-js/pull/870))
 ### [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
 
 - Types: Fix some missing attributes by @mahboubii in #857
