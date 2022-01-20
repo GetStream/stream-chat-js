@@ -3073,4 +3073,8 @@ export class StreamChat<
       ...options,
     });
   }
+
+  async getImportUploadPath(name: string) {
+    return this.get<APIResponse>(this.baseURL + `/imports/upload_path`, { name });
+  }
 }
