@@ -3081,4 +3081,8 @@ export class StreamChat<
   async createImport(path: string) {
     return this.post<APIResponse>(this.baseURL + `/imports`, { path });
   }
+
+  async getImport(id: string) {
+    return this.get<APIResponse>(this.baseURL + `/imports/${id}`);
+  }
 }
