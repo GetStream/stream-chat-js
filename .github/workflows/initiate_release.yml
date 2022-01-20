@@ -38,17 +38,15 @@ jobs:
         uses: ./.github/actions/setup-node
 
       - name: Update CHANGELOG.md, package.json and push release branch
-        uses: actions/github-script@v5
         env:
           VERSION: ${{ github.event.inputs.version }}
-        with:
-          script: |
-            npm run changelog
-            git config --global user.name 'github-actions' 
-            git config --global user.email 'release@getstream.io'
-            git checkout -q -b "release-$VERSION"
-            git commit -am "chore(release): $VERSION"
-            git push -q -u origin "release-$VERSION"
+        run: |
+          npm run changelog
+          git config --global user.name 'github-actions' 
+          git config --global user.email 'release@getstream.io'
+          git checkout -q -b "release-$VERSION"
+          git commit -am "chore(release): $VERSION"
+          git push -q -u origin "release-$VERSION"
 
       - name: Get changelog diff
         uses: actions/github-script@v5
