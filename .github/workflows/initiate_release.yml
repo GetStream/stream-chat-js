@@ -41,7 +41,7 @@ jobs:
         uses: actions/github-script@v5
         env:
           VERSION: ${{ github.event.inputs.version }}
-        run: |
+        with: |
           npm run changelog
           git config --global user.name 'github-actions' 
           git config --global user.email 'release@getstream.io'
