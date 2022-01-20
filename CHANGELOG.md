@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [5.1.3](https://github.com/GetStream/stream-chat-js/compare/v5.1.2...v5.1.3) (2022-01-20)
+
+
+### Features
+
+* add automated release flow ([#866](https://github.com/GetStream/stream-chat-js/issues/866)) ([9b81974](https://github.com/GetStream/stream-chat-js/commit/9b819744807b1208b13789d2571f0e0f56fd4e9c))
+* remove imgur from commands ([#865](https://github.com/GetStream/stream-chat-js/issues/865)) ([9efeea4](https://github.com/GetStream/stream-chat-js/commit/9efeea4d04ed5da3cb9730158da20de0fa021c48))
+
+
+### Bug Fixes
+
+* add channel.kicked event ([#878](https://github.com/GetStream/stream-chat-js/issues/878)) ([d9334f5](https://github.com/GetStream/stream-chat-js/commit/d9334f5cc8aa70e4be4ef197548c38988441604f))
+
 ### [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
 
 - Types: Fix some missing attributes by @mahboubii in #857
