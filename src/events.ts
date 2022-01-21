@@ -2,6 +2,7 @@ export const EVENT_MAP = {
   'channel.created': true,
   'channel.deleted': true,
   'channel.hidden': true,
+  'channel.kicked': true,
   'channel.muted': true,
   'channel.truncated': true,
   'channel.unmuted': true,
