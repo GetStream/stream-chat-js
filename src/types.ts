@@ -99,6 +99,7 @@ export type AppSettingsAPIResponse<CommandType extends string = LiteralStringFor
       apn?: APNConfig;
       firebase?: FirebaseConfig;
       huawei?: HuaweiConfig;
+      xiaomi?: XiaomiConfig;
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
@@ -286,13 +287,16 @@ export type ChannelMemberResponse<UserType = UR> = {
 
 export type CheckPushResponse = APIResponse & {
   device_errors?: {
-    error_message?: string;
-    provider?: string;
+    [deviceID: string]: {
+      error_message?: string;
+      provider?: string;
+    };
   };
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
-  rendered_huawei_template?: string;
+  rendered_message?: {};
+  skip_devides?: boolean;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -1443,7 +1447,6 @@ export type AppSettings = {
   huawei_config?: {
     id: string;
     secret: string;
-    data_template?: string;
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
@@ -1457,6 +1460,10 @@ export type AppSettings = {
   sqs_url?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
+  xiaomi_config?: {
+    package_name: string;
+    secret: string;
+  };
 };
 
 export type Attachment<T = UR> = T & {
@@ -1588,7 +1595,7 @@ export type CheckPushInput<UserType = UR> = {
   user_id?: string;
 };
 
-export type PushProvider = 'apn' | 'firebase' | 'huawei';
+export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
 
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
@@ -1765,7 +1772,10 @@ export type FirebaseConfig = {
 };
 
 export type HuaweiConfig = {
-  data_template?: string;
+  enabled?: boolean;
+};
+
+export type XiaomiConfig = {
   enabled?: boolean;
 };
 
@@ -1926,7 +1936,6 @@ export type TestPushDataInput = {
   apnTemplate?: string;
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
-  huaweiDataTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
 };
