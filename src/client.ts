@@ -2265,6 +2265,7 @@ export class StreamChat<
    * It is present for internal usage only.
    * This function can, and will, break and/or be removed at any point in time.
    *
+   * @private
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
    * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
@@ -2288,6 +2289,7 @@ export class StreamChat<
    * It is present for internal usage only.
    * This function can, and will, break and/or be removed at any point in time.
    *
+   * @private
    * @param {string} [id] flag report to review
    * @param {string} [reviewResult] flag report review result
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
@@ -2297,6 +2299,25 @@ export class StreamChat<
   async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
     return await this.patch<ReviewFlagReportResponse<UserType>>(this.baseURL + `/moderation/reports/${id}`, {
       review_result: reviewResult,
+      ...options,
+    });
+  }
+
+  /**
+   * _unblockMessage - unblocks message blocked by automod
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} targetMessageID
+   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @returns {Promise<APIResponse>}
+   */
+  async _unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
+    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
+      target_message_id: targetMessageID,
       ...options,
     });
   }
