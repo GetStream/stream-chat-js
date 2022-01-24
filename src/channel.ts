@@ -453,12 +453,14 @@ export class Channel<
   /**
    * delete - Delete the channel. Messages are permanently removed.
    *
+   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
+   *
    * @return {Promise<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>} The server response
    */
-  async delete() {
+  async delete(options: { hard_delete?: boolean } = {}) {
     return await this.getClient().delete<DeleteChannelAPIResponse<ChannelType, CommandType, UserType>>(
       this._channelURL(),
-      {},
+      { ...options },
     );
   }
 
