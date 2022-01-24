@@ -1262,6 +1262,7 @@ export class Channel<
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: event.received_at as Date,
             user: event.user,
+            unread_messages: 0,
           };
 
           if (event.user?.id === this.getClient().user?.id) {
@@ -1310,6 +1311,7 @@ export class Channel<
             channelState.read[event.user.id] = {
               last_read: new Date(event.created_at as string),
               user: event.user,
+              unread_messages: 0,
             };
           } else if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
@@ -1474,6 +1476,7 @@ export class Channel<
         this.state.read[user.id] = {
           user,
           last_read,
+          unread_messages: 0,
         };
       }
     }
@@ -1481,10 +1484,14 @@ export class Channel<
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        const parsedRead = { ...read, last_read: new Date(read.last_read) };
-        this.state.read[read.user.id] = parsedRead;
-        if (read.user.id === user?.id && typeof parsedRead.unread_messages === 'number') {
-          this.state.unreadCount = parsedRead.unread_messages;
+        this.state.read[read.user.id] = {
+          last_read: new Date(read.last_read),
+          unread_messages: read.unread_messages ?? 0,
+          user: read.user,
+        };
+
+        if (read.user.id === user?.id) {
+          this.state.unreadCount = this.state.read[read.user.id].unread_messages;
         }
       }
     }
