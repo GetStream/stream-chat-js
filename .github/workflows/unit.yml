@@ -1,0 +1,20 @@
+name: Unit Test
+on: [pull_request]
+
+concurrency: 
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [10, 12, 14, 16, 17]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Unit tests
+        run: yarn run test-unit

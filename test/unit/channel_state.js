@@ -24,6 +24,14 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages[1].id).to.be.equal('1');
 	});
 
+	it('should not add messages from shadow banned users', () => {
+		const state = new ChannelState();
+
+		state.addMessagesSorted([generateMsg({ shadowed: true })]);
+
+		expect(state.messages).to.be.empty;
+	});
+
 	it('empty state add multiple messages', async function () {
 		const state = new ChannelState();
 		state.addMessagesSorted([

@@ -1,4 +1,41 @@
-# CHANGELOG
+# Changelog
+
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+## [5.3.0](https://github.com/GetStream/stream-chat-js/compare/v5.2.0...v5.3.0) (2022-01-24)
+
+
+### Features
+
+* add unblockmessage ([#868](https://github.com/GetStream/stream-chat-js/issues/868)) ([52e9f42](https://github.com/GetStream/stream-chat-js/commit/52e9f42efc1d5d1e378a9f7388081ae05cbf61ca))
+* add xiaomi push provider ([#883](https://github.com/GetStream/stream-chat-js/issues/883)) ([381b0f7](https://github.com/GetStream/stream-chat-js/commit/381b0f79c2867d5a2793fd72db86722fe23bed74))
+
+
+### Bug Fixes
+
+* include unread_messages for all message events ([#871](https://github.com/GetStream/stream-chat-js/issues/871)) ([f26ceed](https://github.com/GetStream/stream-chat-js/commit/f26ceed6ca5897b47a8309cbbd983cb3e5002078))
+
+## [5.2.0](https://github.com/GetStream/stream-chat-js/compare/v5.1.2...v5.2.0) (2022-01-20)
+
+### Features
+
+- Add async user export endpoint support ([#860](https://github.com/GetStream/stream-chat-js/pull/860))
+- Add permission tags support ([#867](https://github.com/GetStream/stream-chat-js/pull/867))
+- add automated release flow ([#866](https://github.com/GetStream/stream-chat-js/issues/866)) ([9b81974](https://github.com/GetStream/stream-chat-js/commit/9b819744807b1208b13789d2571f0e0f56fd4e9c))
+- remove imgur from commands ([#865](https://github.com/GetStream/stream-chat-js/issues/865)) ([9efeea4](https://github.com/GetStream/stream-chat-js/commit/9efeea4d04ed5da3cb9730158da20de0fa021c48))
+
+### Bug Fixes
+
+- add channel.kicked event ([#878](https://github.com/GetStream/stream-chat-js/issues/878)) ([d9334f5](https://github.com/GetStream/stream-chat-js/commit/d9334f5cc8aa70e4be4ef197548c38988441604f))
+- Fix flickering and out-of-order events on truncate.channel with system message ([#870](https://github.com/GetStream/stream-chat-js/pull/870))
+
+### [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
+
+- Types: Fix some missing attributes by @mahboubii in #857
+- Chore: Break CI into multiple workflow by @mahboubii in #858
+- Fix: FormData accepts browser Blob by @mahboubii in #856
+- Fix: Don't add messages from shadow banned users to state by @madsroskar in #859
+- Types: Image attachment's dimensions by @vishalnarkhede in #861
 
 ## September 15, 2021 - 4.2.0
 

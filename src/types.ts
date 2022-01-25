@@ -99,6 +99,7 @@ export type AppSettingsAPIResponse<CommandType extends string = LiteralStringFor
       apn?: APNConfig;
       firebase?: FirebaseConfig;
       huawei?: HuaweiConfig;
+      xiaomi?: XiaomiConfig;
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
@@ -286,13 +287,16 @@ export type ChannelMemberResponse<UserType = UR> = {
 
 export type CheckPushResponse = APIResponse & {
   device_errors?: {
-    error_message?: string;
-    provider?: string;
+    [deviceID: string]: {
+      error_message?: string;
+      provider?: string;
+    };
   };
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
-  rendered_huawei_template?: string;
+  rendered_message?: {};
+  skip_devides?: boolean;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -353,6 +357,10 @@ export type ExportChannelResponse = {
   task_id: string;
 };
 
+export type ExportUsersResponse = {
+  task_id: string;
+};
+
 export type ExportChannelStatusResponse = {
   created_at?: string;
   error?: {};
@@ -368,7 +376,9 @@ export type FlagMessageResponse<UserType = UR> = APIResponse & {
     updated_at: string;
     user: UserResponse<UserType>;
     approved_at?: string;
+    channel_cid?: string;
     details?: Object; // Any JSON
+    message_user_id?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -1437,7 +1447,6 @@ export type AppSettings = {
   huawei_config?: {
     id: string;
     secret: string;
-    data_template?: string;
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
@@ -1451,6 +1460,10 @@ export type AppSettings = {
   sqs_url?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
+  xiaomi_config?: {
+    package_name: string;
+    secret: string;
+  };
 };
 
 export type Attachment<T = UR> = T & {
@@ -1466,6 +1479,8 @@ export type Attachment<T = UR> = T & {
   footer_icon?: string;
   image_url?: string;
   og_scrape_url?: string;
+  original_height?: number;
+  original_width?: number;
   pretext?: string;
   text?: string;
   thumb_url?: string;
@@ -1580,14 +1595,13 @@ export type CheckPushInput<UserType = UR> = {
   user_id?: string;
 };
 
-export type PushProvider = 'apn' | 'firebase' | 'huawei';
+export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
 
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
   | 'fun_set'
   | 'giphy'
-  | 'imgur'
   | 'moderation_set'
   | 'mute'
   | 'unban'
@@ -1733,6 +1747,10 @@ export type ExportChannelOptions = {
   version?: string;
 };
 
+export type ExportUsersRequest = {
+  user_ids: string[];
+};
+
 export type Field = {
   short?: boolean;
   title?: string;
@@ -1754,7 +1772,10 @@ export type FirebaseConfig = {
 };
 
 export type HuaweiConfig = {
-  data_template?: string;
+  enabled?: boolean;
+};
+
+export type XiaomiConfig = {
   enabled?: boolean;
 };
 
@@ -1776,9 +1797,9 @@ export type MessageBase<AttachmentType = UR, MessageType = UR, UserType = UR> = 
   html?: string;
   mml?: string;
   parent_id?: string;
-  pin_expires?: string;
+  pin_expires?: string | null;
   pinned?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   text?: string;
@@ -1826,6 +1847,7 @@ export type PermissionAPIObject = {
   name?: string;
   owner?: boolean;
   same_team?: boolean;
+  tags?: string[];
 };
 
 export type PermissionObject = {
@@ -1914,7 +1936,6 @@ export type TestPushDataInput = {
   apnTemplate?: string;
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
-  huaweiDataTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
 };

@@ -11,6 +11,11 @@ import {
   UserResponse,
 } from './types';
 
+type ChannelReadStatus<UserType> = Record<
+  string,
+  { last_read: Date; unread_messages: number; user: UserResponse<UserType> }
+>;
+
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -29,7 +34,7 @@ export class ChannelState<
     string,
     Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
   >;
-  read: Record<string, { last_read: Date; user: UserResponse<UserType> }>;
+  read: ChannelReadStatus<UserType>;
   messages: Array<
     ReturnType<
       ChannelState<
@@ -167,6 +172,10 @@ export class ChannelState<
     addIfDoesNotExist = true,
   ) {
     for (let i = 0; i < newMessages.length; i += 1) {
+      const isFromShadowBannedUser = newMessages[i].shadowed;
+      if (isFromShadowBannedUser) {
+        continue;
+      }
       const message = this.formatMessage(newMessages[i]);
 
       if (message.user && this._channel?.cid) {

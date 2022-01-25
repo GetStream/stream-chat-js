@@ -54,6 +54,10 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
+function isBlobWebAPI(uri: unknown): uri is Blob {
+  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
+}
+
 export function isOwnUser<
   ChannelType extends UR = UR,
   CommandType extends string = LiteralStringForUnion,
@@ -88,7 +92,7 @@ export function addFileToFormData(
 ) {
   const data = new FormData();
 
-  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri)) {
+  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri) || isBlobWebAPI(uri)) {
     if (name) data.append('file', uri, name);
     else data.append('file', uri);
   } else {
