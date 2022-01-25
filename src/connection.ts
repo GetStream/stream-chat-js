@@ -271,9 +271,11 @@ export class StableWSConnection<
     this.requestID = randomId();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
     try {
+      this._log(`_connect() - waiting for token`);
       await this.client.tokenManager.tokenReady();
       this._setupConnectionPromise();
       const wsURL = this._buildUrl();
+      this._log(`_connect() - Connecting to ${wsURL}`, { wsURL, requestID: this.requestID });
       this.ws = new WebSocket(wsURL);
       this.ws.onopen = this.onopen.bind(this, this.wsID);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
@@ -412,6 +414,7 @@ export class StableWSConnection<
   onmessage = (wsID: number, event: WebSocket.MessageEvent) => {
     if (this.wsID !== wsID) return;
 
+    this._log('onmessage() - onmessage callback', { event, wsID });
     const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
 
     // we wait till the first message before we consider the connection open..
@@ -430,7 +433,6 @@ export class StableWSConnection<
 
     // trigger the event..
     this.lastEvent = new Date();
-    this._log('onmessage() - onmessage callback', { event, wsID });
 
     if (data && data.type === 'health.check') {
       this.scheduleNextPing();
