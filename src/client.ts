@@ -3074,19 +3074,22 @@ export class StreamChat<
     });
   }
 
-  async getImportUploadPath(name: string) {
-    return this.get<APIResponse>(this.baseURL + `/imports/upload_path`, { name });
+  async getImportUploadPath(id: string) {
+    return this.get<APIResponse>(this.baseURL + `/imports/${id}/upload_path`);
   }
 
-  async createImport(path: string) {
-    return this.post<APIResponse>(this.baseURL + `/imports`, { path });
+  async createImport(filename: string) {
+    const { import_task } = await this.post<APIResponse & { import_task: {} }>(this.baseURL + `/imports`, { filename });
+    return import_task;
   }
 
   async getImport(id: string) {
-    return this.get<APIResponse>(this.baseURL + `/imports/${id}`);
+    const { import_task } = await this.get<APIResponse & { import_task: {} }>(this.baseURL + `/imports/${id}`);
+    return import_task;
   }
 
-  async listImports() {
-    return this.get<APIResponse>(this.baseURL + `/imports`);
+  async listImports(options: { limit?: number; offset?: number }) {
+    const { import_tasks } = await this.get<APIResponse & { import_tasks: {}[] }>(this.baseURL + `/imports`, options);
+    return import_tasks;
   }
 }
