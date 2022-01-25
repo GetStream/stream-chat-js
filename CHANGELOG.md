@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [5.3.1](https://github.com/GetStream/stream-chat-js/compare/v5.3.0...v5.3.1) (2022-01-25)
+
+
+### Features
+
+* **channel:** add hard_delete flag to channel.delete ([#885](https://github.com/GetStream/stream-chat-js/issues/885)) ([d0c0e5d](https://github.com/GetStream/stream-chat-js/commit/d0c0e5dec31b97ce2d512e59a667dc6ab760a823))
+
+
+### Bug Fixes
+
+* added missing logs for wsconnection ([#887](https://github.com/GetStream/stream-chat-js/issues/887)) ([94bd909](https://github.com/GetStream/stream-chat-js/commit/94bd909f08e6ca833c897925f6216aff14c47170))
+
 ## [5.3.0](https://github.com/GetStream/stream-chat-js/compare/v5.2.0...v5.3.0) (2022-01-24)
 
 
