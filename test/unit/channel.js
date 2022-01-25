@@ -208,6 +208,68 @@ describe('Channel _handleChannelEvent', function () {
 
 		expect(channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message.deleted_at).to.be.ok;
 	});
+
+	it('should include unread_messages for message events from another user', () => {
+		const channel = client.channel('messaging', 'id');
+		channel.initialized = true;
+		channel.state.read['id'] = {
+			unread_messages: 2,
+		};
+
+		const message = generateMsg();
+
+		const events = [
+			'message.read',
+			'message.deleted',
+			'message.new',
+			'message.updated',
+			'member.added',
+			'member.updated',
+			'member.removed',
+		];
+
+		for (const event of events) {
+			channel.state.read['id'].unread_messages = 2;
+			channel._handleChannelEvent({
+				type: event,
+				user: { id: 'id' },
+				message,
+			});
+			expect(channel.state.read['id'].unread_messages, `${event} should not be undefined`).not.to.be.undefined;
+		}
+	});
+
+	it('should include unread_messages for message events from the current user', () => {
+		const channel = client.channel('messaging', 'id');
+
+		channel.initialized = true;
+		channel.state.read[client.user.id] = {
+			unread_messages: 2,
+		};
+
+		const message = generateMsg({ user: { id: client.userID } });
+
+		const events = [
+			'message.read',
+			'message.deleted',
+			'message.new',
+			'message.updated',
+			'member.added',
+			'member.updated',
+			'member.removed',
+		];
+
+		for (const event of events) {
+			channel.state.read['id'].unread_messages = 2;
+			channel._handleChannelEvent({
+				type: event,
+				user: { id: client.user.id },
+				message,
+			});
+			expect(channel.state.read[client.user.id].unread_messages, `${event} should not be undefined`).not.to.be
+				.undefined;
+		}
+	});
 });
 
 describe('Channels - Constructor', function () {
