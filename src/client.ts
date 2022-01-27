@@ -127,6 +127,10 @@ import {
   FlagReportsPaginationOptions,
   ExportUsersRequest,
   ExportUsersResponse,
+  CreateImportResponse,
+  GetImportResponse,
+  ListImportsResponse,
+  ListImportsPaginationOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -3084,10 +3088,10 @@ export class StreamChat<
    * @private
    * @param {string} filename filename of uploaded data
    *
-   * @return {APIResponse} An ImportTask
+   * @return {APIResponse & CreateImportResponse} An ImportTask
    */
   async _createImport(filename: string) {
-    return await this.post<APIResponse & { import_task: {}; upload_url: string }>(this.baseURL + `/imports`, {
+    return await this.post<APIResponse & CreateImportResponse>(this.baseURL + `/imports`, {
       filename,
     });
   }
@@ -3102,10 +3106,10 @@ export class StreamChat<
    * @private
    * @param {string} id id of Import Task
    *
-   * @return {APIResponse} An ImportTask
+   * @return {APIResponse & GetImportResponse} An ImportTask
    */
   async _getImport(id: string) {
-    return await this.get<APIResponse & { import_task: {} }>(this.baseURL + `/imports/${id}`);
+    return await this.get<APIResponse & GetImportResponse>(this.baseURL + `/imports/${id}`);
   }
 
   /**
@@ -3116,11 +3120,11 @@ export class StreamChat<
    * This function can, and will, break and/or be removed at any point in time.
    *
    * @private
-   * @param {{ limit?: number; offset?: number }} options pagination options
+   * @param {ListImportsPaginationOptions} options pagination options
    *
-   * @return {APIResponse} An ImportTask
+   * @return {APIResponse & ListImportsResponse} An ImportTask
    */
-  async _listImports(options: { limit?: number; offset?: number }) {
-    return await this.get<APIResponse & { import_tasks: {}[] }>(this.baseURL + `/imports`, options);
+  async _listImports(options: ListImportsPaginationOptions) {
+    return await this.get<APIResponse & ListImportsResponse>(this.baseURL + `/imports`, options);
   }
 }

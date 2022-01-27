@@ -2137,3 +2137,38 @@ export type TruncateOptions<AttachmentType, MessageType, UserType> = {
   skip_push?: boolean;
   truncated_at?: Date;
 };
+
+export type CreateImportResponse = {
+  import_task: ImportTask;
+  upload_url: string;
+};
+
+export type GetImportResponse = {
+  import_task: ImportTask;
+};
+
+export type ListImportsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type ListImportsResponse = {
+  import_tasks: ImportTask[];
+};
+
+export type ImportTaskHistory = {
+  created_at: string;
+  next_state: string;
+  prev_state: string;
+};
+
+export type ImportTask = {
+  created_at: string;
+  filename: string;
+  history: ImportTaskHistory[];
+  id: string;
+  state: string;
+  updated_at: string;
+  result?: UR;
+  size?: number;
+};
