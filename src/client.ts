@@ -3074,17 +3074,53 @@ export class StreamChat<
     });
   }
 
-  async createImport(filename: string) {
+  /**
+   * _createImport - Create an Import Task.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} filename filename of uploaded data
+   *
+   * @return {APIResponse} An ImportTask
+   */
+  async _createImport(filename: string) {
     return await this.post<APIResponse & { import_task: {}; upload_url: string }>(this.baseURL + `/imports`, {
       filename,
     });
   }
 
-  async getImport(id: string) {
+  /**
+   * _getImport - Get an Import Task.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} id id of Import Task
+   *
+   * @return {APIResponse} An ImportTask
+   */
+  async _getImport(id: string) {
     return await this.get<APIResponse & { import_task: {} }>(this.baseURL + `/imports/${id}`);
   }
 
-  async listImports(options: { limit?: number; offset?: number }) {
+  /**
+   * _listImports - Lists Import Tasks.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {{ limit?: number; offset?: number }} options pagination options
+   *
+   * @return {APIResponse} An ImportTask
+   */
+  async _listImports(options: { limit?: number; offset?: number }) {
     return await this.get<APIResponse & { import_tasks: {}[] }>(this.baseURL + `/imports`, options);
   }
 }
