@@ -127,6 +127,10 @@ import {
   FlagReportsPaginationOptions,
   ExportUsersRequest,
   ExportUsersResponse,
+  CreateImportResponse,
+  GetImportResponse,
+  ListImportsResponse,
+  ListImportsPaginationOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -3072,5 +3076,55 @@ export class StreamChat<
       user_ids,
       ...options,
     });
+  }
+
+  /**
+   * _createImport - Create an Import Task.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} filename filename of uploaded data
+   *
+   * @return {APIResponse & CreateImportResponse} An ImportTask
+   */
+  async _createImport(filename: string) {
+    return await this.post<APIResponse & CreateImportResponse>(this.baseURL + `/imports`, {
+      filename,
+    });
+  }
+
+  /**
+   * _getImport - Get an Import Task.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} id id of Import Task
+   *
+   * @return {APIResponse & GetImportResponse} An ImportTask
+   */
+  async _getImport(id: string) {
+    return await this.get<APIResponse & GetImportResponse>(this.baseURL + `/imports/${id}`);
+  }
+
+  /**
+   * _listImports - Lists Import Tasks.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {ListImportsPaginationOptions} options pagination options
+   *
+   * @return {APIResponse & ListImportsResponse} An ImportTask
+   */
+  async _listImports(options: ListImportsPaginationOptions) {
+    return await this.get<APIResponse & ListImportsResponse>(this.baseURL + `/imports`, options);
   }
 }
