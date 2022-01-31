@@ -11,6 +11,11 @@ import {
   UserResponse,
 } from './types';
 
+type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+  string,
+  { last_read: Date; unread_messages: number; user: UserResponse<StreamChatGenerics> }
+>;
+
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -18,7 +23,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   _channel: Channel<StreamChatGenerics>;
   watcher_count: number;
   typing: Record<string, Event<StreamChatGenerics>>;
-  read: Record<string, { last_read: Date; user: UserResponse<StreamChatGenerics> }>;
+  read: ChannelReadStatus<StreamChatGenerics>;
   messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;

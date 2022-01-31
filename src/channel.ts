@@ -416,10 +416,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * delete - Delete the channel. Messages are permanently removed.
    *
+   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
+   *
    * @return {Promise<DeleteChannelAPIResponse<StreamChatGenerics>>} The server response
    */
-  async delete() {
-    return await this.getClient().delete<DeleteChannelAPIResponse<StreamChatGenerics>>(this._channelURL(), {});
+  async delete(options: { hard_delete?: boolean } = {}) {
+    return await this.getClient().delete<DeleteChannelAPIResponse<StreamChatGenerics>>(this._channelURL(), {
+      ...options,
+    });
   }
 
   /**
@@ -1164,6 +1168,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: event.received_at as Date,
             user: event.user,
+            unread_messages: 0,
           };
 
           if (event.user?.id === this.getClient().user?.id) {
@@ -1212,6 +1217,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             channelState.read[event.user.id] = {
               last_read: new Date(event.created_at as string),
               user: event.user,
+              unread_messages: 0,
             };
           } else if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
@@ -1231,6 +1237,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       case 'channel.truncated':
         channelState.clearMessages();
         channelState.unreadCount = 0;
+        // system messages don't increment unread counts
+        if (event.message) {
+          channelState.addMessageSorted(event.message);
+          if (event.message.pinned) {
+            channelState.addPinnedMessage(event.message);
+          }
+        }
         break;
       case 'member.added':
       case 'member.updated':
@@ -1365,6 +1378,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         this.state.read[user.id] = {
           user,
           last_read,
+          unread_messages: 0,
         };
       }
     }
@@ -1372,10 +1386,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        const parsedRead = { ...read, last_read: new Date(read.last_read) };
-        this.state.read[read.user.id] = parsedRead;
-        if (read.user.id === user?.id && typeof parsedRead.unread_messages === 'number') {
-          this.state.unreadCount = parsedRead.unread_messages;
+        this.state.read[read.user.id] = {
+          last_read: new Date(read.last_read),
+          unread_messages: read.unread_messages ?? 0,
+          user: read.user,
+        };
+
+        if (read.user.id === user?.id) {
+          this.state.unreadCount = this.state.read[read.user.id].unread_messages;
         }
       }
     }
