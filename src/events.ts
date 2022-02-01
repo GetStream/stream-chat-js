@@ -32,7 +32,6 @@ export const EVENT_MAP = {
   'reaction.updated': true,
   'typing.start': true,
   'typing.stop': true,
-  'transport.changed': true,
   'user.banned': true,
   'user.deleted': true,
   'user.presence.changed': true,
@@ -44,6 +43,7 @@ export const EVENT_MAP = {
   // local events
   'connection.changed': true,
   'connection.recovered': true,
+  'transport.changed': true,
 };
 
 const IS_VALID_EVENT_MAP_TYPE = { ...EVENT_MAP, all: true };
