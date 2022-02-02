@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [5.5.0](https://github.com/GetStream/stream-chat-js/compare/v5.4.0...v5.5.0) (2022-02-02)
+
+
+### Features
+
+* imports API endpoints ([#884](https://github.com/GetStream/stream-chat-js/issues/884)) ([27fccbe](https://github.com/GetStream/stream-chat-js/commit/27fccbeb3aec1b905858a31a5308ed1de49e70f7))
+
+
+### Bug Fixes
+
+* added transport.changed event to event map ([#892](https://github.com/GetStream/stream-chat-js/issues/892)) ([48013cd](https://github.com/GetStream/stream-chat-js/commit/48013cdf19fe9e3e6e25790a951ac730733493cb))
+
 ## [5.4.0](https://github.com/GetStream/stream-chat-js/compare/v5.3.0...v5.4.0) (2022-01-25)
 
 
