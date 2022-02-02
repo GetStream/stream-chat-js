@@ -162,7 +162,7 @@ export type FlagReport<
   message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   user: UserResponse<UserType>;
   created_at?: string;
-  review_details?: Object;
+  details?: Object;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<UserType>;
@@ -1089,11 +1089,13 @@ export type MessageFlagsFilters = QueryFilters<
 >;
 
 export type FlagReportsFiltersOptions = {
+  channel_cid?: string;
   is_reviewed?: boolean;
   message_id?: string;
   report_id?: string;
   review_result?: string;
   reviewed_by?: string;
+  team?: string;
   user_id?: string;
 };
 
@@ -1118,6 +1120,14 @@ export type FlagReportsFilters = QueryFilters<
     message_id?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
+  } & {
+    team?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
   } & {
       [Key in keyof Omit<
         FlagReportsFiltersOptions,
