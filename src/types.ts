@@ -1433,9 +1433,11 @@ export type Attachment<T = UR> = T & {
   color?: string;
   fallback?: string;
   fields?: Field[];
+  file_size?: number | string;
   footer?: string;
   footer_icon?: string;
   image_url?: string;
+  mime_type?: string;
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
