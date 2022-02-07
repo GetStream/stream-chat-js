@@ -1,7 +1,7 @@
 import babel from '@rollup/plugin-babel';
 import external from 'rollup-plugin-peer-deps-external';
 import commonjs from '@rollup/plugin-commonjs';
-import replace from 'rollup-plugin-replace';
+import replace from '@rollup/plugin-replace';
 import { terser } from 'rollup-plugin-terser';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 
@@ -49,7 +49,7 @@ const normalBundle = {
 	],
 	external: externalPackages.concat(['https', 'jsonwebtoken', 'crypto']),
 	plugins: [
-		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		external(),
 		nodeResolve({ extensions }),
 		babel(babelConfig),
@@ -73,7 +73,7 @@ const browserBundle = {
 	],
 	external: externalPackages,
 	plugins: [
-		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		browserIgnore,
 		external(),
 		nodeResolve({ extensions }),
@@ -93,7 +93,7 @@ const fullBrowserBundle = {
 		},
 	],
 	plugins: [
-		replace({ 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
 		browserIgnore,
 		external(),
 		nodeResolve({ extensions, browser: true }),

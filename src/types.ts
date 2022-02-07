@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from 'axios';
+import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
 /**
@@ -99,6 +100,7 @@ export type AppSettingsAPIResponse<CommandType extends string = LiteralStringFor
       apn?: APNConfig;
       firebase?: FirebaseConfig;
       huawei?: HuaweiConfig;
+      xiaomi?: XiaomiConfig;
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
@@ -160,7 +162,7 @@ export type FlagReport<
   message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>;
   user: UserResponse<UserType>;
   created_at?: string;
-  review_details?: Object;
+  details?: Object;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<UserType>;
@@ -286,13 +288,16 @@ export type ChannelMemberResponse<UserType = UR> = {
 
 export type CheckPushResponse = APIResponse & {
   device_errors?: {
-    error_message?: string;
-    provider?: string;
+    [deviceID: string]: {
+      error_message?: string;
+      provider?: string;
+    };
   };
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
-  rendered_huawei_template?: string;
+  rendered_message?: {};
+  skip_devides?: boolean;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -350,6 +355,10 @@ export type EventAPIResponse<
 };
 
 export type ExportChannelResponse = {
+  task_id: string;
+};
+
+export type ExportUsersResponse = {
   task_id: string;
 };
 
@@ -1044,50 +1053,7 @@ export type EventHandler<
   UserType extends UR = UR
 > = (event: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>) => void;
 
-export type EventTypes =
-  | 'all'
-  | 'channel.created'
-  | 'channel.deleted'
-  | 'channel.hidden'
-  | 'channel.muted'
-  | 'channel.truncated'
-  | 'channel.unmuted'
-  | 'channel.updated'
-  | 'channel.visible'
-  | 'transport.changed' // ws vs longpoll
-  | 'connection.changed'
-  | 'connection.recovered'
-  | 'health.check'
-  | 'member.added'
-  | 'member.removed'
-  | 'member.updated'
-  | 'message.deleted'
-  | 'message.new'
-  | 'message.read'
-  | 'message.updated'
-  | 'notification.added_to_channel'
-  | 'notification.channel_deleted'
-  | 'notification.channel_mutes_updated'
-  | 'notification.channel_truncated'
-  | 'notification.invite_accepted'
-  | 'notification.invite_rejected'
-  | 'notification.invited'
-  | 'notification.mark_read'
-  | 'notification.message_new'
-  | 'notification.mutes_updated'
-  | 'notification.removed_from_channel'
-  | 'reaction.deleted'
-  | 'reaction.new'
-  | 'reaction.updated'
-  | 'typing.start'
-  | 'typing.stop'
-  | 'user.banned'
-  | 'user.deleted'
-  | 'user.presence.changed'
-  | 'user.unbanned'
-  | 'user.updated'
-  | 'user.watching.start'
-  | 'user.watching.stop';
+export type EventTypes = 'all' | keyof typeof EVENT_MAP;
 
 /**
  * Filter Types
@@ -1123,11 +1089,13 @@ export type MessageFlagsFilters = QueryFilters<
 >;
 
 export type FlagReportsFiltersOptions = {
+  channel_cid?: string;
   is_reviewed?: boolean;
   message_id?: string;
   report_id?: string;
   review_result?: string;
   reviewed_by?: string;
+  team?: string;
   user_id?: string;
 };
 
@@ -1152,6 +1120,14 @@ export type FlagReportsFilters = QueryFilters<
     message_id?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
+  } & {
+    team?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
   } & {
       [Key in keyof Omit<
         FlagReportsFiltersOptions,
@@ -1439,7 +1415,6 @@ export type AppSettings = {
   huawei_config?: {
     id: string;
     secret: string;
-    data_template?: string;
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
@@ -1453,6 +1428,10 @@ export type AppSettings = {
   sqs_url?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
+  xiaomi_config?: {
+    package_name: string;
+    secret: string;
+  };
 };
 
 export type Attachment<T = UR> = T & {
@@ -1464,9 +1443,11 @@ export type Attachment<T = UR> = T & {
   color?: string;
   fallback?: string;
   fields?: Field[];
+  file_size?: number | string;
   footer?: string;
   footer_icon?: string;
   image_url?: string;
+  mime_type?: string;
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
@@ -1584,14 +1565,13 @@ export type CheckPushInput<UserType = UR> = {
   user_id?: string;
 };
 
-export type PushProvider = 'apn' | 'firebase' | 'huawei';
+export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
 
 export type CommandVariants<CommandType extends string = LiteralStringForUnion> =
   | 'all'
   | 'ban'
   | 'fun_set'
   | 'giphy'
-  | 'imgur'
   | 'moderation_set'
   | 'mute'
   | 'unban'
@@ -1737,6 +1717,10 @@ export type ExportChannelOptions = {
   version?: string;
 };
 
+export type ExportUsersRequest = {
+  user_ids: string[];
+};
+
 export type Field = {
   short?: boolean;
   title?: string;
@@ -1758,7 +1742,10 @@ export type FirebaseConfig = {
 };
 
 export type HuaweiConfig = {
-  data_template?: string;
+  enabled?: boolean;
+};
+
+export type XiaomiConfig = {
   enabled?: boolean;
 };
 
@@ -1830,6 +1817,7 @@ export type PermissionAPIObject = {
   name?: string;
   owner?: boolean;
   same_team?: boolean;
+  tags?: string[];
 };
 
 export type PermissionObject = {
@@ -1918,7 +1906,6 @@ export type TestPushDataInput = {
   apnTemplate?: string;
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
-  huaweiDataTemplate?: string;
   messageID?: string;
   skipDevices?: boolean;
 };
@@ -2119,4 +2106,39 @@ export type TruncateOptions<AttachmentType, MessageType, UserType> = {
   message?: Message<AttachmentType, MessageType, UserType>;
   skip_push?: boolean;
   truncated_at?: Date;
+};
+
+export type CreateImportResponse = {
+  import_task: ImportTask;
+  upload_url: string;
+};
+
+export type GetImportResponse = {
+  import_task: ImportTask;
+};
+
+export type ListImportsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type ListImportsResponse = {
+  import_tasks: ImportTask[];
+};
+
+export type ImportTaskHistory = {
+  created_at: string;
+  next_state: string;
+  prev_state: string;
+};
+
+export type ImportTask = {
+  created_at: string;
+  filename: string;
+  history: ImportTaskHistory[];
+  id: string;
+  state: string;
+  updated_at: string;
+  result?: UR;
+  size?: number;
 };

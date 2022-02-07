@@ -2,6 +2,7 @@ export const EVENT_MAP = {
   'channel.created': true,
   'channel.deleted': true,
   'channel.hidden': true,
+  'channel.kicked': true,
   'channel.muted': true,
   'channel.truncated': true,
   'channel.unmuted': true,
@@ -42,6 +43,7 @@ export const EVENT_MAP = {
   // local events
   'connection.changed': true,
   'connection.recovered': true,
+  'transport.changed': true,
 };
 
 const IS_VALID_EVENT_MAP_TYPE = { ...EVENT_MAP, all: true };
