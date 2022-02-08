@@ -67,6 +67,7 @@ export class Channel<
   _client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
   type: string;
   id: string | undefined;
+  image?: string;
   data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType> | undefined;
   _data: ChannelData<ChannelType> | ChannelResponse<ChannelType, CommandType, UserType>;
   cid: string;

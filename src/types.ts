@@ -231,6 +231,7 @@ export type ChannelResponse<
   created_by_id?: string;
   deleted_at?: string;
   hidden?: boolean;
+  image?: string;
   invites?: string[];
   last_message_at?: string;
   member_count?: number;
@@ -717,6 +718,7 @@ export type UserResponse<UserType = UR> = User<UserType> & {
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  image?: string;
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
@@ -1519,6 +1521,7 @@ export type ChannelConfigWithInfo<CommandType extends string = LiteralStringForU
   };
 
 export type ChannelData<ChannelType = UR> = ChannelType & {
+  image?: string;
   members?: string[];
   name?: string;
 };
