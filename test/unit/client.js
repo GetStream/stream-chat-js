@@ -375,17 +375,13 @@ describe('Client WSFallback', () => {
 
 	it('should fire transport.changed and health.check event', async () => {
 		sinon.spy(client, 'dispatchEvent');
-		client.doAxiosRequest = () => ({ event: { connection_id: 'new_id', type: 'health.check' } });
+		client.doAxiosRequest = () => ({ event: { type: 'health.check', connection_id: 'new_id' } });
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		await client.disconnectUser();
-		expect(health).to.be.eql({ connection_id: 'new_id' });
-		expect(
-			client.dispatchEvent.calledWithMatch(
-				{ type: 'transport.changed', mode: 'longpoll' },
-				{ connection_id: 'new_id', type: 'health.check' },
-			),
-		).to.be.true;
+		expect(health).to.be.eql({ type: 'health.check', connection_id: 'new_id' });
+		expect(client.dispatchEvent.calledWithMatch({ type: 'transport.changed', mode: 'longpoll' })).to.be.true;
+		expect(client.dispatchEvent.calledWithMatch({ type: 'health.check', connection_id: 'new_id' })).to.be.true;
 	});
 
 	it('should ignore fallback if flag is false', async () => {
