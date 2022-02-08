@@ -918,6 +918,7 @@ export class Channel<
   ) {
     if (message.shadowed) return false;
     if (message.silent) return false;
+    if (message.parent_id && !message.show_in_channel) return false;
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
     if (message.type === 'system') return false;
