@@ -355,7 +355,7 @@ describe('Client WSFallback', () => {
 		const stub = sinon
 			.stub()
 			.onCall(0)
-			.resolves({ event: { connection_id: 'new_id', type: 'health.check' } })
+			.resolves({ event: { connection_id: 'new_id' } })
 			.resolves({});
 		client.doAxiosRequest = stub;
 		client.wsBaseURL = 'ws://getstream.io';
@@ -374,14 +374,23 @@ describe('Client WSFallback', () => {
 	});
 
 	it('should fire transport.changed and health.check event', async () => {
+		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
 		sinon.spy(client, 'dispatchEvent');
-		client.doAxiosRequest = () => ({ event: { type: 'health.check', connection_id: 'new_id' } });
+		client.doAxiosRequest = () => ({
+			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
+		});
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		await client.disconnectUser();
-		expect(health).to.be.eql({ type: 'health.check', connection_id: 'new_id' });
+		expect(health).to.be.eql({ type: 'health.check', connection_id: 'new_id', received_at: eventDate });
 		expect(client.dispatchEvent.calledWithMatch({ type: 'transport.changed', mode: 'longpoll' })).to.be.true;
-		expect(client.dispatchEvent.calledWithMatch({ type: 'health.check', connection_id: 'new_id' })).to.be.true;
+		expect(
+			client.dispatchEvent.calledWithMatch({
+				type: 'health.check',
+				connection_id: 'new_id',
+				received_at: eventDate,
+			}),
+		).to.be.true;
 	});
 
 	it('should ignore fallback if flag is false', async () => {
