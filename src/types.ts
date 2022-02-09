@@ -1,4 +1,5 @@
 import { AxiosRequestConfig } from 'axios';
+import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
 /**
@@ -167,7 +168,7 @@ export type FlagReport<StreamChatGenerics extends ExtendableGenerics = DefaultGe
   message: MessageResponse<StreamChatGenerics>;
   user: UserResponse<StreamChatGenerics>;
   created_at?: string;
-  review_details?: Object;
+  details?: Object;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<StreamChatGenerics>;
@@ -927,50 +928,7 @@ export type EventHandler<StreamChatGenerics extends ExtendableGenerics = Default
   event: Event<StreamChatGenerics>,
 ) => void;
 
-export type EventTypes =
-  | 'all'
-  | 'channel.created'
-  | 'channel.deleted'
-  | 'channel.hidden'
-  | 'channel.muted'
-  | 'channel.truncated'
-  | 'channel.unmuted'
-  | 'channel.updated'
-  | 'channel.visible'
-  | 'transport.changed' // ws vs longpoll
-  | 'connection.changed'
-  | 'connection.recovered'
-  | 'health.check'
-  | 'member.added'
-  | 'member.removed'
-  | 'member.updated'
-  | 'message.deleted'
-  | 'message.new'
-  | 'message.read'
-  | 'message.updated'
-  | 'notification.added_to_channel'
-  | 'notification.channel_deleted'
-  | 'notification.channel_mutes_updated'
-  | 'notification.channel_truncated'
-  | 'notification.invite_accepted'
-  | 'notification.invite_rejected'
-  | 'notification.invited'
-  | 'notification.mark_read'
-  | 'notification.message_new'
-  | 'notification.mutes_updated'
-  | 'notification.removed_from_channel'
-  | 'reaction.deleted'
-  | 'reaction.new'
-  | 'reaction.updated'
-  | 'typing.start'
-  | 'typing.stop'
-  | 'user.banned'
-  | 'user.deleted'
-  | 'user.presence.changed'
-  | 'user.unbanned'
-  | 'user.updated'
-  | 'user.watching.start'
-  | 'user.watching.stop';
+export type EventTypes = 'all' | keyof typeof EVENT_MAP;
 
 /**
  * Filter Types
@@ -1006,11 +964,13 @@ export type MessageFlagsFilters = QueryFilters<
 >;
 
 export type FlagReportsFiltersOptions = {
+  channel_cid?: string;
   is_reviewed?: boolean;
   message_id?: string;
   report_id?: string;
   review_result?: string;
   reviewed_by?: string;
+  team?: string;
   user_id?: string;
 };
 
@@ -1035,6 +995,14 @@ export type FlagReportsFilters = QueryFilters<
     message_id?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
+  } & {
+    team?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
   } & {
       [Key in keyof Omit<
         FlagReportsFiltersOptions,
@@ -1442,9 +1410,11 @@ export type Attachment<
   color?: string;
   fallback?: string;
   fields?: Field[];
+  file_size?: number | string;
   footer?: string;
   footer_icon?: string;
   image_url?: string;
+  mime_type?: string;
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
