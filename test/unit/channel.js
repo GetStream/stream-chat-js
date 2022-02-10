@@ -65,6 +65,11 @@ describe('Channel count unread', function () {
 		expect(channel._countMessageAsUnread({ user: { id: 'mute1' } })).not.to.be.ok;
 	});
 
+	it('_countMessageAsUnread should return false for channel with read_events off', function () {
+		const channel = client.channel('messaging', { members: ['tommaso'], own_capabilities: [] });
+		expect(channel._countMessageAsUnread({ user: { id: 'random' } })).not.to.be.ok;
+	});
+
 	it('_countMessageAsUnread should return true for unmuted user', function () {
 		expect(channel._countMessageAsUnread({ user: { id: 'unmute' } })).to.be.ok;
 	});
