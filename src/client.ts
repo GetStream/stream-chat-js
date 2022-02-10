@@ -195,6 +195,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
+  /** promise which gets set on disconnectUser and gets awaited (if set) before creating a new connection */
+  pendingDisconnect: null | Promise<void>;
 
   /**
    * Initialize a client
@@ -282,6 +284,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.defaultWSTimeoutWithFallback = 6000;
     this.defaultWSTimeout = 15000;
+    this.pendingDisconnect = null;
 
     /**
      * logger function should accept 3 parameters:
@@ -414,6 +417,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
+
+    if (this.pendingDisconnect) await this.pendingDisconnect;
+    this.pendingDisconnect = null;
 
     /**
      * Calling connectUser multiple times is potentially the result of a  bad integration, however,
@@ -696,6 +702,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.state = new ClientState();
     // reset token manager
     setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
+
+    this.pendingDisconnect = closePromise;
 
     // close the WS connection
     return closePromise;
