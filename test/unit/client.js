@@ -352,15 +352,16 @@ describe('Client WSFallback', () => {
 	});
 
 	it('should try wsFallback if WebSocket fails', async () => {
+		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
 		const stub = sinon
 			.stub()
 			.onCall(0)
-			.resolves({ event: { connection_id: 'new_id' } })
-			.resolves({});
+			.resolves({ event: { connection_id: 'new_id', received_at: eventDate } });
+
 		client.doAxiosRequest = stub;
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
-		expect(health).to.be.eql({ connection_id: 'new_id' });
+		expect(health).to.be.eql({ connection_id: 'new_id', received_at: eventDate });
 		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
 		expect(client.wsFallback.connectionID).to.be.eql('new_id');
 		expect(client.wsFallback.consecutiveFailures).to.be.eql(0);
@@ -371,16 +372,27 @@ describe('Client WSFallback', () => {
 		expect(client.wsConnection.totalFailures).to.be.greaterThan(1);
 		await client.disconnectUser();
 		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
+		stub.reset();
 	});
 
-	it('should fire transport.changed event', async () => {
+	it('should fire transport.changed and health.check event', async () => {
+		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
 		sinon.spy(client, 'dispatchEvent');
-		client.doAxiosRequest = () => ({ event: { connection_id: 'new_id' } });
+		client.doAxiosRequest = () => ({
+			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
+		});
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		await client.disconnectUser();
-		expect(health).to.be.eql({ connection_id: 'new_id' });
+		expect(health).to.be.eql({ type: 'health.check', connection_id: 'new_id', received_at: eventDate });
 		expect(client.dispatchEvent.calledWithMatch({ type: 'transport.changed', mode: 'longpoll' })).to.be.true;
+		expect(
+			client.dispatchEvent.calledWithMatch({
+				type: 'health.check',
+				connection_id: 'new_id',
+				received_at: eventDate,
+			}),
+		).to.be.true;
 	});
 
 	it('should ignore fallback if flag is false', async () => {
