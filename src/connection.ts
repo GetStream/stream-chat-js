@@ -9,7 +9,7 @@ import {
   addConnectionEventListeners,
 } from './utils';
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
-import { ConnectAPIResponse, ConnectionOpen, LiteralStringForUnion, UR, LogLevel } from './types';
+import { ConnectAPIResponse, ConnectionOpen, ExtendableGenerics, DefaultGenerics, UR, LogLevel } from './types';
 import { StreamChat } from './client';
 
 // Type guards to check WebSocket error type
@@ -36,22 +36,13 @@ const isErrorEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.Err
  * - state can be recovered by querying the channel again
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
-export class StableWSConnection<
-  // CAUTION: generics are out of usual order here
-  ChannelType extends UR = UR,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UR = UR,
-  AttachmentType extends UR = UR,
-  EventType extends UR = UR,
-  MessageType extends UR = UR,
-  ReactionType extends UR = UR
-> {
+export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   // global from constructor
-  client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+  client: StreamChat<StreamChatGenerics>;
 
   // local vars
   connectionID?: string;
-  connectionOpen?: ConnectAPIResponse<ChannelType, CommandType, UserType>;
+  connectionOpen?: ConnectAPIResponse<StreamChatGenerics>;
   consecutiveFailures: number;
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
@@ -66,16 +57,12 @@ export class StableWSConnection<
     reason?: Error & { code?: string | number; isWSFailure?: boolean; StatusCode?: string | number },
   ) => void;
   requestID: string | undefined;
-  resolvePromise?: (value: ConnectionOpen<ChannelType, CommandType, UserType>) => void;
+  resolvePromise?: (value: ConnectionOpen<StreamChatGenerics>) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
 
-  constructor({
-    client,
-  }: {
-    client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
-  }) {
+  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
     /** StreamChat client */
     this.client = client;
     /** consecutive failures influence the duration of the timeout */
@@ -501,7 +488,6 @@ export class StableWSConnection<
     this.isHealthy = healthy;
 
     if (this.isHealthy) {
-      //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
       return;
     }
@@ -509,7 +495,6 @@ export class StableWSConnection<
     // we're offline, wait few seconds and fire and event if still offline
     setTimeout(() => {
       if (this.isHealthy) return;
-      //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
     }, 5000);
   };
@@ -575,7 +560,7 @@ export class StableWSConnection<
   _setupConnectionPromise = () => {
     this.isResolved = false;
     /** a promise that is resolved once ws.open is called */
-    this.connectionOpen = new Promise<ConnectionOpen<ChannelType, CommandType, UserType>>((resolve, reject) => {
+    this.connectionOpen = new Promise<ConnectionOpen<StreamChatGenerics>>((resolve, reject) => {
       this.resolvePromise = resolve;
       this.rejectPromise = reject;
     });

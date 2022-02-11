@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
 import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import { ConnectionOpen, Event, UnknownType, UR, LiteralStringForUnion, LogLevel } from './types';
+import { ConnectionOpen, Event, UR, ExtendableGenerics, DefaultGenerics, LogLevel } from './types';
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -12,26 +12,14 @@ export enum ConnectionState {
   Init = 'INIT',
 }
 
-export class WSConnectionFallback<
-  AttachmentType extends UR = UR,
-  ChannelType extends UR = UR,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UR = UR,
-  MessageType extends UR = UR,
-  ReactionType extends UR = UR,
-  UserType extends UR = UR
-> {
-  client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+  client: StreamChat<StreamChatGenerics>;
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
   cancelToken?: CancelTokenSource;
 
-  constructor({
-    client,
-  }: {
-    client: StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
-  }) {
+  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
@@ -48,12 +36,10 @@ export class WSConnectionFallback<
 
     // transition from connecting => connected
     if (this.state === ConnectionState.Connecting && state === ConnectionState.Connected) {
-      //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: true });
     }
 
     if (state === ConnectionState.Closed || state === ConnectionState.Disconnected) {
-      //@ts-expect-error
       this.client.dispatchEvent({ type: 'connection.changed', online: false });
     }
 
@@ -77,7 +63,7 @@ export class WSConnectionFallback<
   };
 
   /** @private */
-  _req = async <T = UR>(params: UnknownType, config: AxiosRequestConfig, retry: boolean): Promise<T> => {
+  _req = async <T = UR>(params: UR, config: AxiosRequestConfig, retry: boolean): Promise<T> => {
     if (!this.cancelToken && !params.close) {
       this.cancelToken = axios.CancelToken.source();
     }
@@ -113,7 +99,7 @@ export class WSConnectionFallback<
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{
-          events: Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>[];
+          events: Event<StreamChatGenerics>[];
         }>({}, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
 
         if (data.events?.length) {
@@ -163,7 +149,7 @@ export class WSConnectionFallback<
     this._setState(ConnectionState.Connecting);
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
-      const { event } = await this._req<{ event: ConnectionOpen<ChannelType, CommandType, UserType> }>(
+      const { event } = await this._req<{ event: ConnectionOpen<StreamChatGenerics> }>(
         { json: this.client._buildWSPayload() },
         { timeout: 8000 }, // 8s
         reconnect,
