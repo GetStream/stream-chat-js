@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [5.6.0](https://github.com/GetStream/stream-chat-js/compare/v5.5.0...v5.6.0) (2022-02-09)
+
+
+### Features
+
+* **moderation:** update flag_report field name and add more filterin… ([#894](https://github.com/GetStream/stream-chat-js/issues/894)) ([280b179](https://github.com/GetStream/stream-chat-js/commit/280b179286d0e8686edd107593a2d5c10f00c1bb))
+
+
+### Bug Fixes
+
+* fire health.check event after successful connection when using long poll transport ([#900](https://github.com/GetStream/stream-chat-js/issues/900)) ([0b3cd97](https://github.com/GetStream/stream-chat-js/commit/0b3cd979830c10994f7601762d57892756fc0ead))
+* ignore unread count for thread replies ([#890](https://github.com/GetStream/stream-chat-js/issues/890)) ([7a014be](https://github.com/GetStream/stream-chat-js/commit/7a014be3fb21ca6f7e19881cfe2acb770124ee4c))
+
 ## [5.5.0](https://github.com/GetStream/stream-chat-js/compare/v5.4.0...v5.5.0) (2022-02-02)
 
 

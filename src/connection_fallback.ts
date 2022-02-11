@@ -157,6 +157,8 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
 
       this._setState(ConnectionState.Connected);
       this.connectionID = event.connection_id;
+      // @ts-expect-error
+      this.client.dispatchEvent(event);
       this._poll();
       if (reconnect) {
         this.client.recoverState();
