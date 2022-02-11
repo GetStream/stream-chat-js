@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.0.0](https://github.com/GetStream/stream-chat-js/compare/v5.6.0...v6.0.0) (2022-02-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* convert Generics into a single Generic (#837)
+
+* convert Generics into a single Generic ([#837](https://github.com/GetStream/stream-chat-js/issues/837)) ([6406db4](https://github.com/GetStream/stream-chat-js/commit/6406db4309f3e8202ef23606d3245d8405367d70))
+
 ## [5.6.0](https://github.com/GetStream/stream-chat-js/compare/v5.5.0...v5.6.0) (2022-02-09)
 
 
