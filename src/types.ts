@@ -148,24 +148,24 @@ export type ModerationResult = {
 };
 
 export type AutomodDetails = {
-  action: string;
-  image_labels: Array<string>;
-  original_message_type: string;
-  result: ModerationResult;
+  action?: string;
+  image_labels?: Array<string>;
+  original_message_type?: string;
+  result?: ModerationResult;
 };
 
 export type FlagDetails = {
-  automod: AutomodDetails;
+  automod?: AutomodDetails;
 };
 
 export type Flag<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  target_message: MessageResponse<StreamChatGenerics>;
-  target_user: UserResponse<StreamChatGenerics>;
-  user: UserResponse<StreamChatGenerics>;
-  created_at?: string;
-  created_by_automod?: boolean;
+  created_at: string;
+  created_by_automod: boolean;
+  updated_at: string;
   details?: FlagDetails;
-  updated_at?: string;
+  target_message?: MessageResponse<StreamChatGenerics>;
+  target_user?: UserResponse<StreamChatGenerics>;
+  user?: UserResponse<StreamChatGenerics>;
 };
 
 export type FlagsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
