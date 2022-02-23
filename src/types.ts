@@ -996,6 +996,8 @@ export type MessageFlagsFilters = QueryFilters<
 export type FlagsFiltersOptions = {
   channel_cid?: string;
   message_id?: string;
+  message_user_id?: string;
+  reporter_id?: string;
   team?: string;
   user_id?: string;
 };
@@ -1010,9 +1012,17 @@ export type FlagsFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagsFiltersOptions['message_id']>;
   } & {
+    message_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['message_user_id']>;
+  } & {
     channel_cid?:
       | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagsFiltersOptions['channel_cid']>;
+  } & {
+    reporter_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['reporter_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['reporter_id']>;
   } & {
     team?:
       | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['team']>, '$eq' | '$in'>>
@@ -1024,6 +1034,7 @@ export type FlagReportsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
   message_id?: string;
+  message_user_id?: string;
   report_id?: string;
   review_result?: string;
   reviewed_by?: string;
@@ -1052,6 +1063,10 @@ export type FlagReportsFilters = QueryFilters<
     message_id?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
+  } & {
+    message_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_user_id']>;
   } & {
     channel_cid?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
