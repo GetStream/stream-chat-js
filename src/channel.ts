@@ -924,7 +924,7 @@ export class Channel<
     if (message.type === 'system') return false;
 
     // Return false if channel doesn't allow read events.
-    if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read_events'))
+    if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
       return false;
 
     if (this.muteStatus().muted) return false;
