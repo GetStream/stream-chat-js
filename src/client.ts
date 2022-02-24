@@ -131,6 +131,9 @@ import {
   GetImportResponse,
   ListImportsResponse,
   ListImportsPaginationOptions,
+  FlagsFilters,
+  FlagsPaginationOptions,
+  FlagsResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2011,6 +2014,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async unflagUser(targetID: string, options: { user_id?: string } = {}) {
     return await this.post<FlagUserResponse<StreamChatGenerics>>(this.baseURL + '/moderation/unflag', {
       target_user_id: targetID,
+      ...options,
+    });
+  }
+
+  /**
+   * _queryFlags - Query flags.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {FlagsFilters} filterConditions MongoDB style filter conditions
+   * @param {FlagsPaginationOptions} options Option object, {limit: 10, offset:0}
+   *
+   * @return {Promise<FlagsResponse<StreamChatGenerics>>} Flags Response
+   */
+  async _queryFlags(filterConditions: FlagsFilters = {}, options: FlagsPaginationOptions = {}) {
+    // Return a list of flags
+    return await this.post<FlagsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flags', {
+      filter_conditions: filterConditions,
       ...options,
     });
   }
