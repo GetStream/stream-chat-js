@@ -4,84 +4,34 @@ import {
   ChannelMembership,
   FormatMessageResponse,
   Event,
-  LiteralStringForUnion,
+  ExtendableGenerics,
+  DefaultGenerics,
   MessageResponse,
   ReactionResponse,
-  UR,
   UserResponse,
 } from './types';
 
-type ChannelReadStatus<UserType> = Record<
+type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
-  { last_read: Date; unread_messages: number; user: UserResponse<UserType> }
+  { last_read: Date; unread_messages: number; user: UserResponse<StreamChatGenerics> }
 >;
 
 /**
  * ChannelState - A container class for the channel state.
  */
-export class ChannelState<
-  AttachmentType extends UR = UR,
-  ChannelType extends UR = UR,
-  CommandType extends string = LiteralStringForUnion,
-  EventType extends UR = UR,
-  MessageType extends UR = UR,
-  ReactionType extends UR = UR,
-  UserType extends UR = UR
-> {
-  _channel: Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>;
+export class ChannelState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+  _channel: Channel<StreamChatGenerics>;
   watcher_count: number;
-  typing: Record<
-    string,
-    Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
-  >;
-  read: ChannelReadStatus<UserType>;
-  messages: Array<
-    ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >
-  >;
-  pinnedMessages: Array<
-    ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >
-  >;
-  threads: Record<
-    string,
-    Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >
-    >
-  >;
-  mutedUsers: Array<UserResponse<UserType>>;
-  watchers: Record<string, UserResponse<UserType>>;
-  members: Record<string, ChannelMemberResponse<UserType>>;
+  typing: Record<string, Event<StreamChatGenerics>>;
+  read: ChannelReadStatus<StreamChatGenerics>;
+  messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
+  pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
+  threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;
+  mutedUsers: Array<UserResponse<StreamChatGenerics>>;
+  watchers: Record<string, UserResponse<StreamChatGenerics>>;
+  members: Record<string, ChannelMemberResponse<StreamChatGenerics>>;
   unreadCount: number;
-  membership: ChannelMembership<UserType>;
+  membership: ChannelMembership<StreamChatGenerics>;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
@@ -90,9 +40,7 @@ export class ChannelState<
    * be pushed on to message list.
    */
   isUpToDate: boolean;
-  constructor(
-    channel: Channel<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>,
-  ) {
+  constructor(channel: Channel<StreamChatGenerics>) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = {};
@@ -119,13 +67,13 @@ export class ChannelState<
   /**
    * addMessageSorted - Add a message to the state
    *
-   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} newMessage A new message
+   * @param {MessageResponse<StreamChatGenerics>} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessageSorted(
-    newMessage: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
+    newMessage: MessageResponse<StreamChatGenerics>,
     timestampChanged = false,
     addIfDoesNotExist = true,
   ) {
@@ -136,12 +84,10 @@ export class ChannelState<
    * formatMessage - Takes the message object. Parses the dates, sets __html
    * and sets the status to received if missing. Returns a message object
    *
-   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message a message object
+   * @param {MessageResponse<StreamChatGenerics>} message a message object
    *
    */
-  formatMessage(
-    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
-  ): FormatMessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType> {
+  formatMessage(message: MessageResponse<StreamChatGenerics>): FormatMessageResponse<StreamChatGenerics> {
     return {
       ...message,
       /**
@@ -159,14 +105,14 @@ export class ChannelState<
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
-   * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} newMessages A list of messages
+   * @param {Array<MessageResponse<StreamChatGenerics>>} newMessages A list of messages
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[],
+    newMessages: MessageResponse<StreamChatGenerics>[],
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
@@ -243,12 +189,10 @@ export class ChannelState<
   /**
    * addPinnedMessages - adds messages in pinnedMessages property
    *
-   * @param {Array<MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>>} pinnedMessages A list of pinned messages
+   * @param {Array<MessageResponse<StreamChatGenerics>>} pinnedMessages A list of pinned messages
    *
    */
-  addPinnedMessages(
-    pinnedMessages: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>[],
-  ) {
+  addPinnedMessages(pinnedMessages: MessageResponse<StreamChatGenerics>[]) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
       this.addPinnedMessage(pinnedMessages[i]);
     }
@@ -257,12 +201,10 @@ export class ChannelState<
   /**
    * addPinnedMessage - adds message in pinnedMessages
    *
-   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} pinnedMessage message to update
+   * @param {MessageResponse<StreamChatGenerics>} pinnedMessage message to update
    *
    */
-  addPinnedMessage(
-    pinnedMessage: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
-  ) {
+  addPinnedMessage(pinnedMessage: MessageResponse<StreamChatGenerics>) {
     this.pinnedMessages = this._addToMessageList(
       this.pinnedMessages,
       this.formatMessage(pinnedMessage),
@@ -274,19 +216,17 @@ export class ChannelState<
   /**
    * removePinnedMessage - removes pinned message from pinnedMessages
    *
-   * @param {MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>} message message to remove
+   * @param {MessageResponse<StreamChatGenerics>} message message to remove
    *
    */
-  removePinnedMessage(
-    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
-  ) {
+  removePinnedMessage(message: MessageResponse<StreamChatGenerics>) {
     const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
     this.pinnedMessages = result;
   }
 
   addReaction(
-    reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
+    reaction: ReactionResponse<StreamChatGenerics>,
+    message?: MessageResponse<StreamChatGenerics>,
     enforce_unique?: boolean,
   ) {
     if (!message) return;
@@ -299,8 +239,8 @@ export class ChannelState<
   }
 
   _addOwnReactionToMessage(
-    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
-    reaction: ReactionResponse<ReactionType, UserType>,
+    ownReactions: ReactionResponse<StreamChatGenerics>[] | null | undefined,
+    reaction: ReactionResponse<StreamChatGenerics>,
     enforce_unique?: boolean,
   ) {
     if (enforce_unique) {
@@ -318,8 +258,8 @@ export class ChannelState<
   }
 
   _removeOwnReactionFromMessage(
-    ownReactions: ReactionResponse<ReactionType, UserType>[] | null | undefined,
-    reaction: ReactionResponse<ReactionType, UserType>,
+    ownReactions: ReactionResponse<StreamChatGenerics>[] | null | undefined,
+    reaction: ReactionResponse<StreamChatGenerics>,
   ) {
     if (ownReactions) {
       return ownReactions.filter((item) => item.user_id !== reaction.user_id || item.type !== reaction.type);
@@ -327,10 +267,7 @@ export class ChannelState<
     return ownReactions;
   }
 
-  removeReaction(
-    reaction: ReactionResponse<ReactionType, UserType>,
-    message?: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
-  ) {
+  removeReaction(reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
@@ -340,28 +277,14 @@ export class ChannelState<
     return messageWithReaction;
   }
 
-  removeQuotedMessageReferences(
-    message: MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>,
-  ) {
-    const parseMessage = (
-      m: ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >,
-    ) =>
+  removeQuotedMessageReferences(message: MessageResponse<StreamChatGenerics>) {
+    const parseMessage = (m: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>) =>
       (({
         ...m,
         created_at: m.created_at.toString(),
         pinned_at: m.pinned_at?.toString(),
         updated_at: m.updated_at?.toString(),
-      } as unknown) as MessageResponse<AttachmentType, ChannelType, CommandType, MessageType, ReactionType, UserType>);
+      } as unknown) as MessageResponse<StreamChatGenerics>);
 
     const updatedMessages = this.messages
       .filter((msg) => msg.quoted_message_id === message.id)
@@ -384,28 +307,8 @@ export class ChannelState<
       show_in_channel?: boolean;
     },
     updateFunc: (
-      msg: ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >,
-    ) => ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >,
+      msg: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
+    ) => ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
   ) {
     const { parent_id, show_in_channel, pinned } = message;
 
@@ -448,37 +351,15 @@ export class ChannelState<
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
    *
-   * @param {Array<ReturnType<ChannelState<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>['formatMessage']>>} messages A list of messages
+   * @param {Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>} messages A list of messages
    * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {string} sortBy field name to use to sort the messages by
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    */
   _addToMessageList(
-    messages: Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >
-    >,
-    message: ReturnType<
-      ChannelState<
-        AttachmentType,
-        ChannelType,
-        CommandType,
-        EventType,
-        MessageType,
-        ReactionType,
-        UserType
-      >['formatMessage']
-    >,
+    messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
+    message: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = true,
@@ -570,19 +451,7 @@ export class ChannelState<
   }
 
   removeMessageFromArray = (
-    msgArray: Array<
-      ReturnType<
-        ChannelState<
-          AttachmentType,
-          ChannelType,
-          CommandType,
-          EventType,
-          MessageType,
-          ReactionType,
-          UserType
-        >['formatMessage']
-      >
-    >,
+    msgArray: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter((message) => !(!!message.id && !!msg.id && message.id === msg.id));
@@ -593,24 +462,12 @@ export class ChannelState<
   /**
    * Updates the message.user property with updated user object, for messages.
    *
-   * @param {UserResponse<UserType>} user
+   * @param {UserResponse<StreamChatGenerics>} user
    */
-  updateUserMessages = (user: UserResponse<UserType>) => {
+  updateUserMessages = (user: UserResponse<StreamChatGenerics>) => {
     const _updateUserMessages = (
-      messages: Array<
-        ReturnType<
-          ChannelState<
-            AttachmentType,
-            ChannelType,
-            CommandType,
-            EventType,
-            MessageType,
-            ReactionType,
-            UserType
-          >['formatMessage']
-        >
-      >,
-      user: UserResponse<UserType>,
+      messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
+      user: UserResponse<StreamChatGenerics>,
     ) => {
       for (let i = 0; i < messages.length; i++) {
         const m = messages[i];
@@ -632,25 +489,13 @@ export class ChannelState<
   /**
    * Marks the messages as deleted, from deleted user.
    *
-   * @param {UserResponse<UserType>} user
+   * @param {UserResponse<StreamChatGenerics>} user
    * @param {boolean} hardDelete
    */
-  deleteUserMessages = (user: UserResponse<UserType>, hardDelete = false) => {
+  deleteUserMessages = (user: UserResponse<StreamChatGenerics>, hardDelete = false) => {
     const _deleteUserMessages = (
-      messages: Array<
-        ReturnType<
-          ChannelState<
-            AttachmentType,
-            ChannelType,
-            CommandType,
-            EventType,
-            MessageType,
-            ReactionType,
-            UserType
-          >['formatMessage']
-        >
-      >,
-      user: UserResponse<UserType>,
+      messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
+      user: UserResponse<StreamChatGenerics>,
       hardDelete = false,
     ) => {
       for (let i = 0; i < messages.length; i++) {
@@ -679,17 +524,7 @@ export class ChannelState<
             type: 'deleted',
             updated_at: m.updated_at,
             user: m.user,
-          } as unknown) as ReturnType<
-            ChannelState<
-              AttachmentType,
-              ChannelType,
-              CommandType,
-              EventType,
-              MessageType,
-              ReactionType,
-              UserType
-            >['formatMessage']
-          >;
+          } as unknown) as ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
         } else {
           messages[i] = {
             ...m,
@@ -736,7 +571,7 @@ export class ChannelState<
           cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
-        } as Event<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>);
+        } as Event<StreamChatGenerics>);
       }
     }
   }

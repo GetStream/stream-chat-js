@@ -1,5 +1,5 @@
 import FormData from 'form-data';
-import { AscDesc, LiteralStringForUnion, OwnUserBase, OwnUserResponse, UR, UserResponse } from './types';
+import { AscDesc, ExtendableGenerics, DefaultGenerics, OwnUserBase, OwnUserResponse, UserResponse } from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -54,18 +54,14 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
-function isBlobWebAPI(uri: unknown): uri is Blob {
-  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
+export function isOwnUser<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
+): user is OwnUserResponse<StreamChatGenerics> {
+  return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
 }
 
-export function isOwnUser<
-  ChannelType extends UR = UR,
-  CommandType extends string = LiteralStringForUnion,
-  UserType extends UR = UR
->(
-  user?: OwnUserResponse<ChannelType, CommandType, UserType> | UserResponse<UserType>,
-): user is OwnUserResponse<ChannelType, CommandType, UserType> {
-  return (user as OwnUserResponse<ChannelType, CommandType, UserType>)?.total_unread_count !== undefined;
+function isBlobWebAPI(uri: unknown): uri is Blob {
+  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
 }
 
 export function isOwnUserBaseProperty(property: string) {

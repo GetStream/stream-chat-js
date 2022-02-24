@@ -35,7 +35,15 @@ Documentation for this JavaScript client are available at the [Stream Website](h
 The StreamChat client is setup to allow extension of the base types through use of generics when instantiated. The default instantiation has all generics set to `Record<string, unknown>`.
 
 ```typescript
-StreamChat<AttachmentType, ChannelType, CommandType, EventType, MessageType, ReactionType, UserType>
+StreamChat<{
+  attachmentType: AttachmentType;
+  channelType: ChannelType;
+  commandType: CommandType;
+  eventType: EventType;
+  messageType: MessageType;
+  reactionType: ReactionType;
+  userType: UserType;
+}>
 ```
 
 Custom types provided when initializing the client will carry through to all client returns and provide intellisense to queries.
@@ -57,26 +65,26 @@ type CustomReaction = { size?: number };
 type ChatEvent = { quitChannel?: boolean };
 type CustomCommands = 'giphy';
 
+type StreamType = {
+  attachmentType: ChatAttachment;
+  channelType: ChatChannel;
+  commandType: CustomCommands;
+  eventType: ChatEvent;
+  messageType: UserMessage | AdminMessage;
+  reactionType: CustomReaction;
+  userType: ChatUser1 | ChatUser2;
+};
+
 // Instantiate a new client (server side)
 // you can also use `new StreamChat<T,T,...>()`
-const client = StreamChat.getInstance<
-  ChatAttachment,
-  ChatChannel,
-  CustomCommands,
-  ChatEvent,
-  UserMessage | AdminMessage,
-  CustomReaction,
-  ChatUser1 | ChatUser2
->('YOUR_API_KEY', 'API_KEY_SECRET');
+const client = StreamChat.getInstance<StreamType>('YOUR_API_KEY', 'API_KEY_SECRET');
 
 /**
  * Instantiate a new client (client side)
  * Unused generics default to Record<string, unknown>
  * with the exception of Command which defaults to string & {}
  */
-const client = StreamChat.getInstance<{}, ChatChannel, {}, {}, UserMessage | AdminMessage, {}, ChatUser1 | ChatUser2>(
-  'YOUR_API_KEY',
-);
+const client = StreamChat.getInstance<StreamType>('YOUR_API_KEY');
 ```
 
 Query operations will return results that utilize the custom types added via generics. In addition the query filters are type checked and provide intellisense using both the key and type of the parameter to ensure accurate use.
