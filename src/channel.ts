@@ -29,7 +29,6 @@ import {
   MessageFilters,
   MessageResponse,
   MuteChannelAPIResponse,
-  PaginationOptions,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
   QueryMembersOptions,
@@ -49,6 +48,7 @@ import {
   DefaultGenerics,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
+  MessagePaginationOptions,
 } from './types';
 import { Role } from './permissions';
 
@@ -773,7 +773,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    */
   async getReplies(
     parent_id: string,
-    options: PaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string },
+    options: MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string },
   ) {
     const data = await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
       this.getClient().baseURL + `/messages/${parent_id}/replies`,
