@@ -1186,7 +1186,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     if (event.type === 'notification.mark_read') {
       const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.map((activeChannelKey) => (this.activeChannels[activeChannelKey].state.unreadCount = 0));
+      activeChannelKeys.forEach((activeChannelKey) => (this.activeChannels[activeChannelKey].state.unreadCount = 0));
     }
 
     if ((event.type === 'channel.deleted' || event.type === 'notification.channel_deleted') && event.cid) {
