@@ -1486,6 +1486,7 @@ export type Attachment<
   file_size?: number | string;
   footer?: string;
   footer_icon?: string;
+  giphy?: GiphyData;
   image_url?: string;
   mime_type?: string;
   og_scrape_url?: string;
@@ -1775,6 +1776,25 @@ export type FirebaseConfig = {
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
+};
+
+type GiphyVersionInfo = {
+  height: number;
+  url: string;
+  width: number;
+};
+
+type GiphyVersions =
+  | 'original'
+  | 'fixed_height'
+  | 'fixed_height_still'
+  | 'fixed_height_downsampled'
+  | 'fixed_width'
+  | 'fixed_width_still'
+  | 'fixed_width_downsampled';
+
+type GiphyData = {
+  [key in GiphyVersions]: GiphyVersionInfo;
 };
 
 export type HuaweiConfig = {
