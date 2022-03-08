@@ -1779,9 +1779,9 @@ export type FirebaseConfig = {
 };
 
 type GiphyVersionInfo = {
-  height: number;
+  height: string;
   url: string;
-  width: number;
+  width: string;
 };
 
 type GiphyVersions =
