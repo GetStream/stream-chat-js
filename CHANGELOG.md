@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.1.0](https://github.com/GetStream/stream-chat-js/compare/v6.0.0...v6.1.0) (2022-03-07)
+
+
+### Features
+
+* **moderation:** add _queryFlags function ([#913](https://github.com/GetStream/stream-chat-js/issues/913)) ([b86f0d5](https://github.com/GetStream/stream-chat-js/commit/b86f0d5bff7ebbf4ba2c063216a7c83d11e4a597))
+
+
+### Bug Fixes
+
+* channel unreadCount to be set as 0 when notification.mark_read event is dispatched [CRNS - 433] ([#914](https://github.com/GetStream/stream-chat-js/issues/914)) ([667969e](https://github.com/GetStream/stream-chat-js/commit/667969ebba954f8c3d94832e7276c18b6ac12bf8))
+* unread count to not increment if channel has read_events off ([#904](https://github.com/GetStream/stream-chat-js/issues/904)) ([75ebc95](https://github.com/GetStream/stream-chat-js/commit/75ebc95bf8809e6f0a934624d95ed3e2d71b45b5))
+
 ## [6.0.0](https://github.com/GetStream/stream-chat-js/compare/v5.6.0...v6.0.0) (2022-02-11)
 
 

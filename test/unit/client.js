@@ -127,6 +127,20 @@ describe('Client userMuteStatus', function () {
 		expect(client.userMuteStatus('mute4')).not.to.be.ok;
 		expect(client.userMuteStatus('missingUser')).not.to.be.ok;
 	});
+
+	it('should update all active channel unread count to 0 when notification.mark_read event is called', function () {
+		client.activeChannels = { vish: { state: { unreadCount: 1 } }, vish2: { state: { unreadCount: 2 } } };
+		client.dispatchEvent({
+			type: 'notification.mark_read',
+		});
+
+		const unreadCountSum = Object.values(client.activeChannels).reduce(
+			(prevSum, currSum) => prevSum + currSum.state.unreadCount,
+			0,
+		);
+
+		expect(unreadCountSum).to.be.equal(0);
+	});
 });
 
 describe('Client connectUser', () => {

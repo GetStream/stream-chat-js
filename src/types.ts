@@ -147,6 +147,31 @@ export type ModerationResult = {
   moderated_by?: string;
 };
 
+export type AutomodDetails = {
+  action?: string;
+  image_labels?: Array<string>;
+  original_message_type?: string;
+  result?: ModerationResult;
+};
+
+export type FlagDetails = {
+  automod?: AutomodDetails;
+};
+
+export type Flag<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  created_at: string;
+  created_by_automod: boolean;
+  updated_at: string;
+  details?: FlagDetails;
+  target_message?: MessageResponse<StreamChatGenerics>;
+  target_user?: UserResponse<StreamChatGenerics>;
+  user?: UserResponse<StreamChatGenerics>;
+};
+
+export type FlagsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  flags?: Array<Flag<StreamChatGenerics>>;
+};
+
 export type MessageFlagsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   flags?: Array<{
     message: MessageResponse<StreamChatGenerics>;
@@ -168,7 +193,7 @@ export type FlagReport<StreamChatGenerics extends ExtendableGenerics = DefaultGe
   message: MessageResponse<StreamChatGenerics>;
   user: UserResponse<StreamChatGenerics>;
   created_at?: string;
-  details?: Object;
+  details?: FlagDetails;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<StreamChatGenerics>;
@@ -632,6 +657,11 @@ export type MessageFlagsPaginationOptions = {
   offset?: number;
 };
 
+export type FlagsPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
 export type FlagReportsPaginationOptions = {
   limit?: number;
   offset?: number;
@@ -963,10 +993,48 @@ export type MessageFlagsFilters = QueryFilters<
     }
 >;
 
+export type FlagsFiltersOptions = {
+  channel_cid?: string;
+  message_id?: string;
+  message_user_id?: string;
+  reporter_id?: string;
+  team?: string;
+  user_id?: string;
+};
+
+export type FlagsFilters = QueryFilters<
+  {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['user_id']>;
+  } & {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['message_id']>;
+  } & {
+    message_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['message_user_id']>;
+  } & {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['channel_cid']>;
+  } & {
+    reporter_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['reporter_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['reporter_id']>;
+  } & {
+    team?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['team']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagsFiltersOptions['team']>;
+  }
+>;
+
 export type FlagReportsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
   message_id?: string;
+  message_user_id?: string;
   report_id?: string;
   review_result?: string;
   reviewed_by?: string;
@@ -996,6 +1064,10 @@ export type FlagReportsFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
   } & {
+    message_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<FlagReportsFiltersOptions['message_user_id']>;
+  } & {
     channel_cid?:
       | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
       | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
@@ -1010,6 +1082,7 @@ export type FlagReportsFilters = QueryFilters<
       >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
     }
 >;
+
 export type BannedUsersFilterOptions = {
   banned_by_id?: string;
   channel_cid?: string;
