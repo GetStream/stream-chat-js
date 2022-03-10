@@ -1413,6 +1413,7 @@ export type Action = {
 export type AnonUserType = {};
 
 export type APNConfig = {
+  auth_key?: string;
   auth_type?: string;
   bundle_id?: string;
   development?: boolean;
@@ -1420,6 +1421,7 @@ export type APNConfig = {
   host?: string;
   key_id?: string;
   notification_template?: string;
+  p12_cert?: string;
   team_id?: string;
 };
 
@@ -1444,7 +1446,7 @@ export type AppSettings = {
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
-    credentials_json: string;
+    credentials_json?: string;
     data_template?: string;
     notification_template?: string;
     server_key?: string;
@@ -1486,6 +1488,7 @@ export type Attachment<
   file_size?: number | string;
   footer?: string;
   footer_icon?: string;
+  giphy?: GiphyData;
   image_url?: string;
   mime_type?: string;
   og_scrape_url?: string;
@@ -1775,14 +1778,38 @@ export type FirebaseConfig = {
   data_template?: string;
   enabled?: boolean;
   notification_template?: string;
+  server_key?: string;
+};
+
+type GiphyVersionInfo = {
+  height: string;
+  url: string;
+  width: string;
+};
+
+type GiphyVersions =
+  | 'original'
+  | 'fixed_height'
+  | 'fixed_height_still'
+  | 'fixed_height_downsampled'
+  | 'fixed_width'
+  | 'fixed_width_still'
+  | 'fixed_width_downsampled';
+
+type GiphyData = {
+  [key in GiphyVersions]: GiphyVersionInfo;
 };
 
 export type HuaweiConfig = {
   enabled?: boolean;
+  id?: string;
+  secret?: string;
 };
 
 export type XiaomiConfig = {
   enabled?: boolean;
+  package_name?: string;
+  secret?: string;
 };
 
 export type LiteralStringForUnion = string & {};
