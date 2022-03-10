@@ -128,6 +128,7 @@ import {
   ExportUsersRequest,
   ExportUsersResponse,
   CreateImportResponse,
+  CreateImportURLResponse,
   GetImportResponse,
   ListImportsResponse,
   ListImportsPaginationOptions,
@@ -2833,7 +2834,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * _createImport - Create an Import Task.
+   * _createImportURL - Create an Import upload url.
    *
    * Note: Do not use this.
    * It is present for internal usage only.
@@ -2844,9 +2845,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {APIResponse & CreateImportResponse} An ImportTask
    */
-  async _createImport(filename: string) {
-    return await this.post<APIResponse & CreateImportResponse>(this.baseURL + `/imports`, {
+  async _createImportURL(filename: string) {
+    return await this.post<APIResponse & CreateImportURLResponse>(this.baseURL + `/import_urls`, {
       filename,
+    });
+  }
+
+  /**
+   * _createImport - Create an Import Task.
+   *
+   * Note: Do not use this.
+   * It is present for internal usage only.
+   * This function can, and will, break and/or be removed at any point in time.
+   *
+   * @private
+   * @param {string} path path of uploaded data
+   *
+   * @return {APIResponse & CreateImportResponse} An ImportTask
+   */
+  async _createImport(path: string) {
+    return await this.post<APIResponse & CreateImportResponse>(this.baseURL + `/imports`, {
+      path,
     });
   }
 
