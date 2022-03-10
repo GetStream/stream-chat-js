@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.2.0](https://github.com/GetStream/stream-chat-js/compare/v6.1.0...v6.2.0) (2022-03-10)
+
+
+### Features
+
+* add giphy size customisation data support ([#921](https://github.com/GetStream/stream-chat-js/issues/921)) ([140cb6a](https://github.com/GetStream/stream-chat-js/commit/140cb6acb4cdb10089f5a419747178a6f1a2142d))
+
+
+### Bug Fixes
+
+* add types for returned push creds ([#922](https://github.com/GetStream/stream-chat-js/issues/922)) ([1523889](https://github.com/GetStream/stream-chat-js/commit/1523889f28b6ceb09d18e44f4c1060deedbc27a5))
+
 ## [6.1.0](https://github.com/GetStream/stream-chat-js/compare/v6.0.0...v6.1.0) (2022-03-07)
 
 
