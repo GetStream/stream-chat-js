@@ -2157,9 +2157,13 @@ export type TruncateOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   truncated_at?: Date;
 };
 
+export type CreateImportURLResponse = {
+  path: string;
+  upload_url: string;
+};
+
 export type CreateImportResponse = {
   import_task: ImportTask;
-  upload_url: string;
 };
 
 export type GetImportResponse = {
@@ -2183,9 +2187,9 @@ export type ImportTaskHistory = {
 
 export type ImportTask = {
   created_at: string;
-  filename: string;
   history: ImportTaskHistory[];
   id: string;
+  path: string;
   state: string;
   updated_at: string;
   result?: UR;
