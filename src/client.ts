@@ -86,6 +86,10 @@ import {
   PermissionAPIResponse,
   PermissionsAPIResponse,
   PushProvider,
+  PushProviderID,
+  PushProviderConfig,
+  PushProviderUpsertResponse,
+  PushProviderListResponse,
   ReactionResponse,
   SearchOptions,
   SearchPayload,
@@ -2899,5 +2903,44 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async _listImports(options: ListImportsPaginationOptions) {
     return await this.get<APIResponse & ListImportsResponse>(this.baseURL + `/imports`, options);
+  }
+
+  /**
+   * upsertPushProvider - Create or Update a push provider
+   *
+   * Note: Works only for v2 push version is enabled on app settings.
+   *
+   * @param {PushProviderConfig} configuration of the provider you want to create or update
+   *
+   * @return {APIResponse & PushProviderUpsertResponse} A push provider
+   */
+  async upsertPushProvider(pushProvider: PushProviderConfig) {
+    return await this.post<APIResponse & PushProviderUpsertResponse>(this.baseURL + `/push_providers`, {
+      push_provider: pushProvider,
+    });
+  }
+
+  /**
+   * deletePushProvider - Delete a push provider
+   *
+   * Note: Works only for v2 push version is enabled on app settings.
+   *
+   * @param {PushProviderID} type and foreign id of the push provider to be deleted
+   *
+   * @return {APIResponse} An API response
+   */
+  async deletePushProvider({ type, name }: PushProviderID) {
+    return await this.delete<APIResponse>(this.baseURL + `/push_providers/${type}/${name}`);
+  }
+
+  /**
+   * listPushProviders - Get all push providers in the app
+   *
+   * Note: Works only for v2 push version is enabled on app settings.
+   *
+   * @return {APIResponse & PushProviderListResponse} A push provider
+   */
+  async listPushProviders() {
+    return await this.get<APIResponse & PushProviderListResponse>(this.baseURL + `/push_providers`);
   }
 }
