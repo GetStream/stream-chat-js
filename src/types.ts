@@ -2223,6 +2223,10 @@ export type GetImportResponse = {
   import_task: ImportTask;
 };
 
+export type CreateImportOptions = {
+  mode: 'insert' | 'upsert';
+};
+
 export type ListImportsPaginationOptions = {
   limit?: number;
   offset?: number;
