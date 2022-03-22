@@ -2195,3 +2195,4 @@ export type ImportTask = {
   result?: UR;
   size?: number;
 };
+export type MessageSetType = 'latest' | 'current' | 'new';
