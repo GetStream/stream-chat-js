@@ -6,6 +6,7 @@ import {
   Event,
   ExtendableGenerics,
   DefaultGenerics,
+  MessageSetType,
   MessageResponse,
   ReactionResponse,
   UserResponse,
@@ -24,7 +25,6 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   watcher_count: number;
   typing: Record<string, Event<StreamChatGenerics>>;
   read: ChannelReadStatus<StreamChatGenerics>;
-  messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;
   mutedUsers: Array<UserResponse<StreamChatGenerics>>;
@@ -40,12 +40,23 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * be pushed on to message list.
    */
   isUpToDate: boolean;
+  /**
+   * Disjoint lists of messages
+   * Users can jump in the message list (with searching) and this can result in disjoint lists of messages
+   * The state manages these lists and merges them when lists overlap
+   * The messages array contains the currently active set
+   */
+  messageSets: {
+    isCurrent: boolean;
+    isLatest: boolean;
+    messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
+  }[] = [];
   constructor(channel: Channel<StreamChatGenerics>) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = {};
     this.read = {};
-    this.messages = [];
+    this.initMessages();
     this.pinnedMessages = [];
     this.threads = {};
     // a list of users to hide messages from
@@ -64,20 +75,49 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.last_message_at = channel?.state?.last_message_at != null ? new Date(channel.state.last_message_at) : null;
   }
 
+  get messages() {
+    return this.messageSets.find((s) => s.isCurrent)?.messages || [];
+  }
+
+  set messages(messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>) {
+    const index = this.messageSets.findIndex((s) => s.isCurrent);
+    this.messageSets[index].messages = messages;
+  }
+
+  /**
+   * The list of latest messages
+   * The messages array not always contains the latest messages (for example if a user searched for an earlier message, that is in a different message set)
+   */
+  get latestMessages() {
+    return this.messageSets.find((s) => s.isLatest)?.messages || [];
+  }
+
+  set latestMessages(messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>) {
+    const index = this.messageSets.findIndex((s) => s.isLatest);
+    this.messageSets[index].messages = messages;
+  }
+
   /**
    * addMessageSorted - Add a message to the state
    *
    * @param {MessageResponse<StreamChatGenerics>} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   *
+   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
    */
   addMessageSorted(
     newMessage: MessageResponse<StreamChatGenerics>,
     timestampChanged = false,
     addIfDoesNotExist = true,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
-    return this.addMessagesSorted([newMessage], timestampChanged, false, addIfDoesNotExist);
+    return this.addMessagesSorted(
+      [newMessage],
+      timestampChanged,
+      false,
+      addIfDoesNotExist,
+      messageSetToAddToIfDoesNotExist,
+    );
   }
 
   /**
@@ -109,6 +149,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
+   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if messages are not in the list (only used if addIfDoesNotExist is true)
    *
    */
   addMessagesSorted(
@@ -116,46 +157,59 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    for (let i = 0; i < newMessages.length; i += 1) {
-      const isFromShadowBannedUser = newMessages[i].shadowed;
+    const { messagesToAdd, targetMessageSetIndex } = this.findTargetMessageSet(
+      newMessages,
+      addIfDoesNotExist,
+      messageSetToAddToIfDoesNotExist,
+    );
+
+    for (let i = 0; i < messagesToAdd.length; i += 1) {
+      const isFromShadowBannedUser = messagesToAdd[i].shadowed;
       if (isFromShadowBannedUser) {
         continue;
       }
-      const message = this.formatMessage(newMessages[i]);
+      const isMerging = messagesToAdd[i].created_at instanceof Date;
+      let message: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
+      if (isMerging) {
+        message = messagesToAdd[i] as ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
+      } else {
+        message = this.formatMessage(messagesToAdd[i] as MessageResponse<StreamChatGenerics>);
 
-      if (message.user && this._channel?.cid) {
-        /**
-         * Store the reference to user for this channel, so that when we have to
-         * handle updates to user, we can use the reference map, to determine which
-         * channels need to be updated with updated user object.
-         */
-        this._channel.getClient().state.updateUserReference(message.user, this._channel.cid);
-      }
+        if (message.user && this._channel?.cid) {
+          /**
+           * Store the reference to user for this channel, so that when we have to
+           * handle updates to user, we can use the reference map, to determine which
+           * channels need to be updated with updated user object.
+           */
+          this._channel.getClient().state.updateUserReference(message.user, this._channel.cid);
+        }
 
-      if (initializing && message.id && this.threads[message.id]) {
-        // If we are initializing the state of channel (e.g., in case of connection recovery),
-        // then in that case we remove thread related to this message from threads object.
-        // This way we can ensure that we don't have any stale data in thread object
-        // and consumer can refetch the replies.
-        delete this.threads[message.id];
-      }
+        if (initializing && message.id && this.threads[message.id]) {
+          // If we are initializing the state of channel (e.g., in case of connection recovery),
+          // then in that case we remove thread related to this message from threads object.
+          // This way we can ensure that we don't have any stale data in thread object
+          // and consumer can refetch the replies.
+          delete this.threads[message.id];
+        }
 
-      if (!this.last_message_at) {
-        this.last_message_at = new Date(message.created_at.getTime());
-      }
+        if (!this.last_message_at) {
+          this.last_message_at = new Date(message.created_at.getTime());
+        }
 
-      if (message.created_at.getTime() > this.last_message_at.getTime()) {
-        this.last_message_at = new Date(message.created_at.getTime());
+        if (message.created_at.getTime() > this.last_message_at.getTime()) {
+          this.last_message_at = new Date(message.created_at.getTime());
+        }
       }
 
       // update or append the messages...
       const parentID = message.parent_id;
 
-      // add to the main message list
-      if (!parentID || message.show_in_channel) {
-        this.messages = this._addToMessageList(
-          this.messages,
+      // add to the given message set
+      if ((!parentID || message.show_in_channel) && targetMessageSetIndex !== -1) {
+        this.messageSets[targetMessageSetIndex].messages = this._addToMessageList(
+          this.messageSets[targetMessageSetIndex].messages,
           message,
           timestampChanged,
           'created_at',
@@ -172,7 +226,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
        * message is "oldest" message, and newer messages are therefore not loaded.
        * This can also occur if an old thread message is updated.
        */
-      if (parentID && !initializing) {
+      if (parentID && !initializing && !isMerging) {
         const thread = this.threads[parentID] || [];
         const threadMessages = this._addToMessageList(
           thread,
@@ -286,12 +340,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         updated_at: m.updated_at?.toString(),
       } as unknown) as MessageResponse<StreamChatGenerics>);
 
-    const updatedMessages = this.messages
-      .filter((msg) => msg.quoted_message_id === message.id)
-      .map(parseMessage)
-      .map((msg) => ({ ...msg, quoted_message: { ...message, attachments: [] } }));
+    this.messageSets.forEach((set) => {
+      const updatedMessages = set.messages
+        .filter((msg) => msg.quoted_message_id === message.id)
+        .map(parseMessage)
+        .map((msg) => ({ ...msg, quoted_message: { ...message, attachments: [] } }));
 
-    this.addMessagesSorted(updatedMessages, true);
+      this.addMessagesSorted(updatedMessages, true);
+    });
   }
 
   /**
@@ -322,9 +378,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     }
 
     if ((!show_in_channel && !parent_id) || show_in_channel) {
-      const msgIndex = this.messages.findIndex((msg) => msg.id === message.id);
-      if (msgIndex !== -1) {
-        this.messages[msgIndex] = updateFunc(this.messages[msgIndex]);
+      const messageSetIndex = this.findMessageSetIndex(message);
+      if (messageSetIndex !== -1) {
+        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex((msg) => msg.id === message.id);
+        if (msgIndex !== -1) {
+          this.messageSets[messageSetIndex].messages[msgIndex] = updateFunc(
+            this.messageSets[messageSetIndex].messages[msgIndex],
+          );
+        }
       }
     }
 
@@ -442,9 +503,15 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const { removed, result: messages } = this.removeMessageFromArray(this.messages, messageToRemove);
-      this.messages = messages;
-      isRemoved = removed;
+      const messageSetIndex = this.findMessageSetIndex(messageToRemove);
+      if (messageSetIndex !== -1) {
+        const { removed, result: messages } = this.removeMessageFromArray(
+          this.messageSets[messageSetIndex].messages,
+          messageToRemove,
+        );
+        this.messageSets[messageSetIndex].messages = messages;
+        isRemoved = removed;
+      }
     }
 
     return isRemoved;
@@ -477,7 +544,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       }
     };
 
-    _updateUserMessages(this.messages, user);
+    this.messageSets.forEach((set) => _updateUserMessages(set.messages, user));
 
     for (const parentId in this.threads) {
       _updateUserMessages(this.threads[parentId], user);
@@ -535,7 +602,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       }
     };
 
-    _deleteUserMessages(this.messages, user, hardDelete);
+    this.messageSets.forEach((set) => _deleteUserMessages(set.messages, user, hardDelete));
 
     for (const parentId in this.threads) {
       _deleteUserMessages(this.threads[parentId], user, hardDelete);
@@ -549,9 +616,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.messages.filter((message) => message.type !== 'error');
+    const filteredMessages = this.latestMessages.filter((message) => message.type !== 'error');
 
-    this.messages = filteredMessages;
+    this.latestMessages = filteredMessages;
   }
 
   /**
@@ -577,7 +644,129 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   clearMessages() {
-    this.messages = [];
+    this.initMessages();
     this.pinnedMessages = [];
+  }
+
+  initMessages() {
+    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true }];
+  }
+
+  /**
+   * loadMessageIntoState - Loads a given message (and messages around it) into the state
+   *
+   * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
+   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
+   */
+  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string) {
+    let messageSetIndex: number;
+    let switchedToMessageSet = false;
+    let loadedMessageThread = false;
+    const messageIdToFind = parentMessageId || messageId;
+    if (messageId === 'latest') {
+      if (this.messages === this.latestMessages) {
+        return;
+      }
+      messageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
+    } else {
+      messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
+    }
+    if (messageSetIndex !== -1) {
+      this.switchToMessageSet(messageSetIndex);
+      switchedToMessageSet = true;
+    }
+    loadedMessageThread = !parentMessageId || !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
+    if (switchedToMessageSet && loadedMessageThread) {
+      return;
+    }
+    if (!switchedToMessageSet) {
+      await this._channel.query({ messages: { id_around: messageIdToFind, limit: 25 } }, 'new');
+    }
+    if (!loadedMessageThread && parentMessageId) {
+      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit: 25 });
+    }
+    messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
+    if (messageSetIndex !== -1) {
+      this.switchToMessageSet(messageSetIndex);
+    }
+  }
+
+  private switchToMessageSet(index: number) {
+    const currentMessages = this.messageSets.find((s) => s.isCurrent);
+    if (!currentMessages) {
+      return;
+    }
+    currentMessages.isCurrent = false;
+    this.messageSets[index].isCurrent = true;
+  }
+
+  private areMessageSetsOverlap(messages1: Array<{ id: string }>, messages2: Array<{ id: string }>) {
+    return messages1.some((m1) => messages2.find((m2) => m1.id === m2.id));
+  }
+
+  private findMessageSetIndex(message: { id?: string }) {
+    return this.messageSets.findIndex((set) => !!set.messages.find((m) => m.id === message.id));
+  }
+
+  private findTargetMessageSet(
+    newMessages: MessageResponse<StreamChatGenerics>[],
+    addIfDoesNotExist = true,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+  ) {
+    let messagesToAdd: (
+      | MessageResponse<StreamChatGenerics>
+      | ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>
+    )[] = newMessages;
+    let targetMessageSetIndex!: number;
+    if (addIfDoesNotExist) {
+      const overlappingMessageSetIndices = this.messageSets
+        .map((_, i) => i)
+        .filter((i) => this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages));
+      switch (messageSetToAddToIfDoesNotExist) {
+        case 'new':
+          if (overlappingMessageSetIndices.length > 0) {
+            targetMessageSetIndex = overlappingMessageSetIndices[0];
+            // No new message set is created if newMessages only contains thread replies
+          } else if (newMessages.some((m) => !m.parent_id)) {
+            this.messageSets.push({ messages: [], isCurrent: false, isLatest: false });
+            targetMessageSetIndex = this.messageSets.length - 1;
+          }
+          break;
+        case 'current':
+          targetMessageSetIndex = this.messageSets.findIndex((s) => s.isCurrent);
+          break;
+        case 'latest':
+          targetMessageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
+          break;
+        default:
+          targetMessageSetIndex = -1;
+      }
+      // when merging the target set will be the first one from the overlapping message sets
+      const mergeTargetMessageSetIndex = overlappingMessageSetIndices.splice(0, 1)[0];
+      const mergeSourceMessageSetIndices = [...overlappingMessageSetIndices];
+      if (mergeTargetMessageSetIndex !== undefined && mergeTargetMessageSetIndex !== targetMessageSetIndex) {
+        mergeSourceMessageSetIndices.push(targetMessageSetIndex);
+      }
+      // merge message sets
+      if (mergeSourceMessageSetIndices.length > 0) {
+        const target = this.messageSets[mergeTargetMessageSetIndex];
+        const sources = this.messageSets.filter((_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1);
+        sources.forEach((messageSet) => {
+          target.isLatest = target.isLatest || messageSet.isLatest;
+          target.isCurrent = target.isCurrent || messageSet.isCurrent;
+          messagesToAdd = [...messagesToAdd, ...messageSet.messages];
+        });
+        sources.forEach((s) => this.messageSets.splice(this.messageSets.indexOf(s), 1));
+        const overlappingMessageSetIndex = this.messageSets.findIndex((s) =>
+          this.areMessageSetsOverlap(s.messages, newMessages),
+        );
+        targetMessageSetIndex = overlappingMessageSetIndex;
+      }
+    } else {
+      // assumes that all new messages belong to the same set
+      targetMessageSetIndex = this.findMessageSetIndex(newMessages[0]);
+    }
+
+    return { targetMessageSetIndex, messagesToAdd };
   }
 }
