@@ -2244,4 +2244,13 @@ export type ImportTask = {
   result?: UR;
   size?: number;
 };
+
 export type MessageSetType = 'latest' | 'current' | 'new';
+
+export type PushProviderUpsertResponse = {
+  push_provider: PushProvider;
+};
+
+export type PushProviderListResponse = {
+  push_providers: PushProvider[];
+};
