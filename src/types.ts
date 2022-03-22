@@ -120,6 +120,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
       apn?: APNConfig;
       firebase?: FirebaseConfig;
       huawei?: HuaweiConfig;
+      providers?: PushProviderConfig[];
       xiaomi?: XiaomiConfig;
     };
     revoke_tokens_issued_before?: string | null;
@@ -1609,6 +1610,54 @@ export type CheckPushInput<StreamChatGenerics extends ExtendableGenerics = Defau
 };
 
 export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
+
+export type PushProviderConfig = PushProviderCommon &
+  PushProviderAPN &
+  PushProviderFirebase &
+  PushProviderHuawei &
+  PushProviderXiaomi;
+
+export type PushProviderID = {
+  name: string;
+  type: PushProvider;
+};
+
+export type PushProviderCommon = {
+  created_at: string;
+  updated_at: string;
+  description?: string;
+  disabled_at?: string;
+  disabled_reason?: string;
+};
+
+export type PushProviderAPN = {
+  apn_auth_key?: string;
+  apn_auth_type?: 'token' | 'certificate';
+  apn_development?: boolean;
+  apn_host?: string;
+  apn_key_id?: string;
+  apn_notification_template?: string;
+  apn_p12_cert?: string;
+  apn_team_id?: string;
+  apn_topic?: string;
+};
+
+export type PushProviderFirebase = {
+  firebase_credentials?: string;
+  firebase_data_template?: string;
+  firebase_notification_template?: string;
+  firebase_server_key?: string;
+};
+
+export type PushProviderHuawei = {
+  huawei_app_id?: string;
+  huawei_app_secret?: string;
+};
+
+export type PushProviderXiaomi = {
+  xiaomi_package_name?: string;
+  xiaomi_secret?: string;
+};
 
 export type CommandVariants<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | 'all'
