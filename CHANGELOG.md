@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.3.0](https://github.com/GetStream/stream-chat-js/compare/v6.2.0...v6.3.0) (2022-03-23)
+
+
+### Features
+
+* add provider management ([#930](https://github.com/GetStream/stream-chat-js/issues/930)) ([2d35b81](https://github.com/GetStream/stream-chat-js/commit/2d35b81e18dba5d8f66c8b4ecac3753ed425ced9))
+* add types for get app providers ([#929](https://github.com/GetStream/stream-chat-js/issues/929)) ([610e98d](https://github.com/GetStream/stream-chat-js/commit/610e98d0648096f7a806188027d7fb54cf136ba1))
+* Jump to message ([#851](https://github.com/GetStream/stream-chat-js/issues/851)) ([6eca258](https://github.com/GetStream/stream-chat-js/commit/6eca2583a6392f9aa9fab13f12fbf026ce887c36))
+
 ## [6.2.0](https://github.com/GetStream/stream-chat-js/compare/v6.1.0...v6.2.0) (2022-03-10)
 
 
