@@ -1696,6 +1696,7 @@ export type Device<StreamChatGenerics extends ExtendableGenerics = DefaultGeneri
 export type BaseDeviceFields = {
   id: string;
   push_provider: PushProvider;
+  push_provider_name?: string;
 };
 
 export type DeviceFields = BaseDeviceFields & {

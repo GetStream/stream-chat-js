@@ -1546,13 +1546,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} id the device id
    * @param {PushProvider} push_provider the push provider
    * @param {string} [userID] the user id (defaults to current user)
+   * @param {string} [push_provider_name] user provided push provider name for multi bundle support
    *
    */
-  async addDevice(id: string, push_provider: PushProvider, userID?: string) {
+  async addDevice(id: string, push_provider: PushProvider, userID?: string, push_provider_name?: string) {
     return await this.post<APIResponse>(this.baseURL + '/devices', {
       id,
       push_provider,
       ...(userID != null ? { user_id: userID } : {}),
+      ...(push_provider_name != null ? { push_provider_name } : {}),
     });
   }
 
