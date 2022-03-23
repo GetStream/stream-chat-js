@@ -44,6 +44,18 @@ describe('connection', function () {
 
 	after(() => wss.close());
 
+	describe('Connection tokenProvider', () => {
+		it('should handle token provider rejection ', async () => {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:9999', // invalid base url
+			});
+			client.defaultWSTimeout = 20;
+			const tokenProvider = () => Promise.reject(new Error('network failure'));
+			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).to.be.rejectedWith(/tokenProvider failed/);
+		});
+	});
+
 	describe('Connection _buildUrl', function () {
 		const device = { id: 'device_id', push_provider: 'firebase' };
 		const client = newStreamChat();
