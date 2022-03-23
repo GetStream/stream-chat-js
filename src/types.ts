@@ -295,14 +295,15 @@ export type CheckPushResponse = APIResponse & {
   device_errors?: {
     [deviceID: string]: {
       error_message?: string;
-      provider?: string;
+      provider?: PushProvider;
+      provider_name?: string;
     };
   };
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
   rendered_message?: {};
-  skip_devides?: boolean;
+  skip_devices?: boolean;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -2013,6 +2014,8 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  pushProviderName?: string;
+  pushProviderType?: PushProvider;
   skipDevices?: boolean;
 };
 

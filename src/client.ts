@@ -624,18 +624,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-	 * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
-	 *
-	 * @param {string} userID User ID. If user has no devices, it will error
-	 * @param {TestPushDataInput} [data] Overrides for push templates/message used
-	 * 		IE: {
-				  messageID: 'id-of-message',//will error if message does not exist
-				  apnTemplate: '{}', //if app doesn't have apn configured it will error
-				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
-				  skipDevices: true, // skip config/device checks and sending to real devices
-			}
-	 */
+   * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+   *
+   * @param {string} userID User ID. If user has no devices, it will error
+   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   *  IE: {
+        messageID: 'id-of-message', // will error if message does not exist
+        apnTemplate: '{}', // if app doesn't have apn configured it will error
+        firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
+        firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
+        skipDevices: true, // skip config/device checks and sending to real devices
+        pushProviderName: 'staging' // one of your configured push providers
+        pushProviderType: 'apn' // one of supported provider types
+      }
+  */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
     return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
@@ -644,6 +646,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...(data.firebaseTemplate ? { firebase_template: data.firebaseTemplate } : {}),
       ...(data.firebaseDataTemplate ? { firebase_data_template: data.firebaseDataTemplate } : {}),
       ...(data.skipDevices ? { skip_devices: true } : {}),
+      ...(data.pushProviderName ? { push_provider_name: data.pushProviderName } : {}),
+      ...(data.pushProviderType ? { push_provider_type: data.pushProviderType } : {}),
     });
   }
 
@@ -651,11 +655,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * testSQSSettings - Tests that the given or configured SQS configuration is valid
    *
    * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
-   * 		IE: {
-				  sqs_key: 'auth_key',
-				  sqs_secret: 'auth_secret',
-				  sqs_url: 'url_to_queue',
-			}
+   *  IE: {
+        sqs_key: 'auth_key',
+        sqs_secret: 'auth_secret',
+        sqs_url: 'url_to_queue',
+      }
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
     return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
