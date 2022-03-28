@@ -732,6 +732,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   quotes?: boolean;
   reactions?: boolean;
   read_events?: boolean;
+  reminders?: boolean;
   replies?: boolean;
   search?: boolean;
   typing_events?: boolean;
@@ -1464,6 +1465,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  reminders_interval?: number;
   revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
