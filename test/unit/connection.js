@@ -48,7 +48,6 @@ describe('connection', function () {
 		it('should handle token provider rejection ', async () => {
 			const client = new StreamChat('apiKey', {
 				allowServerSideConnect: true,
-				baseURL: 'http://localhost:9999', // invalid base url
 			});
 			client.defaultWSTimeout = 20;
 			const tokenProvider = () => Promise.reject(new Error('network failure'));
