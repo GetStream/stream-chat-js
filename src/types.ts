@@ -252,6 +252,8 @@ export type ChannelResponse<
   own_capabilities?: string[];
   team?: string;
   truncated_at?: string;
+  truncated_by?: UserResponse<StreamChatGenerics>;
+  truncated_by_id?: string;
   updated_at?: string;
 };
 
@@ -732,6 +734,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   quotes?: boolean;
   reactions?: boolean;
   read_events?: boolean;
+  reminders?: boolean;
   replies?: boolean;
   search?: boolean;
   typing_events?: boolean;
@@ -1464,6 +1467,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  reminders_interval?: number;
   revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
@@ -2208,6 +2212,8 @@ export type TruncateOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   message?: Message<StreamChatGenerics>;
   skip_push?: boolean;
   truncated_at?: Date;
+  user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
 };
 
 export type CreateImportURLResponse = {
@@ -2221,6 +2227,10 @@ export type CreateImportResponse = {
 
 export type GetImportResponse = {
   import_task: ImportTask;
+};
+
+export type CreateImportOptions = {
+  mode: 'insert' | 'upsert';
 };
 
 export type ListImportsPaginationOptions = {
