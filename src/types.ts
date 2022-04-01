@@ -1348,9 +1348,9 @@ export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultG
   | ChannelSortBase<StreamChatGenerics>
   | Array<ChannelSortBase<StreamChatGenerics>>;
 
-export type ChannelSortBase<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = Sort<StreamChatGenerics> & {
+export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
+  StreamChatGenerics['channelType']
+> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
