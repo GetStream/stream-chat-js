@@ -696,6 +696,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.anonymous = false;
 
+    // causes duplicate connections (implement canceling?)
+    // happens when switching between users is done fast enough
+    // (while calling disconnectUser before each new connection)
+    // React's useEffect
+    if (this.pendingDisconnect) {
+      // cancel pending connections
+      return this.pendingDisconnect;
+    }
+
     const closePromise = this.closeConnection(timeout);
 
     for (const channel of Object.values(this.activeChannels)) {
