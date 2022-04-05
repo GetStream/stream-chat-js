@@ -75,8 +75,10 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     channel_configs: Record<
       string,
       {
+        reminders: boolean;
         automod?: ChannelConfigAutomod;
         automod_behavior?: ChannelConfigAutomodBehavior;
+        automod_thresholds?: ChannelConfigAutomodThresholds;
         blocklist_behavior?: ChannelConfigAutomodBehavior;
         commands?: CommandVariants<StreamChatGenerics>[];
         connect_events?: boolean;
@@ -98,6 +100,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         url_enrichment?: boolean;
       }
     >;
+    reminders_interval: number;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
@@ -1542,8 +1545,10 @@ export type ChannelConfigAutomodThresholds = null | {
 };
 
 export type ChannelConfigFields = {
+  reminders: boolean;
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  automod_thresholds?: ChannelConfigAutomodThresholds;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
@@ -1617,6 +1622,7 @@ export type CheckPushInput<StreamChatGenerics extends ExtendableGenerics = Defau
 export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
 
 export type PushProviderConfig = PushProviderCommon &
+  PushProviderID &
   PushProviderAPN &
   PushProviderFirebase &
   PushProviderHuawei &
@@ -1956,7 +1962,7 @@ export type Policy = {
   owner?: boolean;
   priority?: number;
   resources?: string[];
-  roles?: string[];
+  roles?: string[] | null;
   updated_at?: string;
 };
 
