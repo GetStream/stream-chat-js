@@ -396,6 +396,32 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.pinnedMessages[2].id).to.be.equal('2');
 	});
 
+	it('should add message preview', async function () {
+		// these message previews are used UI SDKs
+		const messagePreview = generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') });
+		const state = new ChannelState();
+		state.addMessageSorted(messagePreview);
+
+		expect(state.messages[0].id).to.be.equal('1');
+	});
+
+	it('should add thread reply preview', async function () {
+		// these message previews are used by UI SDKs
+		const parentMessage = generateMsg({ id: 'parent_id', date: '2020-01-01T00:00:00.001Z' });
+		const threadReplyPreview = generateMsg({
+			id: '2',
+			date: new Date('2020-01-01T00:00:00.001Z'),
+			parent_id: 'parent_id',
+		});
+		const state = new ChannelState();
+		state.addMessageSorted(parentMessage);
+		state.addMessageSorted(threadReplyPreview);
+		const thread = state.threads[parentMessage.id];
+
+		expect(thread.length).to.be.equal(1);
+		expect(thread[0].id).to.be.equal(threadReplyPreview.id);
+	});
+
 	describe('merges overlapping message sets', () => {
 		it('when new messages overlap with latest messages', () => {
 			const state = new ChannelState();

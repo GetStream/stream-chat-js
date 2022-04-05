@@ -170,9 +170,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       if (isFromShadowBannedUser) {
         continue;
       }
-      const isMerging = messagesToAdd[i].created_at instanceof Date;
+      // If message is already formatted we can skip the tasks below
+      // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
+      // This will be also true for message previews used by some SDKs
+      const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
       let message: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
-      if (isMerging) {
+      if (isMessageFormatted) {
         message = messagesToAdd[i] as ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
       } else {
         message = this.formatMessage(messagesToAdd[i] as MessageResponse<StreamChatGenerics>);
@@ -226,7 +229,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
        * message is "oldest" message, and newer messages are therefore not loaded.
        * This can also occur if an old thread message is updated.
        */
-      if (parentID && !initializing && !isMerging) {
+      if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
         const threadMessages = this._addToMessageList(
           thread,
