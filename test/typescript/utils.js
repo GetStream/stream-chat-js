@@ -1,10 +1,12 @@
 const { StreamChat } = require('../../dist');
-require('dotenv').config();
-const apiKey = '892s22ypvt6m';
-const apiSecret = '5cssrefv55rs3cnkk38kfjam2k7c2ykwn4h79dqh66ym89gm65cxy4h9jx4cypd6';
 
-const multiTenancySecret = 'pf8krbh9z3vc8d35dn65tq4xsa4jqmcbdgp5spuej2fprm6rqc5mtxuxghgxw43u';
-const multiTenancyKey = '2g3vcvcnmm5u';
+require('dotenv').config({ path: `${process.cwd()}/test/typescript/.env` });
+
+const apiKey = process.env.API_KEY;
+const apiSecret = process.env.API_SECRET;
+
+const multiTenancySecret = process.env.MULTITENANCY_API_SECRET;
+const multiTenancyKey = process.env.MULTITENANCY_API_KEY;
 
 module.exports = {
 	createMultiTenancyUsers: async function createMultiTenancyUsers(userIDs, teams = [], additionalInfo) {
