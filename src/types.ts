@@ -252,6 +252,8 @@ export type ChannelResponse<
   own_capabilities?: string[];
   team?: string;
   truncated_at?: string;
+  truncated_by?: UserResponse<StreamChatGenerics>;
+  truncated_by_id?: string;
   updated_at?: string;
 };
 
@@ -2210,6 +2212,8 @@ export type TruncateOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   message?: Message<StreamChatGenerics>;
   skip_push?: boolean;
   truncated_at?: Date;
+  user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
 };
 
 export type CreateImportURLResponse = {
