@@ -75,8 +75,10 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     channel_configs: Record<
       string,
       {
+        reminders: boolean;
         automod?: ChannelConfigAutomod;
         automod_behavior?: ChannelConfigAutomodBehavior;
+        automod_thresholds?: ChannelConfigAutomodThresholds;
         blocklist_behavior?: ChannelConfigAutomodBehavior;
         commands?: CommandVariants<StreamChatGenerics>[];
         connect_events?: boolean;
@@ -98,6 +100,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         url_enrichment?: boolean;
       }
     >;
+    reminders_interval: number;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
@@ -252,6 +255,8 @@ export type ChannelResponse<
   own_capabilities?: string[];
   team?: string;
   truncated_at?: string;
+  truncated_by?: UserResponse<StreamChatGenerics>;
+  truncated_by_id?: string;
   updated_at?: string;
 };
 
@@ -295,14 +300,15 @@ export type CheckPushResponse = APIResponse & {
   device_errors?: {
     [deviceID: string]: {
       error_message?: string;
-      provider?: string;
+      provider?: PushProvider;
+      provider_name?: string;
     };
   };
   general_errors?: string[];
   rendered_apn_template?: string;
   rendered_firebase_template?: string;
   rendered_message?: {};
-  skip_devides?: boolean;
+  skip_devices?: boolean;
 };
 
 export type CheckSQSResponse = APIResponse & {
@@ -731,6 +737,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   quotes?: boolean;
   reactions?: boolean;
   read_events?: boolean;
+  reminders?: boolean;
   replies?: boolean;
   search?: boolean;
   typing_events?: boolean;
@@ -1344,9 +1351,9 @@ export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultG
   | ChannelSortBase<StreamChatGenerics>
   | Array<ChannelSortBase<StreamChatGenerics>>;
 
-export type ChannelSortBase<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = Sort<StreamChatGenerics> & {
+export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
+  StreamChatGenerics['channelType']
+> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1463,6 +1470,7 @@ export type AppSettings = {
   push_config?: {
     version?: string;
   };
+  reminders_interval?: number;
   revoke_tokens_issued_before?: string | null;
   sqs_key?: string;
   sqs_secret?: string;
@@ -1537,8 +1545,10 @@ export type ChannelConfigAutomodThresholds = null | {
 };
 
 export type ChannelConfigFields = {
+  reminders: boolean;
   automod?: ChannelConfigAutomod;
   automod_behavior?: ChannelConfigAutomodBehavior;
+  automod_thresholds?: ChannelConfigAutomodThresholds;
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
@@ -1612,6 +1622,7 @@ export type CheckPushInput<StreamChatGenerics extends ExtendableGenerics = Defau
 export type PushProvider = 'apn' | 'firebase' | 'huawei' | 'xiaomi';
 
 export type PushProviderConfig = PushProviderCommon &
+  PushProviderID &
   PushProviderAPN &
   PushProviderFirebase &
   PushProviderHuawei &
@@ -1696,6 +1707,7 @@ export type Device<StreamChatGenerics extends ExtendableGenerics = DefaultGeneri
 export type BaseDeviceFields = {
   id: string;
   push_provider: PushProvider;
+  push_provider_name?: string;
 };
 
 export type DeviceFields = BaseDeviceFields & {
@@ -1950,7 +1962,7 @@ export type Policy = {
   owner?: boolean;
   priority?: number;
   resources?: string[];
-  roles?: string[];
+  roles?: string[] | null;
   updated_at?: string;
 };
 
@@ -2012,6 +2024,8 @@ export type TestPushDataInput = {
   firebaseDataTemplate?: string;
   firebaseTemplate?: string;
   messageID?: string;
+  pushProviderName?: string;
+  pushProviderType?: PushProvider;
   skipDevices?: boolean;
 };
 
@@ -2204,6 +2218,8 @@ export type TruncateOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   message?: Message<StreamChatGenerics>;
   skip_push?: boolean;
   truncated_at?: Date;
+  user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
 };
 
 export type CreateImportURLResponse = {
@@ -2217,6 +2233,10 @@ export type CreateImportResponse = {
 
 export type GetImportResponse = {
   import_task: ImportTask;
+};
+
+export type CreateImportOptions = {
+  mode: 'insert' | 'upsert';
 };
 
 export type ListImportsPaginationOptions = {

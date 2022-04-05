@@ -105,13 +105,17 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
   // In case of static token, it will simply resolve to static token.
   loadToken = () => {
     // eslint-disable-next-line no-async-promise-executor
-    this.loadTokenPromise = new Promise(async (resolve) => {
+    this.loadTokenPromise = new Promise(async (resolve, reject) => {
       if (this.type === 'static') {
         return resolve(this.token as string);
       }
 
       if (this.tokenProvider && typeof this.tokenProvider !== 'string') {
-        this.token = await this.tokenProvider();
+        try {
+          this.token = await this.tokenProvider();
+        } catch (e) {
+          return reject(new Error(`Call to tokenProvider failed with message: ${e}`));
+        }
         resolve(this.token);
       }
     });

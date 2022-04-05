@@ -132,6 +132,7 @@ import {
   ExportUsersRequest,
   ExportUsersResponse,
   CreateImportResponse,
+  CreateImportOptions,
   CreateImportURLResponse,
   GetImportResponse,
   ListImportsResponse,
@@ -538,10 +539,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   _setupConnection = this.openConnection;
 
   /**
-	 * updateAppSettings - updates application settings
-	 *
-	 * @param {AppSettings} options App settings.
-	 * 		IE: {
+   * updateAppSettings - updates application settings
+   *
+   * @param {AppSettings} options App settings.
+   * 		IE: {
 	  			"apn_config": {
 					"auth_type": "token",
 					"auth_key": fs.readFileSync(
@@ -561,7 +562,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 				},
 				"webhook_url": "https://acme.com/my/awesome/webhook/"
 			}
-	 */
+   */
   async updateAppSettings(options: AppSettings) {
     if (options.apn_config?.p12_cert) {
       options.apn_config.p12_cert = Buffer.from(options.apn_config.p12_cert).toString('base64');
@@ -624,18 +625,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-	 * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
-	 *
-	 * @param {string} userID User ID. If user has no devices, it will error
-	 * @param {TestPushDataInput} [data] Overrides for push templates/message used
-	 * 		IE: {
-				  messageID: 'id-of-message',//will error if message does not exist
-				  apnTemplate: '{}', //if app doesn't have apn configured it will error
-				  firebaseTemplate: '{}', //if app doesn't have firebase configured it will error
-				  firebaseDataTemplate: '{}', //if app doesn't have firebase configured it will error
-				  skipDevices: true, // skip config/device checks and sending to real devices
-			}
-	 */
+   * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+   *
+   * @param {string} userID User ID. If user has no devices, it will error
+   * @param {TestPushDataInput} [data] Overrides for push templates/message used
+   *  IE: {
+        messageID: 'id-of-message', // will error if message does not exist
+        apnTemplate: '{}', // if app doesn't have apn configured it will error
+        firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
+        firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
+        skipDevices: true, // skip config/device checks and sending to real devices
+        pushProviderName: 'staging' // one of your configured push providers
+        pushProviderType: 'apn' // one of supported provider types
+      }
+  */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
     return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
@@ -644,6 +647,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...(data.firebaseTemplate ? { firebase_template: data.firebaseTemplate } : {}),
       ...(data.firebaseDataTemplate ? { firebase_data_template: data.firebaseDataTemplate } : {}),
       ...(data.skipDevices ? { skip_devices: true } : {}),
+      ...(data.pushProviderName ? { push_provider_name: data.pushProviderName } : {}),
+      ...(data.pushProviderType ? { push_provider_type: data.pushProviderType } : {}),
     });
   }
 
@@ -651,11 +656,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * testSQSSettings - Tests that the given or configured SQS configuration is valid
    *
    * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
-   * 		IE: {
-				  sqs_key: 'auth_key',
-				  sqs_secret: 'auth_secret',
-				  sqs_url: 'url_to_queue',
-			}
+   *  IE: {
+        sqs_key: 'auth_key',
+        sqs_secret: 'auth_secret',
+        sqs_url: 'url_to_queue',
+      }
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
     return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
@@ -1546,13 +1551,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} id the device id
    * @param {PushProvider} push_provider the push provider
    * @param {string} [userID] the user id (defaults to current user)
+   * @param {string} [push_provider_name] user provided push provider name for multi bundle support
    *
    */
-  async addDevice(id: string, push_provider: PushProvider, userID?: string) {
+  async addDevice(id: string, push_provider: PushProvider, userID?: string, push_provider_name?: string) {
     return await this.post<APIResponse>(this.baseURL + '/devices', {
       id,
       push_provider,
       ...(userID != null ? { user_id: userID } : {}),
+      ...(push_provider_name != null ? { push_provider_name } : {}),
     });
   }
 
@@ -2846,7 +2853,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @private
    * @param {string} filename filename of uploaded data
-   *
    * @return {APIResponse & CreateImportResponse} An ImportTask
    */
   async _createImportURL(filename: string) {
@@ -2864,12 +2870,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @private
    * @param {string} path path of uploaded data
-   *
+   * @param {CreateImportOptions} options import options
    * @return {APIResponse & CreateImportResponse} An ImportTask
    */
-  async _createImport(path: string) {
+  async _createImport(path: string, options: CreateImportOptions = { mode: 'upsert' }) {
     return await this.post<APIResponse & CreateImportResponse>(this.baseURL + `/imports`, {
       path,
+      ...options,
     });
   }
 

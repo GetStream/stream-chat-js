@@ -13,3 +13,8 @@ jobs:
       - uses: ./.github/actions/setup-node
       - name: Run API type definition tests
         run: yarn test-types
+        env:
+          API_KEY: ${{ secrets.TS_TEST_API_KEY }}
+          API_SECRET: ${{ secrets.TS_TEST_API_SECRET }}
+          MULTITENANCY_API_KEY: ${{ secrets.TS_TEST_MULTITENANCY_API_KEY }}
+          MULTITENANCY_API_SECRET: ${{ secrets.TS_TEST_MULTITENANCY_API_SECRET }}
