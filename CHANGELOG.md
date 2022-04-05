@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.4.0](https://github.com/GetStream/stream-chat-js/compare/v6.3.0...v6.4.0) (2022-04-05)
+
+
+### Features
+
+* add multi bundle into devices ([#932](https://github.com/GetStream/stream-chat-js/issues/932)) ([014e470](https://github.com/GetStream/stream-chat-js/commit/014e470da6223b6d4920336e3094b887ec6eb74f))
+* add provider filtering into check push ([#933](https://github.com/GetStream/stream-chat-js/issues/933)) ([2a4c7ec](https://github.com/GetStream/stream-chat-js/commit/2a4c7ece23656e1c19aa81913483e056b3d5ce2e))
+* add reminders feature ([#935](https://github.com/GetStream/stream-chat-js/issues/935)) ([9ae3438](https://github.com/GetStream/stream-chat-js/commit/9ae3438cfbe0abe1affc6f9dbdd52d7a06add60a))
+* added import mode ([#927](https://github.com/GetStream/stream-chat-js/issues/927)) ([c7679f2](https://github.com/GetStream/stream-chat-js/commit/c7679f243f25e387445327b18045fb5194001e46))
+* **truncate:** add truncated by options ([#938](https://github.com/GetStream/stream-chat-js/issues/938)) ([a7637da](https://github.com/GetStream/stream-chat-js/commit/a7637da3382743f71479d9a32c0201e35bfb757c))
+
+
+### Bug Fixes
+
+* added missing push and reminders related types  ([#942](https://github.com/GetStream/stream-chat-js/issues/942)) ([b7543eb](https://github.com/GetStream/stream-chat-js/commit/b7543eba66eb5ac3a04e353ef3dd3c2053b2fedc))
+* catch tokenProvider rejection ([#934](https://github.com/GetStream/stream-chat-js/issues/934)) ([250aea6](https://github.com/GetStream/stream-chat-js/commit/250aea61d028a66999a4870d6617dfaed847b10b))
+* Thread reply preview not added to channel state ([#940](https://github.com/GetStream/stream-chat-js/issues/940)) ([38d78af](https://github.com/GetStream/stream-chat-js/commit/38d78aff2bafa8068261ee3ca4c0b2240affca07))
+* types of fields in ChannelSort ([#941](https://github.com/GetStream/stream-chat-js/issues/941)) ([d8a2d38](https://github.com/GetStream/stream-chat-js/commit/d8a2d38d98f51d34c1d56c9964f8501b3c00b29f))
+
 ## [6.3.0](https://github.com/GetStream/stream-chat-js/compare/v6.2.0...v6.3.0) (2022-03-23)
 
 
