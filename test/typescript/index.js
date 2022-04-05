@@ -1,6 +1,6 @@
 // Its a simple node script which uses our js client to make various API calls.
 // The responses received from those calls are written to a typescript file and compared against there corresponding
-// APIResponse types, specified in declaration file - types/stream-chat/index.d.ts
+// APIResponse types, specified in declaration file - types/stream-chat/index.d.ts.
 const fs = require('fs');
 const rg = require('./response-generators/index');
 
