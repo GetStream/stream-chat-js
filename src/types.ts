@@ -119,6 +119,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     push_notifications?: {
+      offline_only: boolean;
       version: string;
       apn?: APNConfig;
       firebase?: FirebaseConfig;
@@ -1468,6 +1469,7 @@ export type AppSettings = {
   image_upload_config?: FileUploadConfig;
   multi_tenant_enabled?: boolean;
   push_config?: {
+    offline_only?: boolean;
     version?: string;
   };
   reminders_interval?: number;
