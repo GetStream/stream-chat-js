@@ -542,26 +542,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * updateAppSettings - updates application settings
    *
    * @param {AppSettings} options App settings.
-   * 		IE: {
-	  			"apn_config": {
-					"auth_type": "token",
-					"auth_key": fs.readFileSync(
-						'./apn-push-auth-key.p8',
-						'utf-8',
-					),
-					"key_id": "keyid",
-					"team_id": "teamid", //either ALL these 3
-					"notification_template": "notification handlebars template",
-					"bundle_id": "com.apple.your.app",
-					"development": true
-				},
-				"firebase_config": {
-					"server_key": "server key from fcm",
-					"notification_template": "notification handlebars template"
-					"data_template": "data handlebars template"
-				},
-				"webhook_url": "https://acme.com/my/awesome/webhook/"
-			}
+   * IE: {
+      'apn_config': {
+        'auth_type': 'token',
+        'auth_key": fs.readFileSync(
+          './apn-push-auth-key.p8',
+          'utf-8',
+        ),
+        'key_id': 'keyid',
+        'team_id': 'teamid',
+        'notification_template": 'notification handlebars template',
+        'bundle_id': 'com.apple.your.app',
+        'development': true
+			},
+      'firebase_config': {
+        'server_key': 'server key from fcm',
+        'notification_template': 'notification handlebars template',
+        'data_template': 'data handlebars template',
+        'apn_template': 'apn notification handlebars template under v2'
+      },
+      'webhook_url': 'https://acme.com/my/awesome/webhook/'
+    }
    */
   async updateAppSettings(options: AppSettings) {
     if (options.apn_config?.p12_cert) {

@@ -1455,6 +1455,7 @@ export type AppSettings = {
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
+    apn_template?: string;
     credentials_json?: string;
     data_template?: string;
     notification_template?: string;
@@ -1656,6 +1657,7 @@ export type PushProviderAPN = {
 };
 
 export type PushProviderFirebase = {
+  firebase_apn_template?: string;
   firebase_credentials?: string;
   firebase_data_template?: string;
   firebase_notification_template?: string;
@@ -1837,6 +1839,7 @@ export type FileUploadConfig = {
 };
 
 export type FirebaseConfig = {
+  apn_template?: string;
   credentials_json?: string;
   data_template?: string;
   enabled?: boolean;
