@@ -361,6 +361,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       'updated_at',
       'last_message_at',
       'own_capabilities',
+      'truncated_by',
     ];
     reserved.forEach((key) => {
       delete channelData[key];
