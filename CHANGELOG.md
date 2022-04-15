@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.5.0](https://github.com/GetStream/stream-chat-js/compare/v6.4.0...v6.5.0) (2022-04-15)
+
+
+### Features
+
+* add apn template types ([#947](https://github.com/GetStream/stream-chat-js/issues/947)) ([f8b1faa](https://github.com/GetStream/stream-chat-js/commit/f8b1faa4f4927172b9d62c7b4870295793ccbe15))
+* add types for offline flag of push ([#946](https://github.com/GetStream/stream-chat-js/issues/946)) ([5eced26](https://github.com/GetStream/stream-chat-js/commit/5eced26a2c90707f514c5fef4b0a6fddbc8870dc))
+
+
+### Bug Fixes
+
+* mark all active channels as read only if notification.mark_read event's unread_channels is 0 ([#955](https://github.com/GetStream/stream-chat-js/issues/955)) ([8d2e3ca](https://github.com/GetStream/stream-chat-js/commit/8d2e3ca10929ef7389b157bb4a6ada71c7074e6b))
+
 ## [6.4.0](https://github.com/GetStream/stream-chat-js/compare/v6.3.0...v6.4.0) (2022-04-05)
 
 
