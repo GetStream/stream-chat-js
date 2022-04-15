@@ -127,19 +127,39 @@ describe('Client userMuteStatus', function () {
 		expect(client.userMuteStatus('mute4')).not.to.be.ok;
 		expect(client.userMuteStatus('missingUser')).not.to.be.ok;
 	});
+});
 
-	it('should update all active channel unread count to 0 when notification.mark_read event is called', function () {
+describe('Client active channels cache', () => {
+	const client = new StreamChat('', '');
+	const user = { id: 'user' };
+
+	client.connectUser = async () => {
+		client.user = user;
+		client.wsPromise = Promise.resolve();
+	};
+	beforeEach(() => {
 		client.activeChannels = { vish: { state: { unreadCount: 1 } }, vish2: { state: { unreadCount: 2 } } };
+	});
+
+	const countUnreadChannels = (channels) =>
+		Object.values(channels).reduce((prevSum, currSum) => prevSum + currSum.state.unreadCount, 0);
+
+	it('should mark all active channels as read on notification.mark_read event if event.unread_channels is 0', function () {
 		client.dispatchEvent({
 			type: 'notification.mark_read',
+			unread_channels: 0,
 		});
 
-		const unreadCountSum = Object.values(client.activeChannels).reduce(
-			(prevSum, currSum) => prevSum + currSum.state.unreadCount,
-			0,
-		);
+		expect(countUnreadChannels(client.activeChannels)).to.be.equal(0);
+	});
 
-		expect(unreadCountSum).to.be.equal(0);
+	it('should not mark any active channel as read on notification.mark_read event if event.unread_channels > 0', function () {
+		client.dispatchEvent({
+			type: 'notification.mark_read',
+			unread_channels: 1,
+		});
+
+		expect(countUnreadChannels(client.activeChannels)).to.be.equal(3);
 	});
 });
 
