@@ -1195,11 +1195,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       this.mutedUsers = event.me.mutes;
     }
 
-    if (event.type === 'notification.mark_read') {
-      const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach((activeChannelKey) => (this.activeChannels[activeChannelKey].state.unreadCount = 0));
-    }
-
     if ((event.type === 'channel.deleted' || event.type === 'notification.channel_deleted') && event.cid) {
       client.state.deleteAllChannelReference(event.cid);
       this.activeChannels[event.cid]?._disconnect();
