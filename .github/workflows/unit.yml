@@ -17,4 +17,4 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Unit tests
-        run: yarn run test-unit
+        run: yarn run test-coverage
