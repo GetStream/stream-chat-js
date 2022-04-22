@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [6.5.1](https://github.com/GetStream/stream-chat-js/compare/v6.5.0...v6.5.1) (2022-04-22)
+
+
+### Bug Fixes
+
+* multiple ws connections due to redundant openConnection calls ([#960](https://github.com/GetStream/stream-chat-js/issues/960)) ([8150199](https://github.com/GetStream/stream-chat-js/commit/815019977fb4587c849a575373a53af40d4eab03))
+
 ## [6.5.0](https://github.com/GetStream/stream-chat-js/compare/v6.4.0...v6.5.0) (2022-04-15)
 
 
