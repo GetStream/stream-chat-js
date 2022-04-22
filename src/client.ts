@@ -516,6 +516,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       throw Error('User is not set on client, use client.connectUser or client.connectAnonymousUser instead');
     }
 
+    if (this.wsConnection?.isConnecting) {
+      this.logger('info', 'client:openConnection() - connection already in progress', {
+        tags: ['connection', 'client'],
+      });
+
+      return Promise.resolve();
+    }
+
     if ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) && this._hasConnectionID()) {
       this.logger('info', 'client:openConnection() - openConnection called twice, healthy connection already exists', {
         tags: ['connection', 'client'],
