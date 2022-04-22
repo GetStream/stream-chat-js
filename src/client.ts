@@ -770,7 +770,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   /**
    * createToken - Creates a token to authenticate this user. This function is used server side.
-   * The resulting token should be passed to the client side when the users registers or logs in
+   * The resulting token should be passed to the client side when the users registers or logs in.
    *
    * @param {string} userID The User ID
    * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
