@@ -1,0 +1,38 @@
+name: Scheduled tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday at 9:00 UTC
+    - cron: "0 9 * * 1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-node
+
+      - name: Run test
+        env:
+          API_KEY: ${{ secrets.TS_TEST_API_KEY }}
+          API_SECRET: ${{ secrets.TS_TEST_API_SECRET }}
+          MULTITENANCY_API_KEY: ${{ secrets.TS_TEST_MULTITENANCY_API_KEY }}
+          MULTITENANCY_API_SECRET: ${{ secrets.TS_TEST_MULTITENANCY_API_SECRET }}
+        run: |
+          # Retry 3 times because tests can be flaky
+          for _ in 1 2 3;
+          do
+              yarn test-types && break
+          done
+
+      - name: Notify Slack if failed
+        uses: voxmedia/github-action-slack-notify-build@v1
+        if: failure()
+        with:
+          channel_id: C02RPDF7T63
+          color: danger
+          status: FAILED
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFICATIONS_BOT_TOKEN }}
