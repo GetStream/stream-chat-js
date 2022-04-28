@@ -24,4 +24,4 @@ runs:
 
     - name: Install Dependencies & Build
       run: yarn install --frozen-lockfile --ignore-engines
-
+      shell: bash
