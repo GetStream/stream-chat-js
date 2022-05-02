@@ -562,7 +562,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         'notification_template": 'notification handlebars template',
         'bundle_id': 'com.apple.your.app',
         'development': true
-			},
+      },
       'firebase_config': {
         'server_key': 'server key from fcm',
         'notification_template': 'notification handlebars template',
@@ -1863,7 +1863,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       mark_messages_deleted?: boolean;
     },
   ) {
-    return await this.delete<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
+    return await this.delete<APIResponse & { user: UserResponse<StreamChatGenerics> } & { task_id?: string }>(
       this.baseURL + `/users/${userID}`,
       params,
     );
