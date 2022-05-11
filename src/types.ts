@@ -2241,6 +2241,11 @@ export type Campaign = {
 } & CampaignData &
   CampaignStatus;
 
+export type TestCampaignResponse = {
+  campaign?: Campaign;
+  invalid_users?: Record<string, string>;
+};
+
 export type TaskStatus = {
   created_at: string;
   status: string;
