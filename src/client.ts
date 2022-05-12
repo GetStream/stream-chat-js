@@ -2745,14 +2745,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * scheduleCampaign - Schedule a Campaign
    *
    * @param {string} id Campaign ID
-   * @param {{sendAt: number}} params Schedule params
+   * @param {{scheduledFor: number}} params Schedule params
    *
    * @return {Campaign} Scheduled Campaign
    */
-  async scheduleCampaign(id: string, params: { sendAt: number }) {
-    const { sendAt } = params;
+  async scheduleCampaign(id: string, params: { scheduledFor: number }) {
+    const { scheduledFor } = params;
     const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/schedule`, {
-      send_at: sendAt,
+      scheduled_for: scheduledFor,
     });
     return campaign;
   }
