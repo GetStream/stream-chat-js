@@ -1468,7 +1468,9 @@ export type AppSettings = {
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
+  migrate_permissions_to_v2?: boolean;
   multi_tenant_enabled?: boolean;
+  permission_version?: string;
   push_config?: {
     offline_only?: boolean;
     version?: string;
