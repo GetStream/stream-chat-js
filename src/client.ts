@@ -140,6 +140,7 @@ import {
   FlagsFilters,
   FlagsPaginationOptions,
   FlagsResponse,
+  TestCampaignResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2785,12 +2786,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {string} id Campaign ID
    * @param {{users: string[]}} params Test params
-   * @return {Campaign} Test Campaign
+   *
+   * @return {TestCampaignResponse} Test campaign response
    */
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
-    const { campaign } = await this.post<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/test`, { users });
-    return campaign;
+    return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
   }
 
   /**
