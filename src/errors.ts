@@ -61,5 +61,5 @@ export function isWSFailure(err: APIError): boolean {
 }
 
 export function isErrorResponse(res: AxiosResponse<unknown>): res is AxiosResponse<APIErrorResponse> {
-  return (res.status + '')[0] !== '2';
+  return !res.status || res.status < 200 || 300 <= res.status;
 }
