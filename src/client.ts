@@ -141,6 +141,7 @@ import {
   FlagsPaginationOptions,
   FlagsResponse,
   TestCampaignResponse,
+  GetCallTokenResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2043,6 +2044,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       target_user_id: targetID,
       ...options,
     });
+  }
+
+  async getCallToken(callID: string, options: { user_id?: string } = {}) {
+    return await this.post<GetCallTokenResponse>(this.baseURL + `/calls/${callID}`, { ...options });
   }
 
   /**

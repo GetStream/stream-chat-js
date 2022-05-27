@@ -2319,3 +2319,34 @@ export type PushProviderUpsertResponse = {
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
 };
+
+export type CreateCallOptions = {
+  id: String;
+  type: String;
+  created_by?: UserResponse<StreamChatGenerics> | null;
+  created_by_id?: string;
+  options?: Object;
+};
+
+export type HMSCall = {
+  room: String;
+};
+
+export type AgoraCall = {
+  channel: String;
+};
+
+export type Call = {
+  id: String;
+  provider: String;
+  agora?: AgoraCall;
+  hms?: HMSCall;
+};
+
+export type CreateCallResponse = APIResponse & {
+  call: Call;
+  token: String;
+  agora_uid?: String;
+};
+
+export type GetCallTokenResponse = APIResponse & {};
