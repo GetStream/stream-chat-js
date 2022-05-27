@@ -1,4 +1,4 @@
-import { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -2319,3 +2319,17 @@ export type PushProviderUpsertResponse = {
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
 };
+
+export type APIErrorResponse = {
+  code: number;
+  duration: string;
+  message: string;
+  more_info: string;
+  StatusCode: number;
+};
+
+export class ErrorFromResponse<T> extends Error {
+  code?: number;
+  response?: AxiosResponse<T>;
+  status?: number;
+}
