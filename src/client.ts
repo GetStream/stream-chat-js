@@ -2046,6 +2046,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
+  /**
+   * getCallToken - retrieves the auth token needed to join a call
+   *
+   * @param {string} callID
+   * @param {object} options
+   * @returns {Promise<GetCallTokenResponse>}
+   */
   async getCallToken(callID: string, options: { user_id?: string } = {}) {
     return await this.post<GetCallTokenResponse>(this.baseURL + `/calls/${callID}`, { ...options });
   }
