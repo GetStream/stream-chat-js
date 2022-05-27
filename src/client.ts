@@ -1,7 +1,7 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
@@ -12,7 +12,7 @@ import { isValidEventType } from './events';
 import { JWTUserToken, DevToken, CheckSignature } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
-import { isWSFailure } from './errors';
+import { isErrorResponse, isWSFailure } from './errors';
 import {
   isFunction,
   isOwnUserBaseProperty,
@@ -142,6 +142,8 @@ import {
   FlagsResponse,
   TestCampaignResponse,
   GetCallTokenResponse,
+  APIErrorResponse,
+  ErrorFromResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -941,7 +943,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         }
         return this.handleResponse(e.response);
       } else {
-        throw e;
+        throw e as AxiosError<APIErrorResponse>;
       }
     }
   };
@@ -986,9 +988,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  errorFromResponse<T>(response: AxiosResponse<T & { code?: number; message?: string }>) {
-    let err: Error & { code?: number; response?: AxiosResponse<T>; status?: number };
-    err = new Error(`StreamChat error HTTP code: ${response.status}`);
+  errorFromResponse(response: AxiosResponse<APIErrorResponse>): ErrorFromResponse<APIErrorResponse> {
+    let err: ErrorFromResponse<APIErrorResponse>;
+    err = new ErrorFromResponse(`StreamChat error HTTP code: ${response.status}`);
     if (response.data && response.data.code) {
       err = new Error(`StreamChat error code ${response.data.code}: ${response.data.message}`);
       err.code = response.data.code;
@@ -1000,8 +1002,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   handleResponse<T>(response: AxiosResponse<T>) {
     const data = response.data;
-    if ((response.status + '')[0] !== '2') {
-      throw this.errorFromResponse<T>(response);
+    if (isErrorResponse(response)) {
+      throw this.errorFromResponse(response);
     }
     return data;
   }

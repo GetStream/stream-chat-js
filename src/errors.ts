@@ -1,3 +1,6 @@
+import { AxiosResponse } from 'axios';
+import { APIErrorResponse } from './types';
+
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
   '-1': { name: 'InternalSystemError', retryable: true },
   '2': { name: 'AccessKeyError', retryable: false },
@@ -55,4 +58,8 @@ export function isWSFailure(err: APIError): boolean {
   } catch (_) {
     return false;
   }
+}
+
+export function isErrorResponse(res: AxiosResponse<unknown>): res is AxiosResponse<APIErrorResponse> {
+  return !res.status || res.status < 200 || 300 <= res.status;
 }

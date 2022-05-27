@@ -1,4 +1,4 @@
-import { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -2350,3 +2350,17 @@ export type CreateCallResponse = APIResponse & {
 };
 
 export type GetCallTokenResponse = APIResponse & {};
+
+export type APIErrorResponse = {
+  code: number;
+  duration: string;
+  message: string;
+  more_info: string;
+  StatusCode: number;
+};
+
+export class ErrorFromResponse<T> extends Error {
+  code?: number;
+  response?: AxiosResponse<T>;
+  status?: number;
+}
