@@ -2322,12 +2322,18 @@ export type PushProviderListResponse = {
   push_providers: PushProvider[];
 };
 
+type ErrorResponseDetails = {
+  code: number;
+  messages: string[];
+};
+
 export type APIErrorResponse = {
   code: number;
   duration: string;
   message: string;
   more_info: string;
   StatusCode: number;
+  details?: ErrorResponseDetails;
 };
 
 export class ErrorFromResponse<T> extends Error {
