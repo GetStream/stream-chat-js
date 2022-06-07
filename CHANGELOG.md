@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.7.0](https://github.com/GetStream/stream-chat-js/compare/v6.6.0...v6.7.0) (2022-06-07)
+
+
+### Bug Fixes
+
+* **types:** added support for thumb_url for video attachments in send file response ([#982](https://github.com/GetStream/stream-chat-js/issues/982)) ([79ed099](https://github.com/GetStream/stream-chat-js/commit/79ed099678c69ac5841f89cd521adab5f3eef8ff))
+
 ## [6.6.0](https://github.com/GetStream/stream-chat-js/compare/v6.5.1...v6.6.0) (2022-06-02)
 
 
