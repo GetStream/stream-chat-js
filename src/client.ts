@@ -156,6 +156,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     [key: string]: Channel<StreamChatGenerics>;
   };
   anonymous: boolean;
+  persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
   baseURL?: string;
   browser: boolean;
@@ -274,6 +275,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // mapping between channel groups and configs
     this.configs = {};
     this.anonymous = false;
+    this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
@@ -455,8 +457,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     try {
       return await this.setUserPromise;
     } catch (err) {
-      // cleanup client to allow the user to retry connectUser again
-      this.disconnectUser();
+      if (this.persistUserOnConnectionFailure) {
+        // cleanup client to allow the user to retry connectUser again
+        this.closeConnection();
+      } else {
+        this.disconnectUser();
+      }
       throw err;
     }
   };
@@ -482,6 +488,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
      * It contains reserved properties and own user properties which are not present in `this._user`.
      */
     this.user = user;
+    this.userID = user.id;
     // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
@@ -699,7 +706,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     for (const channel of Object.values(this.activeChannels)) {
       channel._disconnect();
     }
-
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
@@ -1456,7 +1462,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) {
-    const { skipInitialization } = stateOptions;
     const defaultOptions: ChannelOptions = { state: true, watch: true, presence: false };
 
     // Make sure we wait for the connect promise if there is a pending one
@@ -1479,17 +1484,34 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       payload,
     );
 
-    const channels: Channel<StreamChatGenerics>[] = [];
+    this.dispatchEvent({
+      type: 'channels.queried',
+      queriedChannels: {
+        channels: data.channels,
+        isLatestMessageSet: true,
+      },
+    });
 
-    // update our cache of the configs
-    for (const channelState of data.channels) {
+    return this.hydrateActiveChannels(data.channels, stateOptions);
+  }
+
+  hydrateActiveChannels(
+    channelsFromApi: ChannelAPIResponse<StreamChatGenerics>[] = [],
+    stateOptions: ChannelStateOptions = {},
+  ) {
+    const { skipInitialization, staticState = false } = stateOptions;
+
+    for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState);
     }
 
-    for (const channelState of data.channels) {
+    const channels: Channel<StreamChatGenerics>[] = [];
+
+    for (const channelState of channelsFromApi) {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
       c.initialized = true;
+      c.staticState = staticState;
 
       if (skipInitialization === undefined) {
         c._initializeState(channelState, 'latest');
@@ -1500,6 +1522,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
       channels.push(c);
     }
+
+    if (!staticState) {
+      // If the channels are coming from server, then clear out the
+      // previously help offline channels.
+      for (const key in this.activeChannels) {
+        const channel = this.activeChannels[key];
+        if (channel.staticState) {
+          delete this.activeChannels[key];
+        }
+      }
+    }
+
     return channels;
   }
 

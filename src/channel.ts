@@ -66,6 +66,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   listeners: { [key: string]: (string | EventHandler<StreamChatGenerics>)[] };
   state: ChannelState<StreamChatGenerics>;
   initialized: boolean;
+  staticState: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
@@ -109,6 +110,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // perhaps the state variable should be private
     this.state = new ChannelState<StreamChatGenerics>(this);
     this.initialized = false;
+    this.staticState = true;
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
@@ -982,8 +984,15 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.getClient()._addChannelConfig(state);
 
     // add any messages to our channel state
-    this._initializeState(state, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
+    this.getClient().dispatchEvent({
+      type: 'channels.queried',
+      queriedChannels: {
+        channels: [state],
+        isLatestMessageSet: messageSet.isLatest,
+      },
+    });
     return state;
   }
 
@@ -1366,7 +1375,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.state.messages) {
       this.state.initMessages();
     }
-    this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
+
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
     }
@@ -1418,6 +1428,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
       }
     }
+
+    return {
+      messageSet,
+    };
   }
 
   _disconnect() {

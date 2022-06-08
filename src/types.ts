@@ -261,7 +261,7 @@ export type ChannelResponse<
   updated_at?: string;
 };
 
-export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel: ChannelResponse<StreamChatGenerics>;
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
@@ -489,6 +489,7 @@ export type MessageResponse<
 export type MessageResponseBase<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageBase<StreamChatGenerics> & {
+  type: MessageLabel;
   args?: string;
   channel?: ChannelResponse<StreamChatGenerics>;
   cid?: string;
@@ -512,7 +513,6 @@ export type MessageResponseBase<
   silent?: boolean;
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
-  type?: MessageLabel;
   updated_at?: string;
 };
 
@@ -569,6 +569,7 @@ export type ReactionResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = Reaction<StreamChatGenerics> & {
   created_at: string;
+  message_id: string;
   updated_at: string;
 };
 
@@ -715,6 +716,7 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
 
 export type ChannelStateOptions = {
   skipInitialization?: string[];
+  staticState?: boolean;
 };
 
 export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -878,6 +880,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   logger?: Logger;
+  persistUserOnConnectionFailure?: boolean;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
    * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
@@ -944,8 +947,13 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
   message?: MessageResponse<StreamChatGenerics>;
+  mode?: string;
   online?: boolean;
   parent_id?: string;
+  queriedChannels?: {
+    channels: ChannelAPIResponse<StreamChatGenerics>[];
+    isLatestMessageSet?: boolean;
+  };
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
