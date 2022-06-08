@@ -253,7 +253,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
    * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
    */
   async _connect() {
-    if (this.isConnecting || this.isDisconnected) return; // simply ignore _connect if it's currently trying to connect
+    if (this.isConnecting || (this.isDisconnected && this.client.options.enableWSFallback)) return; // simply ignore _connect if it's currently trying to connect
     this.isConnecting = true;
     this.requestID = randomId();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
@@ -329,7 +329,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       return;
     }
 
-    if (this.isDisconnected) {
+    if (this.isDisconnected && this.client.options.enableWSFallback) {
       this._log('_reconnect() - Abort (3) since disconnect() is called');
       return;
     }

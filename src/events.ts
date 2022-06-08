@@ -42,6 +42,7 @@ export const EVENT_MAP = {
   'user.watching.stop': true,
 
   // local events
+  'channels.queried': true,
   'connection.changed': true,
   'connection.recovered': true,
   'transport.changed': true,
