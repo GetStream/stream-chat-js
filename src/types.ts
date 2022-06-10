@@ -199,6 +199,7 @@ export type FlagReport<StreamChatGenerics extends ExtendableGenerics = DefaultGe
   user: UserResponse<StreamChatGenerics>;
   created_at?: string;
   details?: FlagDetails;
+  first_reporter?: UserResponse<StreamChatGenerics>;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<StreamChatGenerics>;
