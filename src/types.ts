@@ -594,7 +594,9 @@ export type SearchWarning = {
   warning_code: number;
   warning_description: string;
 };
-export type SendFileAPIResponse = APIResponse & { file: string };
+
+// Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
+export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
@@ -2323,12 +2325,18 @@ export type PushProviderListResponse = {
   push_providers: PushProvider[];
 };
 
+type ErrorResponseDetails = {
+  code: number;
+  messages: string[];
+};
+
 export type APIErrorResponse = {
   code: number;
   duration: string;
   message: string;
   more_info: string;
   StatusCode: number;
+  details?: ErrorResponseDetails;
 };
 
 export class ErrorFromResponse<T> extends Error {
