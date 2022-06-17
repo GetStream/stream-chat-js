@@ -1245,7 +1245,17 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'channel.truncated':
-        channelState.clearMessages();
+        if (event.channel && event.channel.truncated_at) {
+          const truncated_at = event.channel.truncated_at;
+          channelState.messageSets
+            .flatMap((ms) => ms.messages)
+            .forEach((m) => {
+              if (+new Date(truncated_at) > +m.created_at) channelState.removeMessage({ id: m.id });
+            });
+        } else {
+          channelState.clearMessages();
+        }
+
         channelState.unreadCount = 0;
         // system messages don't increment unread counts
         if (event.message) {
