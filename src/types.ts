@@ -72,6 +72,7 @@ export type APIResponse = {
 
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
+    cdn_url_expiration_time: number;
     channel_configs: Record<
       string,
       {
@@ -1451,6 +1452,7 @@ export type AppSettings = {
   };
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
+  cdn_url_expiration_time?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
