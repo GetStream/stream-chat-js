@@ -1248,11 +1248,11 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         if (event.channel?.truncated_at) {
           const truncatedAt = +new Date(event.channel.truncated_at);
 
-          channelState.messageSets
-            .flatMap((ms) => ms.messages)
-            .forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt) channelState.removeMessage({ id });
+          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
+            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
+              if (truncatedAt > +createdAt) channelState.removeMessage({ id, messageSetIndex });
             });
+          });
         } else {
           channelState.clearMessages();
         }
