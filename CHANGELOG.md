@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### Bug Fixes
 
+* **feat:** add `first_reporter` field to the `FlagReport` type ([#987](https://github.com/GetStream/stream-chat-js/pull/987)) ([0667f2e](https://github.com/GetStream/stream-chat-js/pull/987/commits/0667f2ee2693bf2e7e74132e3715f49a421c6bfa))
+
 * **types:** added support for thumb_url for video attachments in send file response ([#982](https://github.com/GetStream/stream-chat-js/issues/982)) ([79ed099](https://github.com/GetStream/stream-chat-js/commit/79ed099678c69ac5841f89cd521adab5f3eef8ff))
 
 ## [6.6.0](https://github.com/GetStream/stream-chat-js/compare/v6.5.1...v6.6.0) (2022-06-02)
