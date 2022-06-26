@@ -50,6 +50,8 @@ import {
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   MessagePaginationOptions,
+  CreateCallOptions,
+  CreateCallResponse,
 } from './types';
 import { Role } from './permissions';
 
@@ -1075,6 +1077,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       type: this.type,
       id: this.id,
     });
+  }
+
+  /**
+   * createCall - creates a call for the current channel
+   *
+   * @param {CreateCallOptions} options
+   * @returns {Promise<CreateCallResponse>}
+   */
+  async createCall(options: CreateCallOptions) {
+    return await this.getClient().post<CreateCallResponse>(this._channelURL() + '/call', options);
   }
 
   /**
