@@ -264,6 +264,30 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.messages.length).to.be.equal(2);
 	});
 
+	it('message.truncate removes pinned messages up to specified date', function () {
+		const messages = [
+			{ created_at: '2021-01-01T00:01:00', pinned: true, pinned_at: new Date('2021-01-01T00:01:01.010Z') },
+			{ created_at: '2021-01-01T00:02:00' },
+			{ created_at: '2021-01-01T00:03:00', pinned: true, pinned_at: new Date('2021-01-01T00:02:02.011Z') },
+		].map(generateMsg);
+
+		channel.state.addMessagesSorted(messages);
+		channel.state.addPinnedMessages(messages.filter((m) => m.pinned));
+		expect(channel.state.messages.length).to.be.equal(3);
+		expect(channel.state.pinnedMessages.length).to.be.equal(2);
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: messages[1].created_at,
+			},
+		});
+
+		expect(channel.state.messages.length).to.be.equal(2);
+		expect(channel.state.pinnedMessages.length).to.be.equal(1);
+	});
+
 	it('message.delete removes quoted messages references', function () {
 		const originalMessage = generateMsg({ silent: true });
 		channel._handleChannelEvent({
