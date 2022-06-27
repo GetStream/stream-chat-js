@@ -1438,7 +1438,23 @@ export type APNConfig = {
   team_id?: string;
 };
 
+export type AgoraOptions = {
+  app_certificate: string;
+  app_id: string;
+  role_map?: Record<string, string>;
+};
+
+export type HMSOptions = {
+  app_access_key: string;
+  app_secret: string;
+  default_role: string;
+  default_room_template: string;
+  default_region?: string;
+  role_map?: Record<string, string>;
+};
+
 export type AppSettings = {
+  agora_options?: AgoraOptions | null;
   apn_config?: {
     auth_key?: string;
     auth_type?: string;
@@ -1467,6 +1483,7 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
+  hms_options?: HMSOptions | null;
   huawei_config?: {
     id: string;
     secret: string;
@@ -1485,6 +1502,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  video_provider?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
   xiaomi_config?: {
@@ -2325,6 +2343,42 @@ export type PushProviderUpsertResponse = {
 
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
+};
+
+export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: String;
+  type: String;
+  options?: Object;
+  user?: UserResponse<StreamChatGenerics> | null;
+  user_id?: string;
+};
+
+export type HMSCall = {
+  room: String;
+};
+
+export type AgoraCall = {
+  channel: String;
+};
+
+export type Call = {
+  id: String;
+  provider: String;
+  agora?: AgoraCall;
+  hms?: HMSCall;
+};
+
+export type CreateCallResponse = APIResponse & {
+  call: Call;
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
+};
+
+export type GetCallTokenResponse = APIResponse & {
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
 };
 
 type ErrorResponseDetails = {
