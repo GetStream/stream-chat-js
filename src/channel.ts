@@ -1265,6 +1265,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
               if (truncatedAt > +createdAt) channelState.removeMessage({ id, messageSetIndex });
             });
           });
+
+          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
+            if (truncatedAt > +createdAt) channelState.removePinnedMessage({ id });
+          });
         } else {
           channelState.clearMessages();
         }
