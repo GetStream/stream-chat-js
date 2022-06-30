@@ -2783,17 +2783,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return campaign;
   }
 
-  /**
-   * resumeCampaign - Resume a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Resumed Campaign
-   */
-  async resumeCampaign(id: string) {
-    const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/resume`);
-    return campaign;
-  }
+  // This is commented because feature is not supported for now.
+  // /**
+  //  * resumeCampaign - Resume a Campaign
+  //  *
+  //  * @param {string} id Campaign ID
+  //  *
+  //  * @return {Campaign} Resumed Campaign
+  //  */
+  // async resumeCampaign(id: string) {
+  //   const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/resume`);
+  //   return campaign;
+  // }
 
   /**
    * testCampaign - Test a Campaign

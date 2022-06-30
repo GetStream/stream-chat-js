@@ -1853,7 +1853,7 @@ export type EndpointName =
   | 'DeleteCampaign'
   | 'ScheduleCampaign'
   | 'StopCampaign'
-  | 'ResumeCampaign'
+  // | 'ResumeCampaign'
   | 'TestCampaign'
   | 'GetOG'
   | 'GetTask'
