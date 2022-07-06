@@ -929,13 +929,24 @@ export type UserOptions = {
  * Event Types
  */
 
-export type ConnectionChangeEvent = {
-  type: EventTypes;
-  online?: boolean;
+type ConnectionChangedLocalEvent = {
+  online: boolean;
+  type: 'connection.changed';
 };
 
-export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['eventType'] & {
-  type: EventTypes;
+type ConnectionRecoveredLocalEvent = {
+  type: 'connection.recovered';
+};
+
+type TransportChangedLocalEvent = {
+  mode: 'ws' | 'longpoll';
+  type: 'transport.changed';
+};
+
+type LocalEvent = ConnectionChangedLocalEvent | ConnectionRecoveredLocalEvent | TransportChangedLocalEvent;
+
+type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  type: Exclude<EventTypes, LocalEvent['type']>;
   channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
   channel_type?: string;
@@ -948,7 +959,6 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
   message?: MessageResponse<StreamChatGenerics>;
-  online?: boolean;
   parent_id?: string;
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
@@ -960,6 +970,10 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   user_id?: string;
   watcher_count?: number;
 };
+
+export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
+  | (StreamChatGenerics['eventType'] & ServerEvent<StreamChatGenerics>)
+  | (LocalEvent & { received_at?: string | Date });
 
 export type UserCustomEvent<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics

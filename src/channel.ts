@@ -1327,7 +1327,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     // any event can send over the online count
-    if (event.watcher_count !== undefined) {
+    if (
+      event.type !== 'connection.changed' &&
+      event.type !== 'connection.recovered' &&
+      event.type !== 'transport.changed' &&
+      event.watcher_count
+    ) {
       channel.state.watcher_count = event.watcher_count;
     }
   }

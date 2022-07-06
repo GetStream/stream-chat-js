@@ -811,7 +811,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {{ unsubscribe: () => void }} Description
    */
   on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
+  on<E extends Event>(eventType: Event['type'], callback: (event: E) => void): { unsubscribe: () => void };
   on(
     callbackOrString: EventHandler<StreamChatGenerics> | string,
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
@@ -1010,13 +1010,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   dispatchEvent = (event: Event<StreamChatGenerics>) => {
     if (!event.received_at) event.received_at = new Date();
+    let channel: Channel<StreamChatGenerics> | undefined = undefined;
+    if (
+      event.type !== 'connection.changed' &&
+      event.type !== 'connection.recovered' &&
+      event.type !== 'transport.changed' &&
+      event.cid
+    ) {
+      channel = this.activeChannels[event.cid];
+    }
 
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event);
 
     // channel event handlers
-    const cid = event.cid;
-    const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
       channel._handleChannelEvent(event);
     }
@@ -1118,12 +1125,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Event} event
    */
   _handleUserEvent = (event: Event<StreamChatGenerics>) => {
-    if (!event.user) {
-      return;
-    }
-
     /** update the client.state with any changes to users */
-    if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
+    if ((event.type === 'user.presence.changed' || event.type === 'user.updated') && event.user) {
       if (event.user.id === this.userID) {
         const user = { ...(this.user || {}) };
         const _user = { ...(this._user || {}) };
@@ -1154,11 +1157,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       this._updateMemberWatcherReferences(event.user);
     }
 
-    if (event.type === 'user.updated') {
+    if (event.type === 'user.updated' && event.user) {
       this._updateUserMessageReferences(event.user);
     }
 
-    if (event.type === 'user.deleted' && event.user.deleted_at && (event.mark_messages_deleted || event.hard_delete)) {
+    if (
+      event.type === 'user.deleted' &&
+      event.user &&
+      event.user.deleted_at &&
+      (event.mark_messages_deleted || event.hard_delete)
+    ) {
       this._deleteUserMessageReference(event.user, event.hard_delete);
     }
   };
@@ -1182,7 +1190,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       client.mutedUsers = event.me.mutes;
     }
 
-    if (event.channel && event.type === 'notification.message_new') {
+    if (event.type === 'notification.message_new' && event.channel) {
       this.configs[event.channel.type] = event.channel.config;
     }
 
