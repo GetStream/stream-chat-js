@@ -840,7 +840,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    */
   off(callback: EventHandler<StreamChatGenerics>): void;
-  off(eventType: string, callback: EventHandler<StreamChatGenerics>): void;
+  off<E extends Event>(eventType: Event['type'], callback: (event: E) => void): void;
   off(
     callbackOrString: EventHandler<StreamChatGenerics> | string,
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
