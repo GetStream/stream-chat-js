@@ -16,7 +16,7 @@ import {
   DeleteChannelAPIResponse,
   Event,
   EventAPIResponse,
-  EventHandler,
+  EventHandlerInferred,
   EventTypes,
   FormatMessageResponse,
   GetMultipleMessagesAPIResponse,
@@ -65,7 +65,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics> | undefined;
   _data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics>;
   cid: string;
-  listeners: { [key: string]: (string | EventHandler<StreamChatGenerics>)[] };
+  listeners: { [key: string]: (string | ((event: Event<StreamChatGenerics>) => void))[] };
   state: ChannelState<StreamChatGenerics>;
   initialized: boolean;
   lastKeyStroke?: Date;
@@ -1099,11 +1099,11 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {EventHandler<StreamChatGenerics> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<StreamChatGenerics>} [callbackOrNothing] The callback to call
    */
-  on(eventType: EventTypes, callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on(
-    callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
+  on<T extends Event['type']>(eventType: T, callback: EventHandlerInferred<T>): { unsubscribe: () => void };
+  on<T extends Event['type']>(callback: EventHandlerInferred<T>): { unsubscribe: () => void };
+  on<T extends Event['type']>(
+    callbackOrString: EventHandlerInferred<T> | T,
+    callbackOrNothing?: EventHandlerInferred<T>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
@@ -1119,7 +1119,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       channel: this,
     });
 
-    this.listeners[key].push(callback);
+    this.listeners[key].push(callback as string | ((event: Event<StreamChatGenerics>) => void));
 
     return {
       unsubscribe: () => {
@@ -1137,13 +1137,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * off - Remove the event handler
    *
    */
-  off(eventType: EventTypes, callback: EventHandler<StreamChatGenerics>): void;
-  off(callback: EventHandler<StreamChatGenerics>): void;
-  off(
-    callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
+  off<T extends Event['type']>(eventType: T, callback: EventHandlerInferred<T>): void;
+  off<T extends Event['type']>(callback: EventHandlerInferred<T>): void;
+  off<T extends Event['type']>(
+    callbackOrString: EventHandlerInferred<T> | EventTypes,
+    callbackOrNothing?: EventHandlerInferred<T>,
   ): void {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as T) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);

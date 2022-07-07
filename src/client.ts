@@ -57,7 +57,7 @@ import {
   Device,
   EndpointName,
   Event,
-  EventHandler,
+  EventHandlerInferred,
   ExportChannelOptions,
   ExportChannelRequest,
   ExportChannelResponse,
@@ -144,6 +144,7 @@ import {
   GetCallTokenResponse,
   APIErrorResponse,
   ErrorFromResponse,
+  EventInferred,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -810,23 +811,23 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {{ unsubscribe: () => void }} Description
    */
-  on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on<E extends Event>(eventType: E['type'], callback: (event: E) => void): { unsubscribe: () => void };
-  on(
-    callbackOrString: EventHandler<StreamChatGenerics> | string,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
+  on<T extends Event['type']>(callback: EventHandlerInferred<T>): { unsubscribe: () => void };
+  on<T extends Event['type']>(eventType: T, callback: EventHandlerInferred<T>): { unsubscribe: () => void };
+  on<T extends Event['type']>(
+    callbackOrString: EventHandlerInferred<T> | Event['type'],
+    callbackOrNothing?: EventHandlerInferred<T>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
-    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
+    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandlerInferred<T>);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
     this.logger('info', `Attaching listener for ${key} event`, { tags: ['event', 'client'] });
-    this.listeners[key].push(callback);
+    this.listeners[key].push(callback as (event: Event<StreamChatGenerics>) => void);
     return {
       unsubscribe: () => {
         this.logger('info', `Removing listener for ${key} event`, { tags: ['event', 'client'] });
@@ -839,18 +840,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * off - Remove the event handler
    *
    */
-  off(callback: EventHandler<StreamChatGenerics>): void;
-  off<E extends Event>(eventType: E['type'], callback: (event: E) => void): void;
-  off(
-    callbackOrString: EventHandler<StreamChatGenerics> | string,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
+  off<T extends Event['type']>(callback: EventHandlerInferred<T>): void;
+  off<T extends Event['type']>(eventType: T, callback: EventHandlerInferred<T>): void;
+  off<T extends Event['type']>(
+    callbackOrString: EventHandlerInferred<T> | T,
+    callbackOrNothing?: EventHandlerInferred<T>,
   ) {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
-    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
+    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandlerInferred<T>);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
