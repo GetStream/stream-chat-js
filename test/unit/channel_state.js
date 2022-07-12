@@ -422,6 +422,22 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(thread[0].id).to.be.equal(threadReplyPreview.id);
 	});
 
+	it('should ignore own_reactions for message update', () => {
+		const state = new ChannelState();
+		state.addMessagesSorted([
+			generateMsg({
+				id: '0',
+				own_reactions: [
+					{ created_at: new Date().toISOString(), updated_at: new Date().toISOString(), type: 'wow' },
+				],
+			}),
+		]);
+		// Simulate message.update event -> own_reactions always will be an empty array
+		state.addMessageSorted({ ...state.messages[0], text: 'update', own_reactions: [] }, false, false);
+
+		expect(state.messages[0].own_reactions.length).to.be.equal(1);
+	});
+
 	describe('merges overlapping message sets', () => {
 		it('when new messages overlap with latest messages', () => {
 			const state = new ChannelState();

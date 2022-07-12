@@ -469,13 +469,20 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
 
     // message already exists and not filtered due to timestampChanged, update and return
     if (!timestampChanged && message.id) {
+      let messageIndex;
       if (messageArr[left] && message.id === messageArr[left].id) {
-        messageArr[left] = message;
-        return [...messageArr];
+        messageIndex = left;
       }
 
       if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
-        messageArr[left - 1] = message;
+        messageIndex = left - 1;
+      }
+
+      if (messageIndex !== undefined) {
+        // own_reactions always be [] in WS events -> ignore for message updates
+        const own_reactions = messageArr[messageIndex].own_reactions;
+        message.own_reactions = own_reactions;
+        messageArr[messageIndex] = message;
         return [...messageArr];
       }
     }
