@@ -1211,6 +1211,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'message.deleted':
         if (event.message) {
+          this._extendEventWithOwnReactions(event);
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
 
@@ -1248,6 +1249,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'message.updated':
         if (event.message) {
+          this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -1444,6 +1446,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           this.state.members[member.user.id] = member;
         }
       }
+    }
+  }
+
+  _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
+    if (!event.message) {
+      return;
+    }
+    const message = this.state.findMessage(event.message.id, event.message.parent_id);
+    if (message) {
+      event.message.own_reactions = message.own_reactions;
     }
   }
 
