@@ -1375,7 +1375,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   };
 
   _checkInitialized() {
-    if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
+    if (!this.initialized && !this.staticState && !this.getClient()._isUsingServerAuth()) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
