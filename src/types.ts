@@ -266,6 +266,13 @@ export type ChannelResponse<
   updated_at?: string;
 };
 
+export type QueryChannelsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  channels: Omit<ChannelAPIResponse<StreamChatGenerics>, keyof APIResponse>[];
+};
+
+export type QueryChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse &
+  ChannelAPIResponse<StreamChatGenerics>;
+
 export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel: ChannelResponse<StreamChatGenerics>;
   members: ChannelMemberResponse<StreamChatGenerics>[];

@@ -144,6 +144,7 @@ import {
   GetCallTokenResponse,
   APIErrorResponse,
   ErrorFromResponse,
+  QueryChannelsAPIResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -1482,10 +1483,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const data = await this.post<{ channels: ChannelAPIResponse<StreamChatGenerics>[] }>(
-      this.baseURL + '/channels',
-      payload,
-    );
+    const data = await this.post<QueryChannelsAPIResponse<StreamChatGenerics>>(this.baseURL + '/channels', payload);
 
     this.dispatchEvent({
       type: 'channels.queried',

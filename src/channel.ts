@@ -52,6 +52,7 @@ import {
   MessagePaginationOptions,
   CreateCallOptions,
   CreateCallResponse,
+  QueryChannelAPIResponse,
 } from './types';
 import { Role } from './permissions';
 
@@ -724,7 +725,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @param {ChannelQueryOptions<StreamChatGenerics>} options additional options for the query endpoint
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} The server response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The server response
    */
   async watch(options?: ChannelQueryOptions<StreamChatGenerics>) {
     const defaultOptions = {
@@ -923,7 +924,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * create - Creates a new channel
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} The Server Response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The Server Response
    */
   create = async () => {
     const options = {
@@ -940,7 +941,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {ChannelQueryOptions<StreamChatGenerics>} options The query options
    * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} Returns a query response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} Returns a query response
    */
   async query(
     options: ChannelQueryOptions<StreamChatGenerics>,
@@ -954,7 +955,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       queryURL += `/${this.id}`;
     }
 
-    const state = await this.getClient().post<ChannelAPIResponse<StreamChatGenerics>>(queryURL + '/query', {
+    const state = await this.getClient().post<QueryChannelAPIResponse<StreamChatGenerics>>(queryURL + '/query', {
       data: this._data,
       state: true,
       ...options,
@@ -1278,7 +1279,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           });
 
           channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt) channelState.removePinnedMessage({ id });
+            if (truncatedAt > +createdAt)
+              channelState.removePinnedMessage({ id } as MessageResponse<StreamChatGenerics>);
           });
         } else {
           channelState.clearMessages();
