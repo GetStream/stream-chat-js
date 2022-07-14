@@ -932,3 +932,57 @@ describe('loadMessageIntoState', () => {
 		});
 	});
 });
+
+describe('findMessage', () => {
+	it('message is in current message set', async () => {
+		const state = new ChannelState();
+		const messageId = '8';
+		state.addMessagesSorted([generateMsg({ id: messageId })], false, true, true, 'latest');
+		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
+
+		expect(state.findMessage(messageId).id).to.eql(messageId);
+	});
+
+	it('message is in a different set', async () => {
+		const state = new ChannelState();
+		const messageId = '5';
+		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
+		state.addMessagesSorted([generateMsg({ id: messageId })], false, true, true, 'new');
+		await state.loadMessageIntoState('5');
+
+		expect(state.findMessage(messageId).id).to.eql(messageId);
+	});
+
+	it('message not found', async () => {
+		const state = new ChannelState();
+		state.addMessagesSorted([generateMsg({ id: '5' }), generateMsg({ id: '6' })]);
+
+		expect(state.findMessage('12')).to.eql(undefined);
+	});
+
+	describe('if message is a thread reply', () => {
+		it('message found', async () => {
+			const messageId = '8';
+			const parentMessageId = '5';
+			const state = new ChannelState();
+			const parentMessage = generateMsg({ id: parentMessageId });
+			const reply = generateMsg({ id: messageId, parent_id: parentMessageId });
+			state.addMessagesSorted([parentMessage]);
+			state.addMessagesSorted([reply]);
+
+			expect(state.findMessage(messageId, parentMessageId).id).to.eql(messageId);
+		});
+
+		it('message not found', async () => {
+			const messageId = '8';
+			const parentMessageId = '5';
+			const state = new ChannelState();
+			const parentMessage = generateMsg({ id: parentMessageId });
+			const reply = generateMsg({ id: messageId, parent_id: parentMessageId });
+			state.addMessagesSorted([parentMessage]);
+			state.addMessagesSorted([reply]);
+
+			expect(state.findMessage(messageId, `not${parentMessageId}`)).to.eql(undefined);
+		});
+	});
+});
