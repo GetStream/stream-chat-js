@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [6.7.3](https://github.com/GetStream/stream-chat-js/compare/v6.7.2...v6.7.3) (2022-07-06)
+
+
+### Bug Fixes
+
+* some app setting types ([#1003](https://github.com/GetStream/stream-chat-js/issues/1003)) ([35c13a1](https://github.com/GetStream/stream-chat-js/commit/35c13a179301a0f16b03c54d7e7b88bd3beba6aa))
+
+### [6.7.2](https://github.com/GetStream/stream-chat-js/compare/v6.7.1...v6.7.2) (2022-06-27)
+
+
+### Bug Fixes
+
+* pinnedMesages truncated_at aware ([#996](https://github.com/GetStream/stream-chat-js/issues/996)) ([fa0bfdc](https://github.com/GetStream/stream-chat-js/commit/fa0bfdc69399a98e56674e31f00cca55066c8ef8))
+
+### [6.7.1](https://github.com/GetStream/stream-chat-js/compare/v6.7.0...v6.7.1) (2022-06-24)
+
+
+### Bug Fixes
+
+* **Channel:** add "truncated_at" to "channel.truncated" event handler  ([#991](https://github.com/GetStream/stream-chat-js/issues/991)) ([edffd5f](https://github.com/GetStream/stream-chat-js/commit/edffd5f38f3c56abe03048d3afc5cd70a12c7f4e))
+
+## [6.7.0](https://github.com/GetStream/stream-chat-js/compare/v6.6.0...v6.7.0) (2022-06-22)
+
+
+### Bug Fixes
+
+* **feat:** add `first_reporter` field to the `FlagReport` type ([#987](https://github.com/GetStream/stream-chat-js/pull/987)) ([0667f2e](https://github.com/GetStream/stream-chat-js/pull/987/commits/0667f2ee2693bf2e7e74132e3715f49a421c6bfa))
+
+* **types:** added support for thumb_url for video attachments in send file response ([#982](https://github.com/GetStream/stream-chat-js/issues/982)) ([79ed099](https://github.com/GetStream/stream-chat-js/commit/79ed099678c69ac5841f89cd521adab5f3eef8ff))
+
+## [6.6.0](https://github.com/GetStream/stream-chat-js/compare/v6.5.1...v6.6.0) (2022-06-02)
+
+
+### Features
+
+* **eventmap:** add user.unread_message_reminder ([#972](https://github.com/GetStream/stream-chat-js/issues/972)) ([f70de60](https://github.com/GetStream/stream-chat-js/commit/f70de60662a372607bd1fabe0651d1c86b90a6a9))
+
+
+### Bug Fixes
+
+* add TestCampaignResponse type ([#967](https://github.com/GetStream/stream-chat-js/issues/967)) ([2c2e0c8](https://github.com/GetStream/stream-chat-js/commit/2c2e0c8c9d53c3fac7b229a01463417b89f3aae7))
+* **delete_user:** add task_id to deleteuser response ([#963](https://github.com/GetStream/stream-chat-js/issues/963)) ([0090f93](https://github.com/GetStream/stream-chat-js/commit/0090f9340675d9813600fbcc090e8ba239952ed3))
+* rename field ([#966](https://github.com/GetStream/stream-chat-js/issues/966)) ([6c34e92](https://github.com/GetStream/stream-chat-js/commit/6c34e9265a524117de99d4c29712dfe27b3e0d72))
+* **types:** add types to support permission migration parameters ([#976](https://github.com/GetStream/stream-chat-js/issues/976)) ([6f82e1a](https://github.com/GetStream/stream-chat-js/commit/6f82e1a4d96d86db77b7c4b365500bb769866e2c))
+
 ### [6.5.1](https://github.com/GetStream/stream-chat-js/compare/v6.5.0...v6.5.1) (2022-04-22)
 
 

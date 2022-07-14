@@ -1,4 +1,4 @@
-import { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -101,16 +101,19 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
       }
     >;
     reminders_interval: number;
+    agora_options?: AgoraOptions | null;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     campaign_enabled?: boolean;
+    cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     grants?: Record<string, string[]>;
+    hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -135,6 +138,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
+    video_provider?: string;
     webhook_events?: Array<string>;
     webhook_url?: string;
   };
@@ -199,6 +203,7 @@ export type FlagReport<StreamChatGenerics extends ExtendableGenerics = DefaultGe
   user: UserResponse<StreamChatGenerics>;
   created_at?: string;
   details?: FlagDetails;
+  first_reporter?: UserResponse<StreamChatGenerics>;
   review_result?: string;
   reviewed_at?: string;
   reviewed_by?: UserResponse<StreamChatGenerics>;
@@ -594,7 +599,9 @@ export type SearchWarning = {
   warning_code: number;
   warning_description: string;
 };
-export type SendFileAPIResponse = APIResponse & { file: string };
+
+// Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
+export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
@@ -1442,7 +1449,23 @@ export type APNConfig = {
   team_id?: string;
 };
 
+export type AgoraOptions = {
+  app_certificate: string;
+  app_id: string;
+  role_map?: Record<string, string>;
+};
+
+export type HMSOptions = {
+  app_access_key: string;
+  app_secret: string;
+  default_role: string;
+  default_room_template: string;
+  default_region?: string;
+  role_map?: Record<string, string>;
+};
+
 export type AppSettings = {
+  agora_options?: AgoraOptions | null;
   apn_config?: {
     auth_key?: string;
     auth_type?: string;
@@ -1456,6 +1479,8 @@ export type AppSettings = {
   };
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
+  before_message_send_hook_url?: string;
+  cdn_expiration_seconds?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
@@ -1470,13 +1495,16 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
+  hms_options?: HMSOptions | null;
   huawei_config?: {
     id: string;
     secret: string;
   };
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
+  migrate_permissions_to_v2?: boolean;
   multi_tenant_enabled?: boolean;
+  permission_version?: 'v1' | 'v2';
   push_config?: {
     offline_only?: boolean;
     version?: string;
@@ -1486,6 +1514,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  video_provider?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
   xiaomi_config?: {
@@ -2327,3 +2356,59 @@ export type PushProviderUpsertResponse = {
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
 };
+
+export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: String;
+  type: String;
+  options?: Object;
+  user?: UserResponse<StreamChatGenerics> | null;
+  user_id?: string;
+};
+
+export type HMSCall = {
+  room: String;
+};
+
+export type AgoraCall = {
+  channel: String;
+};
+
+export type Call = {
+  id: String;
+  provider: String;
+  agora?: AgoraCall;
+  hms?: HMSCall;
+};
+
+export type CreateCallResponse = APIResponse & {
+  call: Call;
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
+};
+
+export type GetCallTokenResponse = APIResponse & {
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
+};
+
+type ErrorResponseDetails = {
+  code: number;
+  messages: string[];
+};
+
+export type APIErrorResponse = {
+  code: number;
+  duration: string;
+  message: string;
+  more_info: string;
+  StatusCode: number;
+  details?: ErrorResponseDetails;
+};
+
+export class ErrorFromResponse<T> extends Error {
+  code?: number;
+  response?: AxiosResponse<T>;
+  status?: number;
+}

@@ -36,6 +36,7 @@ export const EVENT_MAP = {
   'user.deleted': true,
   'user.presence.changed': true,
   'user.unbanned': true,
+  'user.unread_message_reminder': true,
   'user.updated': true,
   'user.watching.start': true,
   'user.watching.stop': true,

@@ -161,13 +161,17 @@ describe('Channel count unread', function () {
 
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
-	const client = new StreamChat('apiKey');
-	client.user = user;
-	client.userID = user.id;
-	client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+	let client;
+	let channel;
 
-	const channel = client.channel('messaging', 'id');
-	channel.initialized = true;
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = true;
+	});
 
 	it('message.new reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
@@ -218,6 +222,72 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
 
+	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
+		const messages = [
+			{ created_at: '2021-01-01T00:01:00' },
+			{ created_at: '2021-01-01T00:02:00' },
+			{ created_at: '2021-01-01T00:03:00' },
+		].map(generateMsg);
+
+		channel.state.addMessagesSorted(messages);
+		expect(channel.state.messages.length).to.be.equal(3);
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.state.messages.length).to.be.equal(0);
+	});
+
+	it('message.truncate removes messages up to specified date', function () {
+		const messages = [
+			{ created_at: '2021-01-01T00:01:00' },
+			{ created_at: '2021-01-01T00:02:00' },
+			{ created_at: '2021-01-01T00:03:00' },
+		].map(generateMsg);
+
+		channel.state.addMessagesSorted(messages);
+		expect(channel.state.messages.length).to.be.equal(3);
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: messages[1].created_at,
+			},
+		});
+
+		expect(channel.state.messages.length).to.be.equal(2);
+	});
+
+	it('message.truncate removes pinned messages up to specified date', function () {
+		const messages = [
+			{ created_at: '2021-01-01T00:01:00', pinned: true, pinned_at: new Date('2021-01-01T00:01:01.010Z') },
+			{ created_at: '2021-01-01T00:02:00' },
+			{ created_at: '2021-01-01T00:03:00', pinned: true, pinned_at: new Date('2021-01-01T00:02:02.011Z') },
+		].map(generateMsg);
+
+		channel.state.addMessagesSorted(messages);
+		channel.state.addPinnedMessages(messages.filter((m) => m.pinned));
+		expect(channel.state.messages.length).to.be.equal(3);
+		expect(channel.state.pinnedMessages.length).to.be.equal(2);
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: messages[1].created_at,
+			},
+		});
+
+		expect(channel.state.messages.length).to.be.equal(2);
+		expect(channel.state.pinnedMessages.length).to.be.equal(1);
+	});
+
 	it('message.delete removes quoted messages references', function () {
 		const originalMessage = generateMsg({ silent: true });
 		channel._handleChannelEvent({
@@ -248,8 +318,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('should include unread_messages for message events from another user', () => {
-		const channel = client.channel('messaging', 'id');
-		channel.initialized = true;
 		channel.state.read['id'] = {
 			unread_messages: 2,
 		};
@@ -278,9 +346,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('should include unread_messages for message events from the current user', () => {
-		const channel = client.channel('messaging', 'id');
-
-		channel.initialized = true;
 		channel.state.read[client.user.id] = {
 			unread_messages: 2,
 		};
@@ -298,7 +363,10 @@ describe('Channel _handleChannelEvent', function () {
 		];
 
 		for (const event of events) {
-			channel.state.read['id'].unread_messages = 2;
+			channel.state.read['id'] = {
+				unread_messages: 2,
+			};
+
 			channel._handleChannelEvent({
 				type: event,
 				user: { id: client.user.id },

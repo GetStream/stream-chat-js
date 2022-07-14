@@ -50,6 +50,8 @@ import {
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   MessagePaginationOptions,
+  CreateCallOptions,
+  CreateCallResponse,
 } from './types';
 import { Role } from './permissions';
 
@@ -1087,6 +1089,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * createCall - creates a call for the current channel
+   *
+   * @param {CreateCallOptions} options
+   * @returns {Promise<CreateCallResponse>}
+   */
+  async createCall(options: CreateCallOptions) {
+    return await this.getClient().post<CreateCallResponse>(this._channelURL() + '/call', options);
+  }
+
+  /**
    * on - Listen to events on this channel.
    *
    * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
@@ -1254,7 +1266,23 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'channel.truncated':
-        channelState.clearMessages();
+        if (event.channel?.truncated_at) {
+          const truncatedAt = +new Date(event.channel.truncated_at);
+
+          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
+            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
+              if (truncatedAt > +createdAt) channelState.removeMessage({ id, messageSetIndex });
+            });
+          });
+
+          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
+            if (truncatedAt > +createdAt)
+              channelState.removePinnedMessage({ id } as MessageResponse<StreamChatGenerics>);
+          });
+        } else {
+          channelState.clearMessages();
+        }
+
         channelState.unreadCount = 0;
         // system messages don't increment unread counts
         if (event.message) {

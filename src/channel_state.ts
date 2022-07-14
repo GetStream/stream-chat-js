@@ -499,7 +499,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @return {boolean} Returns if the message was removed
    */
-  removeMessage(messageToRemove: { id: string; parent_id?: string }) {
+  removeMessage(messageToRemove: { id: string; messageSetIndex?: number; parent_id?: string }) {
     let isRemoved = false;
     if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
@@ -510,7 +510,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const messageSetIndex = this.findMessageSetIndex(messageToRemove);
+      const messageSetIndex = messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
       if (messageSetIndex !== -1) {
         const { removed, result: messages } = this.removeMessageFromArray(
           this.messageSets[messageSetIndex].messages,
