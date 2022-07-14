@@ -698,6 +698,30 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     }
   }
 
+  /**
+   * findMessage - Finds a message inside the state
+   *
+   * @param {string} messageId The id of the message
+   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
+   *
+   * @return {ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>} Returns the message, or undefined if the message wasn't found
+   */
+  findMessage(messageId: string, parentMessageId?: string) {
+    if (parentMessageId) {
+      const messages = this.threads[parentMessageId];
+      if (!messages) {
+        return undefined;
+      }
+      return messages.find((m) => m.id === messageId);
+    }
+
+    const messageSetIndex = this.findMessageSetIndex({ id: messageId });
+    if (messageSetIndex === -1) {
+      return undefined;
+    }
+    return this.messageSets[messageSetIndex].messages.find((m) => m.id === messageId);
+  }
+
   private switchToMessageSet(index: number) {
     const currentMessages = this.messageSets.find((s) => s.isCurrent);
     if (!currentMessages) {
