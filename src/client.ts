@@ -146,6 +146,7 @@ import {
   ErrorFromResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import {QueryChannel} from "./protobuf/chat/v2/client_rpc/clientside.pb";
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -1438,6 +1439,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // Return a list of message flags
     return await this.get<MessageFlagsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flags/message', {
       payload: { filter_conditions: filterConditions, ...options },
+    });
+  }
+
+  async queryChannelsV2(
+    filterConditions: ChannelFilters<StreamChatGenerics>,
+    sort: ChannelSort<StreamChatGenerics> = [],
+    options: ChannelOptions = {},
+    stateOptions: ChannelStateOptions = {}
+  ) {
+    const enc = new TextEncoder();
+    return await QueryChannel({
+      mq: enc.encode(JSON.stringify(filterConditions)),
+      sort: [],
+      pager: {
+        limit: options.limit ? BigInt(options.limit) : 0n,
+        offset: options.offset ? BigInt(options.offset): 0n,
+      }
+    }, {
+      baseURL: this.baseURL,
+      headers: {
+        Authorization: this.tokenManager.getToken() || "",
+      },
+      prefix: "/rpc",
     });
   }
 

@@ -43,7 +43,9 @@
     "form-data": "^4.0.0",
     "isomorphic-ws": "^4.0.1",
     "jsonwebtoken": "^8.5.1",
+    "twirpscript": "^0.0.59",
     "ws": "^7.4.4"
+
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",
@@ -72,7 +74,7 @@
     "@types/chai-like": "^1.1.1",
     "@types/eslint": "7.2.7",
     "@types/mocha": "^9.0.0",
-    "@types/node": "^16.11.11",
+    "@types/node": "^18.0.3",
     "@types/prettier": "^2.2.2",
     "@types/rollup-plugin-json": "^3.0.2",
     "@types/rollup-plugin-peer-deps-external": "^2.2.0",
