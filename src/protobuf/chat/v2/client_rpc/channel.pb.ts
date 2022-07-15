@@ -48,6 +48,7 @@ export type ChannelCapability =
   | "CHANNEL_CAPABILITY_UPDATE_ANY_MESSAGE"
   | "CHANNEL_CAPABILITY_UPDATE_OWN_MESSAGE"
   | "CHANNEL_CAPABILITY_SEARCH_MESSAGES"
+  | "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS"
   | "CHANNEL_CAPABILITY_UPLOAD_FILE"
   | "CHANNEL_CAPABILITY_DELETE_CHANNEL"
   | "CHANNEL_CAPABILITY_UPDATE_CHANNEL"
@@ -56,16 +57,18 @@ export type ChannelCapability =
   | "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS"
   | "CHANNEL_CAPABILITY_FLAG_MESSAGE"
   | "CHANNEL_CAPABILITY_MUTE_CHANNEL"
-  | "CHANNEL_CAPABILITY_SLOW_MODE"
-  | "CHANNEL_CAPABILITY_CUSTOM_EVENTS"
+  | "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS"
   | "CHANNEL_CAPABILITY_READ_EVENTS"
   | "CHANNEL_CAPABILITY_CONNECT_EVENTS"
-  | "CHANNEL_CAPABILITY_TYPING_EVENTS";
+  | "CHANNEL_CAPABILITY_TYPING_EVENTS"
+  | "CHANNEL_CAPABILITY_SLOW_MODE"
+  | "CHANNEL_CAPABILITY_JOIN_CALL"
+  | "CHANNEL_CAPABILITY_CREATE_CALL";
 
 /**
- * Channel response schema.
+ * A view which User gets when they request a channel
  */
-export interface ChannelResponse {
+export interface ChannelUserView {
   /**
    * Contains base channel view.
    */
@@ -102,7 +105,7 @@ export interface GetChannelResponse {
   /**
    * Contains base channel view.
    */
-  channel: ChannelResponse;
+  channel: ChannelUserView;
 }
 
 /**
@@ -148,7 +151,7 @@ export interface QueryChannelResponse {
   /**
    * List of channels.
    */
-  channels: ChannelResponse[];
+  channels: ChannelUserView[];
 }
 
 //========================================//
@@ -222,6 +225,11 @@ export const ChannelCapability = {
    */
   CHANNEL_CAPABILITY_SEARCH_MESSAGES: "CHANNEL_CAPABILITY_SEARCH_MESSAGES",
   /**
+   * Capability to search messages.
+   */
+  CHANNEL_CAPABILITY_SEND_TYPING_EVENTS:
+    "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS",
+  /**
    * Capability to upload a file
    */
   CHANNEL_CAPABILITY_UPLOAD_FILE: "CHANNEL_CAPABILITY_UPLOAD_FILE",
@@ -256,13 +264,10 @@ export const ChannelCapability = {
    */
   CHANNEL_CAPABILITY_MUTE_CHANNEL: "CHANNEL_CAPABILITY_MUTE_CHANNEL",
   /**
-   * Capability to modify slow mode.
-   */
-  CHANNEL_CAPABILITY_SLOW_MODE: "CHANNEL_CAPABILITY_SLOW_MODE",
-  /**
    * Capability to populate `custom` event.
    */
-  CHANNEL_CAPABILITY_CUSTOM_EVENTS: "CHANNEL_CAPABILITY_CUSTOM_EVENTS",
+  CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS:
+    "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS",
   /**
    * Capability to populate `read` event.
    */
@@ -275,6 +280,18 @@ export const ChannelCapability = {
    * Capability to populate `typing` event.
    */
   CHANNEL_CAPABILITY_TYPING_EVENTS: "CHANNEL_CAPABILITY_TYPING_EVENTS",
+  /**
+   * Capability to modify slow mode.
+   */
+  CHANNEL_CAPABILITY_SLOW_MODE: "CHANNEL_CAPABILITY_SLOW_MODE",
+  /**
+   * Capability to join a call.
+   */
+  CHANNEL_CAPABILITY_JOIN_CALL: "CHANNEL_CAPABILITY_JOIN_CALL",
+  /**
+   * Capability to create a call.
+   */
+  CHANNEL_CAPABILITY_CREATE_CALL: "CHANNEL_CAPABILITY_CREATE_CALL",
   /**
    * @private
    */
@@ -326,34 +343,34 @@ export const ChannelCapability = {
         return "CHANNEL_CAPABILITY_SEARCH_MESSAGES";
       }
       case 15: {
-        return "CHANNEL_CAPABILITY_UPLOAD_FILE";
+        return "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS";
       }
       case 16: {
-        return "CHANNEL_CAPABILITY_DELETE_CHANNEL";
+        return "CHANNEL_CAPABILITY_UPLOAD_FILE";
       }
       case 17: {
-        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL";
+        return "CHANNEL_CAPABILITY_DELETE_CHANNEL";
       }
       case 18: {
-        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS";
+        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL";
       }
       case 19: {
-        return "CHANNEL_CAPABILITY_QUOTE_MESSAGE";
+        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS";
       }
       case 20: {
-        return "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS";
+        return "CHANNEL_CAPABILITY_QUOTE_MESSAGE";
       }
       case 21: {
-        return "CHANNEL_CAPABILITY_FLAG_MESSAGE";
+        return "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS";
       }
       case 22: {
-        return "CHANNEL_CAPABILITY_MUTE_CHANNEL";
+        return "CHANNEL_CAPABILITY_FLAG_MESSAGE";
       }
       case 23: {
-        return "CHANNEL_CAPABILITY_SLOW_MODE";
+        return "CHANNEL_CAPABILITY_MUTE_CHANNEL";
       }
       case 24: {
-        return "CHANNEL_CAPABILITY_CUSTOM_EVENTS";
+        return "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS";
       }
       case 25: {
         return "CHANNEL_CAPABILITY_READ_EVENTS";
@@ -363,6 +380,15 @@ export const ChannelCapability = {
       }
       case 27: {
         return "CHANNEL_CAPABILITY_TYPING_EVENTS";
+      }
+      case 28: {
+        return "CHANNEL_CAPABILITY_SLOW_MODE";
+      }
+      case 29: {
+        return "CHANNEL_CAPABILITY_JOIN_CALL";
+      }
+      case 30: {
+        return "CHANNEL_CAPABILITY_CREATE_CALL";
       }
       // unknown values are preserved as numbers. this occurs when new enum values are introduced and the generated code is out of date.
       default: {
@@ -420,34 +446,34 @@ export const ChannelCapability = {
       case "CHANNEL_CAPABILITY_SEARCH_MESSAGES": {
         return 14;
       }
-      case "CHANNEL_CAPABILITY_UPLOAD_FILE": {
+      case "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS": {
         return 15;
       }
-      case "CHANNEL_CAPABILITY_DELETE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_UPLOAD_FILE": {
         return 16;
       }
-      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_DELETE_CHANNEL": {
         return 17;
       }
-      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS": {
+      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL": {
         return 18;
       }
-      case "CHANNEL_CAPABILITY_QUOTE_MESSAGE": {
+      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS": {
         return 19;
       }
-      case "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS": {
+      case "CHANNEL_CAPABILITY_QUOTE_MESSAGE": {
         return 20;
       }
-      case "CHANNEL_CAPABILITY_FLAG_MESSAGE": {
+      case "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS": {
         return 21;
       }
-      case "CHANNEL_CAPABILITY_MUTE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_FLAG_MESSAGE": {
         return 22;
       }
-      case "CHANNEL_CAPABILITY_SLOW_MODE": {
+      case "CHANNEL_CAPABILITY_MUTE_CHANNEL": {
         return 23;
       }
-      case "CHANNEL_CAPABILITY_CUSTOM_EVENTS": {
+      case "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS": {
         return 24;
       }
       case "CHANNEL_CAPABILITY_READ_EVENTS": {
@@ -459,6 +485,15 @@ export const ChannelCapability = {
       case "CHANNEL_CAPABILITY_TYPING_EVENTS": {
         return 27;
       }
+      case "CHANNEL_CAPABILITY_SLOW_MODE": {
+        return 28;
+      }
+      case "CHANNEL_CAPABILITY_JOIN_CALL": {
+        return 29;
+      }
+      case "CHANNEL_CAPABILITY_CREATE_CALL": {
+        return 30;
+      }
       // unknown values are preserved as numbers. this occurs when new enum values are introduced and the generated code is out of date.
       default: {
         return i as unknown as number;
@@ -467,31 +502,31 @@ export const ChannelCapability = {
   },
 } as const;
 
-export const ChannelResponse = {
+export const ChannelUserView = {
   /**
-   * Serializes ChannelResponse to protobuf.
+   * Serializes ChannelUserView to protobuf.
    */
-  encode: function (msg: Partial<ChannelResponse>): Uint8Array {
-    return ChannelResponse._writeMessage(
+  encode: function (msg: Partial<ChannelUserView>): Uint8Array {
+    return ChannelUserView._writeMessage(
       msg,
       new BinaryWriter()
     ).getResultBuffer();
   },
 
   /**
-   * Deserializes ChannelResponse from protobuf.
+   * Deserializes ChannelUserView from protobuf.
    */
-  decode: function (bytes: ByteSource): ChannelResponse {
-    return ChannelResponse._readMessage(
-      ChannelResponse.initialize(),
+  decode: function (bytes: ByteSource): ChannelUserView {
+    return ChannelUserView._readMessage(
+      ChannelUserView.initialize(),
       new BinaryReader(bytes)
     );
   },
 
   /**
-   * Initializes ChannelResponse with all fields set to their default value.
+   * Initializes ChannelUserView with all fields set to their default value.
    */
-  initialize: function (): ChannelResponse {
+  initialize: function (): ChannelUserView {
     return {
       channelView: ChannelView.initialize(),
       userSettings: ChannelUserSettings.initialize(),
@@ -504,7 +539,7 @@ export const ChannelResponse = {
    * @private
    */
   _writeMessage: function (
-    msg: Partial<ChannelResponse>,
+    msg: Partial<ChannelUserView>,
     writer: BinaryWriter
   ): BinaryWriter {
     if (msg.channelView) {
@@ -530,9 +565,9 @@ export const ChannelResponse = {
    * @private
    */
   _readMessage: function (
-    msg: ChannelResponse,
+    msg: ChannelUserView,
     reader: BinaryReader
-  ): ChannelResponse {
+  ): ChannelUserView {
     while (reader.nextField()) {
       const field = reader.getFieldNumber();
       switch (field) {
@@ -666,7 +701,7 @@ export const GetChannelResponse = {
    */
   initialize: function (): GetChannelResponse {
     return {
-      channel: ChannelResponse.initialize(),
+      channel: ChannelUserView.initialize(),
     };
   },
 
@@ -678,7 +713,7 @@ export const GetChannelResponse = {
     writer: BinaryWriter
   ): BinaryWriter {
     if (msg.channel) {
-      writer.writeMessage(1, msg.channel, ChannelResponse._writeMessage);
+      writer.writeMessage(1, msg.channel, ChannelUserView._writeMessage);
     }
     return writer;
   },
@@ -694,7 +729,7 @@ export const GetChannelResponse = {
       const field = reader.getFieldNumber();
       switch (field) {
         case 1: {
-          reader.readMessage(msg.channel, ChannelResponse._readMessage);
+          reader.readMessage(msg.channel, ChannelUserView._readMessage);
           break;
         }
         default: {
@@ -916,7 +951,7 @@ export const QueryChannelResponse = {
       writer.writeRepeatedMessage(
         1,
         msg.channels as any,
-        ChannelResponse._writeMessage
+        ChannelUserView._writeMessage
       );
     }
     return writer;
@@ -933,8 +968,8 @@ export const QueryChannelResponse = {
       const field = reader.getFieldNumber();
       switch (field) {
         case 1: {
-          const m = ChannelResponse.initialize();
-          reader.readMessage(m, ChannelResponse._readMessage);
+          const m = ChannelUserView.initialize();
+          reader.readMessage(m, ChannelUserView._readMessage);
           msg.channels.push(m);
           break;
         }
@@ -1019,6 +1054,11 @@ export const ChannelCapabilityJSON = {
    */
   CHANNEL_CAPABILITY_SEARCH_MESSAGES: "CHANNEL_CAPABILITY_SEARCH_MESSAGES",
   /**
+   * Capability to search messages.
+   */
+  CHANNEL_CAPABILITY_SEND_TYPING_EVENTS:
+    "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS",
+  /**
    * Capability to upload a file
    */
   CHANNEL_CAPABILITY_UPLOAD_FILE: "CHANNEL_CAPABILITY_UPLOAD_FILE",
@@ -1053,13 +1093,10 @@ export const ChannelCapabilityJSON = {
    */
   CHANNEL_CAPABILITY_MUTE_CHANNEL: "CHANNEL_CAPABILITY_MUTE_CHANNEL",
   /**
-   * Capability to modify slow mode.
-   */
-  CHANNEL_CAPABILITY_SLOW_MODE: "CHANNEL_CAPABILITY_SLOW_MODE",
-  /**
    * Capability to populate `custom` event.
    */
-  CHANNEL_CAPABILITY_CUSTOM_EVENTS: "CHANNEL_CAPABILITY_CUSTOM_EVENTS",
+  CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS:
+    "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS",
   /**
    * Capability to populate `read` event.
    */
@@ -1072,6 +1109,18 @@ export const ChannelCapabilityJSON = {
    * Capability to populate `typing` event.
    */
   CHANNEL_CAPABILITY_TYPING_EVENTS: "CHANNEL_CAPABILITY_TYPING_EVENTS",
+  /**
+   * Capability to modify slow mode.
+   */
+  CHANNEL_CAPABILITY_SLOW_MODE: "CHANNEL_CAPABILITY_SLOW_MODE",
+  /**
+   * Capability to join a call.
+   */
+  CHANNEL_CAPABILITY_JOIN_CALL: "CHANNEL_CAPABILITY_JOIN_CALL",
+  /**
+   * Capability to create a call.
+   */
+  CHANNEL_CAPABILITY_CREATE_CALL: "CHANNEL_CAPABILITY_CREATE_CALL",
   /**
    * @private
    */
@@ -1123,34 +1172,34 @@ export const ChannelCapabilityJSON = {
         return "CHANNEL_CAPABILITY_SEARCH_MESSAGES";
       }
       case 15: {
-        return "CHANNEL_CAPABILITY_UPLOAD_FILE";
+        return "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS";
       }
       case 16: {
-        return "CHANNEL_CAPABILITY_DELETE_CHANNEL";
+        return "CHANNEL_CAPABILITY_UPLOAD_FILE";
       }
       case 17: {
-        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL";
+        return "CHANNEL_CAPABILITY_DELETE_CHANNEL";
       }
       case 18: {
-        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS";
+        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL";
       }
       case 19: {
-        return "CHANNEL_CAPABILITY_QUOTE_MESSAGE";
+        return "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS";
       }
       case 20: {
-        return "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS";
+        return "CHANNEL_CAPABILITY_QUOTE_MESSAGE";
       }
       case 21: {
-        return "CHANNEL_CAPABILITY_FLAG_MESSAGE";
+        return "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS";
       }
       case 22: {
-        return "CHANNEL_CAPABILITY_MUTE_CHANNEL";
+        return "CHANNEL_CAPABILITY_FLAG_MESSAGE";
       }
       case 23: {
-        return "CHANNEL_CAPABILITY_SLOW_MODE";
+        return "CHANNEL_CAPABILITY_MUTE_CHANNEL";
       }
       case 24: {
-        return "CHANNEL_CAPABILITY_CUSTOM_EVENTS";
+        return "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS";
       }
       case 25: {
         return "CHANNEL_CAPABILITY_READ_EVENTS";
@@ -1160,6 +1209,15 @@ export const ChannelCapabilityJSON = {
       }
       case 27: {
         return "CHANNEL_CAPABILITY_TYPING_EVENTS";
+      }
+      case 28: {
+        return "CHANNEL_CAPABILITY_SLOW_MODE";
+      }
+      case 29: {
+        return "CHANNEL_CAPABILITY_JOIN_CALL";
+      }
+      case 30: {
+        return "CHANNEL_CAPABILITY_CREATE_CALL";
       }
       // unknown values are preserved as numbers. this occurs when new enum values are introduced and the generated code is out of date.
       default: {
@@ -1217,34 +1275,34 @@ export const ChannelCapabilityJSON = {
       case "CHANNEL_CAPABILITY_SEARCH_MESSAGES": {
         return 14;
       }
-      case "CHANNEL_CAPABILITY_UPLOAD_FILE": {
+      case "CHANNEL_CAPABILITY_SEND_TYPING_EVENTS": {
         return 15;
       }
-      case "CHANNEL_CAPABILITY_DELETE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_UPLOAD_FILE": {
         return 16;
       }
-      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_DELETE_CHANNEL": {
         return 17;
       }
-      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS": {
+      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL": {
         return 18;
       }
-      case "CHANNEL_CAPABILITY_QUOTE_MESSAGE": {
+      case "CHANNEL_CAPABILITY_UPDATE_CHANNEL_MEMBERS": {
         return 19;
       }
-      case "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS": {
+      case "CHANNEL_CAPABILITY_QUOTE_MESSAGE": {
         return 20;
       }
-      case "CHANNEL_CAPABILITY_FLAG_MESSAGE": {
+      case "CHANNEL_CAPABILITY_BAN_CHANNEL_MEMBERS": {
         return 21;
       }
-      case "CHANNEL_CAPABILITY_MUTE_CHANNEL": {
+      case "CHANNEL_CAPABILITY_FLAG_MESSAGE": {
         return 22;
       }
-      case "CHANNEL_CAPABILITY_SLOW_MODE": {
+      case "CHANNEL_CAPABILITY_MUTE_CHANNEL": {
         return 23;
       }
-      case "CHANNEL_CAPABILITY_CUSTOM_EVENTS": {
+      case "CHANNEL_CAPABILITY_SEND_CUSTOM_EVENTS": {
         return 24;
       }
       case "CHANNEL_CAPABILITY_READ_EVENTS": {
@@ -1256,6 +1314,15 @@ export const ChannelCapabilityJSON = {
       case "CHANNEL_CAPABILITY_TYPING_EVENTS": {
         return 27;
       }
+      case "CHANNEL_CAPABILITY_SLOW_MODE": {
+        return 28;
+      }
+      case "CHANNEL_CAPABILITY_JOIN_CALL": {
+        return 29;
+      }
+      case "CHANNEL_CAPABILITY_CREATE_CALL": {
+        return 30;
+      }
       // unknown values are preserved as numbers. this occurs when new enum values are introduced and the generated code is out of date.
       default: {
         return i as unknown as number;
@@ -1264,28 +1331,28 @@ export const ChannelCapabilityJSON = {
   },
 } as const;
 
-export const ChannelResponseJSON = {
+export const ChannelUserViewJSON = {
   /**
-   * Serializes ChannelResponse to JSON.
+   * Serializes ChannelUserView to JSON.
    */
-  encode: function (msg: Partial<ChannelResponse>): string {
-    return JSON.stringify(ChannelResponseJSON._writeMessage(msg));
+  encode: function (msg: Partial<ChannelUserView>): string {
+    return JSON.stringify(ChannelUserViewJSON._writeMessage(msg));
   },
 
   /**
-   * Deserializes ChannelResponse from JSON.
+   * Deserializes ChannelUserView from JSON.
    */
-  decode: function (json: string): ChannelResponse {
-    return ChannelResponseJSON._readMessage(
-      ChannelResponseJSON.initialize(),
+  decode: function (json: string): ChannelUserView {
+    return ChannelUserViewJSON._readMessage(
+      ChannelUserViewJSON.initialize(),
       JSON.parse(json)
     );
   },
 
   /**
-   * Initializes ChannelResponse with all fields set to their default value.
+   * Initializes ChannelUserView with all fields set to their default value.
    */
-  initialize: function (): ChannelResponse {
+  initialize: function (): ChannelUserView {
     return {
       channelView: ChannelView.initialize(),
       userSettings: ChannelUserSettings.initialize(),
@@ -1298,7 +1365,7 @@ export const ChannelResponseJSON = {
    * @private
    */
   _writeMessage: function (
-    msg: Partial<ChannelResponse>
+    msg: Partial<ChannelUserView>
   ): Record<string, unknown> {
     const json: Record<string, unknown> = {};
     if (msg.channelView) {
@@ -1330,7 +1397,7 @@ export const ChannelResponseJSON = {
   /**
    * @private
    */
-  _readMessage: function (msg: ChannelResponse, json: any): ChannelResponse {
+  _readMessage: function (msg: ChannelUserView, json: any): ChannelUserView {
     const _channelView = json.channelView ?? json.channel_view;
     if (_channelView) {
       const m = ChannelView.initialize();
@@ -1440,7 +1507,7 @@ export const GetChannelResponseJSON = {
    */
   initialize: function (): GetChannelResponse {
     return {
-      channel: ChannelResponse.initialize(),
+      channel: ChannelUserView.initialize(),
     };
   },
 
@@ -1452,7 +1519,7 @@ export const GetChannelResponseJSON = {
   ): Record<string, unknown> {
     const json: Record<string, unknown> = {};
     if (msg.channel) {
-      const channel = ChannelResponseJSON._writeMessage(msg.channel);
+      const channel = ChannelUserViewJSON._writeMessage(msg.channel);
       if (Object.keys(channel).length > 0) {
         json.channel = channel;
       }
@@ -1469,8 +1536,8 @@ export const GetChannelResponseJSON = {
   ): GetChannelResponse {
     const _channel = json.channel;
     if (_channel) {
-      const m = ChannelResponse.initialize();
-      ChannelResponseJSON._readMessage(m, _channel);
+      const m = ChannelUserView.initialize();
+      ChannelUserViewJSON._readMessage(m, _channel);
       msg.channel = m;
     }
     return msg;
@@ -1668,7 +1735,7 @@ export const QueryChannelResponseJSON = {
   ): Record<string, unknown> {
     const json: Record<string, unknown> = {};
     if (msg.channels?.length) {
-      json.channels = msg.channels.map(ChannelResponseJSON._writeMessage);
+      json.channels = msg.channels.map(ChannelUserViewJSON._writeMessage);
     }
     return json;
   },
@@ -1683,8 +1750,8 @@ export const QueryChannelResponseJSON = {
     const _channels = json.channels;
     if (_channels) {
       for (const item of _channels) {
-        const m = ChannelResponse.initialize();
-        ChannelResponseJSON._readMessage(m, item);
+        const m = ChannelUserView.initialize();
+        ChannelUserViewJSON._readMessage(m, item);
         msg.channels.push(m);
       }
     }

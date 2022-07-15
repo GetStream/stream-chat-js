@@ -3,9 +3,13 @@
 /* eslint-disable */
 
 import type { ByteSource } from "twirpscript";
-import { BinaryReader, BinaryWriter } from "twirpscript";
+import {
+  BinaryReader,
+  BinaryWriter,
+  encodeBase64Bytes,
+  decodeBase64Bytes,
+} from "twirpscript";
 
-import { Struct, StructJSON } from "../../google/protobuf/struct.pb";
 import { Timestamp, TimestampJSON } from "../../google/protobuf/timestamp.pb";
 import { User, UserJSON } from "./user.pb";
 import { MessageView, MessageViewJSON } from "./message.pb";
@@ -68,7 +72,7 @@ export interface Channel {
    * custom is a JSON object which contains any channel data. This data can be
    * used for sorting, filtering and data organization.
    */
-  custom: Struct;
+  custom: Uint8Array;
   /**
    * The timestamp of channel creation.
    */
@@ -333,7 +337,7 @@ export const Channel = {
       translation: ChannelTranslation.initialize(),
       truncated: ChannelTruncationStatus.initialize(),
       commands: [],
-      custom: Struct.initialize(),
+      custom: new Uint8Array(),
       createdAt: Timestamp.initialize(),
       updatedAt: Timestamp.initialize(),
       deletedAt: Timestamp.initialize(),
@@ -385,8 +389,8 @@ export const Channel = {
         ChannelCommand._writeMessage
       );
     }
-    if (msg.custom) {
-      writer.writeMessage(11, msg.custom, Struct._writeMessage);
+    if (msg.custom?.length) {
+      writer.writeBytes(11, msg.custom);
     }
     if (msg.createdAt) {
       writer.writeMessage(12, msg.createdAt, Timestamp._writeMessage);
@@ -453,7 +457,7 @@ export const Channel = {
           break;
         }
         case 11: {
-          reader.readMessage(msg.custom, Struct._readMessage);
+          msg.custom = reader.readBytes();
           break;
         }
         case 12: {
@@ -1446,7 +1450,7 @@ export const ChannelJSON = {
       translation: ChannelTranslation.initialize(),
       truncated: ChannelTruncationStatus.initialize(),
       commands: [],
-      custom: Struct.initialize(),
+      custom: new Uint8Array(),
       createdAt: Timestamp.initialize(),
       updatedAt: Timestamp.initialize(),
       deletedAt: Timestamp.initialize(),
@@ -1502,11 +1506,8 @@ export const ChannelJSON = {
     if (msg.commands?.length) {
       json.commands = msg.commands.map(ChannelCommandJSON._writeMessage);
     }
-    if (msg.custom) {
-      const custom = StructJSON._writeMessage(msg.custom);
-      if (Object.keys(custom).length > 0) {
-        json.custom = custom;
-      }
+    if (msg.custom?.length) {
+      json.custom = encodeBase64Bytes(msg.custom);
     }
     if (msg.createdAt) {
       const createdAt = TimestampJSON._writeMessage(msg.createdAt);
@@ -1587,9 +1588,7 @@ export const ChannelJSON = {
     }
     const _custom = json.custom;
     if (_custom) {
-      const m = Struct.initialize();
-      StructJSON._readMessage(m, _custom);
-      msg.custom = m;
+      msg.custom = decodeBase64Bytes(_custom);
     }
     const _createdAt = json.createdAt ?? json.created_at;
     if (_createdAt) {

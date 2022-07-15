@@ -1,0 +1,3 @@
+# Ignore proto files for now
+*.proto
+
