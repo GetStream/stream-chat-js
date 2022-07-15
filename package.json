@@ -43,9 +43,7 @@
     "form-data": "^4.0.0",
     "isomorphic-ws": "^4.0.1",
     "jsonwebtoken": "^8.5.1",
-    "twirpscript": "^0.0.59",
     "ws": "^7.4.4"
-
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",
@@ -62,6 +60,9 @@
     "@babel/register": "^7.16.0",
     "@commitlint/cli": "^16.0.2",
     "@commitlint/config-conventional": "^16.0.0",
+    "@protobuf-ts/plugin": "^2.7.0",
+    "@protobuf-ts/protoc": "^2.7.0",
+    "@protobuf-ts/twirp-transport": "^2.7.0",
     "@rollup/plugin-babel": "^5.3.0",
     "@rollup/plugin-commonjs": "^17.1.0",
     "@rollup/plugin-node-resolve": "^11.2.0",

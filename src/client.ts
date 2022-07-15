@@ -146,10 +146,52 @@ import {
   ErrorFromResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
-import {QueryChannel} from "./protobuf/chat/v2/client_rpc/clientside.pb";
+
+import * as rpc from './protobuf_gen/chat/v2/client_rpc/clientside.client';
+import {TwirpFetchTransport} from "@protobuf-ts/twirp-transport";
+import {RpcInterceptor} from "@protobuf-ts/runtime-rpc";
+import {MethodInfo} from "@protobuf-ts/runtime-rpc/build/types/reflection-info";
+import {RpcOptions} from "@protobuf-ts/runtime-rpc/build/types/rpc-options";
+import {UnaryCall} from "@protobuf-ts/runtime-rpc/build/types/unary-call";
+import {ServerStreamingCall} from "@protobuf-ts/runtime-rpc/build/types/server-streaming-call";
+import {ClientStreamingCall} from "@protobuf-ts/runtime-rpc/build/types/client-streaming-call";
+import {DuplexStreamingCall} from "@protobuf-ts/runtime-rpc/build/types/duplex-streaming-call";
+import {
+  NextClientStreamingFn, NextDuplexStreamingFn,
+  NextServerStreamingFn,
+  NextUnaryFn
+} from "@protobuf-ts/runtime-rpc/build/types/rpc-interceptor";
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
+}
+
+class AuthorizationInterceptor<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> implements RpcInterceptor {
+
+  private client: StreamChat<StreamChatGenerics>;
+
+  constructor(client: StreamChat<StreamChatGenerics>) {
+    this.client = client;
+  }
+
+  interceptUnary?(next: NextUnaryFn, method: MethodInfo, input: object, options: RpcOptions): UnaryCall {
+    if (options.meta === undefined) {
+      options.meta = {};
+    }
+    options.meta["stream-auth-type"] = "jwt";
+    options.meta["api_key"] = this.client.key;
+    options.meta["Authorization"] = this.client.tokenManager.getToken() || "";
+    return next(method, input, options);
+  }
+  interceptServerStreaming?(next: NextServerStreamingFn, method: MethodInfo, input: object, options: RpcOptions): ServerStreamingCall {
+    return next(method, input, options);
+  }
+  interceptClientStreaming?(next: NextClientStreamingFn, method: MethodInfo, options: RpcOptions): ClientStreamingCall {
+    return next(method, options);
+  }
+  interceptDuplex?(next: NextDuplexStreamingFn, method: MethodInfo, options: RpcOptions): DuplexStreamingCall {
+    return next(method, options);
+  }
 }
 
 export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
@@ -161,6 +203,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   };
   anonymous: boolean;
   axiosInstance: AxiosInstance;
+  rpc!: rpc.IClientChatServiceClient;
   baseURL?: string;
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
@@ -398,6 +441,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
+
+    this.rpc = new rpc.ClientChatServiceClient(new TwirpFetchTransport({
+      baseUrl: this.baseURL,
+      timeout: this.options.timeout,
+      interceptors: [
+        new AuthorizationInterceptor(this),
+      ],
+    }));
   }
 
   _getConnectionID = () => this.wsConnection?.connectionID || this.wsFallback?.connectionID;
@@ -1445,24 +1496,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async queryChannelsV2(
     filterConditions: ChannelFilters<StreamChatGenerics>,
     sort: ChannelSort<StreamChatGenerics> = [],
-    options: ChannelOptions = {},
-    stateOptions: ChannelStateOptions = {}
+    options: ChannelOptions = {}
   ) {
-    const enc = new TextEncoder();
-    return await QueryChannel({
-      mq: enc.encode(JSON.stringify(filterConditions)),
+    const call = this.rpc.queryChannel({
+      mq: new TextEncoder().encode(JSON.stringify(filterConditions)),
       sort: [],
       pager: {
-        limit: options.limit ? BigInt(options.limit) : 0n,
-        offset: options.offset ? BigInt(options.offset): 0n,
-      }
-    }, {
-      baseURL: this.baseURL,
-      headers: {
-        Authorization: this.tokenManager.getToken() || "",
+        limit: options.limit?.toString() || "0",
+        offset: options.offset?.toString() || "0",
       },
-      prefix: "/rpc",
     });
+    return (await call.response).channels;
   }
 
   /**
