@@ -1511,12 +1511,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     for (const channelState of channelsFromApi) {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
-
-      if (staticState) {
-        c.staticState = true;
-      } else {
-        c.initialized = true;
-      }
+      c.staticState = staticState;
+      c.initialized = !staticState;
 
       if (skipInitialization === undefined) {
         c._initializeState(channelState, 'latest');
