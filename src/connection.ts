@@ -257,9 +257,21 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
     this.isConnecting = true;
     this.requestID = randomId();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
+    let isTokenReady = false;
     try {
       this._log(`_connect() - waiting for token`);
       await this.client.tokenManager.tokenReady();
+      isTokenReady = true;
+    } catch (e) {
+      // token provider has failed before, so try again
+    }
+
+    try {
+      if (!isTokenReady) {
+        this._log(`_connect() - tokenProvider failed before, so going to retry`);
+        await this.client.tokenManager.loadToken();
+      }
+
       this._setupConnectionPromise();
       const wsURL = this._buildUrl();
       this._log(`_connect() - Connecting to ${wsURL}`, { wsURL, requestID: this.requestID });
@@ -284,7 +296,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       }
     } catch (err) {
       this.isConnecting = false;
-
+      this._log(`_connect() - Error - `, err);
       if (this.client.options.enableInsights) {
         this.client.insightMetrics.wsConsecutiveFailures++;
         this.client.insightMetrics.wsTotalFailures++;
