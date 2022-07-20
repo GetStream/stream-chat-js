@@ -66,9 +66,23 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics> | undefined;
   _data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics>;
   cid: string;
+  /**  */
   listeners: { [key: string]: (string | EventHandler<StreamChatGenerics>)[] };
   state: ChannelState<StreamChatGenerics>;
+  /**
+   * This boolean is a vague indication of weather the channel exists on chat backend.
+   *
+   * If the value is true, then that means the channel has been initialized by either calling
+   * channel.create() or channel.query() or channel.watch().
+   *
+   * If the value is false, then channel may or may not exist on the backend. The only way to ensure
+   * is by calling channel.create() or channel.query() or channel.watch().
+   */
   initialized: boolean;
+  /**
+   * Indicates weather channel has been initialized by manually populating the state with some messages, members etc.
+   * Static state indicates that channel exists on backend, but is not being watched yet.
+   */
   staticState: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
@@ -113,7 +127,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // perhaps the state variable should be private
     this.state = new ChannelState<StreamChatGenerics>(this);
     this.initialized = false;
-    this.staticState = true;
+    this.staticState = false;
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
