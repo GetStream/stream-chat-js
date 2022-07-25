@@ -273,6 +273,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
@@ -604,7 +605,7 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
-  pending_message_metadata?: Record<string, string>;
+  pending_message_metadata?: Record<string, string> | null;
 };
 
 export type TruncateChannelAPIResponse<
@@ -2001,6 +2002,11 @@ export type MessageUpdatableFields<StreamChatGenerics extends ExtendableGenerics
 export type PartialMessageUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<MessageUpdatableFields<StreamChatGenerics>>;
   unset?: Array<keyof MessageUpdatableFields<StreamChatGenerics>>;
+};
+
+export type PendingMessageResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string>;
 };
 
 export type PermissionAPIObject = {
