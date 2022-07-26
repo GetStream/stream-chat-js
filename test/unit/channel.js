@@ -376,6 +376,41 @@ describe('Channel _handleChannelEvent', function () {
 				.undefined;
 		}
 	});
+
+	it('should extend "message.updated" and "message.deleted" event payloads with "own_reactions"', () => {
+		const own_reactions = [
+			{ created_at: new Date().toISOString(), updated_at: new Date().toISOString(), type: 'wow' },
+		];
+		const testCases = [
+			[generateMsg({ own_reactions })], // channel message
+			[generateMsg({ id: '0' }), generateMsg({ parent_id: '0', own_reactions })], // thread message
+		];
+
+		testCases.forEach((messages) => {
+			channel.state.addMessagesSorted(messages);
+			const message = messages[messages.length - 1];
+
+			const eventTypes = ['message.updated', 'message.deleted'];
+
+			eventTypes.forEach((eventType) => {
+				let receivedEvent;
+				channel.on(eventType, (e) => (receivedEvent = e));
+
+				const event = {
+					type: eventType,
+					// own_reactions is always [] in WS events
+					message: { ...message, own_reactions: [] },
+				};
+				channel._handleChannelEvent(event);
+				channel._callChannelListeners(event);
+
+				expect(channel.state.findMessage(message.id, message.parent_id).own_reactions.length).to.equal(
+					own_reactions.length,
+				);
+				expect(receivedEvent.message.own_reactions.length).to.equal(own_reactions.length);
+			});
+		});
+	});
 });
 
 describe('Channels - Constructor', function () {
