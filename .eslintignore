@@ -3,3 +3,4 @@
 /test
 scripts/get_changelog_diff.js
 *.md
+/src/protobuf_gen

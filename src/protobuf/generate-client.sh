@@ -17,6 +17,6 @@ npx protoc \
   --ts_opt client_generic \
   --ts_opt server_none \
   --proto_path $PROTO_DIR \
-  $PROTO_DIR/chat/v2/client_rpc/clientside.proto
+  $PROTO_DIR/chat/client_v2_rpc/rpc.proto
 
 echo "Finished generating protobuf client"

@@ -4,3 +4,4 @@
 /types
 CHANGELOG.md
 test/typescript/data.ts
+src/protobuf_gen
