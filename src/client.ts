@@ -451,7 +451,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.rpc = new rpc.ClientRPCClient(
       new TwirpFetchTransport({
-        baseUrl: this.baseURL,
+        baseUrl: this.baseURL + (this.options.twirpPathPrefix || ''),
         timeout: this.options.timeout,
         interceptors: [new AuthorizationInterceptor(this)],
       }),

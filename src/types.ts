@@ -896,6 +896,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  twirpPathPrefix?: string;
   warmUp?: boolean;
 };
 
