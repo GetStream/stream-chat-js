@@ -148,7 +148,7 @@ import {
 import { InsightMetrics, postInsights } from './insights';
 
 import * as rpc from './protobuf_gen/chat/client_v2_rpc/rpc.client';
-import * as utilsV2 from './protobuf_gen/chat/utils_v2/utils.client';
+import * as utilsV2 from './protobuf_gen/chat/utils_v2/utils';
 import { TwirpFetchTransport } from '@protobuf-ts/twirp-transport';
 import { RpcInterceptor } from '@protobuf-ts/runtime-rpc';
 import { MethodInfo } from '@protobuf-ts/runtime-rpc/build/types/reflection-info';
@@ -1502,7 +1502,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   async queryChannelsV2(
     filterConditions: ChannelFilters<StreamChatGenerics>,
-    sort: utilsV2.Sort<StreamChatGenerics> = [],
+    sort: utilsV2.Sort[] = [],
     options: ChannelOptions = {},
   ) {
     const call = this.rpc.queryChannels({
