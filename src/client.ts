@@ -1516,6 +1516,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return (await call.response).channels;
   }
 
+  async getChannelV2(channelType: string, channelID: string, memberIds: string[] = []) {
+    const call = this.rpc.getChannel$({
+      identifier: {
+        type: channelType,
+        id: channelID,
+        memberIds,
+      },
+    });
+    return (await call.response).channel;
+  }
+
   /**
    * queryChannels - Query channels
    *
