@@ -975,8 +975,6 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   | (StreamChatGenerics['eventType'] & ServerEvent<StreamChatGenerics>)
   | (LocalEvent & { received_at?: string | Date });
 
-export type EventInferred<T extends Event['type']> = Event & { type: T };
-
 export type UserCustomEvent<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['eventType'] & {
@@ -986,7 +984,6 @@ export type UserCustomEvent<
 export type EventHandler<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = (
   event: Event<StreamChatGenerics>,
 ) => void;
-export type EventHandlerInferred<T extends Event['type']> = (event: EventInferred<T>) => void;
 
 export type EventTypes = 'all' | keyof typeof EVENT_MAP;
 
