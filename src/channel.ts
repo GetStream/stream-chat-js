@@ -1147,11 +1147,11 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * off - Remove the event handler
    *
    */
-  off(eventType: EventTypes, callback: EventHandler<StreamChatGenerics>): void;
   off<EventType extends Event['type'], InferredEvent extends Extract<Event, { type: EventType }>>(
     eventType: EventType,
     callback: (event: InferredEvent) => void,
   ): void;
+  off(callback: EventHandler<StreamChatGenerics>): void;
   off(
     callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
@@ -1468,6 +1468,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
+    if (
+      event.type === 'connection.changed' ||
+      event.type === 'connection.recovered' ||
+      event.type === 'transport.changed'
+    ) {
+      return;
+    }
     if (!event.message) {
       return;
     }
