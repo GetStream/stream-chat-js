@@ -144,12 +144,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
+   * @param {boolean} [options.is_pending_message] Make this message pending
+   * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
   async sendMessage(
     message: Message<StreamChatGenerics>,
-    options?: { skip_enrich_url?: boolean; skip_push?: boolean },
+    options?: {
+      is_pending_message?: boolean;
+      pending_message_metadata?: Record<string, string>;
+      skip_enrich_url?: boolean;
+      skip_push?: boolean;
+    },
   ) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
@@ -1217,6 +1224,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'message.deleted':
         if (event.message) {
+          this._extendEventWithOwnReactions(event);
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
 
@@ -1254,6 +1262,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'message.updated':
         if (event.message) {
+          this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -1455,6 +1464,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           this.state.members[member.user.id] = member;
         }
       }
+    }
+  }
+
+  _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
+    if (!event.message) {
+      return;
+    }
+    const message = this.state.findMessage(event.message.id, event.message.parent_id);
+    if (message) {
+      event.message.own_reactions = message.own_reactions;
     }
   }
 

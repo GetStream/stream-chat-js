@@ -101,6 +101,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
       }
     >;
     reminders_interval: number;
+    agora_options?: AgoraOptions | null;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
@@ -112,6 +113,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     grants?: Record<string, string[]>;
+    hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -136,6 +138,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
+    video_provider?: string;
     webhook_events?: Array<string>;
     webhook_url?: string;
   };
@@ -270,6 +273,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
@@ -601,6 +605,7 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string> | null;
 };
 
 export type TruncateChannelAPIResponse<
@@ -1482,6 +1487,7 @@ export type AppSettings = {
   };
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
+  before_message_send_hook_url?: string;
   cdn_expiration_seconds?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
@@ -2010,6 +2016,11 @@ export type MessageUpdatableFields<StreamChatGenerics extends ExtendableGenerics
 export type PartialMessageUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<MessageUpdatableFields<StreamChatGenerics>>;
   unset?: Array<keyof MessageUpdatableFields<StreamChatGenerics>>;
+};
+
+export type PendingMessageResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string>;
 };
 
 export type PermissionAPIObject = {
