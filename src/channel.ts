@@ -1099,7 +1099,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {EventHandler<StreamChatGenerics> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<StreamChatGenerics>} [callbackOrNothing] The callback to call
    */
-  on(eventType: EventTypes, callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
+  on<EventType extends Event['type'], InferredEvent extends Extract<Event, { type: EventType }>>(
+    eventType: EventType,
+    callback: (event: InferredEvent) => void,
+  ): { unsubscribe: () => void };
   on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
   on(
     callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
@@ -1138,7 +1141,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    */
   off(eventType: EventTypes, callback: EventHandler<StreamChatGenerics>): void;
-  off(callback: EventHandler<StreamChatGenerics>): void;
+  off<EventType extends Event['type'], InferredEvent extends Extract<Event, { type: EventType }>>(
+    eventType: EventType,
+    callback: (event: InferredEvent) => void,
+  ): void;
   off(
     callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
