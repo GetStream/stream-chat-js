@@ -1407,6 +1407,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       this.state.pinnedMessages = [];
     }
     this.state.addPinnedMessages(state.pinned_messages || []);
+    if (state.pending_messages) {
+      this.state.pending_messages = state.pending_messages;
+    }
     this.state.watcher_count = state.watcher_count || 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
