@@ -144,6 +144,8 @@ import {
   GetCallTokenResponse,
   APIErrorResponse,
   ErrorFromResponse,
+  SyncOptions,
+  SyncResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2576,11 +2578,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /** sync - returns all events that happened for a list of channels since last sync
    * @param {string[]} channel_cids list of channel CIDs
    * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
+   * @param {SyncOptions} options See JSDoc in the type fields for more info
+   *
+   * @returns {Promise<SyncResponse>}
    */
-  sync(channel_cids: string[], last_sync_at: string) {
-    return this.post<APIResponse & { events: Event<StreamChatGenerics>[] }>(`${this.baseURL}/sync`, {
+  sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
+    return this.post<SyncResponse>(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
+      ...options,
     });
   }
 
