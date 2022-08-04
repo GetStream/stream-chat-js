@@ -1466,11 +1466,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
-    if (
-      event.type === 'connection.changed' ||
-      event.type === 'connection.recovered' ||
-      event.type === 'transport.changed'
-    ) {
+    if (isLocalEvent(event)) {
       return;
     }
     if (!event.message) {
