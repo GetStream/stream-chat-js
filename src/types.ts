@@ -608,6 +608,11 @@ export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics
   pending_message_metadata?: Record<string, string> | null;
 };
 
+export type SyncResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  events: Event<StreamChatGenerics>[];
+  inaccessible_cids?: string[];
+};
+
 export type TruncateChannelAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = APIResponse & {
@@ -898,6 +903,19 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+};
+
+export type SyncOptions = {
+  /**
+   * This will behave as queryChannels option.
+   */
+  watch?: boolean;
+  /**
+   * Return channels from request that user does not have access to in a separate
+   * field in the response called 'inaccessible_cids' instead of
+   * adding them as 'notification.removed_from_channel' events.
+   */
+  with_inaccessible_cids?: boolean;
 };
 
 export type UnBanUserOptions = {
