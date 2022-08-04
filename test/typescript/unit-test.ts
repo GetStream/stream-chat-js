@@ -197,7 +197,6 @@ const event: Event<StreamTypes> = {
   member: { user_id: 'john' },
   user: { id: 'john', online: true },
   unread_count: 3,
-  online: true,
 };
 voidReturn = client.dispatchEvent(event);
 voidPromise = client.recoverState();
