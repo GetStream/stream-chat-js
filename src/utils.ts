@@ -1,5 +1,14 @@
 import FormData from 'form-data';
-import { AscDesc, ExtendableGenerics, DefaultGenerics, OwnUserBase, OwnUserResponse, UserResponse } from './types';
+import {
+  AscDesc,
+  ExtendableGenerics,
+  DefaultGenerics,
+  OwnUserBase,
+  OwnUserResponse,
+  UserResponse,
+  Event as StreamEvent,
+  LocalEvent as StreamLocalEvent,
+} from './types';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -58,6 +67,14 @@ export function isOwnUser<StreamChatGenerics extends ExtendableGenerics = Defaul
   user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
 ): user is OwnUserResponse<StreamChatGenerics> {
   return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
+}
+
+export function isLocalEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  event: StreamEvent<StreamChatGenerics>,
+): event is StreamEvent<StreamChatGenerics, StreamLocalEvent['type']> {
+  return (
+    event.type !== 'connection.changed' && event.type !== 'connection.recovered' && event.type !== 'transport.changed'
+  );
 }
 
 function isBlobWebAPI(uri: unknown): uri is Blob {

@@ -1,6 +1,6 @@
 import { ChannelState } from './channel_state';
 import { isValidEventType } from './events';
-import { logChatPromiseExecution, normalizeQuerySort } from './utils';
+import { isLocalEvent, logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -1342,12 +1342,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     // any event can send over the online count
-    if (
-      event.type !== 'connection.changed' &&
-      event.type !== 'connection.recovered' &&
-      event.type !== 'transport.changed' &&
-      event.watcher_count
-    ) {
+    if (!isLocalEvent(event) && event.watcher_count) {
       channel.state.watcher_count = event.watcher_count;
     }
   }

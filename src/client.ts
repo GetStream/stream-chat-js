@@ -23,6 +23,7 @@ import {
   sleep,
   retryInterval,
   isOnline,
+  isLocalEvent,
 } from './utils';
 
 import {
@@ -1019,12 +1020,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   dispatchEvent = (event: Event<StreamChatGenerics>) => {
     if (!event.received_at) event.received_at = new Date();
     let channel: Channel<StreamChatGenerics> | undefined = undefined;
-    if (
-      event.type !== 'connection.changed' &&
-      event.type !== 'connection.recovered' &&
-      event.type !== 'transport.changed' &&
-      event.cid
-    ) {
+
+    if (!isLocalEvent(event) && event.cid) {
       channel = this.activeChannels[event.cid];
     }
 

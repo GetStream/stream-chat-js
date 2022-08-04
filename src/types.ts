@@ -966,9 +966,9 @@ type TransportChangedLocalEvent = {
   type: 'transport.changed';
 };
 
-type LocalEvent = ConnectionChangedLocalEvent | ConnectionRecoveredLocalEvent | TransportChangedLocalEvent;
+export type LocalEvent = ConnectionChangedLocalEvent | ConnectionRecoveredLocalEvent | TransportChangedLocalEvent;
 
-type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   type: Exclude<EventTypes, LocalEvent['type']>;
   channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
@@ -994,6 +994,7 @@ type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
   watcher_count?: number;
 };
 
+// either a local-event or a server-event or a user-custom-event
 export type Event<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
   T extends string = EventTypes
