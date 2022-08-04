@@ -73,7 +73,7 @@ export function isLocalEvent<StreamChatGenerics extends ExtendableGenerics = Def
   event: StreamEvent<StreamChatGenerics>,
 ): event is StreamEvent<StreamChatGenerics, StreamLocalEvent['type']> {
   return (
-    event.type !== 'connection.changed' && event.type !== 'connection.recovered' && event.type !== 'transport.changed'
+    event.type === 'connection.changed' || event.type === 'connection.recovered' || event.type === 'transport.changed'
   );
 }
 
