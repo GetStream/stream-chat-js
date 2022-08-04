@@ -814,7 +814,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {{ unsubscribe: () => void }} Description
    */
   on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on<EventType extends Event['type']>(
+  on<EventType extends Event<StreamChatGenerics>['type']>(
     eventType: EventType,
     callback: (event: Event<StreamChatGenerics, EventType>) => void,
   ): { unsubscribe: () => void };
@@ -846,7 +846,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    */
   off(callback: EventHandler<StreamChatGenerics>): void;
-  off<EventType extends Event['type']>(
+  off<EventType extends Event<StreamChatGenerics>['type']>(
     eventType: EventType,
     callback: (event: Event<StreamChatGenerics, EventType>) => void,
   ): void;
