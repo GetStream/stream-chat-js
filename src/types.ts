@@ -994,6 +994,12 @@ export type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultG
   watcher_count?: number;
 };
 
+export type UserCustomEvent<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = StreamChatGenerics['eventType'] & {
+  type: string;
+};
+
 // either a local-event or a server-event or a user-custom-event
 export type Event<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
@@ -1007,15 +1013,7 @@ export type Event<
     >
   : T extends ServerEvent['type']
   ? ServerEvent<StreamChatGenerics>
-  : StreamChatGenerics['eventType'] & {
-      type: T;
-    };
-
-export type UserCustomEvent<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = StreamChatGenerics['eventType'] & {
-  type: string;
-};
+  : UserCustomEvent<StreamChatGenerics>;
 
 export type EventHandler<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = (
   event: Event<StreamChatGenerics>,
