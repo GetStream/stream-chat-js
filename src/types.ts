@@ -438,6 +438,10 @@ export type GetCommandResponse<StreamChatGenerics extends ExtendableGenerics = D
   CreateCommandOptions<StreamChatGenerics> &
   CreatedAtUpdatedAt;
 
+export type GetMessageAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = SendMessageAPIResponse<StreamChatGenerics>;
+
 export type GetMultipleMessagesAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = APIResponse & {

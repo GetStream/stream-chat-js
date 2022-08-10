@@ -69,6 +69,7 @@ import {
   FlagUserResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetMessageAPIResponse,
   GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
@@ -2413,9 +2414,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   async getMessage(messageID: string) {
-    return await this.get<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
-      this.baseURL + `/messages/${messageID}`,
-    );
+    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(this.baseURL + `/messages/${messageID}`);
   }
 
   getUserAgent() {
