@@ -2979,4 +2979,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async listPushProviders() {
     return await this.get<APIResponse & PushProviderListResponse>(this.baseURL + `/push_providers`);
   }
+
+  /**
+   * commitMessage - Commit a pending message
+   *
+   * @param {string} id message ID
+   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
+   * @param {boolean} [options.skip_push] Skip sending push notifications
+   *
+   * @return {APIResponse & MessageResponse} The committed message
+   */
+  async commitMessage(
+    id: string,
+    options?: {
+      skip_enrich_url?: boolean;
+      skip_push?: boolean;
+    },
+  ) {
+    return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+      this.baseURL + `/messages/${id}/commit`,
+      {
+        id,
+        ...options,
+      },
+    );
+  }
 }
