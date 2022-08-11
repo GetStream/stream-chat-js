@@ -280,6 +280,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
@@ -443,6 +444,10 @@ export type GetChannelTypeResponse<StreamChatGenerics extends ExtendableGenerics
 export type GetCommandResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse &
   CreateCommandOptions<StreamChatGenerics> &
   CreatedAtUpdatedAt;
+
+export type GetMessageAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = SendMessageAPIResponse<StreamChatGenerics>;
 
 export type GetMultipleMessagesAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
@@ -612,6 +617,12 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string> | null;
+};
+
+export type SyncResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  events: Event<StreamChatGenerics>[];
+  inaccessible_cids?: string[];
 };
 
 export type TruncateChannelAPIResponse<
@@ -906,6 +917,19 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+};
+
+export type SyncOptions = {
+  /**
+   * This will behave as queryChannels option.
+   */
+  watch?: boolean;
+  /**
+   * Return channels from request that user does not have access to in a separate
+   * field in the response called 'inaccessible_cids' instead of
+   * adding them as 'notification.removed_from_channel' events.
+   */
+  with_inaccessible_cids?: boolean;
 };
 
 export type UnBanUserOptions = {
@@ -2015,6 +2039,11 @@ export type MessageUpdatableFields<StreamChatGenerics extends ExtendableGenerics
 export type PartialMessageUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<MessageUpdatableFields<StreamChatGenerics>>;
   unset?: Array<keyof MessageUpdatableFields<StreamChatGenerics>>;
+};
+
+export type PendingMessageResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string>;
 };
 
 export type PermissionAPIObject = {

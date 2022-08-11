@@ -10,6 +10,7 @@ import {
   MessageResponse,
   ReactionResponse,
   UserResponse,
+  PendingMessageResponse,
 } from './types';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
@@ -26,6 +27,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   typing: Record<string, Event<StreamChatGenerics>>;
   read: ChannelReadStatus<StreamChatGenerics>;
   pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
+  pending_messages: Array<PendingMessageResponse<StreamChatGenerics>>;
   threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;
   mutedUsers: Array<UserResponse<StreamChatGenerics>>;
   watchers: Record<string, UserResponse<StreamChatGenerics>>;
@@ -58,6 +60,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.read = {};
     this.initMessages();
     this.pinnedMessages = [];
+    this.pending_messages = [];
     this.threads = {};
     // a list of users to hide messages from
     this.mutedUsers = [];

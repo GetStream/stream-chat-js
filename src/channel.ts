@@ -161,12 +161,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
+   * @param {boolean} [options.is_pending_message] Make this message pending
+   * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
   async sendMessage(
     message: Message<StreamChatGenerics>,
-    options?: { skip_enrich_url?: boolean; skip_push?: boolean },
+    options?: {
+      is_pending_message?: boolean;
+      pending_message_metadata?: Record<string, string>;
+      skip_enrich_url?: boolean;
+      skip_push?: boolean;
+    },
   ) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
@@ -1426,6 +1433,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       this.state.pinnedMessages = [];
     }
     this.state.addPinnedMessages(state.pinned_messages || []);
+    if (state.pending_messages) {
+      this.state.pending_messages = state.pending_messages;
+    }
     this.state.watcher_count = state.watcher_count || 0;
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
