@@ -1,4 +1,5 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -907,6 +908,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+  wsConnection?: StableWSConnection;
 };
 
 export type SyncOptions = {
