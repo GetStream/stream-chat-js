@@ -908,6 +908,8 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+  // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
+  // not be used in production apps.
   wsConnection?: StableWSConnection;
 };
 
