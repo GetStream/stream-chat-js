@@ -92,6 +92,10 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
     this.client.logger(level, 'connection:' + msg, { tags: ['connection'], ...extra });
   }
 
+  setClient(client: StreamChat<StreamChatGenerics>) {
+    this.client = client;
+  }
+
   /**
    * connect - Connect to the WS URL
    * the default 15s timeout allows between 2~3 tries
