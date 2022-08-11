@@ -1875,7 +1875,7 @@ export type EndpointName =
   | 'GetRateLimits'
   | 'CreateSegment'
   | 'GetSegment'
-  | 'ListSegments'
+  | 'QuerySegments'
   | 'UpdateSegment'
   | 'DeleteSegment'
   | 'CreateCampaign'
@@ -2257,46 +2257,64 @@ export type DeleteUserOptions = {
 
 export type SegmentData = {
   description: string;
-  // TODO: define this type in more detail
-  filter: {
-    channel?: object;
-    user?: object;
-  };
+  filter: {};
   name: string;
+  type: 'channel' | 'user';
 };
 
 export type Segment = {
-  app_pk: number;
   created_at: string;
   id: string;
+  size: number;
+  status: string;
   updated_at: string;
-  recipients?: number;
 } & SegmentData;
+
+export type CampaignSortField = {
+  field: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any;
+};
+
+export type CampaignSort = {
+  fields: CampaignSortField[];
+  direction?: 'asc' | 'desc';
+};
+
+export type CampaignQueryOptions = {
+  limit?: number;
+  sort?: CampaignSort;
+};
+
+// TODO: add better typing
+export type SegmentFilters = {};
+export type CampaignFilters = {};
+export type RecipientFilters = {};
 
 export type CampaignData = {
   attachments: Attachment[];
+  channel_type: string;
   defaults: Record<string, string>;
   name: string;
   segment_id: string;
   text: string;
   description?: string;
-  push_notifications?: boolean;
   sender_id?: string;
 };
 
 export type CampaignStatus = {
-  errors: string[];
-  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'canceled' | 'in_progress';
+  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
   completed_at?: string;
+  errored_messages?: number;
   failed_at?: string;
-  progress?: number;
   resumed_at?: string;
   scheduled_at?: string;
+  scheduled_for?: string;
+  sent_messages?: number;
   stopped_at?: string;
 };
 
 export type Campaign = {
-  app_pk: string;
   created_at: string;
   id: string;
   updated_at: string;
@@ -2306,6 +2324,16 @@ export type Campaign = {
 export type TestCampaignResponse = {
   campaign?: Campaign;
   invalid_users?: Record<string, string>;
+};
+
+export type Recipient = {
+  campaign_id: string;
+  channel_cid: string;
+  created_at: string;
+  status: string;
+  updated_at: string;
+  message_id?: string;
+  receiver_id?: string;
 };
 
 export type TaskStatus = {

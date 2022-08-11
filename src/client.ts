@@ -822,6 +822,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const valid = isValidEventType(key);
+    if (!valid) {
+      throw Error(`Invalid event type ${key}`);
+    }
     const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -2650,28 +2654,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return segment;
   }
 
-  /**
-   * getSegment - Get a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   *
-   * @return {Segment} A Segment
-   */
-  async getSegment(id: string) {
-    const { segment } = await this.get<{ segment: Segment }>(this.baseURL + `/segments/${id}`);
-    return segment;
-  }
-
-  /**
-   * listSegments - List Campaign Segments
+   /**
+   * querySegments - Query Campaign Segments
    *
    *
    * @return {Segment[]} Segments
    */
-  async listSegments(options: { limit?: number; offset?: number }) {
-    const { segments } = await this.get<{ segments: Segment[] }>(this.baseURL + `/segments`, options);
-    return segments;
-  }
+    async querySegments(filters: SegmentFilters, options: CampaignQueryOptions = {}) {
+      const { segments } = await this.post<{ segments: Segment[] }>(this.baseURL + `/segments`, {
+        filter_conditions: filters,
+        ...options,
+      });
+      return segments;
+    }
 
   /**
    * updateSegment - Update a Campaign Segment
@@ -2710,25 +2705,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * getCampaign - Get a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} A Campaign
-   */
-  async getCampaign(id: string) {
-    const { campaign } = await this.get<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`);
-    return campaign;
-  }
-
-  /**
-   * listCampaigns - List Campaigns
+   * queryCampaigns - Query Campaigns
    *
    *
    * @return {Campaign[]} Campaigns
    */
-  async listCampaigns(options: { limit?: number; offset?: number }) {
-    const { campaigns } = await this.get<{ campaigns: Campaign[] }>(this.baseURL + `/campaigns`, options);
+  async queryCampaigns(filters: CampaignFilters, options: CampaignQueryOptions = {}) {
+    const { campaigns } = await this.post<{ campaigns: Campaign[] }>(this.baseURL + `/campaigns`, {
+      filter_conditions: {},
+      ...options,
+    });
     return campaigns;
   }
 
@@ -2809,6 +2795,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
+  }
+
+  /**
+   * queryRecipients - Query Campaign Recipient Results
+   *
+   *
+   * @return {Recipient[]} Recipients
+   */
+   async queryRecipients(filters: RecipientFilters, options: CampaignQueryOptions = {}) {
+    const { recipients } = await this.post<{ recipients: Recipient[] }>(this.baseURL + `/recipients`, {
+      filter_conditions: {},
+      ...options,
+    });
+    return recipients;
   }
 
   /**
