@@ -1,4 +1,5 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -907,6 +908,9 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+  // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
+  // not be used in production apps.
+  wsConnection?: StableWSConnection;
 };
 
 export type SyncOptions = {

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.8.0](https://github.com/GetStream/stream-chat-js/compare/v6.7.3...v6.8.0) (2022-08-11)
+
+
+### Features
+
+* add more sync function types ([#1024](https://github.com/GetStream/stream-chat-js/issues/1024)) ([b34fe11](https://github.com/GetStream/stream-chat-js/commit/b34fe115867c9af8c172804271b38ba4bc422c31))
+* add pending message in send message request and response ([#1016](https://github.com/GetStream/stream-chat-js/issues/1016)) ([db32e24](https://github.com/GetStream/stream-chat-js/commit/db32e24a1b1e7aef793fe9de7a6819185f770f5e))
+* get pending message with metadata ([#1026](https://github.com/GetStream/stream-chat-js/issues/1026)) ([62e81f8](https://github.com/GetStream/stream-chat-js/commit/62e81f8252fe65b66a9c2219a7a72d06213fd798))
+* pending messages in channel response ([#1019](https://github.com/GetStream/stream-chat-js/issues/1019)) ([1db90fe](https://github.com/GetStream/stream-chat-js/commit/1db90fe99f76f16c6fc7c1d8ddb8d15f13ddacf6))
+* pending messages in channel state ([#1023](https://github.com/GetStream/stream-chat-js/issues/1023)) ([252c6e3](https://github.com/GetStream/stream-chat-js/commit/252c6e3c713c177249195f5ea6f96abec4c4706c))
+
+
+### Bug Fixes
+
+* message update and delete events override own reactions ([#1009](https://github.com/GetStream/stream-chat-js/issues/1009)) ([fe1ad64](https://github.com/GetStream/stream-chat-js/commit/fe1ad64ab2c3870f1153e5b9ea83e215e4cc6f5b))
+* race condition of query channels and ws connection ([#1029](https://github.com/GetStream/stream-chat-js/issues/1029)) ([f3a9ab4](https://github.com/GetStream/stream-chat-js/commit/f3a9ab4cbe2d04b9567d5b8545dda0540f74b2f4))
+
 ### [6.7.3](https://github.com/GetStream/stream-chat-js/compare/v6.7.2...v6.7.3) (2022-07-06)
 
 

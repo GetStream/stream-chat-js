@@ -7,6 +7,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
 import { ConnectionState } from '../../src/connection_fallback';
+import { StableWSConnection } from '../../src/connection';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -160,6 +161,39 @@ describe('Client active channels cache', () => {
 		});
 
 		expect(countUnreadChannels(client.activeChannels)).to.be.equal(3);
+	});
+});
+
+describe('Client openConnection', () => {
+	let client;
+
+	beforeEach(() => {
+		const wsConnection = new StableWSConnection({});
+		wsConnection.isConnecting = false;
+		wsConnection.connect = function () {
+			this.isConnecting = true;
+			return new Promise((resolve) => {
+				setTimeout(() => {
+					resolve({
+						connection_id: utils.generateUUIDv4(),
+					});
+				}, 1000);
+			});
+		};
+
+		client = new StreamChat('', { allowServerSideConnect: true, wsConnection });
+	});
+
+	it('should return same promise in case of multiple calls', async () => {
+		client.userID = 'vishal';
+		client._setUser({
+			id: 'vishal',
+		});
+
+		const promise1 = client.openConnection();
+		const promise2 = client.openConnection();
+
+		expect(await promise2).to.equal(await promise1);
 	});
 });
 
