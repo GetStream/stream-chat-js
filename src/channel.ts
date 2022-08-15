@@ -83,7 +83,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * Indicates weather channel has been initialized by manually populating the state with some messages, members etc.
    * Static state indicates that channel exists on backend, but is not being watched yet.
    */
-  staticState: boolean;
+  offlineMode: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
@@ -127,7 +127,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // perhaps the state variable should be private
     this.state = new ChannelState<StreamChatGenerics>(this);
     this.initialized = false;
-    this.staticState = false;
+    this.offlineMode = false;
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
@@ -1398,7 +1398,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   };
 
   _checkInitialized() {
-    if (!this.initialized && !this.staticState && !this.getClient()._isUsingServerAuth()) {
+    if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );

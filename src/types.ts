@@ -741,8 +741,8 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
 };
 
 export type ChannelStateOptions = {
+  offlineMode?: boolean;
   skipInitialization?: string[];
-  staticState?: boolean;
 };
 
 export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {

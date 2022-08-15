@@ -1506,7 +1506,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     channelsFromApi: ChannelAPIResponse<StreamChatGenerics>[] = [],
     stateOptions: ChannelStateOptions = {},
   ) {
-    const { skipInitialization, staticState = false } = stateOptions;
+    const { skipInitialization, offlineMode = false } = stateOptions;
 
     for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState);
@@ -1517,8 +1517,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     for (const channelState of channelsFromApi) {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
-      c.staticState = staticState;
-      c.initialized = !staticState;
+      c.offlineMode = offlineMode;
+      c.initialized = !offlineMode;
 
       if (skipInitialization === undefined) {
         c._initializeState(channelState, 'latest');
@@ -1530,12 +1530,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       channels.push(c);
     }
 
-    if (!staticState) {
+    if (!offlineMode) {
       // If the channels are coming from server, then clear out the
       // previously help offline channels.
       for (const key in this.activeChannels) {
         const channel = this.activeChannels[key];
-        if (channel.staticState) {
+        if (channel.offlineMode) {
           delete this.activeChannels[key];
         }
       }
