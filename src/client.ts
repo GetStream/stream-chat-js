@@ -531,12 +531,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       throw Error('User is not set on client, use client.connectUser or client.connectAnonymousUser instead');
     }
 
-    if (this.wsConnection?.isConnecting) {
+    if (this.wsConnection?.isConnecting && this.wsPromise) {
       this.logger('info', 'client:openConnection() - connection already in progress', {
         tags: ['connection', 'client'],
       });
-
-      return Promise.resolve();
+      return this.wsPromise;
     }
 
     if ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) && this._hasConnectionID()) {
@@ -1322,9 +1321,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
       this._sayHi();
     }
-
     // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection<StreamChatGenerics>({ client: this });
+    if (this.options.wsConnection && this.node) {
+      // Intentionally avoiding adding ts generics on wsConnection in options since its only useful for unit test purpose.
+      ((this.options.wsConnection as unknown) as StableWSConnection<StreamChatGenerics>).setClient(this);
+      this.wsConnection = (this.options.wsConnection as unknown) as StableWSConnection<StreamChatGenerics>;
+    } else {
+      this.wsConnection = new StableWSConnection<StreamChatGenerics>({ client: this });
+    }
 
     try {
       // if fallback is used before, continue using it instead of waiting for WS to fail
@@ -1388,7 +1392,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     };
 
     // Make sure we wait for the connect promise if there is a pending one
-    await this.setUserPromise;
+    await this.wsPromise;
 
     if (!this._hasConnectionID()) {
       defaultOptions.presence = false;
@@ -1472,8 +1476,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const defaultOptions: ChannelOptions = { state: true, watch: true, presence: false };
 
     // Make sure we wait for the connect promise if there is a pending one
-    await this.setUserPromise;
-
+    await this.wsPromise;
     if (!this._hasConnectionID()) {
       defaultOptions.watch = false;
     }
@@ -1572,7 +1575,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     // Make sure we wait for the connect promise if there is a pending one
-    await this.setUserPromise;
+    await this.wsPromise;
 
     return await this.get<SearchAPIResponse<StreamChatGenerics>>(this.baseURL + '/search', { payload });
   }
