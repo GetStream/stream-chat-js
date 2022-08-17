@@ -390,10 +390,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Promise<PartialUpdateChannelAPIResponse<StreamChatGenerics>>}
    */
   async updatePartial(update: PartialUpdateChannel<StreamChatGenerics>) {
-    return await this.getClient().patch<PartialUpdateChannelAPIResponse<StreamChatGenerics>>(
+    const data = await this.getClient().patch<PartialUpdateChannelAPIResponse<StreamChatGenerics>>(
       this._channelURL(),
       update,
     );
+    this.data = data.channel;
+    return data;
   }
 
   /**
@@ -992,6 +994,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
     // add any messages to our channel state
     this._initializeState(state, messageSetToAddToIfDoesNotExist);
+
+    this.data = state.channel;
 
     return state;
   }
