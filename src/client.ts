@@ -579,8 +579,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
    */
   async updateAppSettings(options: AppSettings) {
-    if (options.apn_config?.p12_cert) {
-      options.apn_config.p12_cert = Buffer.from(options.apn_config.p12_cert).toString('base64');
+    const apn_config = options.apn_config;
+    if (apn_config?.p12_cert) {
+      options = {
+        ...options,
+        apn_config: { ...apn_config, p12_cert: Buffer.from(apn_config.p12_cert).toString('base64') },
+      };
     }
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
