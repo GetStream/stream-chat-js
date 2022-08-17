@@ -68,6 +68,15 @@ describe('StreamChat getInstance', () => {
 
 		expect(client.baseURL).to.equal(baseURL);
 	});
+
+	it('app settings do not mutate', async () => {
+		const client = new StreamChat('key', 'secret');
+		const cert = Buffer.from('test');
+		const options = { apn_config: { p12_cert: cert } };
+		await expect(client.updateAppSettings(options)).to.be.rejectedWith(/.*/);
+
+		expect(options.apn_config.p12_cert).to.be.eql(cert);
+	});
 });
 
 describe('Client userMuteStatus', function () {
