@@ -10,4 +10,4 @@ export * from './signing';
 export * from './token_manager';
 export * from './insights';
 export * from './types';
-export { isOwnUser, chatCodes, logChatPromiseExecution } from './utils';
+export { isOwnUser, chatCodes, logChatPromiseExecution, isLocalEvent, isServerEvent } from './utils';

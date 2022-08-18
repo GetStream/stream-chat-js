@@ -8,6 +8,7 @@ import {
   UserResponse,
   Event as StreamEvent,
   LocalEvent as StreamLocalEvent,
+  ServerEvent,
 } from './types';
 
 /**
@@ -75,6 +76,12 @@ export function isLocalEvent<StreamChatGenerics extends ExtendableGenerics = Def
   return (
     event.type === 'connection.changed' || event.type === 'connection.recovered' || event.type === 'transport.changed'
   );
+}
+
+export function isServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  event: StreamEvent<StreamChatGenerics>,
+): event is StreamEvent<StreamChatGenerics, ServerEvent['type']> {
+  return !isLocalEvent(event);
 }
 
 function isBlobWebAPI(uri: unknown): uri is Blob {

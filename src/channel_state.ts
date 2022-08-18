@@ -24,7 +24,7 @@ type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGe
 export class ChannelState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   _channel: Channel<StreamChatGenerics>;
   watcher_count: number;
-  typing: Record<string, Event<StreamChatGenerics>>;
+  typing: Record<string, Event<StreamChatGenerics, 'typing.start'>>;
   read: ChannelReadStatus<StreamChatGenerics>;
   pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   pending_messages: Array<PendingMessageResponse<StreamChatGenerics>>;

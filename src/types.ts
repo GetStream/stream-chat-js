@@ -969,7 +969,7 @@ type TransportChangedLocalEvent = {
 export type LocalEvent = ConnectionChangedLocalEvent | ConnectionRecoveredLocalEvent | TransportChangedLocalEvent;
 
 export type ServerEvent<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  type: Exclude<EventTypes, LocalEvent['type']>;
+  type: Exclude<EventTypes, LocalEvent['type'] | 'all'>;
   channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
   channel_type?: string;
@@ -1013,11 +1013,22 @@ export type Event<
     >
   : T extends ServerEvent['type']
   ? ServerEvent<StreamChatGenerics>
+  : T extends 'all'
+  ?
+      | ServerEvent<StreamChatGenerics>
+      | (LocalEvent & {
+          received_at?: string | Date;
+        })
   : UserCustomEvent<StreamChatGenerics>;
 
-export type EventHandler<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = (
-  event: Event<StreamChatGenerics>,
+export type ServerEventHandler<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = (
+  event: ServerEvent<StreamChatGenerics>,
 ) => void;
+
+export type EventHandler<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
+  T extends string = EventTypes
+> = (event: Event<StreamChatGenerics, T>) => void;
 
 export type EventTypes = 'all' | keyof typeof EVENT_MAP;
 

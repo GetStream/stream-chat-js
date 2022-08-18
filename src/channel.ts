@@ -52,6 +52,8 @@ import {
   MessagePaginationOptions,
   CreateCallOptions,
   CreateCallResponse,
+  ServerEvent,
+  ServerEventHandler,
 } from './types';
 import { Role } from './permissions';
 
@@ -65,7 +67,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics> | undefined;
   _data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics>;
   cid: string;
-  listeners: { [key: string]: (string | EventHandler<StreamChatGenerics>)[] };
+  /**  */
+  listeners: { [key: string]: ServerEventHandler<StreamChatGenerics>[] };
   state: ChannelState<StreamChatGenerics>;
   initialized: boolean;
   lastKeyStroke?: Date;
@@ -201,11 +204,11 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * sendEvent - Send an event on this channel
    *
-   * @param {Event<StreamChatGenerics>} event for example {type: 'message.read'}
+   * @param {ServerEvent<StreamChatGenerics>} event for example {type: 'message.read'}
    *
    * @return {Promise<EventAPIResponse<StreamChatGenerics>>} The Server Response
    */
-  async sendEvent(event: Event<StreamChatGenerics>) {
+  async sendEvent(event: ServerEvent<StreamChatGenerics>) {
     this._checkInitialized();
     return await this.getClient().post<EventAPIResponse<StreamChatGenerics>>(this._channelURL() + '/event', {
       event,
@@ -649,7 +652,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
-      } as Event<StreamChatGenerics>);
+      } as ServerEvent<StreamChatGenerics>);
     }
   }
 
@@ -667,7 +670,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     await this.sendEvent({
       type: 'typing.stop',
       parent_id,
-    } as Event<StreamChatGenerics>);
+    } as ServerEvent<StreamChatGenerics>);
   }
 
   /**
@@ -1106,21 +1109,23 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {EventHandler<StreamChatGenerics> | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler<StreamChatGenerics>} [callbackOrNothing] The callback to call
    */
-  on<EventType extends Event<StreamChatGenerics>['type']>(
+  on<EventType extends ServerEvent<StreamChatGenerics>['type'] | 'all'>(
     eventType: EventType,
-    callback: (event: Event<StreamChatGenerics, EventType>) => void,
+    callback: (event: ServerEvent<StreamChatGenerics>) => void,
   ): { unsubscribe: () => void };
-  on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
+  on(callback: ServerEventHandler<StreamChatGenerics>): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler<StreamChatGenerics> | EventTypes,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
+    callbackOrString: ServerEventHandler<StreamChatGenerics> | EventTypes,
+    callbackOrNothing?: ServerEventHandler<StreamChatGenerics>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
       throw Error(`Invalid event type ${key}`);
     }
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
+    const callback = ((callbackOrNothing
+      ? callbackOrNothing
+      : callbackOrString) as unknown) as ServerEventHandler<StreamChatGenerics>;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -1147,7 +1152,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * off - Remove the event handler
    *
    */
-  off<EventType extends Event<StreamChatGenerics>['type']>(
+  off<EventType extends ServerEvent<StreamChatGenerics>['type'] | 'all'>(
     eventType: EventType,
     callback: (event: Event<StreamChatGenerics, EventType>) => void,
   ): void;
@@ -1174,7 +1179,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
-  _handleChannelEvent(event: Event<StreamChatGenerics>) {
+  _handleChannelEvent(event: ServerEvent<StreamChatGenerics>) {
     const channel = this;
     this._client.logger(
       'info',
@@ -1347,7 +1352,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
-  _callChannelListeners = (event: Event<StreamChatGenerics>) => {
+  _callChannelListeners = (event: ServerEvent<StreamChatGenerics>) => {
     const channel = this;
     // gather and call the listeners
     const listeners = [];
@@ -1465,7 +1470,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
-  _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
+  _extendEventWithOwnReactions(event: ServerEvent<StreamChatGenerics>) {
     if (isLocalEvent(event)) {
       return;
     }

@@ -147,6 +147,7 @@ import {
   ErrorFromResponse,
   SyncOptions,
   SyncResponse,
+  ServerEvent,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -814,7 +815,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {{ unsubscribe: () => void }} Description
    */
   on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on<EventType extends Event<StreamChatGenerics>['type']>(
+  on<EventType extends Event<StreamChatGenerics>['type'] | 'all'>(
     eventType: EventType,
     callback: (event: Event<StreamChatGenerics, EventType>) => void,
   ): { unsubscribe: () => void };
@@ -846,7 +847,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    */
   off(callback: EventHandler<StreamChatGenerics>): void;
-  off<EventType extends Event<StreamChatGenerics>['type']>(
+  off<EventType extends Event<StreamChatGenerics>['type'] | 'all'>(
     eventType: EventType,
     callback: (event: Event<StreamChatGenerics, EventType>) => void,
   ): void;
@@ -1030,13 +1031,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // channel event handlers
     if (channel) {
-      channel._handleChannelEvent(event);
+      channel._handleChannelEvent(event as ServerEvent<StreamChatGenerics>);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event);
+      channel._callChannelListeners(event as ServerEvent<StreamChatGenerics>);
     }
 
     postListenerCallbacks.forEach((c) => c());
