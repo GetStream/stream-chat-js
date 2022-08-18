@@ -825,7 +825,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
-      throw Error(`Invalid event type ${key}`);
+      console.warn(`Invalid event type ${key}`);
     }
     const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
     if (!(key in this.listeners)) {
@@ -854,7 +854,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const valid = isValidEventType(key);
     if (!valid) {
-      throw Error(`Invalid event type ${key}`);
+      console.warn(`Invalid event type ${key}`);
     }
     const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
     if (!(key in this.listeners)) {
