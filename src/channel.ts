@@ -1,5 +1,4 @@
 import { ChannelState } from './channel_state';
-import { isValidEventType } from './events';
 import { logChatPromiseExecution, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
@@ -8,16 +7,20 @@ import {
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
-  ChannelUpdateOptions,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelQueryOptions,
   ChannelResponse,
+  ChannelUpdateOptions,
+  CreateCallOptions,
+  CreateCallResponse,
+  DefaultGenerics,
   DeleteChannelAPIResponse,
   Event,
   EventAPIResponse,
   EventHandler,
   EventTypes,
+  ExtendableGenerics,
   FormatMessageResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
@@ -27,11 +30,14 @@ import {
   MemberSort,
   Message,
   MessageFilters,
+  MessagePaginationOptions,
   MessageResponse,
   MessageSetType,
   MuteChannelAPIResponse,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
+  PinnedMessagePaginationOptions,
+  PinnedMessagesSort,
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
@@ -45,13 +51,6 @@ import {
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
-  ExtendableGenerics,
-  DefaultGenerics,
-  PinnedMessagePaginationOptions,
-  PinnedMessagesSort,
-  MessagePaginationOptions,
-  CreateCallOptions,
-  CreateCallResponse,
 } from './types';
 import { Role } from './permissions';
 
@@ -1117,10 +1116,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const valid = isValidEventType(key);
-    if (!valid) {
-      throw Error(`Invalid event type ${key}`);
-    }
     const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -1155,10 +1150,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
   ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const valid = isValidEventType(key);
-    if (!valid) {
-      throw Error(`Invalid event type ${key}`);
-    }
     const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
