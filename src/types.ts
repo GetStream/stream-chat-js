@@ -2330,8 +2330,9 @@ export type Recipient = {
   campaign_id: string;
   channel_cid: string;
   created_at: string;
-  status: string;
+  status: 'pending' | 'sent' | 'failed';
   updated_at: string;
+  details?: string;
   message_id?: string;
   receiver_id?: string;
 };
