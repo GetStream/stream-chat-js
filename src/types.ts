@@ -2286,8 +2286,9 @@ export type SegmentData = {
 export type Segment = {
   created_at: string;
   id: string;
+  in_use: boolean;
   size: number;
-  status: string;
+  status: 'computing' | 'ready';
   updated_at: string;
 } & SegmentData;
 

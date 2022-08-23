@@ -46,6 +46,7 @@ import {
   ChannelFilters,
   ChannelMute,
   ChannelOptions,
+  ChannelResponse,
   ChannelSort,
   ChannelStateOptions,
   CheckPushResponse,
@@ -2695,9 +2696,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async querySegments(filters: SegmentFilters, options: CampaignQueryOptions = {}) {
     const { segments } = await this.get<{
-      campaigns: Record<string, Campaign>;
       segments: Segment[];
-      users: Record<string, UserResponse<StreamChatGenerics>>;
     }>(this.baseURL + `/segments`, {
       payload: {
         filter_conditions: filters,
@@ -2753,7 +2752,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const { campaigns } = await this.get<{
       campaigns: Campaign[];
       segments: Record<string, Segment>;
-      users: Record<string, UserResponse<StreamChatGenerics>>;
+      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
+      users?: Record<string, UserResponse<StreamChatGenerics>>;
     }>(this.baseURL + `/campaigns`, {
       payload: {
         filter_conditions: filters,
@@ -2853,7 +2853,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       campaigns: Record<string, Campaign>;
       recipients: Recipient[];
       segments: Record<string, Segment>;
-      users: Record<string, UserResponse<StreamChatGenerics>>;
+      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
+      users?: Record<string, UserResponse<StreamChatGenerics>>;
     }>(this.baseURL + `/recipients`, {
       payload: {
         filter_conditions: filters,
