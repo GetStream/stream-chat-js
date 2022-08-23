@@ -244,6 +244,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         this.threads[parentID] = threadMessages;
       }
     }
+
+    return {
+      messageSet: this.messageSets[targetMessageSetIndex],
+    };
   }
 
   /**
