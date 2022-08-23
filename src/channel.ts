@@ -51,6 +51,7 @@ import {
   UpdateChannelAPIResponse,
   UserFilters,
   UserResponse,
+  QueryChannelAPIResponse,
 } from './types';
 import { Role } from './permissions';
 
@@ -64,9 +65,24 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics> | undefined;
   _data: ChannelData<StreamChatGenerics> | ChannelResponse<StreamChatGenerics>;
   cid: string;
+  /**  */
   listeners: { [key: string]: (string | EventHandler<StreamChatGenerics>)[] };
   state: ChannelState<StreamChatGenerics>;
+  /**
+   * This boolean is a vague indication of weather the channel exists on chat backend.
+   *
+   * If the value is true, then that means the channel has been initialized by either calling
+   * channel.create() or channel.query() or channel.watch().
+   *
+   * If the value is false, then channel may or may not exist on the backend. The only way to ensure
+   * is by calling channel.create() or channel.query() or channel.watch().
+   */
   initialized: boolean;
+  /**
+   * Indicates weather channel has been initialized by manually populating the state with some messages, members etc.
+   * Static state indicates that channel exists on backend, but is not being watched yet.
+   */
+  offlineMode: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
@@ -110,6 +126,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // perhaps the state variable should be private
     this.state = new ChannelState<StreamChatGenerics>(this);
     this.initialized = false;
+    this.offlineMode = false;
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
@@ -730,7 +747,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @param {ChannelQueryOptions<StreamChatGenerics>} options additional options for the query endpoint
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} The server response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The server response
    */
   async watch(options?: ChannelQueryOptions<StreamChatGenerics>) {
     const defaultOptions = {
@@ -929,7 +946,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * create - Creates a new channel
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} The Server Response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The Server Response
    */
   create = async () => {
     const options = {
@@ -946,7 +963,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {ChannelQueryOptions<StreamChatGenerics>} options The query options
    * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
    *
-   * @return {Promise<ChannelAPIResponse<StreamChatGenerics>>} Returns a query response
+   * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} Returns a query response
    */
   async query(
     options: ChannelQueryOptions<StreamChatGenerics>,
@@ -960,7 +977,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       queryURL += `/${this.id}`;
     }
 
-    const state = await this.getClient().post<ChannelAPIResponse<StreamChatGenerics>>(queryURL + '/query', {
+    const state = await this.getClient().post<QueryChannelAPIResponse<StreamChatGenerics>>(queryURL + '/query', {
       data: this._data,
       state: true,
       ...options,
@@ -992,9 +1009,17 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.getClient()._addChannelConfig(state);
 
     // add any messages to our channel state
-    this._initializeState(state, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
     this.data = state.channel;
+
+    this.getClient().dispatchEvent({
+      type: 'channels.queried',
+      queriedChannels: {
+        channels: [state],
+        isLatestMessageSet: messageSet.isLatest,
+      },
+    });
 
     return state;
   }
@@ -1271,7 +1296,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           });
 
           channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt) channelState.removePinnedMessage({ id });
+            if (truncatedAt > +createdAt)
+              channelState.removePinnedMessage({ id } as MessageResponse<StreamChatGenerics>);
           });
         } else {
           channelState.clearMessages();
@@ -1368,7 +1394,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   };
 
   _checkInitialized() {
-    if (!this.initialized && !this.getClient()._isUsingServerAuth()) {
+    if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
@@ -1397,7 +1423,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.state.messages) {
       this.state.initMessages();
     }
-    this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
+
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
     }
@@ -1452,6 +1479,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
       }
     }
+
+    return {
+      messageSet,
+    };
   }
 
   _extendEventWithOwnReactions(event: Event<StreamChatGenerics>) {
