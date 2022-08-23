@@ -668,7 +668,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
    */
-  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string) {
+  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string, limit = 25) {
     let messageSetIndex: number;
     let switchedToMessageSet = false;
     let loadedMessageThread = false;
@@ -690,10 +690,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       return;
     }
     if (!switchedToMessageSet) {
-      await this._channel.query({ messages: { id_around: messageIdToFind, limit: 25 } }, 'new');
+      await this._channel.query({ messages: { id_around: messageIdToFind, limit } }, 'new');
     }
     if (!loadedMessageThread && parentMessageId) {
-      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit: 25 });
+      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
     }
     messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
     if (messageSetIndex !== -1) {

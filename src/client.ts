@@ -1,42 +1,44 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import axios, { AxiosRequestConfig, AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
-import { isValidEventType } from './events';
-import { JWTUserToken, DevToken, CheckSignature } from './signing';
+import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
-  isFunction,
-  isOwnUserBaseProperty,
   addFileToFormData,
   chatCodes,
+  isFunction,
+  isOnline,
+  isOwnUserBaseProperty,
   normalizeQuerySort,
   randomId,
-  sleep,
   retryInterval,
-  isOnline,
+  sleep,
 } from './utils';
 
 import {
+  APIErrorResponse,
   APIResponse,
   AppSettings,
   AppSettingsAPIResponse,
-  BaseDeviceFields,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
   BannedUsersResponse,
   BannedUsersSort,
   BanUserOptions,
+  BaseDeviceFields,
   BlockList,
   BlockListResponse,
+  Campaign,
+  CampaignData,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -52,51 +54,83 @@ import {
   CreateChannelResponse,
   CreateCommandOptions,
   CreateCommandResponse,
+  CreateImportOptions,
+  CreateImportResponse,
+  CreateImportURLResponse,
   CustomPermissionOptions,
+  DefaultGenerics,
+  DeleteChannelsResponse,
   DeleteCommandResponse,
+  DeleteUserOptions,
   Device,
   EndpointName,
+  ErrorFromResponse,
   Event,
   EventHandler,
   ExportChannelOptions,
   ExportChannelRequest,
   ExportChannelResponse,
   ExportChannelStatusResponse,
-  MessageFlagsFilters,
-  MessageFlagsPaginationOptions,
-  MessageFlagsResponse,
+  ExportUsersRequest,
+  ExportUsersResponse,
+  ExtendableGenerics,
   FlagMessageResponse,
+  FlagReportsFilters,
+  FlagReportsPaginationOptions,
+  FlagReportsResponse,
+  FlagsFilters,
+  FlagsPaginationOptions,
+  FlagsResponse,
   FlagUserResponse,
+  GetCallTokenResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
   ListChannelResponse,
   ListCommandsResponse,
+  ListImportsPaginationOptions,
+  ListImportsResponse,
   Logger,
   MarkChannelsReadOptions,
   Message,
   MessageFilters,
+  MessageFlagsFilters,
+  MessageFlagsPaginationOptions,
+  MessageFlagsResponse,
   MessageResponse,
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  OGAttachment,
   OwnUserResponse,
   PartialMessageUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
   PushProvider,
-  PushProviderID,
   PushProviderConfig,
-  PushProviderUpsertResponse,
+  PushProviderID,
   PushProviderListResponse,
+  PushProviderUpsertResponse,
   ReactionResponse,
+  ReservedMessageFields,
+  ReviewFlagReportOptions,
+  ReviewFlagReportResponse,
+  SearchAPIResponse,
+  SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  SearchAPIResponse,
+  Segment,
+  SegmentData,
   SendFileAPIResponse,
   StreamChatOptions,
+  SyncOptions,
+  SyncResponse,
+  TaskResponse,
+  TaskStatus,
+  TestCampaignResponse,
   TestPushDataInput,
   TestSQSDataInput,
   TokenOrProvider,
@@ -112,42 +146,7 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  SearchMessageSortBase,
-  SegmentData,
-  Segment,
-  Campaign,
-  CampaignData,
-  OGAttachment,
-  TaskStatus,
-  DeleteUserOptions,
-  DeleteChannelsResponse,
-  TaskResponse,
-  ReservedMessageFields,
-  ExtendableGenerics,
-  DefaultGenerics,
-  ReviewFlagReportResponse,
-  FlagReportsFilters,
-  FlagReportsResponse,
-  ReviewFlagReportOptions,
-  FlagReportsPaginationOptions,
-  ExportUsersRequest,
-  ExportUsersResponse,
-  CreateImportResponse,
-  CreateImportOptions,
-  CreateImportURLResponse,
-  GetImportResponse,
-  ListImportsResponse,
-  ListImportsPaginationOptions,
-  FlagsFilters,
-  FlagsPaginationOptions,
-  FlagsResponse,
-  TestCampaignResponse,
-  GetCallTokenResponse,
-  APIErrorResponse,
-  ErrorFromResponse,
   QueryChannelsAPIResponse,
-  SyncOptions,
-  SyncResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -587,8 +586,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
    */
   async updateAppSettings(options: AppSettings) {
-    if (options.apn_config?.p12_cert) {
-      options.apn_config.p12_cert = Buffer.from(options.apn_config.p12_cert).toString('base64');
+    const apn_config = options.apn_config;
+    if (apn_config?.p12_cert) {
+      options = {
+        ...options,
+        apn_config: { ...apn_config, p12_cert: Buffer.from(apn_config.p12_cert).toString('base64') },
+      };
     }
     return await this.patch<APIResponse>(this.baseURL + '/app', options);
   }
@@ -826,10 +829,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const valid = isValidEventType(key);
-    if (!valid) {
-      throw Error(`Invalid event type ${key}`);
-    }
     const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
@@ -855,10 +854,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     callbackOrNothing?: EventHandler<StreamChatGenerics>,
   ) {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const valid = isValidEventType(key);
-    if (!valid) {
-      throw Error(`Invalid event type ${key}`);
-    }
     const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
