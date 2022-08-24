@@ -2695,7 +2695,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment[]} Segments
    */
   async querySegments(filters: SegmentFilters, options: CampaignQueryOptions = {}) {
-    const { segments } = await this.get<{
+    return await this.get<{
       segments: Segment[];
     }>(this.baseURL + `/segments`, {
       payload: {
@@ -2703,7 +2703,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         ...options,
       },
     });
-    return segments;
   }
 
   /**
@@ -2749,7 +2748,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign[]} Campaigns
    */
   async queryCampaigns(filters: CampaignFilters, options: CampaignQueryOptions = {}) {
-    const { campaigns } = await this.get<{
+    return await this.get<{
       campaigns: Campaign[];
       segments: Record<string, Segment>;
       channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
@@ -2760,7 +2759,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         ...options,
       },
     });
-    return campaigns;
   }
 
   /**
@@ -2849,7 +2847,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Recipient[]} Recipients
    */
   async queryRecipients(filters: RecipientFilters, options: CampaignQueryOptions = {}) {
-    const { recipients } = await this.get<{
+    return await this.get<{
       campaigns: Record<string, Campaign>;
       recipients: Recipient[];
       segments: Record<string, Segment>;
@@ -2861,7 +2859,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         ...options,
       },
     });
-    return recipients;
   }
 
   /**
