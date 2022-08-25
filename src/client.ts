@@ -39,11 +39,14 @@ import {
   BlockListResponse,
   Campaign,
   CampaignData,
+  CampaignFilters,
+  CampaignQueryOptions,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
   ChannelMute,
   ChannelOptions,
+  ChannelResponse,
   ChannelSort,
   ChannelStateOptions,
   CheckPushResponse,
@@ -115,6 +118,9 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   ReactionResponse,
+  Recipient,
+  RecipientFilters,
+  RecipientQueryOptions,
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
@@ -124,6 +130,8 @@ import {
   SearchPayload,
   Segment,
   SegmentData,
+  SegmentFilters,
+  SegmentQueryOptions,
   SendFileAPIResponse,
   StreamChatOptions,
   SyncOptions,
@@ -2683,26 +2691,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * getSegment - Get a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   *
-   * @return {Segment} A Segment
-   */
-  async getSegment(id: string) {
-    const { segment } = await this.get<{ segment: Segment }>(this.baseURL + `/segments/${id}`);
-    return segment;
-  }
-
-  /**
-   * listSegments - List Campaign Segments
+   * querySegments - Query Campaign Segments
    *
    *
    * @return {Segment[]} Segments
    */
-  async listSegments(options: { limit?: number; offset?: number }) {
-    const { segments } = await this.get<{ segments: Segment[] }>(this.baseURL + `/segments`, options);
-    return segments;
+  async querySegments(filters: SegmentFilters, options: SegmentQueryOptions = {}) {
+    return await this.get<{
+      segments: Segment[];
+    }>(this.baseURL + `/segments`, {
+      payload: {
+        filter_conditions: filters,
+        ...options,
+      },
+    });
   }
 
   /**
@@ -2742,26 +2744,23 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * getCampaign - Get a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} A Campaign
-   */
-  async getCampaign(id: string) {
-    const { campaign } = await this.get<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`);
-    return campaign;
-  }
-
-  /**
-   * listCampaigns - List Campaigns
+   * queryCampaigns - Query Campaigns
    *
    *
    * @return {Campaign[]} Campaigns
    */
-  async listCampaigns(options: { limit?: number; offset?: number }) {
-    const { campaigns } = await this.get<{ campaigns: Campaign[] }>(this.baseURL + `/campaigns`, options);
-    return campaigns;
+  async queryCampaigns(filters: CampaignFilters, options: CampaignQueryOptions = {}) {
+    return await this.get<{
+      campaigns: Campaign[];
+      segments: Record<string, Segment>;
+      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
+      users?: Record<string, UserResponse<StreamChatGenerics>>;
+    }>(this.baseURL + `/campaigns`, {
+      payload: {
+        filter_conditions: filters,
+        ...options,
+      },
+    });
   }
 
   /**
@@ -2841,6 +2840,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
+  }
+
+  /**
+   * queryRecipients - Query Campaign Recipient Results
+   *
+   *
+   * @return {Recipient[]} Recipients
+   */
+  async queryRecipients(filters: RecipientFilters, options: RecipientQueryOptions = {}) {
+    return await this.get<{
+      campaigns: Record<string, Campaign>;
+      recipients: Recipient[];
+      segments: Record<string, Segment>;
+      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
+      users?: Record<string, UserResponse<StreamChatGenerics>>;
+    }>(this.baseURL + `/recipients`, {
+      payload: {
+        filter_conditions: filters,
+        ...options,
+      },
+    });
   }
 
   /**
