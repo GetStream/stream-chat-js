@@ -2308,6 +2308,9 @@ export type CampaignQueryOptions = {
   sort?: CampaignSort;
 };
 
+export type SegmentQueryOptions = CampaignQueryOptions;
+export type RecipientQueryOptions = CampaignQueryOptions;
+
 // TODO: add better typing
 export type SegmentFilters = {};
 export type CampaignFilters = {};
