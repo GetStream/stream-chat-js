@@ -103,6 +103,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     >;
     reminders_interval: number;
     agora_options?: AgoraOptions | null;
+    async_moderation_config?: AsyncModerationOptions;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
@@ -1505,6 +1506,14 @@ export type HMSOptions = {
   role_map?: Record<string, string>;
 };
 
+export type AsyncModerationOptions = {
+  callback?: {
+    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
+    server_url?: string;
+  };
+  timeout_ms?: number;
+};
+
 export type AppSettings = {
   agora_options?: AgoraOptions | null;
   apn_config?: {
@@ -1518,6 +1527,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_moderation_config?: AsyncModerationOptions;
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   before_message_send_hook_url?: string;
