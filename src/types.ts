@@ -2347,6 +2347,7 @@ export type CampaignStatus = {
   scheduled_for?: string;
   sent_messages?: number;
   stopped_at?: string;
+  task_id?: string;
 };
 
 export type Campaign = {
@@ -2357,7 +2358,6 @@ export type Campaign = {
   CampaignStatus;
 
 export type TestCampaignResponse = {
-  campaign?: Campaign;
   invalid_users?: Record<string, string>;
 };
 
