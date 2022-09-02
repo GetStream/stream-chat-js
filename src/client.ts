@@ -62,6 +62,7 @@ import {
   CreateImportURLResponse,
   CustomPermissionOptions,
   DefaultGenerics,
+  DeleteCampaignOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteUserOptions,
@@ -117,6 +118,7 @@ import {
   PushProviderID,
   PushProviderListResponse,
   PushProviderUpsertResponse,
+  QueryChannelsAPIResponse,
   ReactionResponse,
   Recipient,
   RecipientFilters,
@@ -154,7 +156,6 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
-  QueryChannelsAPIResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -2785,8 +2786,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {Promise<APIResponse>} The Server Response
    */
-  async deleteCampaign(id: string) {
-    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
+  async deleteCampaign(id: string, params: DeleteCampaignOptions = {}) {
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`, params);
   }
 
   /**
