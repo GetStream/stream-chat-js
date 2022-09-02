@@ -2337,8 +2337,10 @@ export type CampaignData = {
   sender_id?: string;
 };
 
+export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
+
 export type CampaignStatus = {
-  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
+  status: CampaignStatusName;
   completed_at?: string;
   errored_messages?: number;
   failed_at?: string;
@@ -2347,6 +2349,7 @@ export type CampaignStatus = {
   scheduled_for?: string;
   sent_messages?: number;
   stopped_at?: string;
+  task_id?: string;
 };
 
 export type Campaign = {
@@ -2357,8 +2360,13 @@ export type Campaign = {
   CampaignStatus;
 
 export type TestCampaignResponse = {
-  campaign?: Campaign;
-  invalid_users?: Record<string, string>;
+  status: CampaignStatusName;
+  details?: string;
+  results?: Record<string, string>;
+};
+
+export type DeleteCampaignOptions = {
+  recipients?: boolean;
 };
 
 export type Recipient = {
