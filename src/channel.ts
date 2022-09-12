@@ -597,10 +597,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    */
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<MuteChannelAPIResponse<StreamChatGenerics>>(
+    const resp = await this.getClient().post<MuteChannelAPIResponse<StreamChatGenerics>>(
       this.getClient().baseURL + '/moderation/mute/channel',
       { channel_cid: this.cid, ...opts },
     );
+    // if there is no error, muteStatus will be in sync right away
+    this.getClient().mutedChannels.push(resp.channel_mute);
+    return resp;
   }
 
   /**
