@@ -10,6 +10,7 @@ import {
   MessageResponse,
   ReactionResponse,
   UserResponse,
+  PendingMessageResponse,
 } from './types';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
@@ -26,6 +27,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   typing: Record<string, Event<StreamChatGenerics>>;
   read: ChannelReadStatus<StreamChatGenerics>;
   pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
+  pending_messages: Array<PendingMessageResponse<StreamChatGenerics>>;
   threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;
   mutedUsers: Array<UserResponse<StreamChatGenerics>>;
   watchers: Record<string, UserResponse<StreamChatGenerics>>;
@@ -58,6 +60,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.read = {};
     this.initMessages();
     this.pinnedMessages = [];
+    this.pending_messages = [];
     this.threads = {};
     // a list of users to hide messages from
     this.mutedUsers = [];
@@ -241,6 +244,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         this.threads[parentID] = threadMessages;
       }
     }
+
+    return {
+      messageSet: this.messageSets[targetMessageSetIndex],
+    };
   }
 
   /**
@@ -495,7 +502,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @return {boolean} Returns if the message was removed
    */
-  removeMessage(messageToRemove: { id: string; parent_id?: string }) {
+  removeMessage(messageToRemove: { id: string; messageSetIndex?: number; parent_id?: string }) {
     let isRemoved = false;
     if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
@@ -506,7 +513,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const messageSetIndex = this.findMessageSetIndex(messageToRemove);
+      const messageSetIndex = messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
       if (messageSetIndex !== -1) {
         const { removed, result: messages } = this.removeMessageFromArray(
           this.messageSets[messageSetIndex].messages,
@@ -661,7 +668,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
    */
-  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string) {
+  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string, limit = 25) {
     let messageSetIndex: number;
     let switchedToMessageSet = false;
     let loadedMessageThread = false;
@@ -683,15 +690,39 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       return;
     }
     if (!switchedToMessageSet) {
-      await this._channel.query({ messages: { id_around: messageIdToFind, limit: 25 } }, 'new');
+      await this._channel.query({ messages: { id_around: messageIdToFind, limit } }, 'new');
     }
     if (!loadedMessageThread && parentMessageId) {
-      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit: 25 });
+      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
     }
     messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
     if (messageSetIndex !== -1) {
       this.switchToMessageSet(messageSetIndex);
     }
+  }
+
+  /**
+   * findMessage - Finds a message inside the state
+   *
+   * @param {string} messageId The id of the message
+   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
+   *
+   * @return {ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>} Returns the message, or undefined if the message wasn't found
+   */
+  findMessage(messageId: string, parentMessageId?: string) {
+    if (parentMessageId) {
+      const messages = this.threads[parentMessageId];
+      if (!messages) {
+        return undefined;
+      }
+      return messages.find((m) => m.id === messageId);
+    }
+
+    const messageSetIndex = this.findMessageSetIndex({ id: messageId });
+    if (messageSetIndex === -1) {
+      return undefined;
+    }
+    return this.messageSets[messageSetIndex].messages.find((m) => m.id === messageId);
   }
 
   private switchToMessageSet(index: number) {

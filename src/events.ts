@@ -42,12 +42,8 @@ export const EVENT_MAP = {
   'user.watching.stop': true,
 
   // local events
+  'channels.queried': true,
   'connection.changed': true,
   'connection.recovered': true,
   'transport.changed': true,
 };
-
-const IS_VALID_EVENT_MAP_TYPE = { ...EVENT_MAP, all: true };
-
-export const isValidEventType = (eventType: string): boolean =>
-  IS_VALID_EVENT_MAP_TYPE[eventType as keyof typeof IS_VALID_EVENT_MAP_TYPE] || false;

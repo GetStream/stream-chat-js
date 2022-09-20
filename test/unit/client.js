@@ -7,6 +7,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
 import { ConnectionState } from '../../src/connection_fallback';
+import { StableWSConnection } from '../../src/connection';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -66,6 +67,15 @@ describe('StreamChat getInstance', () => {
 		const client = StreamChat.getInstance('key3', { baseURL });
 
 		expect(client.baseURL).to.equal(baseURL);
+	});
+
+	it('app settings do not mutate', async () => {
+		const client = new StreamChat('key', 'secret');
+		const cert = Buffer.from('test');
+		const options = { apn_config: { p12_cert: cert } };
+		await expect(client.updateAppSettings(options)).to.be.rejectedWith(/.*/);
+
+		expect(options.apn_config.p12_cert).to.be.eql(cert);
 	});
 });
 
@@ -160,6 +170,39 @@ describe('Client active channels cache', () => {
 		});
 
 		expect(countUnreadChannels(client.activeChannels)).to.be.equal(3);
+	});
+});
+
+describe('Client openConnection', () => {
+	let client;
+
+	beforeEach(() => {
+		const wsConnection = new StableWSConnection({});
+		wsConnection.isConnecting = false;
+		wsConnection.connect = function () {
+			this.isConnecting = true;
+			return new Promise((resolve) => {
+				setTimeout(() => {
+					resolve({
+						connection_id: utils.generateUUIDv4(),
+					});
+				}, 1000);
+			});
+		};
+
+		client = new StreamChat('', { allowServerSideConnect: true, wsConnection });
+	});
+
+	it('should return same promise in case of multiple calls', async () => {
+		client.userID = 'vishal';
+		client._setUser({
+			id: 'vishal',
+		});
+
+		const promise1 = client.openConnection();
+		const promise2 = client.openConnection();
+
+		expect(await promise2).to.equal(await promise1);
 	});
 });
 

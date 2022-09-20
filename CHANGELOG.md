@@ -2,6 +2,83 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [7.1.0](https://github.com/GetStream/stream-chat-js/compare/v7.0.0...v7.1.0) (2022-09-02)
+
+
+### Features
+
+* async moderation config in app settings ([#1039](https://github.com/GetStream/stream-chat-js/issues/1039)) ([54863d0](https://github.com/GetStream/stream-chat-js/commit/54863d0d66b56db221908bd77bc20ef9d7606be5))
+* campaign missing pieces ([#1028](https://github.com/GetStream/stream-chat-js/issues/1028)) ([edbcbe2](https://github.com/GetStream/stream-chat-js/commit/edbcbe212e78b1f764e7f05f77813e0f33a1fd55))
+* campaign type updates ([#1041](https://github.com/GetStream/stream-chat-js/issues/1041)) ([0f674e7](https://github.com/GetStream/stream-chat-js/commit/0f674e7cf2eaa89fcd0379def2d9c2091fcb1e3a))
+
+## [7.0.0](https://github.com/GetStream/stream-chat-js/compare/v6.9.0...v7.0.0) (2022-08-23)
+
+
+### Features
+
+* changes to support offline feature ([#1011](https://github.com/GetStream/stream-chat-js/issues/1011)) ([f8300e7](https://github.com/GetStream/stream-chat-js/commit/f8300e73d7a57e9e37a584a7d1a10f6226ed3223))
+* replaces console.warn instead throwing error when event is not valid ([#1037](https://github.com/GetStream/stream-chat-js/issues/1037)) ([90e3097](https://github.com/GetStream/stream-chat-js/commit/90e3097d67f19e18004ae8dbbd40a9bf79a9ead1))
+
+## [6.9.0](https://github.com/GetStream/stream-chat-js/compare/v6.8.0...v6.9.0) (2022-08-18)
+
+
+### Features
+
+* support limit for load message into state ([#1031](https://github.com/GetStream/stream-chat-js/issues/1031)) ([2968785](https://github.com/GetStream/stream-chat-js/commit/2968785b821d355257f363b42ffcb7c45d6509e9))
+
+
+### Bug Fixes
+
+* do not mutate settings param ([#1032](https://github.com/GetStream/stream-chat-js/issues/1032)) ([a516cc1](https://github.com/GetStream/stream-chat-js/commit/a516cc1c0baa6d5fea3ece13bdf584c9d2641e65))
+* update partial and query do not update channel.data ([#1033](https://github.com/GetStream/stream-chat-js/issues/1033)) ([c9ab4a4](https://github.com/GetStream/stream-chat-js/commit/c9ab4a4f727cf54765c594bff4034514fd0b0b44))
+
+## [6.8.0](https://github.com/GetStream/stream-chat-js/compare/v6.7.3...v6.8.0) (2022-08-11)
+
+
+### Features
+
+* add more sync function types ([#1024](https://github.com/GetStream/stream-chat-js/issues/1024)) ([b34fe11](https://github.com/GetStream/stream-chat-js/commit/b34fe115867c9af8c172804271b38ba4bc422c31))
+* add pending message in send message request and response ([#1016](https://github.com/GetStream/stream-chat-js/issues/1016)) ([db32e24](https://github.com/GetStream/stream-chat-js/commit/db32e24a1b1e7aef793fe9de7a6819185f770f5e))
+* get pending message with metadata ([#1026](https://github.com/GetStream/stream-chat-js/issues/1026)) ([62e81f8](https://github.com/GetStream/stream-chat-js/commit/62e81f8252fe65b66a9c2219a7a72d06213fd798))
+* pending messages in channel response ([#1019](https://github.com/GetStream/stream-chat-js/issues/1019)) ([1db90fe](https://github.com/GetStream/stream-chat-js/commit/1db90fe99f76f16c6fc7c1d8ddb8d15f13ddacf6))
+* pending messages in channel state ([#1023](https://github.com/GetStream/stream-chat-js/issues/1023)) ([252c6e3](https://github.com/GetStream/stream-chat-js/commit/252c6e3c713c177249195f5ea6f96abec4c4706c))
+
+
+### Bug Fixes
+
+* message update and delete events override own reactions ([#1009](https://github.com/GetStream/stream-chat-js/issues/1009)) ([fe1ad64](https://github.com/GetStream/stream-chat-js/commit/fe1ad64ab2c3870f1153e5b9ea83e215e4cc6f5b))
+* race condition of query channels and ws connection ([#1029](https://github.com/GetStream/stream-chat-js/issues/1029)) ([f3a9ab4](https://github.com/GetStream/stream-chat-js/commit/f3a9ab4cbe2d04b9567d5b8545dda0540f74b2f4))
+
+### [6.7.3](https://github.com/GetStream/stream-chat-js/compare/v6.7.2...v6.7.3) (2022-07-06)
+
+
+### Bug Fixes
+
+* some app setting types ([#1003](https://github.com/GetStream/stream-chat-js/issues/1003)) ([35c13a1](https://github.com/GetStream/stream-chat-js/commit/35c13a179301a0f16b03c54d7e7b88bd3beba6aa))
+
+### [6.7.2](https://github.com/GetStream/stream-chat-js/compare/v6.7.1...v6.7.2) (2022-06-27)
+
+
+### Bug Fixes
+
+* pinnedMesages truncated_at aware ([#996](https://github.com/GetStream/stream-chat-js/issues/996)) ([fa0bfdc](https://github.com/GetStream/stream-chat-js/commit/fa0bfdc69399a98e56674e31f00cca55066c8ef8))
+
+### [6.7.1](https://github.com/GetStream/stream-chat-js/compare/v6.7.0...v6.7.1) (2022-06-24)
+
+
+### Bug Fixes
+
+* **Channel:** add "truncated_at" to "channel.truncated" event handler  ([#991](https://github.com/GetStream/stream-chat-js/issues/991)) ([edffd5f](https://github.com/GetStream/stream-chat-js/commit/edffd5f38f3c56abe03048d3afc5cd70a12c7f4e))
+
+## [6.7.0](https://github.com/GetStream/stream-chat-js/compare/v6.6.0...v6.7.0) (2022-06-22)
+
+
+### Bug Fixes
+
+* **feat:** add `first_reporter` field to the `FlagReport` type ([#987](https://github.com/GetStream/stream-chat-js/pull/987)) ([0667f2e](https://github.com/GetStream/stream-chat-js/pull/987/commits/0667f2ee2693bf2e7e74132e3715f49a421c6bfa))
+
+* **types:** added support for thumb_url for video attachments in send file response ([#982](https://github.com/GetStream/stream-chat-js/issues/982)) ([79ed099](https://github.com/GetStream/stream-chat-js/commit/79ed099678c69ac5841f89cd521adab5f3eef8ff))
+
 ## [6.6.0](https://github.com/GetStream/stream-chat-js/compare/v6.5.1...v6.6.0) (2022-06-02)
 
 
@@ -163,13 +240,122 @@ All notable changes to this project will be documented in this file. See [standa
 - add channel.kicked event ([#878](https://github.com/GetStream/stream-chat-js/issues/878)) ([d9334f5](https://github.com/GetStream/stream-chat-js/commit/d9334f5cc8aa70e4be4ef197548c38988441604f))
 - Fix flickering and out-of-order events on truncate.channel with system message ([#870](https://github.com/GetStream/stream-chat-js/pull/870))
 
-### [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
+## [5.1.2](https://github.com/GetStream/stream-chat-js/compare/v5.1.1...v5.1.2) (2022-01-13)
 
 - Types: Fix some missing attributes by @mahboubii in #857
 - Chore: Break CI into multiple workflow by @mahboubii in #858
 - Fix: FormData accepts browser Blob by @mahboubii in #856
 - Fix: Don't add messages from shadow banned users to state by @madsroskar in #859
 - Types: Image attachment's dimensions by @vishalnarkhede in #861
+
+## [5.1.1](https://github.com/GetStream/stream-chat-js/compare/v5.1.0...v5.1.1) (2022-01-03)
+
+### Fixes
+
+* Fix: prevent `own_capabilities` and `hidden` set to undefined in state by `channel.update` event by @yetieaterxb1 in https://github.com/GetStream/stream-chat-js/pull/849
+
+## [5.1.0](https://github.com/GetStream/stream-chat-js/compare/v5.0.1...v5.1.0) (2021-12-30)
+
+### Features
+
+* Add support for new pinned messages endpoint @AnatolyRugalev in https://github.com/GetStream/stream-chat-js/pull/853
+* Add support for version 2 of export endpoint @SiddhantAgarwal  in https://github.com/GetStream/stream-chat-js/pull/813
+
+## [5.0.1](https://github.com/GetStream/stream-chat-js/compare/v5.0.0...v5.0.1) (2021-12-02)
+
+### Fixes
+
+* Fix Longpoll disconnect by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/831
+
+### Features
+
+* New `transport.changed` event by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/832
+
+## [5.0.0](https://github.com/GetStream/stream-chat-js/compare/v4.4.3...v5.0.0) (2021-12-02)
+
+### Breaking Changes ⚠️
+
+- Remove `BanUserOptions` deprecated `user` & `user_id` fields, `banned_by` and `banned_by_id` can be use instead, by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/828
+- Refactor and simplify StableWSConnection constructor params by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/822
+
+### Features
+
+- Extend channel truncation options by @driver-devel in https://github.com/GetStream/stream-chat-js/pull/815 & https://github.com/GetStream/stream-chat-js/pull/805
+- Add `hide_history` parameter to `addMembers` by @yaziine in https://github.com/GetStream/stream-chat-js/pull/817
+- LongPoll by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/814
+
+### Fix
+
+- Add channel update options to member endpoints by @ferhatelmas in https://github.com/GetStream/stream-chat-js/pull/821
+- ChannelOptions type definition by @szuperaz in https://github.com/GetStream/stream-chat-js/pull/824
+- Add `quoted_message` to `ReservedMessageFields` by @vicnicius in https://github.com/GetStream/stream-chat-js/pull/825
+- Remove unused fields in WS JSON payload by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/829
+
+### Chore
+
+- Prettier increase line width to 120char by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/818
+- Drop husky hooks by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/816
+- Types: UR alias UnknownType by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/819
+- Refactor connection logger by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/820
+- CI run on node v17 by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/826
+- Upgrade axios to v0.22 by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/827
+
+## [4.4.3](https://github.com/GetStream/stream-chat-js/compare/v4.4.2...v4.4.3) (2021-11-17)
+
+### Fixes
+
+- Provide `client_request_id` as part of ws failure insights #811 @thesyncim @vishalnarkhede @mahboubii
+
+## [4.4.2](https://github.com/GetStream/stream-chat-js/compare/v4.4.1...v4.4.2) (2021-11-11)
+
+### Fixes
+
+- Inject `instance_client_id` as part of insights so insights from different client instances can be distinguished [5bd6394](https://github.com/GetStream/stream-chat-js/commit/5bd639484ca290d0eb0063f66d5eebb7701b60cf) @thesyncim
+
+## [4.4.1](https://github.com/GetStream/stream-chat-js/compare/v4.4.0...v4.4.1) (2021-11-10)
+
+### Features
+
+- Exported all the functions and classes from [insights](https://github.com/GetStream/stream-chat-js/blob/v4.4.0/src/insights.ts) file @vishalnarkhede [bd2dcbd](https://github.com/GetStream/stream-chat-js/commit/bd2dcbdad12bb8e5cbce0df45ded78548a3da850)
+
+## [4.4.0](https://github.com/GetStream/stream-chat-js/compare/v4.3.0...v4.4.0) (2021-11-10)
+
+### Fixes
+
+- Removed `flag` from CommandsVariant type @yaziine [f1de4b6](https://github.com/GetStream/stream-chat-js/commit/f1de4b6d81949584cd562d643c38ce4d7745f435)
+
+### Features
+
+- Added ability to send insights about websocket failures from client @thesyncim @vishalnarkhede [5fdd032](https://github.com/GetStream/stream-chat-js/commit/5fdd032cae8e2e36c5e41cfda750108e1c661bb3)
+
+  ```tsx
+  const client = StreamChat.getInstance('apikey', { enableInsights: true })
+  ```
+
+- Added `quotes` flag on channel config types @nmerkulov [a130cf4](https://github.com/GetStream/stream-chat-js/commit/a130cf4c992b7d8cd30e6bded7f3fbad5495e020)
+
+## [4.3.0](https://github.com/GetStream/stream-chat-js/compare/v4.2.0...v4.3.0) (2021-11-01)
+
+### Fixes
+
+* Fixed conditions on `window.removeEventLister` to avoid breaking react-native by @vishalnarkhede in https://github.com/GetStream/stream-chat-js/pull/781
+* Fix `queryMembers` sort type by @DanC5 in https://github.com/GetStream/stream-chat-js/pull/787
+* Deprecate `client.markAllRead` and add `client.markChannelsRead` by @yaziine in https://github.com/GetStream/stream-chat-js/pull/800
+
+### Features
+* `GetTask` endpoint to retrieve async task results by @gumuz in https://github.com/GetStream/stream-chat-js/pull/770
+* Add Huawei push provider by @ferhatelmas in https://github.com/GetStream/stream-chat-js/pull/772
+* Change `Permission.Condition` type by @AnatolyRugalev in https://github.com/GetStream/stream-chat-js/pull/775
+* Fix unread count by excluding system messages by @khushal87 in https://github.com/GetStream/stream-chat-js/pull/777
+* Add search backend type by @ferhatelmas in https://github.com/GetStream/stream-chat-js/pull/780
+* New `enrichURL` OG endpoint by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/771
+* Add async `deleteChannels` endpoint by @yaziine in https://github.com/GetStream/stream-chat-js/pull/769 & https://github.com/GetStream/stream-chat-js/pull/788
+* New `async_url_enrich_enabled` flag by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/793
+* Add ExportChannel Options missing `include_truncated_messages` by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/794
+* Expose `webhook_events` field by @nmerkulov in https://github.com/GetStream/stream-chat-js/pull/792
+* Added i`d_around` & `created_at_around` to query messages by @gumuz in https://github.com/GetStream/stream-chat-js/pull/798
+* New `skip_enrich_url` flag by @mahboubii in https://github.com/GetStream/stream-chat-js/pull/799
+* New endpoint for async batch delete users by @gumuz in https://github.com/GetStream/stream-chat-js/pull/762
 
 ## September 15, 2021 - 4.2.0
 

@@ -1,4 +1,5 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
 
@@ -101,16 +102,20 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
       }
     >;
     reminders_interval: number;
+    agora_options?: AgoraOptions | null;
+    async_moderation_config?: AsyncModerationOptions;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     campaign_enabled?: boolean;
+    cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
     grants?: Record<string, string[]>;
+    hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -135,6 +140,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
+    video_provider?: string;
     webhook_events?: Array<string>;
     webhook_url?: string;
   };
@@ -262,13 +268,21 @@ export type ChannelResponse<
   updated_at?: string;
 };
 
-export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+export type QueryChannelsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  channels: Omit<ChannelAPIResponse<StreamChatGenerics>, keyof APIResponse>[];
+};
+
+export type QueryChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse &
+  ChannelAPIResponse<StreamChatGenerics>;
+
+export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel: ChannelResponse<StreamChatGenerics>;
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
@@ -433,6 +447,10 @@ export type GetCommandResponse<StreamChatGenerics extends ExtendableGenerics = D
   CreateCommandOptions<StreamChatGenerics> &
   CreatedAtUpdatedAt;
 
+export type GetMessageAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = SendMessageAPIResponse<StreamChatGenerics>;
+
 export type GetMultipleMessagesAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = APIResponse & {
@@ -490,6 +508,7 @@ export type MessageResponse<
 export type MessageResponseBase<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageBase<StreamChatGenerics> & {
+  type: MessageLabel;
   args?: string;
   channel?: ChannelResponse<StreamChatGenerics>;
   cid?: string;
@@ -513,7 +532,6 @@ export type MessageResponseBase<
   silent?: boolean;
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
-  type?: MessageLabel;
   updated_at?: string;
 };
 
@@ -570,6 +588,7 @@ export type ReactionResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = Reaction<StreamChatGenerics> & {
   created_at: string;
+  message_id: string;
   updated_at: string;
 };
 
@@ -600,6 +619,12 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 
 export type SendMessageAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string> | null;
+};
+
+export type SyncResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  events: Event<StreamChatGenerics>[];
+  inaccessible_cids?: string[];
 };
 
 export type TruncateChannelAPIResponse<
@@ -717,6 +742,7 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
 };
 
 export type ChannelStateOptions = {
+  offlineMode?: boolean;
   skipInitialization?: string[];
 };
 
@@ -882,6 +908,13 @@ export type StreamChatOptions = AxiosRequestConfig & {
   enableWSFallback?: boolean;
   logger?: Logger;
   /**
+   * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
+   * call `connectUser` again to retry.
+   * This is mainly useful for chat application working in offline mode, where you will need client.user to
+   * persist even if connectUser call fails.
+   */
+  persistUserOnConnectionFailure?: boolean;
+  /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
    * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
    * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
@@ -892,6 +925,22 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
+  // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
+  // not be used in production apps.
+  wsConnection?: StableWSConnection;
+};
+
+export type SyncOptions = {
+  /**
+   * This will behave as queryChannels option.
+   */
+  watch?: boolean;
+  /**
+   * Return channels from request that user does not have access to in a separate
+   * field in the response called 'inaccessible_cids' instead of
+   * adding them as 'notification.removed_from_channel' events.
+   */
+  with_inaccessible_cids?: boolean;
 };
 
 export type UnBanUserOptions = {
@@ -947,8 +996,13 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
   message?: MessageResponse<StreamChatGenerics>;
+  mode?: string;
   online?: boolean;
   parent_id?: string;
+  queriedChannels?: {
+    channels: ChannelAPIResponse<StreamChatGenerics>[];
+    isLatestMessageSet?: boolean;
+  };
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
@@ -1437,7 +1491,31 @@ export type APNConfig = {
   team_id?: string;
 };
 
+export type AgoraOptions = {
+  app_certificate: string;
+  app_id: string;
+  role_map?: Record<string, string>;
+};
+
+export type HMSOptions = {
+  app_access_key: string;
+  app_secret: string;
+  default_role: string;
+  default_room_template: string;
+  default_region?: string;
+  role_map?: Record<string, string>;
+};
+
+export type AsyncModerationOptions = {
+  callback?: {
+    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
+    server_url?: string;
+  };
+  timeout_ms?: number;
+};
+
 export type AppSettings = {
+  agora_options?: AgoraOptions | null;
   apn_config?: {
     auth_key?: string;
     auth_type?: string;
@@ -1449,8 +1527,11 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_moderation_config?: AsyncModerationOptions;
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
+  before_message_send_hook_url?: string;
+  cdn_expiration_seconds?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
@@ -1465,6 +1546,7 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
+  hms_options?: HMSOptions | null;
   huawei_config?: {
     id: string;
     secret: string;
@@ -1483,6 +1565,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  video_provider?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
   xiaomi_config?: {
@@ -1823,7 +1906,7 @@ export type EndpointName =
   | 'GetRateLimits'
   | 'CreateSegment'
   | 'GetSegment'
-  | 'ListSegments'
+  | 'QuerySegments'
   | 'UpdateSegment'
   | 'DeleteSegment'
   | 'CreateCampaign'
@@ -1976,6 +2059,11 @@ export type MessageUpdatableFields<StreamChatGenerics extends ExtendableGenerics
 export type PartialMessageUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<MessageUpdatableFields<StreamChatGenerics>>;
   unset?: Array<keyof MessageUpdatableFields<StreamChatGenerics>>;
+};
+
+export type PendingMessageResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message: MessageResponse<StreamChatGenerics>;
+  pending_message_metadata?: Record<string, string>;
 };
 
 export type PermissionAPIObject = {
@@ -2200,46 +2288,71 @@ export type DeleteUserOptions = {
 
 export type SegmentData = {
   description: string;
-  // TODO: define this type in more detail
-  filter: {
-    channel?: object;
-    user?: object;
-  };
+  filter: {};
   name: string;
+  type: 'channel' | 'user';
 };
 
 export type Segment = {
-  app_pk: number;
   created_at: string;
   id: string;
+  in_use: boolean;
+  size: number;
+  status: 'computing' | 'ready';
   updated_at: string;
-  recipients?: number;
 } & SegmentData;
+
+export type CampaignSortField = {
+  field: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any;
+};
+
+export type CampaignSort = {
+  fields: CampaignSortField[];
+  direction?: 'asc' | 'desc';
+};
+
+export type CampaignQueryOptions = {
+  limit?: number;
+  sort?: CampaignSort;
+};
+
+export type SegmentQueryOptions = CampaignQueryOptions;
+export type RecipientQueryOptions = CampaignQueryOptions;
+
+// TODO: add better typing
+export type SegmentFilters = {};
+export type CampaignFilters = {};
+export type RecipientFilters = {};
 
 export type CampaignData = {
   attachments: Attachment[];
+  channel_type: string;
   defaults: Record<string, string>;
   name: string;
   segment_id: string;
   text: string;
   description?: string;
-  push_notifications?: boolean;
   sender_id?: string;
 };
 
+export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
+
 export type CampaignStatus = {
-  errors: string[];
-  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'canceled' | 'in_progress';
+  status: CampaignStatusName;
   completed_at?: string;
+  errored_messages?: number;
   failed_at?: string;
-  progress?: number;
   resumed_at?: string;
   scheduled_at?: string;
+  scheduled_for?: string;
+  sent_messages?: number;
   stopped_at?: string;
+  task_id?: string;
 };
 
 export type Campaign = {
-  app_pk: string;
   created_at: string;
   id: string;
   updated_at: string;
@@ -2247,8 +2360,24 @@ export type Campaign = {
   CampaignStatus;
 
 export type TestCampaignResponse = {
-  campaign?: Campaign;
-  invalid_users?: Record<string, string>;
+  status: CampaignStatusName;
+  details?: string;
+  results?: Record<string, string>;
+};
+
+export type DeleteCampaignOptions = {
+  recipients?: boolean;
+};
+
+export type Recipient = {
+  campaign_id: string;
+  channel_cid: string;
+  created_at: string;
+  status: 'pending' | 'sent' | 'failed';
+  updated_at: string;
+  details?: string;
+  message_id?: string;
+  receiver_id?: string;
 };
 
 export type TaskStatus = {
@@ -2323,6 +2452,42 @@ export type PushProviderUpsertResponse = {
 
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
+};
+
+export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: String;
+  type: String;
+  options?: Object;
+  user?: UserResponse<StreamChatGenerics> | null;
+  user_id?: string;
+};
+
+export type HMSCall = {
+  room: String;
+};
+
+export type AgoraCall = {
+  channel: String;
+};
+
+export type Call = {
+  id: String;
+  provider: String;
+  agora?: AgoraCall;
+  hms?: HMSCall;
+};
+
+export type CreateCallResponse = APIResponse & {
+  call: Call;
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
+};
+
+export type GetCallTokenResponse = APIResponse & {
+  token: String;
+  agora_app_id?: String;
+  agora_uid?: number;
 };
 
 type ErrorResponseDetails = {
