@@ -1412,11 +1412,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     if (state.members) {
-      for (const member of state.members) {
+      this.state.members = state.members.reduce((acc, member) => {
         if (member.user) {
-          this.state.members[member.user.id] = member;
+          acc[member.user.id] = member;
         }
-      }
+        return acc;
+      }, {} as ChannelState<StreamChatGenerics>['members']);
     }
   }
 
