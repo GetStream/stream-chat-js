@@ -2455,38 +2455,38 @@ export type PushProviderListResponse = {
 };
 
 export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  id: String;
-  type: String;
-  options?: Object;
+  id: string;
+  type: string;
+  options?: UR;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
 export type HMSCall = {
-  room: String;
+  room: string;
 };
 
 export type AgoraCall = {
-  channel: String;
+  channel: string;
 };
 
 export type Call = {
-  id: String;
-  provider: String;
+  id: string;
+  provider: string;
   agora?: AgoraCall;
   hms?: HMSCall;
 };
 
 export type CreateCallResponse = APIResponse & {
   call: Call;
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 
 export type GetCallTokenResponse = APIResponse & {
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 
