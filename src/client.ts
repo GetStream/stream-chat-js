@@ -212,6 +212,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
+  private nextRequestAbortController: AbortController | null = null;
 
   /**
    * Initialize a client
@@ -2480,6 +2481,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   ): AxiosRequestConfig {
     const token = this._getToken();
     const authorization = token ? { Authorization: token } : undefined;
+    let signal: AbortSignal | null = null;
+    if (this.nextRequestAbortController !== null) {
+      signal = this.nextRequestAbortController.signal;
+      this.nextRequestAbortController = null;
+    }
 
     if (!options.headers?.['x-client-request-id']) {
       options.headers = {
@@ -2501,6 +2507,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         'X-Stream-Client': this.getUserAgent(),
         ...options.headers,
       },
+      ...(signal ? { signal } : {}),
       ...options.config,
     };
   }
@@ -3029,5 +3036,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async listPushProviders() {
     return await this.get<APIResponse & PushProviderListResponse>(this.baseURL + `/push_providers`);
+  }
+
+  /**
+   * creates an abort controller that will be used by the next HTTP Request.
+   */
+  createAbortControllerForNextRequest() {
+    return (this.nextRequestAbortController = new AbortController());
   }
 }
