@@ -1195,7 +1195,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     if (event.channel && event.type === 'notification.message_new') {
-      this._addChannelConfig({ channel: event.channel });
+      this._addChannelConfig(event.channel);
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
@@ -1512,7 +1512,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const { skipInitialization, offlineMode = false } = stateOptions;
 
     for (const channelState of channelsFromApi) {
-      this._addChannelConfig(channelState);
+      this._addChannelConfig(channelState.channel);
     }
 
     const channels: Channel<StreamChatGenerics>[] = [];
@@ -1669,8 +1669,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  _addChannelConfig(channelState: { channel: ChannelResponse<StreamChatGenerics> }) {
-    this.configs[channelState.channel.cid] = channelState.channel.config;
+  _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
+    this.configs[cid] = config;
   }
 
   /**
