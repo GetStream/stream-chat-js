@@ -145,13 +145,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
-   * getConfig - Get the configs for this channel type
+   * getConfig - Get the config for this channel id (cid)
    *
    * @return {Record<string, unknown>}
    */
   getConfig() {
     const client = this.getClient();
-    return client.configs[this.type];
+    return client.configs[this.cid];
   }
 
   /**
@@ -1006,7 +1006,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    this.getClient()._addChannelConfig(state);
+    this.getClient()._addChannelConfig(state.channel);
 
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
