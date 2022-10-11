@@ -179,9 +179,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   clientID?: string;
   configs: Configs<StreamChatGenerics>;
   key: string;
-  listeners: {
-    [key: string]: Array<(event: Event<StreamChatGenerics>) => void>;
-  };
+  listeners: Record<string, Array<(event: Event<StreamChatGenerics>) => void>>;
   logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -1197,7 +1195,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     if (event.channel && event.type === 'notification.message_new') {
-      this.configs[event.channel.type] = event.channel.config;
+      this._addChannelConfig(event.channel);
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
@@ -1514,7 +1512,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const { skipInitialization, offlineMode = false } = stateOptions;
 
     for (const channelState of channelsFromApi) {
-      this._addChannelConfig(channelState);
+      this._addChannelConfig(channelState.channel);
     }
 
     const channels: Channel<StreamChatGenerics>[] = [];
@@ -1671,8 +1669,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  _addChannelConfig(channelState: ChannelAPIResponse<StreamChatGenerics>) {
-    this.configs[channelState.channel.type] = channelState.channel.config;
+  _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
+    this.configs[cid] = config;
   }
 
   /**
