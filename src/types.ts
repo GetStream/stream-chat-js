@@ -1773,9 +1773,10 @@ export type CommandVariants<StreamChatGenerics extends ExtendableGenerics = Defa
   | 'unmute'
   | StreamChatGenerics['commandType'];
 
-export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  [channel_type: string]: ChannelConfigWithInfo<StreamChatGenerics> | undefined;
-};
+export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+  string,
+  ChannelConfigWithInfo<StreamChatGenerics> | undefined
+>;
 
 export type ConnectionOpen<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   connection_id: string;
