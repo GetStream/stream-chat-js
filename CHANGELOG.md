@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.0.0](https://github.com/GetStream/stream-chat-js/compare/v7.2.0...v8.0.0) (2022-10-12)
+
+
+### Bug Fixes
+
+* crypto.getRandomValues check for older node versions and min nod… ([#1053](https://github.com/GetStream/stream-chat-js/issues/1053)) ([3a5f6f6](https://github.com/GetStream/stream-chat-js/commit/3a5f6f65876fa6f53d404e8af23266d712b0d270))
+
+### ⚠ BREAKING CHANGES
+* compatible node version changed to >=v16
+
 ## [7.2.0](https://github.com/GetStream/stream-chat-js/compare/v7.1.0...v7.2.0) (2022-10-11)
 
 
