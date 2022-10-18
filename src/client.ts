@@ -1914,6 +1914,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
+  /**
+   * restoreUsers - Restore soft deleted users
+   *
+   * @param {string[]} user_ids which users to restore
+   *
+   * @return {APIResponse} A task ID
+   */
+  async restoreUsers(user_ids: string[]) {
+    return await this.post<APIResponse>(this.baseURL + `/users/restore`, { user_ids });
+  }
+
   async reactivateUser(
     userID: string,
     options?: { created_by_id?: string; name?: string; restore_messages?: boolean },
