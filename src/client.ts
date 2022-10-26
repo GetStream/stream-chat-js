@@ -3053,4 +3053,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   createAbortControllerForNextRequest() {
     return (this.nextRequestAbortController = new AbortController());
   }
+
+  /**
+   * commits a pending message, making it visible in the channel and for other users
+   * @param id the message id
+   *
+   * @return {APIResponse & MessageResponse} The message
+   */
+  async commitMessage(id: string) {
+    return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
+  }
 }
