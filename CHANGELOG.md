@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.1.0](https://github.com/GetStream/stream-chat-js/compare/v8.0.0...v8.1.0) (2022-11-01)
+
+
+### Features
+
+* commit message endpoint ([#1060](https://github.com/GetStream/stream-chat-js/issues/1060)) ([8927c64](https://github.com/GetStream/stream-chat-js/commit/8927c6447f82ef3ba97898c449ed00ba029ca3a1))
+* restore users endpoint ([#1057](https://github.com/GetStream/stream-chat-js/issues/1057)) ([a86411f](https://github.com/GetStream/stream-chat-js/commit/a86411fb4b35e24e839ac180aae30af00355fc61))
+
+## [8.0.0](https://github.com/GetStream/stream-chat-js/compare/v7.2.0...v8.0.0) (2022-10-12)
+
+
+### Bug Fixes
+
+* crypto.getRandomValues check for older node versions and min nod… ([#1053](https://github.com/GetStream/stream-chat-js/issues/1053)) ([3a5f6f6](https://github.com/GetStream/stream-chat-js/commit/3a5f6f65876fa6f53d404e8af23266d712b0d270))
+
+### ⚠ BREAKING CHANGES
+* compatible node version changed to >=v16
+
+## [7.2.0](https://github.com/GetStream/stream-chat-js/compare/v7.1.0...v7.2.0) (2022-10-11)
+
+
+### Features
+
+* support cancelling http requests ([#1048](https://github.com/GetStream/stream-chat-js/issues/1048)) ([db719d1](https://github.com/GetStream/stream-chat-js/commit/db719d135e2e950478c5fb5f2ab2d73dfbc1cf5d))
+
+
+### Bug Fixes
+
+* don't keep removed users when reinitializing channel ([#1044](https://github.com/GetStream/stream-chat-js/issues/1044)) ([c61f55a](https://github.com/GetStream/stream-chat-js/commit/c61f55a666a1965189a0bcf2469c92a842bc0fe1))
+* update client to use channel.cid as config keys ([#1047](https://github.com/GetStream/stream-chat-js/issues/1047)) ([aaf5c4c](https://github.com/GetStream/stream-chat-js/commit/aaf5c4c90e562bd26b0fe4fb7460109b7fc86837))
+
+## [7.1.0](https://github.com/GetStream/stream-chat-js/compare/v7.0.0...v7.1.0) (2022-09-02)
+
+
+### Features
+
+* async moderation config in app settings ([#1039](https://github.com/GetStream/stream-chat-js/issues/1039)) ([54863d0](https://github.com/GetStream/stream-chat-js/commit/54863d0d66b56db221908bd77bc20ef9d7606be5))
+* campaign missing pieces ([#1028](https://github.com/GetStream/stream-chat-js/issues/1028)) ([edbcbe2](https://github.com/GetStream/stream-chat-js/commit/edbcbe212e78b1f764e7f05f77813e0f33a1fd55))
+* campaign type updates ([#1041](https://github.com/GetStream/stream-chat-js/issues/1041)) ([0f674e7](https://github.com/GetStream/stream-chat-js/commit/0f674e7cf2eaa89fcd0379def2d9c2091fcb1e3a))
+
+## [7.0.0](https://github.com/GetStream/stream-chat-js/compare/v6.9.0...v7.0.0) (2022-08-23)
+
+
+### Features
+
+* changes to support offline feature ([#1011](https://github.com/GetStream/stream-chat-js/issues/1011)) ([f8300e7](https://github.com/GetStream/stream-chat-js/commit/f8300e73d7a57e9e37a584a7d1a10f6226ed3223))
+* replaces console.warn instead throwing error when event is not valid ([#1037](https://github.com/GetStream/stream-chat-js/issues/1037)) ([90e3097](https://github.com/GetStream/stream-chat-js/commit/90e3097d67f19e18004ae8dbbd40a9bf79a9ead1))
+
 ## [6.9.0](https://github.com/GetStream/stream-chat-js/compare/v6.8.0...v6.9.0) (2022-08-18)
 
 

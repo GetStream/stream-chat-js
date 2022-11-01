@@ -103,6 +103,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     >;
     reminders_interval: number;
     agora_options?: AgoraOptions | null;
+    async_moderation_config?: AsyncModerationOptions;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
@@ -1505,6 +1506,14 @@ export type HMSOptions = {
   role_map?: Record<string, string>;
 };
 
+export type AsyncModerationOptions = {
+  callback?: {
+    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
+    server_url?: string;
+  };
+  timeout_ms?: number;
+};
+
 export type AppSettings = {
   agora_options?: AgoraOptions | null;
   apn_config?: {
@@ -1518,6 +1527,7 @@ export type AppSettings = {
     p12_cert?: string;
     team_id?: string;
   };
+  async_moderation_config?: AsyncModerationOptions;
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   before_message_send_hook_url?: string;
@@ -1763,9 +1773,10 @@ export type CommandVariants<StreamChatGenerics extends ExtendableGenerics = Defa
   | 'unmute'
   | StreamChatGenerics['commandType'];
 
-export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  [channel_type: string]: ChannelConfigWithInfo<StreamChatGenerics> | undefined;
-};
+export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+  string,
+  ChannelConfigWithInfo<StreamChatGenerics> | undefined
+>;
 
 export type ConnectionOpen<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   connection_id: string;
@@ -1896,7 +1907,7 @@ export type EndpointName =
   | 'GetRateLimits'
   | 'CreateSegment'
   | 'GetSegment'
-  | 'ListSegments'
+  | 'QuerySegments'
   | 'UpdateSegment'
   | 'DeleteSegment'
   | 'CreateCampaign'
@@ -2278,46 +2289,71 @@ export type DeleteUserOptions = {
 
 export type SegmentData = {
   description: string;
-  // TODO: define this type in more detail
-  filter: {
-    channel?: object;
-    user?: object;
-  };
+  filter: {};
   name: string;
+  type: 'channel' | 'user';
 };
 
 export type Segment = {
-  app_pk: number;
   created_at: string;
   id: string;
+  in_use: boolean;
+  size: number;
+  status: 'computing' | 'ready';
   updated_at: string;
-  recipients?: number;
 } & SegmentData;
+
+export type CampaignSortField = {
+  field: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any;
+};
+
+export type CampaignSort = {
+  fields: CampaignSortField[];
+  direction?: 'asc' | 'desc';
+};
+
+export type CampaignQueryOptions = {
+  limit?: number;
+  sort?: CampaignSort;
+};
+
+export type SegmentQueryOptions = CampaignQueryOptions;
+export type RecipientQueryOptions = CampaignQueryOptions;
+
+// TODO: add better typing
+export type SegmentFilters = {};
+export type CampaignFilters = {};
+export type RecipientFilters = {};
 
 export type CampaignData = {
   attachments: Attachment[];
+  channel_type: string;
   defaults: Record<string, string>;
   name: string;
   segment_id: string;
   text: string;
   description?: string;
-  push_notifications?: boolean;
   sender_id?: string;
 };
 
+export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
+
 export type CampaignStatus = {
-  errors: string[];
-  status: 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'canceled' | 'in_progress';
+  status: CampaignStatusName;
   completed_at?: string;
+  errored_messages?: number;
   failed_at?: string;
-  progress?: number;
   resumed_at?: string;
   scheduled_at?: string;
+  scheduled_for?: string;
+  sent_messages?: number;
   stopped_at?: string;
+  task_id?: string;
 };
 
 export type Campaign = {
-  app_pk: string;
   created_at: string;
   id: string;
   updated_at: string;
@@ -2325,8 +2361,24 @@ export type Campaign = {
   CampaignStatus;
 
 export type TestCampaignResponse = {
-  campaign?: Campaign;
-  invalid_users?: Record<string, string>;
+  status: CampaignStatusName;
+  details?: string;
+  results?: Record<string, string>;
+};
+
+export type DeleteCampaignOptions = {
+  recipients?: boolean;
+};
+
+export type Recipient = {
+  campaign_id: string;
+  channel_cid: string;
+  created_at: string;
+  status: 'pending' | 'sent' | 'failed';
+  updated_at: string;
+  details?: string;
+  message_id?: string;
+  receiver_id?: string;
 };
 
 export type TaskStatus = {
@@ -2404,38 +2456,38 @@ export type PushProviderListResponse = {
 };
 
 export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  id: String;
-  type: String;
-  options?: Object;
+  id: string;
+  type: string;
+  options?: UR;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
 export type HMSCall = {
-  room: String;
+  room: string;
 };
 
 export type AgoraCall = {
-  channel: String;
+  channel: string;
 };
 
 export type Call = {
-  id: String;
-  provider: String;
+  id: string;
+  provider: string;
   agora?: AgoraCall;
   hms?: HMSCall;
 };
 
 export type CreateCallResponse = APIResponse & {
   call: Call;
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 
 export type GetCallTokenResponse = APIResponse & {
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 
