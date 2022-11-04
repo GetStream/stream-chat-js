@@ -115,6 +115,7 @@ Run in the root of one of the example apps (SampleApp/TypeScriptMessaging) in th
 
 ```shell
 yarn link stream-chat
+yarn start
 ```
 
 Open `metro.config.js` file and set value for watchFolders as
