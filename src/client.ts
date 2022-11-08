@@ -1592,7 +1592,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    */
   setLocalDevice(device: BaseDeviceFields) {
-    if (this.wsConnection || this.wsFallback) {
+    if ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) && this._hasConnectionID()) {
       throw new Error('you can only set device before opening a websocket connection');
     }
 
