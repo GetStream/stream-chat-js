@@ -255,6 +255,7 @@ export type ChannelResponse<
   deleted_at?: string;
   hidden?: boolean;
   invites?: string[];
+  joined?: boolean;
   last_message_at?: string;
   member_count?: number;
   members?: ChannelMemberResponse<StreamChatGenerics>[];
