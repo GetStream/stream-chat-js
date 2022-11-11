@@ -101,6 +101,39 @@ await channel.sendReaction(message.id, { type: 'love', user: { id: 'vishal-1' } 
 
 Custom types provided when initializing the client will carry through to all client returns and provide intellisense to queries.
 
+## 🔗 (Optional) Development Setup in Combination with our SDKs
+
+### Connect to [Stream Chat React Native SDK](https://github.com/GetStream/stream-chat-react-native)
+
+Run in the root of this repo
+
+```shell
+yarn link
+```
+
+Run in the root of one of the example apps (SampleApp/TypeScriptMessaging) in the `stream-chat-react-native` repo
+
+```shell
+yarn link stream-chat
+yarn start
+```
+
+Open `metro.config.js` file and set value for watchFolders as
+
+```javascript
+module.exports = {
+  ...
+  watchFolders: [projectRoot].concat(alternateRoots).concat(['{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}/stream-chat-js'])
+};
+```
+
+Make sure to replace `{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}` with the correct path for stream-chat-js folder as per your directory structure
+Run in the root of this repo
+
+```shell
+yarn start
+```
+
 ## 📚 More code examples
 
 Head over to [docs/typescript.md](./docs/typescript.md) for more examples.
