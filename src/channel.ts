@@ -1423,7 +1423,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.state.messages) {
       this.state.initMessages();
     }
-    const { messageSet } = this.state.addMessagesSorted(messages, true, true, true, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
 
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
