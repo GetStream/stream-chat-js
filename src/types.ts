@@ -826,7 +826,6 @@ export type MarkChannelsReadOptions<StreamChatGenerics extends ExtendableGeneric
 export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
-  message_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
