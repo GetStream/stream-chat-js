@@ -1212,10 +1212,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'message.read':
-        if (event.user?.id) {
+        if (event.user?.id && event.created_at) {
           channelState.read[event.user.id] = {
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
-            last_read: event.received_at as Date,
+            last_read: new Date(event.created_at),
             user: event.user,
             unread_messages: 0,
           };
