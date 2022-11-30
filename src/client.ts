@@ -155,6 +155,7 @@ import {
   UserFilters,
   UserOptions,
   UserResponse,
+  UsersAPIResponse,
   UserSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
@@ -1961,7 +1962,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {string[]} user_ids which users to restore
    *
-   * @return {APIResponse} A task ID
+   * @return {APIResponse} An API response
    */
   async restoreUsers(user_ids: string[]) {
     return await this.post<APIResponse>(this.baseURL + `/users/restore`, {
@@ -1983,10 +1984,38 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
+  /**
+   * reactivateUsers - Reactivate many users
+   *
+   * @param {string[]} user_ids which users to reactivate
+   *
+   * @return {UsersAPIResponse} Array of reactivated users
+   */
+  async reactivateUsers(user_ids: string[], options?: { created_by_id?: string; restore_messages?: boolean }) {
+    return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
+      this.baseURL + `/users/reactivate`,
+      { user_ids, ...options },
+    );
+  }
+
   async deactivateUser(userID: string, options?: { created_by_id?: string; mark_messages_deleted?: boolean }) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       { ...options },
+    );
+  }
+
+  /**
+   * deactivateUsers - Deactivate many users
+   *
+   * @param {string[]} user_ids which users to deactivate
+   *
+   * @return {UsersAPIResponse} Array of deactivated users
+   */
+  async deactivateUsers(user_ids: string[], options?: { created_by_id?: string; mark_messages_deleted?: boolean }) {
+    return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
+      this.baseURL + `/users/deactivate`,
+      { user_ids, ...options },
     );
   }
 
@@ -2978,7 +3007,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string[]} user_ids which users to delete
    * @param {DeleteUserOptions} options Configuration how to delete users
    *
-   * @return {APIResponse} A task ID
+   * @return {TaskResponse} A task ID
    */
   async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
     if (options?.user !== 'soft' && options?.user !== 'hard') {
