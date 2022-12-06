@@ -158,7 +158,6 @@ import {
   UserFilters,
   UserOptions,
   UserResponse,
-  UsersAPIResponse,
   UserSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
@@ -1989,18 +1988,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * reactivateUsers - Reactivate many users
+   * reactivateUsers - Reactivate many users asynchronously
    *
    * @param {string[]} user_ids which users to reactivate
    * @param {ReactivateUsersOptions} [options]
    *
-   * @return {UsersAPIResponse} Array of reactivated users
+   * @return {TaskResponse} A task ID
    */
   async reactivateUsers(user_ids: string[], options?: ReactivateUsersOptions) {
-    return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
-      this.baseURL + `/users/reactivate`,
-      { user_ids, ...options },
-    );
+    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/reactivate`, { user_ids, ...options });
   }
 
   /**
@@ -2019,18 +2015,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * deactivateUsers - Deactivate many users
+   * deactivateUsers - Deactivate many users asynchronously
    *
    * @param {string[]} user_ids which users to deactivate
    * @param {DeactivateUsersOptions} [options]
    *
-   * @return {UsersAPIResponse} Array of deactivated users
+   * @return {TaskResponse} A task ID
    */
   async deactivateUsers(user_ids: string[], options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
-      this.baseURL + `/users/deactivate`,
-      { user_ids, ...options },
-    );
+    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/deactivate`, { user_ids, ...options });
   }
 
   async exportUser(userID: string, options?: Record<string, string>) {
