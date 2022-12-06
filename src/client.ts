@@ -61,6 +61,7 @@ import {
   CreateImportResponse,
   CreateImportURLResponse,
   CustomPermissionOptions,
+  DeactivateUsersOptions,
   DefaultGenerics,
   DeleteCampaignOptions,
   DeleteChannelsResponse,
@@ -120,6 +121,8 @@ import {
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
   ReactionResponse,
+  ReactivateUserOptions,
+  ReactivateUsersOptions,
   Recipient,
   RecipientFilters,
   RecipientQueryOptions,
@@ -1970,14 +1973,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async reactivateUser(
-    userID: string,
-    options?: {
-      created_by_id?: string;
-      name?: string;
-      restore_messages?: boolean;
-    },
-  ) {
+  /**
+   * reactivateUser - Reactivate one user
+   *
+   * @param {string} userID which user to reactivate
+   * @param {ReactivateUserOptions} [options]
+   *
+   * @return {UserResponse} Reactivated user
+   */
+  async reactivateUser(userID: string, options?: ReactivateUserOptions) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
       this.baseURL + `/users/${userID}/reactivate`,
       { ...options },
@@ -1988,17 +1992,26 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * reactivateUsers - Reactivate many users
    *
    * @param {string[]} user_ids which users to reactivate
+   * @param {ReactivateUsersOptions} [options]
    *
    * @return {UsersAPIResponse} Array of reactivated users
    */
-  async reactivateUsers(user_ids: string[], options?: { created_by_id?: string; restore_messages?: boolean }) {
+  async reactivateUsers(user_ids: string[], options?: ReactivateUsersOptions) {
     return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
       this.baseURL + `/users/reactivate`,
       { user_ids, ...options },
     );
   }
 
-  async deactivateUser(userID: string, options?: { created_by_id?: string; mark_messages_deleted?: boolean }) {
+  /**
+   * deactivateUser - Deactivate one user
+   *
+   * @param {string} userID which user to deactivate
+   * @param {DeactivateUsersOptions} [options]
+   *
+   * @return {UserResponse} Array of deactivated users
+   */
+  async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
       this.baseURL + `/users/${userID}/deactivate`,
       { ...options },
@@ -2009,10 +2022,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * deactivateUsers - Deactivate many users
    *
    * @param {string[]} user_ids which users to deactivate
+   * @param {DeactivateUsersOptions} [options]
    *
    * @return {UsersAPIResponse} Array of deactivated users
    */
-  async deactivateUsers(user_ids: string[], options?: { created_by_id?: string; mark_messages_deleted?: boolean }) {
+  async deactivateUsers(user_ids: string[], options?: DeactivateUsersOptions) {
     return await this.post<APIResponse & { users: UsersAPIResponse<StreamChatGenerics> }>(
       this.baseURL + `/users/deactivate`,
       { user_ids, ...options },
