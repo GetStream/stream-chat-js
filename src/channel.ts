@@ -1262,13 +1262,22 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             channelState.addPinnedMessage(event.message);
           }
 
-          if (ownMessage && event.user?.id) {
+          if (event.user?.id) {
+            for (const userId in channelState.read) {
+              if (userId === event.user.id) {
+                channelState.read[event.user.id] = {
+                  last_read: new Date(event.created_at as string),
+                  user: event.user,
+                  unread_messages: 0,
+                };
+              } else {
+                channelState.read[userId].unread_messages += 1;
+              }
+            }
+          }
+
+          if (ownMessage) {
             channelState.unreadCount = 0;
-            channelState.read[event.user.id] = {
-              last_read: new Date(event.created_at as string),
-              user: event.user,
-              unread_messages: 0,
-            };
           } else if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
