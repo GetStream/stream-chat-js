@@ -2005,7 +2005,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} userID which user to deactivate
    * @param {DeactivateUsersOptions} [options]
    *
-   * @return {UserResponse} Array of deactivated users
+   * @return {UserResponse} Deactivated user
    */
   async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
