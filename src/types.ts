@@ -793,6 +793,11 @@ export type CustomPermissionOptions = {
   same_team?: boolean;
 };
 
+export type DeactivateUsersOptions = {
+  created_by_id?: string;
+  mark_messages_deleted?: boolean;
+};
+
 // TODO: rename to UpdateChannelOptions in the next major update and use it in channel._update and/or channel.update
 export type InviteOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   accept_invite?: boolean;
@@ -882,6 +887,17 @@ export type QueryMembersOptions = {
   user_id_gte?: string;
   user_id_lt?: string;
   user_id_lte?: string;
+};
+
+export type ReactivateUserOptions = {
+  created_by_id?: string;
+  name?: string;
+  restore_messages?: boolean;
+};
+
+export type ReactivateUsersOptions = {
+  created_by_id?: string;
+  restore_messages?: boolean;
 };
 
 export type SearchOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
