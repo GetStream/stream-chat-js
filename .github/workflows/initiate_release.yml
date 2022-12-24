@@ -46,7 +46,6 @@ jobs:
           git config --global user.email 'release@getstream.io'
           git checkout -q -b "release-$VERSION"
           git commit -am "chore(release): $VERSION"
-          git pull origin "release-$VERSION"
           git push -q -u origin "release-$VERSION"
 
       - name: Get changelog diff
