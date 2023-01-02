@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.2.1](https://github.com/GetStream/stream-chat-js/compare/v8.2.0...v8.2.1) (2023-01-02)
+
+
+### Bug Fixes
+
+* bump jwt v9 ([#1082](https://github.com/GetStream/stream-chat-js/issues/1082)) ([6c17844](https://github.com/GetStream/stream-chat-js/commit/6c17844a903f4fae99bd843fe79f32fe7e2f3b06))
+
 ## [8.2.0](https://github.com/GetStream/stream-chat-js/compare/v8.1.3...v8.2.0) (2022-12-24)
 
 
