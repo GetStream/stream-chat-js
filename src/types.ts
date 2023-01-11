@@ -255,6 +255,7 @@ export type ChannelResponse<
   deleted_at?: string;
   hidden?: boolean;
   invites?: string[];
+  joined?: boolean;
   last_message_at?: string;
   member_count?: number;
   members?: ChannelMemberResponse<StreamChatGenerics>[];
@@ -792,6 +793,11 @@ export type CustomPermissionOptions = {
   same_team?: boolean;
 };
 
+export type DeactivateUsersOptions = {
+  created_by_id?: string;
+  mark_messages_deleted?: boolean;
+};
+
 // TODO: rename to UpdateChannelOptions in the next major update and use it in channel._update and/or channel.update
 export type InviteOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   accept_invite?: boolean;
@@ -825,7 +831,6 @@ export type MarkChannelsReadOptions<StreamChatGenerics extends ExtendableGeneric
 export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
-  message_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
@@ -882,6 +887,17 @@ export type QueryMembersOptions = {
   user_id_gte?: string;
   user_id_lt?: string;
   user_id_lte?: string;
+};
+
+export type ReactivateUserOptions = {
+  created_by_id?: string;
+  name?: string;
+  restore_messages?: boolean;
+};
+
+export type ReactivateUsersOptions = {
+  created_by_id?: string;
+  restore_messages?: boolean;
 };
 
 export type SearchOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -1773,9 +1789,10 @@ export type CommandVariants<StreamChatGenerics extends ExtendableGenerics = Defa
   | 'unmute'
   | StreamChatGenerics['commandType'];
 
-export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  [channel_type: string]: ChannelConfigWithInfo<StreamChatGenerics> | undefined;
-};
+export type Configs<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+  string,
+  ChannelConfigWithInfo<StreamChatGenerics> | undefined
+>;
 
 export type ConnectionOpen<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   connection_id: string;
@@ -2455,38 +2472,38 @@ export type PushProviderListResponse = {
 };
 
 export type CreateCallOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  id: String;
-  type: String;
-  options?: Object;
+  id: string;
+  type: string;
+  options?: UR;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
 export type HMSCall = {
-  room: String;
+  room: string;
 };
 
 export type AgoraCall = {
-  channel: String;
+  channel: string;
 };
 
 export type Call = {
-  id: String;
-  provider: String;
+  id: string;
+  provider: string;
   agora?: AgoraCall;
   hms?: HMSCall;
 };
 
 export type CreateCallResponse = APIResponse & {
   call: Call;
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 
 export type GetCallTokenResponse = APIResponse & {
-  token: String;
-  agora_app_id?: String;
+  token: string;
+  agora_app_id?: string;
   agora_uid?: number;
 };
 

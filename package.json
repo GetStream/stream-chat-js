@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "7.1.0",
+  "version": "8.2.1",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -36,13 +36,13 @@
   ],
   "dependencies": {
     "@babel/runtime": "^7.16.3",
-    "@types/jsonwebtoken": "^8.5.6",
+    "@types/jsonwebtoken": "~9.0.0",
     "@types/ws": "^7.4.0",
     "axios": "^0.22.0",
     "base64-js": "^1.5.1",
     "form-data": "^4.0.0",
     "isomorphic-ws": "^4.0.1",
-    "jsonwebtoken": "^8.5.1",
+    "jsonwebtoken": "~9.0.0",
     "ws": "^7.4.4"
   },
   "devDependencies": {
@@ -135,6 +135,6 @@
     }
   },
   "engines": {
-    "node": "12 || >=14"
+    "node": ">=16"
   }
 }

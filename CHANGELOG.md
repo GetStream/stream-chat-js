@@ -2,6 +2,68 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.2.1](https://github.com/GetStream/stream-chat-js/compare/v8.2.0...v8.2.1) (2023-01-02)
+
+
+### Bug Fixes
+
+* bump jwt v9 ([#1082](https://github.com/GetStream/stream-chat-js/issues/1082)) ([6c17844](https://github.com/GetStream/stream-chat-js/commit/6c17844a903f4fae99bd843fe79f32fe7e2f3b06))
+
+## [8.2.0](https://github.com/GetStream/stream-chat-js/compare/v8.1.3...v8.2.0) (2022-12-24)
+
+
+### Features
+
+* add batch method for deactivate and reactivate users ([#1074](https://github.com/GetStream/stream-chat-js/issues/1074)) ([b6d14ab](https://github.com/GetStream/stream-chat-js/commit/b6d14aba0b64686ed719946c9c212bebf7157b01))
+
+### [8.1.3](https://github.com/GetStream/stream-chat-js/compare/v8.1.2...v8.1.3) (2022-12-05)
+
+### [8.1.2](https://github.com/GetStream/stream-chat-js/compare/v8.1.1...v8.1.2) (2022-11-18)
+
+### [8.1.1](https://github.com/GetStream/stream-chat-js/compare/v8.1.0...v8.1.1) (2022-11-15)
+
+
+### Features
+
+* allow optimistically added messages in local state ([#1064](https://github.com/GetStream/stream-chat-js/issues/1064)) ([16d9363](https://github.com/GetStream/stream-chat-js/commit/16d9363e59e2ac6ce25fd87174afb14e85505dbb))
+
+
+### Bug Fixes
+
+* add missing property "joined" to ChannelResponse type ([#1066](https://github.com/GetStream/stream-chat-js/issues/1066)) ([5602322](https://github.com/GetStream/stream-chat-js/commit/5602322ded1e9914ee40f0112f5c48cbf83e0fb1))
+* set local device's check for alive websocket connection ([#1067](https://github.com/GetStream/stream-chat-js/issues/1067)) ([a47b55b](https://github.com/GetStream/stream-chat-js/commit/a47b55b1158b99a82892bad6ef9336ff45d9b932))
+
+## [8.1.0](https://github.com/GetStream/stream-chat-js/compare/v8.0.0...v8.1.0) (2022-11-01)
+
+
+### Features
+
+* commit message endpoint ([#1060](https://github.com/GetStream/stream-chat-js/issues/1060)) ([8927c64](https://github.com/GetStream/stream-chat-js/commit/8927c6447f82ef3ba97898c449ed00ba029ca3a1))
+* restore users endpoint ([#1057](https://github.com/GetStream/stream-chat-js/issues/1057)) ([a86411f](https://github.com/GetStream/stream-chat-js/commit/a86411fb4b35e24e839ac180aae30af00355fc61))
+
+## [8.0.0](https://github.com/GetStream/stream-chat-js/compare/v7.2.0...v8.0.0) (2022-10-12)
+
+
+### Bug Fixes
+
+* crypto.getRandomValues check for older node versions and min nod… ([#1053](https://github.com/GetStream/stream-chat-js/issues/1053)) ([3a5f6f6](https://github.com/GetStream/stream-chat-js/commit/3a5f6f65876fa6f53d404e8af23266d712b0d270))
+
+### ⚠ BREAKING CHANGES
+* compatible node version changed to >=v16
+
+## [7.2.0](https://github.com/GetStream/stream-chat-js/compare/v7.1.0...v7.2.0) (2022-10-11)
+
+
+### Features
+
+* support cancelling http requests ([#1048](https://github.com/GetStream/stream-chat-js/issues/1048)) ([db719d1](https://github.com/GetStream/stream-chat-js/commit/db719d135e2e950478c5fb5f2ab2d73dfbc1cf5d))
+
+
+### Bug Fixes
+
+* don't keep removed users when reinitializing channel ([#1044](https://github.com/GetStream/stream-chat-js/issues/1044)) ([c61f55a](https://github.com/GetStream/stream-chat-js/commit/c61f55a666a1965189a0bcf2469c92a842bc0fe1))
+* update client to use channel.cid as config keys ([#1047](https://github.com/GetStream/stream-chat-js/issues/1047)) ([aaf5c4c](https://github.com/GetStream/stream-chat-js/commit/aaf5c4c90e562bd26b0fe4fb7460109b7fc86837))
+
 ## [7.1.0](https://github.com/GetStream/stream-chat-js/compare/v7.0.0...v7.1.0) (2022-09-02)
 
 

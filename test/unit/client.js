@@ -403,7 +403,9 @@ describe('Client setLocalDevice', async () => {
 	});
 
 	it('should throw error when updating device with ws open', async () => {
-		client.wsConnection = true;
+		client.wsConnection = new StableWSConnection({});
+		client.wsConnection.isHealthy = true;
+		client.wsConnection.connectionID = 'ID';
 
 		expect(() => client.setLocalDevice({ id: 'id3', push_provider: 'firebase' })).to.throw();
 	});

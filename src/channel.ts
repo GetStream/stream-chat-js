@@ -145,13 +145,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
-   * getConfig - Get the configs for this channel type
+   * getConfig - Get the config for this channel id (cid)
    *
    * @return {Record<string, unknown>}
    */
   getConfig() {
     const client = this.getClient();
-    return client.configs[this.type];
+    return client.configs[this.cid];
   }
 
   /**
@@ -1006,7 +1006,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    this.getClient()._addChannelConfig(state);
+    this.getClient()._addChannelConfig(state.channel);
 
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
@@ -1212,10 +1212,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'message.read':
-        if (event.user?.id) {
+        if (event.user?.id && event.created_at) {
           channelState.read[event.user.id] = {
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
-            last_read: event.received_at as Date,
+            last_read: new Date(event.created_at),
             user: event.user,
             unread_messages: 0,
           };
@@ -1262,13 +1262,22 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             channelState.addPinnedMessage(event.message);
           }
 
-          if (ownMessage && event.user?.id) {
+          if (event.user?.id) {
+            for (const userId in channelState.read) {
+              if (userId === event.user.id) {
+                channelState.read[event.user.id] = {
+                  last_read: new Date(event.created_at as string),
+                  user: event.user,
+                  unread_messages: 0,
+                };
+              } else {
+                channelState.read[userId].unread_messages += 1;
+              }
+            }
+          }
+
+          if (ownMessage) {
             channelState.unreadCount = 0;
-            channelState.read[event.user.id] = {
-              last_read: new Date(event.created_at as string),
-              user: event.user,
-              unread_messages: 0,
-            };
           } else if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
@@ -1473,11 +1482,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     if (state.members) {
-      for (const member of state.members) {
+      this.state.members = state.members.reduce((acc, member) => {
         if (member.user) {
-          this.state.members[member.user.id] = member;
+          acc[member.user.id] = member;
         }
-      }
+        return acc;
+      }, {} as ChannelState<StreamChatGenerics>['members']);
     }
 
     return {

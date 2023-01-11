@@ -718,3 +718,43 @@ describe('Channel lastMessage', async () => {
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
 	});
 });
+
+describe('Channel _initializeState', () => {
+	it('should not keep members that have unwatched since last watch', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+
+		const firstState = {
+			members: [
+				{
+					user: {
+						id: 'alice',
+					},
+				},
+				{
+					user: {
+						id: 'bob',
+					},
+				},
+			],
+		};
+
+		channel._initializeState(firstState);
+
+		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice', 'bob']);
+
+		const secondState = {
+			members: [
+				{
+					user: {
+						id: 'alice',
+					},
+				},
+			],
+		};
+
+		channel._initializeState(secondState);
+
+		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+});
