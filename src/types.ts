@@ -835,6 +835,14 @@ export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   user_id?: string;
 };
 
+export type MarkUnreadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_id: string;
+  client_id?: string;
+  connection_id?: string;
+  user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
+};
+
 export type MuteUserOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
