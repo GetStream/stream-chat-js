@@ -69,6 +69,30 @@ describe('StreamChat getInstance', () => {
 		expect(client.baseURL).to.equal(baseURL);
 	});
 
+	it('should set axios request config correctly', async () => {
+		const client = StreamChat.getInstance('key', 'secret', {
+			axiosRequestConfig: {
+				headers: {
+					'Cache-Control': 'no-cache',
+					Pragma: 'no-cache',
+				},
+			},
+		});
+
+		let requestConfig = {};
+		client.axiosInstance.get = (url, config) => {
+			requestConfig = config;
+			return {
+				status: 200,
+			};
+		};
+
+		await client.getChannelType('messaging');
+
+		expect(requestConfig.headers).to.haveOwnProperty('Cache-Control', 'no-cache');
+		expect(requestConfig.headers).to.haveOwnProperty('Pragma', 'no-cache');
+	});
+
 	it('app settings do not mutate', async () => {
 		const client = new StreamChat('key', 'secret');
 		const cert = Buffer.from('test');

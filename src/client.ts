@@ -2606,6 +2606,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       },
       ...(signal ? { signal } : {}),
       ...options.config,
+      ...this.options.axiosRequestConfig,
     };
   }
 
