@@ -33,28 +33,47 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
 
 type APIError = Error & { code: number; isWSFailure?: boolean };
 
-export function isAPIError(error: Error): error is APIError {
-  return (error as APIError).code !== undefined;
+export function isAPIError(error: unknown): error is APIError {
+  return error instanceof Error && 'code' in error && typeof error.code === 'number';
 }
 
-export function isErrorRetryable(error: APIError) {
-  if (!error.code) return false;
+export function isErrorRetryable(error: unknown) {
+  if (!isAPIError(error)) return false;
   const err = APIErrorCodes[`${error.code}`];
   if (!err) return false;
   return err.retryable;
 }
 
-export function isConnectionIDError(error: APIError) {
-  return error.code === 46; // ConnectionIDNotFoundError
+export function isConnectionIDError(error: unknown) {
+  return isAPIError(error) && error.code === 46; // ConnectionIDNotFoundError
 }
 
-export function isWSFailure(err: APIError): boolean {
-  if (typeof err.isWSFailure === 'boolean') {
-    return err.isWSFailure;
+interface ErrorWithMessage {
+  message: string;
+}
+
+export function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  );
+}
+
+export function isWSFailure(err: unknown): boolean {
+  if (isAPIError(err)) {
+    return err.isWSFailure ?? false;
   }
 
   try {
-    return JSON.parse(err.message).isWSFailure;
+    if (isErrorWithMessage(err)) {
+      const message = JSON.parse(err.message);
+      if ('isWSFailure' in message && typeof message.isWSFailure === 'boolean') {
+        return message.isWSFailure;
+      }
+    }
+    return false;
   } catch (_) {
     return false;
   }
