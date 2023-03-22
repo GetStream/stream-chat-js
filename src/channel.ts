@@ -163,12 +163,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {boolean} [options.skip_push] Skip sending push notifications
    * @param {boolean} [options.is_pending_message] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
+   * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
   async sendMessage(
     message: Message<StreamChatGenerics>,
     options?: {
+      force_moderation?: boolean;
       is_pending_message?: boolean;
       pending_message_metadata?: Record<string, string>;
       skip_enrich_url?: boolean;
