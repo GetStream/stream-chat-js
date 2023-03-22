@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.4.1](https://github.com/GetStream/stream-chat-js/compare/v8.4.0...v8.4.1) (2023-02-20)
+
+## [8.4.0](https://github.com/GetStream/stream-chat-js/compare/v8.3.0...v8.4.0) (2023-02-15)
+
+
+### Features
+
+* extend SendMessage to server-side moderation API ([#1094](https://github.com/GetStream/stream-chat-js/issues/1094)) ([f93d8bf](https://github.com/GetStream/stream-chat-js/commit/f93d8bf12d5ddd55268b20ef7190946785c531f7))
+
 ## [8.3.0](https://github.com/GetStream/stream-chat-js/compare/v8.2.1...v8.3.0) (2023-01-19)
 
 
