@@ -27,6 +27,7 @@ import {
   GetRepliesAPIResponse,
   InviteOptions,
   MarkReadOptions,
+  MarkUnreadOptions,
   MemberSort,
   Message,
   MessageFilters,
@@ -162,12 +163,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {boolean} [options.skip_push] Skip sending push notifications
    * @param {boolean} [options.is_pending_message] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
+   * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
   async sendMessage(
     message: Message<StreamChatGenerics>,
     options?: {
+      force_moderation?: boolean;
       is_pending_message?: boolean;
       pending_message_metadata?: Record<string, string>;
       skip_enrich_url?: boolean;
@@ -723,6 +726,24 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     return await this.getClient().post<EventAPIResponse<StreamChatGenerics>>(this._channelURL() + '/read', {
+      ...data,
+    });
+  }
+
+  /**
+   * markUnread - Mark the channel as unread from messageID, only works if the `read_events` setting is enabled
+   *
+   * @param {MarkUnreadOptions<StreamChatGenerics>} data
+   * @return {APIResponse} An API response
+   */
+  async markUnread(data: MarkUnreadOptions<StreamChatGenerics>) {
+    this._checkInitialized();
+
+    if (!this.getConfig()?.read_events) {
+      return Promise.resolve(null);
+    }
+
+    return await this.getClient().post<APIResponse>(this._channelURL() + '/unread', {
       ...data,
     });
   }

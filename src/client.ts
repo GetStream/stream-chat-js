@@ -2591,21 +2591,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       };
     }
 
+    const { params: axiosRequestConfigParams, headers: axiosRequestConfigHeaders, ...axiosRequestConfigRest } =
+      this.options.axiosRequestConfig || {};
+
     return {
       params: {
         user_id: this.userID,
         connection_id: this._getConnectionID(),
         api_key: this.key,
         ...options.params,
+        ...(axiosRequestConfigParams || {}),
       },
       headers: {
         ...authorization,
         'stream-auth-type': this.getAuthType(),
         'X-Stream-Client': this.getUserAgent(),
         ...options.headers,
+        ...(axiosRequestConfigHeaders || {}),
       },
       ...(signal ? { signal } : {}),
       ...options.config,
+      ...(axiosRequestConfigRest || {}),
     };
   }
 

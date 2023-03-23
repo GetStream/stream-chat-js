@@ -835,6 +835,14 @@ export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = Defa
   user_id?: string;
 };
 
+export type MarkUnreadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_id: string;
+  client_id?: string;
+  connection_id?: string;
+  user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
+};
+
 export type MuteUserOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
@@ -912,6 +920,7 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
    */
   allowServerSideConnect?: boolean;
+  axiosRequestConfig?: AxiosRequestConfig;
   /**
    * Base url to use for API
    * such as https://chat-proxy-dublin.stream-io-api.com
