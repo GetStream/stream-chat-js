@@ -254,6 +254,7 @@ export type ChannelResponse<
   created_by_id?: string;
   deleted_at?: string;
   hidden?: boolean;
+  hide_for_creator?: boolean;
   invites?: string[];
   joined?: boolean;
   last_message_at?: string;
