@@ -734,13 +734,13 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
   client_id?: string;
   connection_id?: string;
   data?: ChannelResponse<StreamChatGenerics>;
+  hide_for_creator?: boolean;
   members?: PaginationOptions;
   messages?: MessagePaginationOptions;
   presence?: boolean;
   state?: boolean;
   watch?: boolean;
   watchers?: PaginationOptions;
-  hide_for_creator?: boolean;
 };
 
 export type ChannelStateOptions = {
