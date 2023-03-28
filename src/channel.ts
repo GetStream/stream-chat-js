@@ -175,6 +175,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       pending_message_metadata?: Record<string, string>;
       skip_enrich_url?: boolean;
       skip_push?: boolean;
+      keep_channel_hidden?: boolean;
     },
   ) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
