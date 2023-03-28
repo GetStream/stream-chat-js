@@ -740,6 +740,7 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
   state?: boolean;
   watch?: boolean;
   watchers?: PaginationOptions;
+  hide_for_creator?: boolean;
 };
 
 export type ChannelStateOptions = {
@@ -1695,7 +1696,6 @@ export type ChannelData<
 > = StreamChatGenerics['channelType'] & {
   members?: string[];
   name?: string;
-  hide_for_creator?: boolean;
 };
 
 export type ChannelMembership<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
