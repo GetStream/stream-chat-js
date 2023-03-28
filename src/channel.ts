@@ -975,7 +975,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       watch: false,
       state: false,
       presence: false,
-      ...options
+      ...options,
     };
     return await this.query(defaultOptions, 'latest');
   };
