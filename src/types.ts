@@ -73,6 +73,9 @@ export type APIResponse = {
 
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
+    // TODO
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    call_types: any;
     channel_configs: Record<
       string,
       {
