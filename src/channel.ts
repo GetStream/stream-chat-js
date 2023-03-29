@@ -172,6 +172,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     options?: {
       force_moderation?: boolean;
       is_pending_message?: boolean;
+      keep_channel_hidden?: boolean;
       pending_message_metadata?: Record<string, string>;
       skip_enrich_url?: boolean;
       skip_push?: boolean;
@@ -968,14 +969,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * create - Creates a new channel
    *
    * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The Server Response
+   *
    */
-  create = async () => {
-    const options = {
+  create = async (options?: ChannelQueryOptions<StreamChatGenerics>) => {
+    const defaultOptions = {
+      ...options,
       watch: false,
       state: false,
       presence: false,
     };
-    return await this.query(options, 'latest');
+    return await this.query(defaultOptions, 'latest');
   };
 
   /**
