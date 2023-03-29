@@ -969,13 +969,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * create - Creates a new channel
    *
    * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} The Server Response
+   *
    */
   create = async (options?: ChannelQueryOptions<StreamChatGenerics>) => {
     const defaultOptions = {
+      ...options,
       watch: false,
       state: false,
       presence: false,
-      ...options,
     };
     return await this.query(defaultOptions, 'latest');
   };
