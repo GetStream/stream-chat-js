@@ -2716,6 +2716,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.post<APIResponse>(`${this.baseURL}/roles`, { name });
   }
 
+  /** createRole - creates a custom role
+   *
+   * @param {string} name the name of the role that will be copied
+   * @param {string} newName the new role name
+   * @returns {Promise<APIResponse>}
+   */
+  copyRole(name: string, newName: string) {
+    return this.post<APIResponse>(`${this.baseURL}/roles/${name}/copy`, { name: newName });
+  }
+
   /** listRoles - returns the list of all roles for this application
    *
    * @returns {Promise<APIResponse>}
