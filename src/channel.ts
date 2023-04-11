@@ -1495,6 +1495,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       for (const read of state.read) {
         this.state.read[read.user.id] = {
           last_read: new Date(read.last_read),
+          last_read_message_id: read.last_read_msg_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };
