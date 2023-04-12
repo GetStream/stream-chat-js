@@ -598,8 +598,8 @@ export type ReactionResponse<
 
 export type ReadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   last_read: string;
-  last_read_msg_id: string;
   user: UserResponse<StreamChatGenerics>;
+  last_read_msg_id?: string;
   unread_messages?: number;
 };
 
