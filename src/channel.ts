@@ -1385,14 +1385,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.clearMessages();
         }
         break;
-      case 'channel.visible':
-        if (event.channel) {
-          channel.data = {
-            ...event.channel,
-            hidden: false,
-          };
-        }
-        break;
       default:
     }
 
@@ -1436,7 +1428,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
-        `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve ${this.initialized}, ${this.offlineMode}`,
+        `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
     }
   }
