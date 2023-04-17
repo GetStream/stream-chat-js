@@ -1276,6 +1276,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           const ownMessage = event.user?.id === this.getClient().user?.id;
           const isThreadMessage = event.message.parent_id && !event.message.show_in_channel;
 
+          channel.data = { ...channel.data, hidden: false };
+
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
           }
@@ -1383,6 +1385,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.clearMessages();
         }
         break;
+      case 'channel.visible':
+        if (event.channel) {
+          channel.data = {
+            ...event.channel,
+            hidden: false,
+          };
+        }
+        break;
       default:
     }
 
@@ -1426,7 +1436,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
-        `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
+        `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve ${this.initialized}, ${this.offlineMode}`,
       );
     }
   }
