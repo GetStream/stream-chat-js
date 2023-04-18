@@ -1282,10 +1282,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           if (channel.data?.hidden) {
             this._client.dispatchEvent({
               type: 'channel.visible',
+              cid: event.cid,
               channel_id: event.channel_id,
               channel_type: event.channel_type,
             });
-            channel.data = { ...channel.data, hidden: false };
           }
 
           if (this.state.isUpToDate || isThreadMessage) {
@@ -1393,6 +1393,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       case 'channel.hidden':
         if (event.clear_history) {
           channelState.clearMessages();
+        }
+        break;
+      case 'channel.visible':
+        console.log(event);
+        if (event.channel_id) {
+          channel.data = { ...channel.data, hidden: false };
         }
         break;
       default:
