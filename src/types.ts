@@ -73,6 +73,9 @@ export type APIResponse = {
 
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
+    // TODO
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    call_types: any;
     channel_configs: Record<
       string,
       {
@@ -734,6 +737,7 @@ export type ChannelQueryOptions<StreamChatGenerics extends ExtendableGenerics = 
   client_id?: string;
   connection_id?: string;
   data?: ChannelResponse<StreamChatGenerics>;
+  hide_for_creator?: boolean;
   members?: PaginationOptions;
   messages?: MessagePaginationOptions;
   presence?: boolean;

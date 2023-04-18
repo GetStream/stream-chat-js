@@ -2648,7 +2648,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   };
 
-  verifyWebhook(requestBody: string, xSignature: string) {
+  /**
+   * checks signature of a request
+   * @param {string | Buffer} rawBody
+   * @param {string} signature from HTTP header
+   * @returns {boolean}
+   */
+  verifyWebhook(requestBody: string | Buffer, xSignature: string) {
     return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
   }
 

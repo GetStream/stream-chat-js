@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.5.0](https://github.com/GetStream/stream-chat-js/compare/v8.4.1...v8.5.0) (2023-03-29)
+
+
+### Features
+
+* hide channel for creator ([#1109](https://github.com/GetStream/stream-chat-js/issues/1109)) ([b1d36cd](https://github.com/GetStream/stream-chat-js/commit/b1d36cd7cbc14a086fc0169890d20b071a286d52))
+
 ### [8.4.1](https://github.com/GetStream/stream-chat-js/compare/v8.4.0...v8.4.1) (2023-02-20)
 
 ## [8.4.0](https://github.com/GetStream/stream-chat-js/compare/v8.3.0...v8.4.0) (2023-02-15)
