@@ -3175,7 +3175,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param params PollData The poll that will be created
    * @returns {APIResponse & PollResponse} The poll
    */
-  async createPoll(params: PollData) {
-    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, { params });
+  async createPoll(poll: PollData) {
+    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
   }
 }

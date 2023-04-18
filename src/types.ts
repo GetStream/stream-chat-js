@@ -1957,7 +1957,8 @@ export type EndpointName =
   | 'ListImports'
   | 'UpsertPushProvider'
   | 'DeletePushProvider'
-  | 'ListPushProviders';
+  | 'ListPushProviders'
+  | 'CreatePoll';
 
 export type ExportChannelRequest = {
   id: string;
