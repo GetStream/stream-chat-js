@@ -2539,3 +2539,35 @@ export class ErrorFromResponse<T> extends Error {
   response?: AxiosResponse<T>;
   status?: number;
 }
+
+export type PollData = {
+  name: string;
+  options: PollOptionData[];
+  allow_multiple_votes?: boolean;
+  allow_user_suggestion?: boolean;
+  close_at?: Date;
+  description?: string;
+  is_anonymous?: boolean;
+};
+
+export type PollOptionData = {
+  text: string;
+};
+
+export type PollResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = MessageResponseBase<StreamChatGenerics> & {
+  id: string;
+  is_closed: boolean;
+  name: string;
+  options: PollOption[];
+  allow_multiple_votes?: boolean;
+  allow_user_suggestion?: boolean;
+  close_at?: Date;
+  description?: string;
+  is_anonymous?: boolean;
+};
+
+export type PollOption = {
+  id: string;
+};

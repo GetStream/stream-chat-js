@@ -114,6 +114,8 @@ import {
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  PollData,
+  PollResponse,
   PushProvider,
   PushProviderConfig,
   PushProviderID,
@@ -3166,5 +3168,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async commitMessage(id: string) {
     return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
+  }
+
+  /**
+   * Creates a poll
+   * @param params PollData The poll that will be created
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async createPoll(params: PollData) {
+    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, { params });
   }
 }
