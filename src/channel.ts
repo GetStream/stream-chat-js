@@ -1396,7 +1396,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'channel.visible':
-        console.log(event);
         if (event.channel_id) {
           channel.data = { ...channel.data, hidden: false };
         }
