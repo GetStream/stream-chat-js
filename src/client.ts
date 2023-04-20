@@ -115,6 +115,8 @@ import {
   PermissionAPIResponse,
   PermissionsAPIResponse,
   PollData,
+  PollOptionData,
+  PollOptionResponse,
   PollResponse,
   PushProvider,
   PushProviderConfig,
@@ -3177,5 +3179,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async createPoll(poll: PollData) {
     return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  }
+
+  /**
+   * Retrieves a poll
+   * @param id string The poll id
+   * @returns
+   */
+  async getPoll(id: string) {
+    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`);
+  }
+
+  /**
+   * Creates a poll option
+   * @param pollId string The poll id
+   * @param option PollOptionData The poll option that will be created
+   * @returns
+   */
+  async createPollOption(pollId: string, option: PollOptionData) {
+    return await this.post<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
   }
 }

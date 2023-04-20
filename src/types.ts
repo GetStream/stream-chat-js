@@ -2569,6 +2569,13 @@ export type PollResponse<
   is_anonymous?: boolean;
 };
 
+export type PollOptionResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = MessageResponseBase<StreamChatGenerics> & {
+  id: string;
+  text: string;
+};
+
 export type PollOption = {
   id: string;
 };
