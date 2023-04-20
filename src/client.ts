@@ -93,6 +93,7 @@ import {
   GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
+  GetUnreadCountAPIResponse,
   ListChannelResponse,
   ListCommandsResponse,
   ListImportsPaginationOptions,
@@ -1671,6 +1672,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       this.baseURL + '/devices',
       userID ? { user_id: userID } : {},
     );
+  }
+
+  async getUnreadCount(userID?: string) {
+    return await this.get<GetUnreadCountAPIResponse>(this.baseURL + '/unread', userID ? { user_id: userID } : {});
   }
 
   /**
