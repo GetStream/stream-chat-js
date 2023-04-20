@@ -74,13 +74,18 @@ export function DevToken(userId: string) {
 
 /**
  *
- * @param {string} body the signed message
+ * @param {string | Buffer} body the signed message
  * @param {string} secret the shared secret used to generate the signature (Stream API secret)
  * @param {string} signature the signature to validate
  * @return {boolean}
  */
-export function CheckSignature(body: string, secret: string, signature: string) {
-  const key = Buffer.from(secret, 'ascii');
+export function CheckSignature(body: string | Buffer, secret: string, signature: string) {
+  const key = Buffer.from(secret, 'utf8');
   const hash = crypto.createHmac('sha256', key).update(body).digest('hex');
-  return hash === signature;
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
