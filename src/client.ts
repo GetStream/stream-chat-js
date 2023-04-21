@@ -3184,19 +3184,48 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Retrieves a poll
    * @param id string The poll id
-   * @returns
+   * @returns {APIResponse & PollResponse} The poll
    */
   async getPoll(id: string) {
     return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`);
   }
 
   /**
+   * Delete a poll
+   * @param id string The poll id
+   * @returns
+   */
+  async deletePoll(id: string) {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`);
+  }
+
+  /**
    * Creates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be created
-   * @returns
+   * @returns {APIResponse & PollOptionResponse} The poll option
    */
   async createPollOption(pollId: string, option: PollOptionData) {
     return await this.post<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  }
+
+  /**
+   * Retrieves a poll option
+   * @param pollId string The poll id
+   * @param optionId string The poll option id
+   * @returns {APIResponse & PollOptionResponse} The poll option
+   */
+  async getPollOption(pollId: string, optionId: string) {
+    return await this.get<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  }
+
+  /**
+   * Delete a poll option
+   * @param pollId string The poll id
+   * @param optionId string The poll option id
+   * @returns
+   */
+  async deletePollOption(pollId: string, optionId: string) {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
   }
 }
