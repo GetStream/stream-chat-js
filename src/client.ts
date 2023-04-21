@@ -3191,6 +3191,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * Updates a poll
+   * @param id string The poll id
+   * @param poll PollData The poll that will be updated
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async updatePoll(id: string, poll: PollData) {
+    return await this.put<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, poll);
+  }
+
+  /**
    * Delete a poll
    * @param id string The poll id
    * @returns
@@ -3220,10 +3230,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * Updates a poll option
+   * @param pollId string The poll id
+   * @param optionId string The poll option id
+   * @param option PollOptionData The poll option that will be updated
+   * @returns
+   */
+  async updatePollOption(pollId: string, optionId: string, option: PollOptionData) {
+    return await this.put<APIResponse & PollOptionResponse>(
+      this.baseURL + `/polls/${pollId}/options/${optionId}`,
+      option,
+    );
+  }
+
+  /**
    * Delete a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
-   * @returns
+   * @returns {APIResponse & PollOptionResponse} The poll option
    */
   async deletePollOption(pollId: string, optionId: string) {
     return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
