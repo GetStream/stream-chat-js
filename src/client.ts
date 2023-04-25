@@ -3203,10 +3203,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Delete a poll
    * @param id string The poll id
+   * @param userId string The user id (only serverside)
    * @returns
    */
-  async deletePoll(id: string) {
-    return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`);
+  async deletePoll(id: string, userId?: string) {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`, { user_id: userId });
   }
 
   /**
