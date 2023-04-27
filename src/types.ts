@@ -2555,6 +2555,11 @@ export type PollOptionData = {
   text: string;
 };
 
+export type PollVoteData = {
+  option_id?: string;
+  user_suggestion?: string;
+};
+
 export type PollResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageResponseBase<StreamChatGenerics> & {
@@ -2578,4 +2583,16 @@ export type PollOptionResponse<
 
 export type PollOption = {
   id: string;
+};
+
+export type PollVote = {
+  created_at: Date;
+  id: string;
+  poll_id: string;
+  option_id?: string;
+  user_suggestion?: string;
+};
+
+export type PollVoteResponse = {
+  votes: PollVote[];
 };
