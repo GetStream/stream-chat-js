@@ -3265,6 +3265,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
   async voteOnPoll(pollId: string, votes: PollVoteData[]) {
-    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote`, votes);
+    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote`, { votes });
   }
 }
