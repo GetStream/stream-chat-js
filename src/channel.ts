@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  PollVoteData,
 } from './types';
 import { Role } from './permissions';
 
@@ -1146,6 +1147,16 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    */
   async createCall(options: CreateCallOptions) {
     return await this.getClient().post<CreateCallResponse>(this._channelURL() + '/call', options);
+  }
+
+  /**
+   * Cast or cancel one or more votes on a poll
+   * @param pollId string The poll id
+   * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+  async voteOnPoll(pollId: string, votes: PollVoteData[]) {
+    return await this.getClient().voteOnPoll(pollId, votes);
   }
 
   /**

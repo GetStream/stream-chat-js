@@ -3267,4 +3267,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async voteOnPoll(pollId: string, votes: PollVoteData[]) {
     return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote`, { votes });
   }
+
+  /**
+   * Queries poll votes
+   * @param pollId
+   * @param filterConditions
+   * @param sort
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+  async queryPollVotes(
+    pollId: string,
+    filterConditions: ChannelFilters<StreamChatGenerics>,
+    sort: ChannelSort<StreamChatGenerics> = [],
+  ) {
+    return await this.get<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+      filterConditions,
+      sort,
+    });
+  }
 }

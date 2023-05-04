@@ -2549,6 +2549,7 @@ export type PollData = {
   close_at?: Date;
   description?: string;
   is_anonymous?: boolean;
+  is_closed?: boolean;
 };
 
 export type PollOptionData = {
