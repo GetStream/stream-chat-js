@@ -1036,6 +1036,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
     this.data = state.channel;
+    this.offlineMode = false;
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
