@@ -1573,17 +1573,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       channels.push(c);
     }
 
-    if (!offlineMode) {
-      // If the channels are coming from server, then clear out the
-      // previously help offline channels.
-      for (const key in this.activeChannels) {
-        const channel = this.activeChannels[key];
-        if (channel.offlineMode) {
-          delete this.activeChannels[key];
-        }
-      }
-    }
-
     return channels;
   }
 
