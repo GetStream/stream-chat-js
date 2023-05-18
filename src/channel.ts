@@ -1390,6 +1390,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.clearMessages();
         }
         break;
+      case 'channel.visible':
+        channel.data = { ...channel.data, hidden: false };
+        break;
       default:
     }
 
