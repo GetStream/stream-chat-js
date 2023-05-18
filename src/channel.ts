@@ -1279,10 +1279,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           const ownMessage = event.user?.id === this.getClient().user?.id;
           const isThreadMessage = event.message.parent_id && !event.message.show_in_channel;
 
-          if (channel.data?.hidden) {
-            channel.data = { ...channel.data, hidden: false };
-          }
-
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
           }
