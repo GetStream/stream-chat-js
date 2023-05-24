@@ -1389,15 +1389,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'user.banned':
         if (!event.user?.id) break;
-        channelState.members[event.user.id].shadow_banned = !!event.shadow;
-        channelState.members[event.user.id].banned = !event.shadow;
-        channelState.members[event.user.id].user = event.user;
+        channelState.members[event.user.id] = {
+          ...(channelState.members[event.user.id] || {}),
+          shadow_banned: !!event.shadow,
+          banned: !event.shadow,
+          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
+        };
         break;
       case 'user.unbanned':
         if (!event.user?.id) break;
-        channelState.members[event.user.id].shadow_banned = false;
-        channelState.members[event.user.id].banned = false;
-        channelState.members[event.user.id].user = event.user;
+        channelState.members[event.user.id] = {
+          ...(channelState.members[event.user.id] || {}),
+          shadow_banned: false,
+          banned: false,
+          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
+        };
         break;
       default:
     }
