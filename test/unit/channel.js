@@ -434,6 +434,16 @@ describe('Channel _handleChannelEvent', function () {
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(false);
 	});
+
+	it('should mark channel hidden on channel.hidden event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.hidden',
+		};
+		channel.data.hidden = false;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(true);
+	});
 });
 
 describe('Channels - Constructor', function () {
