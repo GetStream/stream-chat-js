@@ -1383,6 +1383,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'channel.hidden':
+        channel.data = { ...channel.data, hidden: true };
         if (event.clear_history) {
           channelState.clearMessages();
         }
