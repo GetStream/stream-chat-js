@@ -411,6 +411,29 @@ describe('Channel _handleChannelEvent', function () {
 			});
 		});
 	});
+
+	it('should mark channel visible on channel.visible event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.visible',
+			cid: 'messaging:id',
+			channel_id: 'id',
+			channel_type: 'messaging',
+			user: {
+				id: 'admin',
+				role: 'admin',
+				created_at: '2022-03-08T09:46:56.840739Z',
+				updated_at: '2022-03-15T08:30:09.796926Z',
+				last_active: '2023-05-24T09:20:31.041292724Z',
+				banned: false,
+				online: true,
+			},
+			created_at: '2023-05-24T09:20:43.986615426Z',
+		};
+		channel.data.hidden = true;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(false);
+	});
 });
 
 describe('Channels - Constructor', function () {
