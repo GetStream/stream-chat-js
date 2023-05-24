@@ -1083,7 +1083,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   /**
    * removes the hidden status for a channel
-   *
+   * Has to be called before Channel.sendMessage() in order WS event `channel.visible` is emitted.
    * @param {string | null} userId
    * @returns {Promise<APIResponse>}
    */
