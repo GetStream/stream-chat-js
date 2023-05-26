@@ -179,6 +179,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       skip_push?: boolean;
     },
   ) {
+    if (options?.is_pending_message !== undefined && !this._client._isUsingServerAuth()) {
+      throw new Error('Setting is_pending_message on client side is not supported');
+    }
+
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
@@ -1037,6 +1041,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
     this.data = state.channel;
+    this.offlineMode = false;
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
@@ -1506,6 +1511,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       for (const read of state.read) {
         this.state.read[read.user.id] = {
           last_read: new Date(read.last_read),
+          last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };

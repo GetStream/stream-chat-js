@@ -758,3 +758,35 @@ describe('Channel _initializeState', () => {
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
 	});
 });
+
+describe('pending message', () => {
+	it('should not allow setting is_pending_message from client side', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		try {
+			await channel.sendMessage(
+				{ text: 'hi' },
+				{
+					is_pending_message: true,
+				},
+			);
+		} catch (e) {
+			expect(e.message).to.be.equal('Setting is_pending_message on client side is not supported');
+		}
+
+		const serverClient = new StreamChat('apiKey', 'secret');
+		serverClient.post = () =>
+			new Promise((resolve) => {
+				resolve(true);
+			});
+		const serverChannel = serverClient.channel('messaging', uuidv4());
+		const response = await serverChannel.sendMessage(
+			{ text: 'hi' },
+			{
+				is_pending_message: true,
+			},
+		);
+
+		expect(response).to.be.equal(true);
+	});
+});

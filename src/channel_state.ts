@@ -15,7 +15,7 @@ import {
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
-  { last_read: Date; unread_messages: number; user: UserResponse<StreamChatGenerics> }
+  { last_read: Date; unread_messages: number; user: UserResponse<StreamChatGenerics>; last_read_message_id?: string }
 >;
 
 /**

@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.8.0](https://github.com/GetStream/stream-chat-js/compare/v8.7.0...v8.8.0) (2023-05-25)
+
+
+### Bug Fixes
+
+* disallow pending message feature on client side ([#1127](https://github.com/GetStream/stream-chat-js/issues/1127)) ([7b60e47](https://github.com/GetStream/stream-chat-js/commit/7b60e47c5e51d5b692eb9552a827d5450a066987))
+
+## [8.7.0](https://github.com/GetStream/stream-chat-js/compare/v8.6.0...v8.7.0) (2023-05-17)
+
+## [8.6.0](https://github.com/GetStream/stream-chat-js/compare/v8.5.0...v8.6.0) (2023-04-24)
+
+
+### Features
+
+* do not delete the active channel if offlineMode is true ([#1116](https://github.com/GetStream/stream-chat-js/issues/1116)) ([2004e28](https://github.com/GetStream/stream-chat-js/commit/2004e28b9fb49ee50e7c46c93c855076bb9172f3))
+* receive last_read_message_id from server ([#1113](https://github.com/GetStream/stream-chat-js/issues/1113)) ([64e9165](https://github.com/GetStream/stream-chat-js/commit/64e916578bc61802822a8ff51430fd8dd2baa5ec))
+
+
+### Bug Fixes
+
+* change typing of verifyWebhook and patch security issue ([#1090](https://github.com/GetStream/stream-chat-js/issues/1090)) ([716db00](https://github.com/GetStream/stream-chat-js/commit/716db00117f77bf9d251374fdae091863a96ca46))
+
 ## [8.5.0](https://github.com/GetStream/stream-chat-js/compare/v8.4.1...v8.5.0) (2023-03-29)
 
 
