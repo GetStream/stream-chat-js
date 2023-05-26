@@ -111,12 +111,15 @@ import {
   OGAttachment,
   OwnUserResponse,
   PartialMessageUpdate,
+  PartialPollOptionUpdate,
+  PartialPollUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
   PollData,
   PollOptionData,
   PollOptionResponse,
+  PollPaginationOptions,
   PollResponse,
   PollVoteData,
   PollVoteResponse,
@@ -126,6 +129,7 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QueryPollsResponse,
   ReactionResponse,
   ReactivateUserOptions,
   ReactivateUsersOptions,
@@ -165,6 +169,8 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  VoteFilters,
+  VoteSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 
@@ -1343,7 +1349,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * @private
    */
-  async connect() {
+async connect() {
     if (!this.userID || !this._user) {
       throw Error('Call connectUser or connectAnonymousUser before starting the connection');
     }
@@ -3179,8 +3185,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param params PollData The poll that will be created
    * @returns {APIResponse & PollResponse} The poll
    */
-  async createPoll(poll: PollData) {
-    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  async createPoll(poll: PollData): Promise<PollResponse> {
+    return await this.post<PollResponse>(this.baseURL + `/polls`, poll);
   }
 
   /**
@@ -3189,18 +3195,28 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & PollResponse} The poll
    */
   async getPoll(id: string) {
-    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`);
+    return await this.get<PollResponse>(this.baseURL + `/polls/${id}`);
   }
 
   /**
    * Updates a poll
-   * @param id string The poll id
    * @param poll PollData The poll that will be updated
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(id: string, poll: PollData) {
-    return await this.put<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, poll);
+  async updatePoll(poll: PollData) {
+    return await this.put<PollResponse>(this.baseURL + `/polls`, poll);
   }
+
+  /**
+   * Partically updates a poll
+   * @param id string The poll id
+   * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
+   * @returns {APIResponse & PollResponse} The poll
+   */
+    async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
+      return await this.patch<PollResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+    }
 
   /**
    * Delete a poll
@@ -3237,22 +3253,32 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Updates a poll option
    * @param pollId string The poll id
-   * @param optionId string The poll option id
    * @param option PollOptionData The poll option that will be updated
    * @returns
    */
-  async updatePollOption(pollId: string, optionId: string, option: PollOptionData) {
+  async updatePollOption(pollId: string, option: PollOptionData) {
     return await this.put<APIResponse & PollOptionResponse>(
-      this.baseURL + `/polls/${pollId}/options/${optionId}`,
+      this.baseURL + `/polls/${pollId}/options`,
       option,
     );
   }
+
+    /**
+   * Partically updates a poll
+   * @param id string The poll id
+   * @param {PartialPollOptionUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
+   * @returns {APIResponse & PollOptionResponse} The poll
+   */
+    async partialUpdatePollOption(pollId: string, optionId: string, partialPollOptionObject: PartialPollOptionUpdate) {
+      return await this.patch<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`, partialPollOptionObject);
+    }
 
   /**
    * Delete a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
-   * @returns {APIResponse & PollOptionResponse} The poll option
+   * @returns {APIResponse} The poll option
    */
   async deletePollOption(pollId: string, optionId: string) {
     return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
@@ -3269,20 +3295,47 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * Queries polls
+   * @param filterConditions
+   * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+    async queryPolls(
+      filterConditions: VoteFilters = {},
+      sort: VoteSort = [],
+      options: PollPaginationOptions = {}
+    ) {
+      return await this.get<APIResponse & QueryPollsResponse>(this.baseURL + '/polls', {
+        payload: {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+        },
+        ...options
+      });
+    }
+
+  /**
    * Queries poll votes
    * @param pollId
    * @param filterConditions
    * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
   async queryPollVotes(
     pollId: string,
-    filterConditions: ChannelFilters<StreamChatGenerics>,
-    sort: ChannelSort<StreamChatGenerics> = [],
+    filterConditions: VoteFilters = {},
+    sort: VoteSort = [],
+    options: PollPaginationOptions = {}
   ) {
     return await this.get<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
-      filterConditions,
-      sort,
-    });
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+      },
+      ...options
+    });    
   }
 }
