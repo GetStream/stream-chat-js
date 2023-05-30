@@ -178,6 +178,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       skip_push?: boolean;
     },
   ) {
+    if (options?.is_pending_message !== undefined && !this._client._isUsingServerAuth()) {
+      throw new Error('Setting is_pending_message on client side is not supported');
+    }
+
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
