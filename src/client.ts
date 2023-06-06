@@ -1350,7 +1350,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * @private
    */
-async connect() {
+  async connect() {
     if (!this.userID || !this._user) {
       throw Error('Call connectUser or connectAnonymousUser before starting the connection');
     }
@@ -3208,9 +3208,9 @@ async connect() {
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & PollResponse} The poll
    */
-    async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
-      return await this.patch<PollResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
-    }
+  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
+    return await this.patch<PollResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+  }
 
   /**
    * Delete a poll
@@ -3251,22 +3251,22 @@ async connect() {
    * @returns
    */
   async updatePollOption(pollId: string, option: PollOptionData) {
-    return await this.put<APIResponse & PollOptionResponse>(
-      this.baseURL + `/polls/${pollId}/options`,
-      option,
-    );
+    return await this.put<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
   }
 
-    /**
+  /**
    * Partically updates a poll
    * @param id string The poll id
    * @param {PartialPollOptionUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & PollOptionResponse} The poll
    */
-    async partialUpdatePollOption(pollId: string, optionId: string, partialPollOptionObject: PartialPollOptionUpdate) {
-      return await this.patch<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`, partialPollOptionObject);
-    }
+  async partialUpdatePollOption(pollId: string, optionId: string, partialPollOptionObject: PartialPollOptionUpdate) {
+    return await this.patch<APIResponse & PollOptionResponse>(
+      this.baseURL + `/polls/${pollId}/options/${optionId}`,
+      partialPollOptionObject,
+    );
+  }
 
   /**
    * Delete a poll option
@@ -3295,19 +3295,15 @@ async connect() {
    * @param options Option object, {limit: 10, offset:0}
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
-    async queryPolls(
-      filterConditions: VoteFilters = {},
-      sort: VoteSort = [],
-      options: PollPaginationOptions = {}
-    ) {
-      return await this.get<APIResponse & QueryPollsResponse>(this.baseURL + '/polls', {
-        payload: {
-          filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
-        },
-        ...options
-      });
-    }
+  async queryPolls(filterConditions: VoteFilters = {}, sort: VoteSort = [], options: PollPaginationOptions = {}) {
+    return await this.get<APIResponse & QueryPollsResponse>(this.baseURL + '/polls', {
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+      },
+      ...options,
+    });
+  }
 
   /**
    * Queries poll votes
@@ -3322,14 +3318,14 @@ async connect() {
     pollId: string,
     filterConditions: VoteFilters = {},
     sort: VoteSort = [],
-    options: PollPaginationOptions = {}
+    options: PollPaginationOptions = {},
   ) {
     return await this.get<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
       payload: {
         filter_conditions: filterConditions,
         sort: normalizeQuerySort(sort),
       },
-      ...options
-    });    
+      ...options,
+    });
   }
 }

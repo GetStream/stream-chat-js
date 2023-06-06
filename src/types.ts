@@ -2582,15 +2582,11 @@ export class ErrorFromResponse<T> extends Error {
   status?: number;
 }
 
-export type QueryPollsResponse<
-StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> =  {
+export type QueryPollsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   polls: PollResponse<StreamChatGenerics>[];
-}
+};
 
-export type PollResponse<
-StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = {
+export type PollResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   created_by: UserResponse<StreamChatGenerics> | null;
   created_by_id: string;
@@ -2603,9 +2599,9 @@ StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
   allow_user_suggestions?: boolean;
   cid?: string;
   description?: string;
-  is_anonymous?: boolean;
   is_closed?: boolean;
-}
+  voting_visibility?: VotingVisibility;
+};
 
 export type PollOption = {
   created_at: string;
@@ -2614,6 +2610,11 @@ export type PollOption = {
   text: string;
   updated_at: string;
   vote_count: number;
+};
+
+export enum VotingVisibility {
+  anonymous = 'anonymous',
+  public = 'public',
 }
 
 export type PollData = {
@@ -2623,10 +2624,10 @@ export type PollData = {
   close_at?: Date;
   description?: string;
   id?: string;
-  is_anonymous?: boolean;
   is_closed?: boolean;
   max_votes_allowed?: number;
   user_id?: string;
+  voting_visibility?: VotingVisibility;
 };
 
 export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -2658,7 +2659,7 @@ export type PollPaginationOptions = {
 };
 
 export type PollOptionResponse = {
-  created_at: Date
+  created_at: Date;
   id: string;
   position: number;
   text: string;
