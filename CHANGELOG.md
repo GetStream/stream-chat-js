@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.9.0](https://github.com/GetStream/stream-chat-js/compare/v8.8.0...v8.9.0) (2023-06-09)
+
+
+### Features
+
+* reflect user ban events in channel members state ([#1128](https://github.com/GetStream/stream-chat-js/issues/1128)) ([ff0e134](https://github.com/GetStream/stream-chat-js/commit/ff0e134cb01253c9901ac9bff1f60b7d0ec4c263))
+
+
+### Bug Fixes
+
+* change the value of channel.data.hidden to false when message.new event triggers ([#1115](https://github.com/GetStream/stream-chat-js/issues/1115)) ([9ecd345](https://github.com/GetStream/stream-chat-js/commit/9ecd3453933aff34f015a288d125e6146a8b1caa))
+
 ## [8.8.0](https://github.com/GetStream/stream-chat-js/compare/v8.7.0...v8.8.0) (2023-05-25)
 
 
