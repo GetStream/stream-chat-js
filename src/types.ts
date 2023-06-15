@@ -2597,6 +2597,7 @@ export type PollResponse<StreamChatGenerics extends ExtendableGenerics = Default
   updated_at: string;
   vote_count: number;
   allow_user_suggestions?: boolean;
+  channel?: ChannelAPIResponse<StreamChatGenerics> | null;
   cid?: string;
   description?: string;
   is_closed?: boolean;
@@ -2621,7 +2622,6 @@ export type PollData = {
   name: string;
   options: PollOptionData[];
   allow_user_suggestion?: boolean;
-  close_at?: Date;
   description?: string;
   id?: string;
   is_closed?: boolean;
@@ -2643,7 +2643,6 @@ export type PollOptionData = {
 };
 
 export type PartialPollOptionUpdate = {
-  // id: string;
   set?: Partial<PollOptionResponse>;
   unset?: Array<keyof PollOptionResponse>;
 };
@@ -2661,15 +2660,18 @@ export type PollPaginationOptions = {
 export type PollOptionResponse = {
   created_at: Date;
   id: string;
+  poll_id: string;
   position: number;
   text: string;
   updated_at: Date;
   vote_count: number;
+  votes?: PollVote[];
 };
 
 export type PollVote = {
   created_at: Date;
   id: string;
+  is_user_suggestion: boolean;
   poll_id: string;
   option_id?: string;
   user_suggestion?: string;
