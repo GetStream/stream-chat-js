@@ -161,7 +161,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
-   * @param {boolean} [options.is_pending_message] This property has been deprecated. Please use `pending` instead.
    * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
