@@ -382,6 +382,8 @@ export type ExportUsersResponse = {
 };
 
 export type ExportChannelStatusResponse = {
+  status: string;
+  task_id: string;
   created_at?: string;
   error?: {};
   result?: {};
