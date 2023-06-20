@@ -88,6 +88,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
+        mark_messages_pending?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -778,6 +779,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   connection_id?: string;
   custom_events?: boolean;
   grants?: Record<string, string[]>;
+  mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1687,6 +1689,7 @@ export type ChannelConfigFields = {
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
+  mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
