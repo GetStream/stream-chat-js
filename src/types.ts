@@ -381,12 +381,18 @@ export type ExportUsersResponse = {
   task_id: string;
 };
 
+export type ExportChannelsResult = {
+  path?: string;
+  s3_bucket_name?: string;
+  url?: string;
+};
+
 export type ExportChannelStatusResponse = {
   status: string;
   task_id: string;
   created_at?: string;
-  error?: {};
-  result?: {};
+  error?: ExportChannelsResult | null;
+  result?: {} | null;
   updated_at?: string;
 };
 
