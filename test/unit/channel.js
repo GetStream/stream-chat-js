@@ -411,6 +411,92 @@ describe('Channel _handleChannelEvent', function () {
 			});
 		});
 	});
+
+	it('should mark channel visible on channel.visible event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.visible',
+			cid: 'messaging:id',
+			channel_id: 'id',
+			channel_type: 'messaging',
+			user: {
+				id: 'admin',
+				role: 'admin',
+				created_at: '2022-03-08T09:46:56.840739Z',
+				updated_at: '2022-03-15T08:30:09.796926Z',
+				last_active: '2023-05-24T09:20:31.041292724Z',
+				banned: false,
+				online: true,
+			},
+			created_at: '2023-05-24T09:20:43.986615426Z',
+		};
+		channel.data.hidden = true;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(false);
+	});
+
+	it('should mark channel hidden on channel.hidden event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.hidden',
+		};
+		channel.data.hidden = false;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(true);
+	});
+
+	it('should update channel member ban state on user.banned and user.unbanned events', () => {
+		const user = { id: 'user_id' };
+		const shadowBanEvent = {
+			type: 'user.banned',
+			shadow: true,
+			user,
+		};
+		const shadowUnbanEvent = {
+			type: 'user.unbanned',
+			shadow: true,
+			user,
+		};
+		const banEvent = {
+			type: 'user.banned',
+			user,
+		};
+		const unbanEvent = {
+			type: 'user.unbanned',
+			user,
+		};
+
+		[
+			[shadowBanEvent, banEvent, { shadow_banned: true, banned: false }, { shadow_banned: false, banned: true }],
+			[
+				shadowBanEvent,
+				shadowUnbanEvent,
+				{ shadow_banned: true, banned: false },
+				{ shadow_banned: false, banned: false },
+			],
+			[
+				shadowBanEvent,
+				unbanEvent,
+				{ shadow_banned: true, banned: false },
+				{ shadow_banned: false, banned: false },
+			],
+			[banEvent, shadowBanEvent, { shadow_banned: false, banned: true }, { shadow_banned: true, banned: false }],
+			[
+				banEvent,
+				shadowUnbanEvent,
+				{ shadow_banned: false, banned: true },
+				{ shadow_banned: false, banned: false },
+			],
+			[banEvent, unbanEvent, { shadow_banned: false, banned: true }, { shadow_banned: false, banned: false }],
+		].forEach(([firstEvent, secondEvent, expectAfterFirst, expectAfterSecond]) => {
+			channel._handleChannelEvent(firstEvent);
+			expect(channel.state.members[user.id].banned).eq(expectAfterFirst.banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterFirst.shadow_banned);
+			channel._handleChannelEvent(secondEvent);
+			expect(channel.state.members[user.id].banned).eq(expectAfterSecond.banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
+		});
+	});
 });
 
 describe('Channels - Constructor', function () {
@@ -756,5 +842,37 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+});
+
+describe('pending message', () => {
+	it('should not allow setting is_pending_message from client side', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		try {
+			await channel.sendMessage(
+				{ text: 'hi' },
+				{
+					is_pending_message: true,
+				},
+			);
+		} catch (e) {
+			expect(e.message).to.be.equal('Setting is_pending_message on client side is not supported');
+		}
+
+		const serverClient = new StreamChat('apiKey', 'secret');
+		serverClient.post = () =>
+			new Promise((resolve) => {
+				resolve(true);
+			});
+		const serverChannel = serverClient.channel('messaging', uuidv4());
+		const response = await serverChannel.sendMessage(
+			{ text: 'hi' },
+			{
+				is_pending_message: true,
+			},
+		);
+
+		expect(response).to.be.equal(true);
 	});
 });
