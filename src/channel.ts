@@ -161,7 +161,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
-   * @param {boolean} [options.is_pending_message] Make this message pending
+   * @param {boolean} [options.is_pending_message] DEPRECATED, please use `pending` instead.
+   * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
    *
@@ -173,15 +174,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       force_moderation?: boolean;
       is_pending_message?: boolean;
       keep_channel_hidden?: boolean;
+      pending?: boolean;
       pending_message_metadata?: Record<string, string>;
       skip_enrich_url?: boolean;
       skip_push?: boolean;
     },
   ) {
-    if (options?.is_pending_message !== undefined && !this._client._isUsingServerAuth()) {
-      throw new Error('Setting is_pending_message on client side is not supported');
-    }
-
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
