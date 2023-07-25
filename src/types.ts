@@ -714,7 +714,9 @@ export type ReviewFlagReportOptions = {
   user_id?: string;
 };
 
-export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
+export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'> & {
+  exclude_expired_bans?: boolean;
+};
 
 export type BanUserOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = UnBanUserOptions & {
   banned_by?: UserResponse<StreamChatGenerics>;
