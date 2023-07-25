@@ -1459,7 +1459,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
    * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
-   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0}
+   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0, exclude_expired_bans: true}
    *
    * @return {Promise<BannedUsersResponse<StreamChatGenerics>>} Ban Query Response
    */
