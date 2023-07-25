@@ -118,6 +118,12 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
+    geofences?: Array<{
+      country_codes: Array<string>;
+      description: string;
+      name: string;
+      type: string;
+    }>;
     grants?: Record<string, string[]>;
     hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
