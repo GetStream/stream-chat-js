@@ -483,6 +483,20 @@ export type GetRepliesAPIResponse<StreamChatGenerics extends ExtendableGenerics 
   messages: MessageResponse<StreamChatGenerics>[];
 };
 
+export type GetUnreadCountAPIResponse = APIResponse & {
+  channel_type: {
+    channel_count: number;
+    channel_type: string;
+    unread_count: number;
+  }[];
+  channels: {
+    channel_id: string;
+    last_read: string;
+    unread_count: number;
+  }[];
+  total_unread_count: number;
+};
+
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel_types: Record<
     string,
