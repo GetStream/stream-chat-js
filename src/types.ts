@@ -2068,6 +2068,7 @@ export type MessageBase<
   pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
+  silent?: boolean;
   text?: string;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
