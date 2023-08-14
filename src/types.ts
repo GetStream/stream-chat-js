@@ -1032,6 +1032,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   connection_id?: string;
   created_at?: string;
   hard_delete?: boolean;
+  last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
