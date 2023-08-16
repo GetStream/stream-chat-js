@@ -540,7 +540,6 @@ export type MessageResponseBase<
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
-  silent?: boolean;
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
