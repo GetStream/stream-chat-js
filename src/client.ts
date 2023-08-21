@@ -2540,7 +2540,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   async getMessage(messageID: string) {
-    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(this.baseURL + `/messages/${encodeURIComponent(messageID)}`);
+    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+    );
   }
 
   getUserAgent() {
