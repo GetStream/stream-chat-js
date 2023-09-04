@@ -2248,23 +2248,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * _unblockMessage - unblocks message blocked by automod
+   * unblockMessage - unblocks message blocked by automod
    *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
    *
-   * @private
    * @param {string} targetMessageID
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async _unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
+  async unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
     return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
       target_message_id: targetMessageID,
       ...options,
     });
   }
+  // alias for backwards compatibility
+  _unblockMessage = this.unblockMessage;
 
   /**
    * @deprecated use markChannelsRead instead
