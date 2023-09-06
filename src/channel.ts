@@ -1160,8 +1160,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
-  async voteOnPoll(pollId: string, votes: PollVoteData[]) {
+  async vote(pollId: string, votes: PollVoteData[]) {
     return await this.getClient().voteOnPoll(pollId, votes);
+  }
+
+  async removeVote(pollId: string, optionId: string) {
+    return await this.getClient().removeVote(pollId, optionId);
   }
 
   /**
@@ -1379,6 +1383,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             hidden: event.channel?.hidden ?? channel.data?.hidden,
             own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
+        }
+        break;
+      case 'poll.vote_casted':
+        if (event.poll_vote) {
+          channelState.addPollVote(event.poll_vote, event.message.id);
+        }
+        break;
+      case 'poll.vote_removed':
+        if (event.poll_vote) {
+          channelState.removePollVote(event.poll_vote, event.message.id);
+        }
+        break;
+      case 'poll.closed':
+          if (event.message) {
+          channelState.addMessageSorted(event.message, false, false);
         }
         break;
       case 'reaction.new':

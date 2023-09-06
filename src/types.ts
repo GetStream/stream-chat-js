@@ -1043,6 +1043,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   mode?: string;
   online?: boolean;
   parent_id?: string;
+  poll_vote?: PollVote;
   queriedChannels?: {
     channels: ChannelAPIResponse<StreamChatGenerics>[];
     isLatestMessageSet?: boolean;
@@ -1664,6 +1665,7 @@ export type Attachment<
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
+  poll?: PollResponse<StreamChatGenerics>;
   pretext?: string;
   text?: string;
   thumb_url?: string;
@@ -2601,6 +2603,7 @@ export type PollResponse<StreamChatGenerics extends ExtendableGenerics = Default
   cid?: string;
   description?: string;
   is_closed?: boolean;
+  own_votes?: PollVote[];
   voting_visibility?: VotingVisibility;
 };
 
@@ -2611,7 +2614,9 @@ export type PollOption = {
   text: string;
   updated_at: string;
   vote_count: number;
+  votes?: PollVote[];
 };
+
 
 export enum VotingVisibility {
   anonymous = 'anonymous',
@@ -2673,6 +2678,7 @@ export type PollVote = {
   id: string;
   is_user_suggestion: boolean;
   poll_id: string;
+  user_id: string;
   option_id?: string;
   user_suggestion?: string;
 };
