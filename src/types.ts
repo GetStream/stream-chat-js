@@ -1039,6 +1039,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   mode?: string;
   online?: boolean;
   parent_id?: string;
+  poll_vote?: PollVote;
   queriedChannels?: {
     channels: ChannelAPIResponse<StreamChatGenerics>[];
     isLatestMessageSet?: boolean;
@@ -1634,6 +1635,7 @@ export type Attachment<
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
+  poll?: PollResponse<StreamChatGenerics>;
   pretext?: string;
   text?: string;
   thumb_url?: string;
@@ -2552,3 +2554,106 @@ export class ErrorFromResponse<T> extends Error {
   response?: AxiosResponse<T>;
   status?: number;
 }
+
+export type QueryPollsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  polls: PollResponse<StreamChatGenerics>[];
+};
+
+export type PollResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  created_at: string;
+  created_by: UserResponse<StreamChatGenerics> | null;
+  created_by_id: string;
+  id: string;
+  max_votes_allowed: number;
+  name: string;
+  options: PollOption[];
+  updated_at: string;
+  vote_count: number;
+  allow_user_suggestions?: boolean;
+  channel?: ChannelAPIResponse<StreamChatGenerics> | null;
+  cid?: string;
+  description?: string;
+  is_closed?: boolean;
+  own_votes?: PollVote[];
+  voting_visibility?: VotingVisibility;
+};
+
+export type PollOption = {
+  created_at: string;
+  id: string;
+  poll_id: string;
+  text: string;
+  updated_at: string;
+  vote_count: number;
+  votes?: PollVote[];
+};
+
+
+export enum VotingVisibility {
+  anonymous = 'anonymous',
+  public = 'public',
+}
+
+export type PollData = {
+  name: string;
+  options: PollOptionData[];
+  allow_user_suggestion?: boolean;
+  description?: string;
+  id?: string;
+  is_closed?: boolean;
+  max_votes_allowed?: number;
+  user_id?: string;
+  voting_visibility?: VotingVisibility;
+};
+
+export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  // id: string;
+  set?: Partial<PollResponse<StreamChatGenerics>>;
+  unset?: Array<keyof PollResponse<StreamChatGenerics>>;
+};
+
+export type PollOptionData = {
+  text: string;
+  id?: string;
+  position?: number;
+};
+
+export type PartialPollOptionUpdate = {
+  set?: Partial<PollOptionResponse>;
+  unset?: Array<keyof PollOptionResponse>;
+};
+
+export type PollVoteData = {
+  option_id?: string;
+  user_suggestion?: string;
+};
+
+export type PollPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+export type PollOptionResponse = {
+  created_at: Date;
+  id: string;
+  poll_id: string;
+  position: number;
+  text: string;
+  updated_at: Date;
+  vote_count: number;
+  votes?: PollVote[];
+};
+
+export type PollVote = {
+  created_at: Date;
+  id: string;
+  is_user_suggestion: boolean;
+  poll_id: string;
+  user_id: string;
+  option_id?: string;
+  user_suggestion?: string;
+};
+
+export type PollVoteResponse = {
+  votes: PollVote[];
+};

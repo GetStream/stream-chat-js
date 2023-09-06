@@ -21,6 +21,7 @@ import {
   PartialUserUpdate,
   PermissionObject,
   ConnectAPIResponse,
+  MessageFilters,
 } from '../../dist/types';
 const apiKey = 'apiKey';
 
@@ -126,7 +127,7 @@ voidReturn = client.setBaseURL('https://chat.stream-io-api.com/');
 const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
 const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
 voidPromise = client.disconnectUser();
-
+client.getUnreadCount();
 const updateRequest: PartialUserUpdate<StreamTypes> = {
   id: 'vishal',
   set: {
@@ -134,6 +135,19 @@ const updateRequest: PartialUserUpdate<StreamTypes> = {
   },
   unset: ['example'],
 };
+
+const chnFilter = {
+  cid: { $eq: "electronics_computers:1357901672724_1264254647" },
+};
+
+const msgFilter: MessageFilters<StreamTypes> = {
+  "user.id": { $eq: "1357901672724" },
+};
+
+client.search(chnFilter, msgFilter, {
+  limit: 30,
+  offset: 0,
+});
 
 const updateUser: Promise<{
   users: { [key: string]: UserResponse<StreamTypes> };

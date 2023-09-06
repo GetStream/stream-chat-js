@@ -3156,4 +3156,171 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async commitMessage(id: string) {
     return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
   }
+
+  /**
+   * Creates a poll
+   * @param params PollData The poll that will be created
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async createPoll(poll: PollData): Promise<APIResponse & PollResponse> {
+    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  }
+
+  /**
+   * Retrieves a poll
+   * @param id string The poll id
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async getPoll(id: string): Promise<APIResponse & PollResponse> {
+    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`);
+  }
+
+  /**
+   * Updates a poll
+   * @param poll PollData The poll that will be updated
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async updatePoll(poll: PollData): Promise<APIResponse & PollResponse> {
+    return await this.put<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  }
+
+  /**
+   * Partically updates a poll
+   * @param id string The poll id
+   * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
+   * @returns {APIResponse & PollResponse} The poll
+   */
+  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate): Promise<APIResponse & PollResponse> {
+    return await this.patch<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+  }
+
+  /**
+   * Delete a poll
+   * @param id string The poll id
+   * @param userId string The user id (only serverside)
+   * @returns
+   */
+  async deletePoll(id: string, userId?: string): Promise<APIResponse> {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`, {
+      ...(userId ? { user_id: userId } : {}),
+    });
+  }
+
+  /**
+   * Creates a poll option
+   * @param pollId string The poll id
+   * @param option PollOptionData The poll option that will be created
+   * @returns {APIResponse & PollOptionResponse} The poll option
+   */
+  async createPollOption(pollId: string, option: PollOptionData): Promise<APIResponse & PollOptionResponse> {
+    return await this.post<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  }
+
+  /**
+   * Retrieves a poll option
+   * @param pollId string The poll id
+   * @param optionId string The poll option id
+   * @returns {APIResponse & PollOptionResponse} The poll option
+   */
+  async getPollOption(pollId: string, optionId: string): Promise<APIResponse & PollOptionResponse> {
+    return await this.get<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  }
+
+  /**
+   * Updates a poll option
+   * @param pollId string The poll id
+   * @param option PollOptionData The poll option that will be updated
+   * @returns
+   */
+  async updatePollOption(pollId: string, option: PollOptionData): Promise<APIResponse & PollOptionResponse> {
+    return await this.put<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  }
+
+  /**
+   * Partically updates a poll
+   * @param id string The poll id
+   * @param {PartialPollOptionUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
+   * @returns {APIResponse & PollOptionResponse} The poll
+   */
+  async partialUpdatePollOption(
+    pollId: string,
+    optionId: string,
+    partialPollOptionObject: PartialPollOptionUpdate,
+  ): Promise<APIResponse & PollOptionResponse> {
+    return await this.patch<APIResponse & PollOptionResponse>(
+      this.baseURL + `/polls/${pollId}/options/${optionId}`,
+      partialPollOptionObject,
+    );
+  }
+
+  /**
+   * Delete a poll option
+   * @param pollId string The poll id
+   * @param optionId string The poll option id
+   * @returns {APIResponse} The poll option
+   */
+  async deletePollOption(pollId: string, optionId: string): Promise<APIResponse> {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  }
+
+  /**
+   * Cast or cancel one or more votes on a poll
+   * @param pollId string The poll id
+   * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+  async voteOnPoll(pollId: string, votes: PollVoteData[], options = {}): Promise<APIResponse & PollVoteResponse> {
+    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote`, { votes, ...options });
+  }
+
+  async removeVote(pollId: string, optionId: string): Promise<APIResponse & PollVoteResponse> {
+    return await this.delete<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote/${optionId}`);
+  }
+
+  /**
+   * Queries polls
+   * @param filterConditions
+   * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+   * @returns {APIResponse & QueryPollsResponse} The polls
+   */
+  async queryPolls(
+    filterConditions: VoteFilters = {},
+    sort: VoteSort = [],
+    options: PollPaginationOptions = {},
+  ): Promise<APIResponse & QueryPollsResponse> {
+    return await this.get<APIResponse & QueryPollsResponse>(this.baseURL + '/polls', {
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+      },
+      ...options,
+    });
+  }
+
+  /**
+   * Queries poll votes
+   * @param pollId
+   * @param filterConditions
+   * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+  async queryPollVotes(
+    pollId: string,
+    filterConditions: VoteFilters = {},
+    sort: VoteSort = [],
+    options: PollPaginationOptions = {},
+  ): Promise<APIResponse & PollVoteResponse> {
+    return await this.get<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+      },
+      ...options,
+    });
+  }
 }
