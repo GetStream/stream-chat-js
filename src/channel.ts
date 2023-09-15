@@ -1387,12 +1387,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'poll.vote_casted':
         if (event.poll_vote) {
-          channelState.addPollVote(event.poll_vote, event.message.id);
+          channelState.addPollVote(event.poll_vote, event.message?.id || '');
         }
         break;
       case 'poll.vote_removed':
         if (event.poll_vote) {
-          channelState.removePollVote(event.poll_vote, event.message.id);
+          channelState.removePollVote(event.poll_vote, event.message?.id || '');
         }
         break;
       case 'poll.closed':
