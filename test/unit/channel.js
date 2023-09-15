@@ -716,6 +716,137 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
+
+	it('channel created using member list - case 3', async () => {
+		clientVish.activeChannels = {};
+
+		// Mock channel.watch call.
+		const userVish = generateUser();
+		const userAmin = generateUser();
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Lets start testing
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		await channelVish_copy1.watch();
+
+		// tempCid should be replaced with actual cid at this point.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// Should not populate tmpCid again.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+
+		await channelVish_copy2.watch();
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using member list - case 4', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy2);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using type only', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy2.cid);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
+
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy2.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(channelVish_copy2);
+	});
 });
 
 describe('event subscription and unsubscription', () => {
