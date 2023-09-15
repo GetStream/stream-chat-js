@@ -2617,7 +2617,6 @@ export type PollOption = {
   votes?: PollVote[];
 };
 
-
 export enum VotingVisibility {
   anonymous = 'anonymous',
   public = 'public',

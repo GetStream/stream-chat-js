@@ -541,7 +541,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     const message = this.findMessage(messageId);
     if (!message) return;
     const messageWithPoll = message;
-    
+
     messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
       if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
         attachment.poll.options = attachment.poll.options.map((option) => {
@@ -550,20 +550,20 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
             option.vote_count += 1;
           }
 
-          return {...option};
+          return { ...option };
         });
         if (pollVote.user_id === this._channel.getClient().userID) {
-            attachment.poll.own_votes?.push(pollVote);
+          attachment.poll.own_votes?.push(pollVote);
         }
 
         attachment.poll.vote_count += 1;
       }
-      return {...attachment};
+      return { ...attachment };
     });
 
-    console.log('>>> from addPollVote function')
-    this.addMessageSorted({...messageWithPoll} as unknown as MessageResponse<StreamChatGenerics>, false, false);
-  }
+    console.log('>>> from addPollVote function');
+    this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+  };
 
   removePollVote = (pollVote: PollVote, messageId: string) => {
     const message = this.findMessage(messageId);
@@ -578,20 +578,20 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
             option.vote_count -= 1;
           }
 
-          return {...option};
+          return { ...option };
         });
         if (pollVote.user_id === this._channel.getClient().userID) {
-            attachment.poll.own_votes = attachment.poll.own_votes?.filter((vote) => vote.user_id !== pollVote.user_id);
+          attachment.poll.own_votes = attachment.poll.own_votes?.filter((vote) => vote.user_id !== pollVote.user_id);
         }
 
         attachment.poll.vote_count -= 1;
       }
-      return {...attachment};
+      return { ...attachment };
     });
 
-    console.log('>>> from removePollVote function')
-    this.addMessageSorted({...messageWithPoll} as unknown as MessageResponse<StreamChatGenerics>, false, false)
-  }
+    console.log('>>> from removePollVote function');
+    this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+  };
 
   /**
    * Updates the message.user property with updated user object, for messages.

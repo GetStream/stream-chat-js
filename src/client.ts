@@ -1677,8 +1677,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   /**
    * @ignore
-   * @param userID 
-   * @returns 
+   * @param userID
+   * @returns
    */
   async getUnreadCount(userID?: string) {
     return await this.get<GetUnreadCountAPIResponse>(this.baseURL + '/unread', userID ? { user_id: userID } : {});
@@ -3293,12 +3293,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
-  async voteOnPoll(pollId: string, votes: PollVoteData[], options = {}): Promise<APIResponse & PollVoteResponse> {
-    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote`, { votes, ...options });
+  async voteOnPoll(
+    messageId: string,
+    pollId: string,
+    votes: PollVoteData[],
+    options = {},
+  ): Promise<APIResponse & PollVoteResponse> {
+    return await this.post<APIResponse & PollVoteResponse>(
+      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
+      { votes, ...options },
+    );
   }
 
-  async removeVote(pollId: string, optionId: string): Promise<APIResponse & PollVoteResponse> {
-    return await this.delete<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/vote/${optionId}`);
+  async removeVote(messageId: string, pollId: string, voteId: string): Promise<APIResponse & PollVoteResponse> {
+    return await this.delete<APIResponse & PollVoteResponse>(
+      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`,
+    );
   }
 
   /**
