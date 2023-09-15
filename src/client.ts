@@ -154,6 +154,7 @@ import {
   UpdateCommandResponse,
   UpdatedMessage,
   UpdateMessageAPIResponse,
+  UpdateMessageOptions,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -2439,7 +2440,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async updateMessage(
     message: UpdatedMessage<StreamChatGenerics>,
     userId?: string | { id: string },
-    options?: { skip_enrich_url?: boolean },
+    options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
@@ -2510,7 +2511,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     id: string,
     partialMessageObject: PartialMessageUpdate<StreamChatGenerics>,
     userId?: string | { id: string },
-    options?: { skip_enrich_url?: boolean },
+    options?: UpdateMessageOptions,
   ) {
     if (!id) {
       throw Error('Please specify the message id when calling partialUpdateMessage');
