@@ -154,6 +154,7 @@ import {
   UpdateCommandResponse,
   UpdatedMessage,
   UpdateMessageAPIResponse,
+  UpdateMessageOptions,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -1737,16 +1738,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       throw Error(`Invalid channel group ${channelType}, can't contain the : character`);
     }
 
+    // support channel("messaging", {options})
+    if (channelIDOrCustom && typeof channelIDOrCustom === 'object') {
+      return this.getChannelByMembers(channelType, channelIDOrCustom);
+    }
+
+    // // support channel("messaging", undefined, {options})
+    if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
+      return this.getChannelByMembers(channelType, custom);
+    }
+
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (channelIDOrCustom == null || channelIDOrCustom === '') {
+    if (!channelIDOrCustom) {
       return new Channel<StreamChatGenerics>(this, channelType, undefined, custom);
-    }
-
-    // support channel("messaging", {options})
-    if (typeof channelIDOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIDOrCustom);
     }
 
     return this.getChannelById(channelType, channelIDOrCustom, custom);
@@ -2248,23 +2254,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * _unblockMessage - unblocks message blocked by automod
+   * unblockMessage - unblocks message blocked by automod
    *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
    *
-   * @private
    * @param {string} targetMessageID
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async _unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
+  async unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
     return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
       target_message_id: targetMessageID,
       ...options,
     });
   }
+  // alias for backwards compatibility
+  _unblockMessage = this.unblockMessage;
 
   /**
    * @deprecated use markChannelsRead instead
@@ -2441,7 +2445,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async updateMessage(
     message: UpdatedMessage<StreamChatGenerics>,
     userId?: string | { id: string },
-    options?: { skip_enrich_url?: boolean },
+    options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
@@ -2512,7 +2516,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     id: string,
     partialMessageObject: PartialMessageUpdate<StreamChatGenerics>,
     userId?: string | { id: string },
-    options?: { skip_enrich_url?: boolean },
+    options?: UpdateMessageOptions,
   ) {
     if (!id) {
       throw Error('Please specify the message id when calling partialUpdateMessage');
