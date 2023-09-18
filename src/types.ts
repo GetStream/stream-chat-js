@@ -2077,6 +2077,20 @@ export type MessageBase<
 
 export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
 
+export type SendMessageOptions = {
+  force_moderation?: boolean;
+  is_pending_message?: boolean;
+  keep_channel_hidden?: boolean;
+  pending?: boolean;
+  pending_message_metadata?: Record<string, string>;
+  skip_enrich_url?: boolean;
+  skip_push?: boolean;
+};
+
+export type UpdateMessageOptions = {
+  skip_enrich_url?: boolean;
+};
+
 export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   target: UserResponse<StreamChatGenerics>;
