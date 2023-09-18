@@ -2262,6 +2262,7 @@ export type TranslationLanguages =
   | 'ja'
   | 'ka'
   | 'ko'
+  | 'lt'
   | 'lv'
   | 'ms'
   | 'nl'
