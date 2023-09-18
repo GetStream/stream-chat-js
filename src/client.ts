@@ -1738,16 +1738,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       throw Error(`Invalid channel group ${channelType}, can't contain the : character`);
     }
 
+    // support channel("messaging", {options})
+    if (channelIDOrCustom && typeof channelIDOrCustom === 'object') {
+      return this.getChannelByMembers(channelType, channelIDOrCustom);
+    }
+
+    // // support channel("messaging", undefined, {options})
+    if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
+      return this.getChannelByMembers(channelType, custom);
+    }
+
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (channelIDOrCustom == null || channelIDOrCustom === '') {
+    if (!channelIDOrCustom) {
       return new Channel<StreamChatGenerics>(this, channelType, undefined, custom);
-    }
-
-    // support channel("messaging", {options})
-    if (typeof channelIDOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIDOrCustom);
     }
 
     return this.getChannelById(channelType, channelIDOrCustom, custom);
