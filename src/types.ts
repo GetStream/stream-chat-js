@@ -527,6 +527,7 @@ export type MessageResponseBase<
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
+  deleted_reply_count?: number;
   i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
     language: TranslationLanguages;
   };
