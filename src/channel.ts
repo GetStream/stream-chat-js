@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  SendMessageOptions,
 } from './types';
 import { Role } from './permissions';
 
@@ -168,18 +169,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
-  async sendMessage(
-    message: Message<StreamChatGenerics>,
-    options?: {
-      force_moderation?: boolean;
-      is_pending_message?: boolean;
-      keep_channel_hidden?: boolean;
-      pending?: boolean;
-      pending_message_metadata?: Record<string, string>;
-      skip_enrich_url?: boolean;
-      skip_push?: boolean;
-    },
-  ) {
+  async sendMessage(message: Message<StreamChatGenerics>, options?: SendMessageOptions) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
