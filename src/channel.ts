@@ -241,8 +241,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       query?: string;
     } = {},
   ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
+    if (options.offset && (options.sort || options.next)) {
+      throw Error(`Cannot specify offset with sort or next parameters`);
     }
     // Return a list of channels
     const payload: SearchPayload<StreamChatGenerics> = {
