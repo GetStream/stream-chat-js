@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.12.1](https://github.com/GetStream/stream-chat-js/compare/v8.12.0...v8.12.1) (2023-09-20)
+
+
+### Bug Fixes
+
+* allow search with offset and sort ([d0c3f35](https://github.com/GetStream/stream-chat-js/commit/d0c3f357e8f559d2e60922098223525f9b06da8e))
+* allow search with offset and sort ([#1174](https://github.com/GetStream/stream-chat-js/issues/1174)) ([fd24276](https://github.com/GetStream/stream-chat-js/commit/fd242769717ef44068cacd61503aa0d958febabc))
+* remove unused unread count api endpoint ([33823be](https://github.com/GetStream/stream-chat-js/commit/33823be128ad917bec51447038e34f56256f8986))
+
 ## [8.12.0](https://github.com/GetStream/stream-chat-js/compare/v8.11.0...v8.12.0) (2023-09-18)
 
 
