@@ -397,13 +397,13 @@ describe('Client search', async () => {
 			sort: [{ custom_field: -1 }],
 		});
 	});
-	it('sorting and offset fails', async () => {
+	it('sorting and offset works', async () => {
 		await expect(
 			client.search({ cid: 'messaging:my-cid' }, 'query', {
 				offset: 1,
 				sort: [{ custom_field: -1 }],
 			}),
-		).to.be.rejectedWith(Error);
+		).to.be.fulfilled;
 	});
 	it('next and offset fails', async () => {
 		await expect(
