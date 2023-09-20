@@ -881,8 +881,8 @@ describe('Channel search', async () => {
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
-	it('sorting and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.rejectedWith(Error);
+	it('sorting and offset works', async () => {
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.fulfilled;
 	});
 	it('next and offset fails', async () => {
 		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
