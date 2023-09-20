@@ -1590,8 +1590,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     query: string | MessageFilters<StreamChatGenerics>,
     options: SearchOptions<StreamChatGenerics> = {},
   ) {
-    if (options.offset && (options.sort || options.next)) {
-      throw Error(`Cannot specify offset with sort or next parameters`);
+    if (options.offset && options.next) {
+      throw Error(`Cannot specify offset with next`);
     }
     const payload: SearchPayload<StreamChatGenerics> = {
       filter_conditions: filterConditions,
