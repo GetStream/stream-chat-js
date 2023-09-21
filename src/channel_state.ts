@@ -346,9 +346,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     const parseMessage = (m: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>) =>
       (({
         ...m,
-        created_at: m.created_at.toString(),
-        pinned_at: m.pinned_at?.toString(),
-        updated_at: m.updated_at?.toString(),
+        created_at: m.created_at.toISOString(),
+        pinned_at: m.pinned_at?.toISOString(),
+        updated_at: m.updated_at?.toISOString(),
       } as unknown) as MessageResponse<StreamChatGenerics>);
 
     this.messageSets.forEach((set) => {

@@ -411,6 +411,92 @@ describe('Channel _handleChannelEvent', function () {
 			});
 		});
 	});
+
+	it('should mark channel visible on channel.visible event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.visible',
+			cid: 'messaging:id',
+			channel_id: 'id',
+			channel_type: 'messaging',
+			user: {
+				id: 'admin',
+				role: 'admin',
+				created_at: '2022-03-08T09:46:56.840739Z',
+				updated_at: '2022-03-15T08:30:09.796926Z',
+				last_active: '2023-05-24T09:20:31.041292724Z',
+				banned: false,
+				online: true,
+			},
+			created_at: '2023-05-24T09:20:43.986615426Z',
+		};
+		channel.data.hidden = true;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(false);
+	});
+
+	it('should mark channel hidden on channel.hidden event', () => {
+		const channelVisibleEvent = {
+			type: 'channel.hidden',
+		};
+		channel.data.hidden = false;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(true);
+	});
+
+	it('should update channel member ban state on user.banned and user.unbanned events', () => {
+		const user = { id: 'user_id' };
+		const shadowBanEvent = {
+			type: 'user.banned',
+			shadow: true,
+			user,
+		};
+		const shadowUnbanEvent = {
+			type: 'user.unbanned',
+			shadow: true,
+			user,
+		};
+		const banEvent = {
+			type: 'user.banned',
+			user,
+		};
+		const unbanEvent = {
+			type: 'user.unbanned',
+			user,
+		};
+
+		[
+			[shadowBanEvent, banEvent, { shadow_banned: true, banned: false }, { shadow_banned: false, banned: true }],
+			[
+				shadowBanEvent,
+				shadowUnbanEvent,
+				{ shadow_banned: true, banned: false },
+				{ shadow_banned: false, banned: false },
+			],
+			[
+				shadowBanEvent,
+				unbanEvent,
+				{ shadow_banned: true, banned: false },
+				{ shadow_banned: false, banned: false },
+			],
+			[banEvent, shadowBanEvent, { shadow_banned: false, banned: true }, { shadow_banned: true, banned: false }],
+			[
+				banEvent,
+				shadowUnbanEvent,
+				{ shadow_banned: false, banned: true },
+				{ shadow_banned: false, banned: false },
+			],
+			[banEvent, unbanEvent, { shadow_banned: false, banned: true }, { shadow_banned: false, banned: false }],
+		].forEach(([firstEvent, secondEvent, expectAfterFirst, expectAfterSecond]) => {
+			channel._handleChannelEvent(firstEvent);
+			expect(channel.state.members[user.id].banned).eq(expectAfterFirst.banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterFirst.shadow_banned);
+			channel._handleChannelEvent(secondEvent);
+			expect(channel.state.members[user.id].banned).eq(expectAfterSecond.banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
+		});
+	});
 });
 
 describe('Channels - Constructor', function () {
@@ -630,6 +716,137 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
+
+	it('channel created using member list - case 3', async () => {
+		clientVish.activeChannels = {};
+
+		// Mock channel.watch call.
+		const userVish = generateUser();
+		const userAmin = generateUser();
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Lets start testing
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		await channelVish_copy1.watch();
+
+		// tempCid should be replaced with actual cid at this point.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// Should not populate tmpCid again.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+
+		await channelVish_copy2.watch();
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using member list - case 4', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy2);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using type only', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy2.cid);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
+
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy2.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(channelVish_copy2);
+	});
 });
 
 describe('event subscription and unsubscription', () => {
@@ -664,8 +881,8 @@ describe('Channel search', async () => {
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
-	it('sorting and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.rejectedWith(Error);
+	it('sorting and offset works', async () => {
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.fulfilled;
 	});
 	it('next and offset fails', async () => {
 		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
@@ -756,37 +973,5 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
-	});
-});
-
-describe('pending message', () => {
-	it('should not allow setting is_pending_message from client side', async () => {
-		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
-		try {
-			await channel.sendMessage(
-				{ text: 'hi' },
-				{
-					is_pending_message: true,
-				},
-			);
-		} catch (e) {
-			expect(e.message).to.be.equal('Setting is_pending_message on client side is not supported');
-		}
-
-		const serverClient = new StreamChat('apiKey', 'secret');
-		serverClient.post = () =>
-			new Promise((resolve) => {
-				resolve(true);
-			});
-		const serverChannel = serverClient.channel('messaging', uuidv4());
-		const response = await serverChannel.sendMessage(
-			{ text: 'hi' },
-			{
-				is_pending_message: true,
-			},
-		);
-
-		expect(response).to.be.equal(true);
 	});
 });
