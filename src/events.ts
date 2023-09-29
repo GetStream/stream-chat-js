@@ -47,3 +47,28 @@ export const EVENT_MAP = {
   'connection.recovered': true,
   'transport.changed': true,
 };
+
+// events handled by channel._handleChannelEvent
+export const CHANNEL_HANDLED_EVENTS = {
+  'typing.start': true,
+  'typing.stop': true,
+  'message.read': true,
+  'user.watching.start': true,
+  'user.updated': true,
+  'user.watching.stop': true,
+  'message.deleted': true,
+  'message.new': true,
+  'message.updated': true,
+  'channel.truncated': true,
+  'member.added': true,
+  'member.updated': true,
+  'member.removed': true,
+  'channel.updated': true,
+  'reaction.new': true,
+  'reaction.deleted': true,
+  'reaction.updated': true,
+  'channel.hidden': true,
+  'channel.visible': true,
+  'user.banned': true,
+  'user.unbanned': true,
+};

@@ -89,6 +89,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  /**
+   * Collects the incoming WS events before the channel is marked as initialized.
+   * This prevents executing procedures that depend on channel being initialized.
+   * Once the channel is marked as initialized the queue is flushed.
+   */
+  wsEventQueue: Event<StreamChatGenerics>[];
 
   /**
    * constructor - Create a channel
@@ -132,6 +138,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
+    this.wsEventQueue = [];
   }
 
   /**
@@ -780,6 +787,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
+    this._flushWsEventQueue();
     this.data = state.channel;
 
     this._client.logger('info', `channel:watch() - started watching channel ${this.cid}`, {
@@ -1207,6 +1215,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(event: Event<StreamChatGenerics>) {
     const channel = this;
+
+    if (!this._isInitialized()) {
+      this.wsEventQueue.push(event);
+      return;
+    }
+
     this._client.logger(
       'info',
       `channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
@@ -1442,6 +1456,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
   };
 
+  _isInitialized() {
+    return this.initialized || this.offlineMode || this.getClient()._isUsingServerAuth();
+  }
+
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
@@ -1554,5 +1572,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
     this.disconnected = true;
     this.state.setIsUpToDate(false);
+  }
+
+  _flushWsEventQueue() {
+    while (this.wsEventQueue.length) {
+      const event = this.wsEventQueue.pop();
+      if (event) this.getClient().dispatchEvent(event);
+    }
   }
 }
