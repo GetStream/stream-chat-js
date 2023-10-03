@@ -1576,7 +1576,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   _flushWsEventQueue() {
     while (this.wsEventQueue.length) {
-      const event = this.wsEventQueue.pop();
+      const event = this.wsEventQueue.shift();
       if (event) this.getClient().dispatchEvent(event);
     }
   }
