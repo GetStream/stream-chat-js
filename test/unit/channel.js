@@ -1,4 +1,5 @@
 import chai from 'chai';
+import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -8,8 +9,7 @@ import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
-import { StreamChat } from '../../src/client';
-import { ChannelState } from '../../src';
+import { CHANNEL_HANDLED_EVENTS, ChannelState, StreamChat } from '../../src';
 
 const expect = chai.expect;
 
@@ -496,6 +496,76 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.members[user.id].banned).eq(expectAfterSecond.banned);
 			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
 		});
+	});
+
+	const eventTypes = Object.keys(CHANNEL_HANDLED_EVENTS);
+	const receiveAllChannelEvents = (channel) => {
+		eventTypes.forEach((type) => {
+			channel._handleChannelEvent({ type });
+		});
+	};
+
+	it('buffers WS events when uninitialized', () => {
+		channel.initialized = false;
+		channel.offlineMode = false;
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
+	});
+
+	it('does not buffer WS events when in offline mode', () => {
+		channel.initialized = false;
+		channel.offlineMode = true;
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.be.empty;
+	});
+
+	it('does not buffer WS events with server-side client', () => {
+		client = new StreamChat('apiKey', 'secret');
+		client.user = user;
+		client.userID = user.id;
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+		channel.offlineMode = false;
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.be.empty;
+	});
+
+	it('does not buffer WS events on initialized channel', () => {
+		channel.initialized = true;
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.be.empty;
+	});
+
+	it('buffers WS events and channel.watch() flushes upon channel initialization', async () => {
+		channel.initialized = false;
+		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
+		await channel.watch();
+		expect(channel.wsEventQueue).to.be.empty;
+		client.doAxiosRequest.restore();
+	});
+
+	it('buffers WS events and channel.query() does not flush the queue', async () => {
+		channel.initialized = false;
+		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
+
+		receiveAllChannelEvents(channel);
+
+		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
+		await channel.query();
+		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
+		client.doAxiosRequest.restore();
 	});
 });
 
