@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.12.3](https://github.com/GetStream/stream-chat-js/compare/v8.12.2...v8.12.3) (2023-10-03)
+
+
+### Bug Fixes
+
+* queue channel WS events until the channel is initialized ([#1179](https://github.com/GetStream/stream-chat-js/issues/1179)) ([2073579](https://github.com/GetStream/stream-chat-js/commit/2073579ecfe4e8a1d5d37aa7f0a43b53bb57cd02))
+
 ### [8.12.2](https://github.com/GetStream/stream-chat-js/compare/v8.12.1...v8.12.2) (2023-10-03)
 
 
