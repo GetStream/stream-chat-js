@@ -14,6 +14,7 @@ import { WSConnectionFallback } from './connection_fallback';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
   addFileToFormData,
+  axiosParamsSerializer,
   chatCodes,
   isFunction,
   isOnline,
@@ -304,6 +305,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.defaultWSTimeoutWithFallback = 6000;
     this.defaultWSTimeout = 15000;
+
+    this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
 
     /**
      * logger function should accept 3 parameters:

@@ -1,5 +1,5 @@
 import chai from 'chai';
-import { generateUUIDv4, normalizeQuerySort } from '../../src/utils';
+import { axiosParamsSerializer, generateUUIDv4, normalizeQuerySort } from '../../src/utils';
 import sinon from 'sinon';
 
 const expect = chai.expect;
@@ -67,5 +67,34 @@ describe('test if sort is deterministic', () => {
 		expect(sort[2].direction).to.be.equal(1);
 		expect(sort[3].field).to.be.equal('deleted_at');
 		expect(sort[3].direction).to.be.equal(-1);
+	});
+});
+
+describe.only('axiosParamsSerializer', () => {
+	const testCases = [
+		{
+			input: {
+				a: 1,
+				b: 2,
+				c: null,
+			},
+			output: 'a=1&b=2&c=null',
+		},
+		{
+			input: {
+				a: {
+					b: 1,
+					c: 2,
+					d: null,
+				},
+				b: [1, 2, 3],
+			},
+			output: 'a=%7B%22b%22%3A1%2C%22c%22%3A2%2C%22d%22%3Anull%7D&b=%5B1%2C2%2C3%5D',
+		},
+	];
+	it('should serialize params', () => {
+		for (const { input, output } of testCases) {
+			expect(axiosParamsSerializer(input)).to.equal(output);
+		}
 	});
 });
