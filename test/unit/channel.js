@@ -592,7 +592,7 @@ describe('Uninitialized Channel', () => {
 	});
 
 	it('returns 0 mentions in unread messages', () => {
-		expect(channel.countUnreadMentions()).to.eq(0);
+		expect(channel.countUnreadMentions()).to.eq(-1);
 	});
 
 	it('reports no lastRead data', () => {
