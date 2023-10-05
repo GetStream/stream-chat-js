@@ -497,6 +497,21 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
 		});
 	});
+});
+
+describe('Channel WS events buffer', () => {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+	});
 
 	const eventTypes = Object.keys(CHANNEL_HANDLED_EVENTS);
 	const receiveAllChannelEvents = (channel) => {
@@ -505,17 +520,13 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	};
 
-	it('buffers WS events when uninitialized', () => {
-		channel.initialized = false;
-		channel.offlineMode = false;
-
+	it('when uninitialized', () => {
 		receiveAllChannelEvents(channel);
 
 		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
 	});
 
 	it('does not buffer WS events when in offline mode', () => {
-		channel.initialized = false;
 		channel.offlineMode = true;
 
 		receiveAllChannelEvents(channel);
@@ -528,8 +539,6 @@ describe('Channel _handleChannelEvent', function () {
 		client.user = user;
 		client.userID = user.id;
 		channel = client.channel('messaging', 'id');
-		channel.initialized = false;
-		channel.offlineMode = false;
 
 		receiveAllChannelEvents(channel);
 
@@ -545,7 +554,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('buffers WS events and channel.watch() flushes upon channel initialization', async () => {
-		channel.initialized = false;
 		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
 
 		receiveAllChannelEvents(channel);
@@ -557,7 +565,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('buffers WS events and channel.query() does not flush the queue', async () => {
-		channel.initialized = false;
 		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
 
 		receiveAllChannelEvents(channel);
@@ -566,6 +573,30 @@ describe('Channel _handleChannelEvent', function () {
 		await channel.query();
 		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
 		client.doAxiosRequest.restore();
+	});
+});
+
+describe('Uninitialized Channel', () => {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+		channel.offlineMode = false;
+	});
+
+	it('returns 0 mentions in unread messages', () => {
+		expect(channel.countUnreadMentions()).to.eq(0);
+	});
+
+	it('reports no lastRead data', () => {
+		expect(channel.lastRead()).to.eq(null);
 	});
 });
 
