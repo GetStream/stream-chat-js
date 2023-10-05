@@ -70,7 +70,7 @@ describe('test if sort is deterministic', () => {
 	});
 });
 
-describe.only('axiosParamsSerializer', () => {
+describe('axiosParamsSerializer', () => {
 	const testCases = [
 		{
 			input: {
