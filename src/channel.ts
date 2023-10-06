@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  SendMessageOptions,
 } from './types';
 import { Role } from './permissions';
 
@@ -88,6 +89,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  /**
+   * Collects the incoming WS events before the channel is marked as initialized.
+   * This prevents executing procedures that depend on channel being initialized.
+   * Once the channel is marked as initialized the queue is flushed.
+   */
+  wsEventQueue: Event<StreamChatGenerics>[];
 
   /**
    * constructor - Create a channel
@@ -131,6 +138,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
+    this.wsEventQueue = [];
   }
 
   /**
@@ -161,27 +169,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
-   * @param {boolean} [options.is_pending_message] Make this message pending
+   * @param {boolean} [options.is_pending_message] DEPRECATED, please use `pending` instead.
+   * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
-  async sendMessage(
-    message: Message<StreamChatGenerics>,
-    options?: {
-      force_moderation?: boolean;
-      is_pending_message?: boolean;
-      keep_channel_hidden?: boolean;
-      pending_message_metadata?: Record<string, string>;
-      skip_enrich_url?: boolean;
-      skip_push?: boolean;
-    },
-  ) {
-    if (options?.is_pending_message !== undefined && !this._client._isUsingServerAuth()) {
-      throw new Error('Setting is_pending_message on client side is not supported');
-    }
-
+  async sendMessage(message: Message<StreamChatGenerics>, options?: SendMessageOptions) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
@@ -253,8 +248,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       query?: string;
     } = {},
   ) {
-    if (options.offset && (options.sort || options.next)) {
-      throw Error(`Cannot specify offset with sort or next parameters`);
+    if (options.offset && options.next) {
+      throw Error(`Cannot specify offset with next`);
     }
     // Return a list of channels
     const payload: SearchPayload<StreamChatGenerics> = {
@@ -792,6 +787,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
+    this._flushWsEventQueue();
     this.data = state.channel;
 
     this._client.logger('info', `channel:watch() - started watching channel ${this.cid}`, {
@@ -1219,6 +1215,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(event: Event<StreamChatGenerics>) {
     const channel = this;
+
+    if (!this._isInitialized()) {
+      this.wsEventQueue.push(event);
+      return;
+    }
+
     this._client.logger(
       'info',
       `channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
@@ -1245,6 +1247,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.read[event.user.id] = {
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: new Date(event.created_at),
+            last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
           };
@@ -1453,6 +1456,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
   };
 
+  _isInitialized() {
+    return this.initialized || this.offlineMode || this.getClient()._isUsingServerAuth();
+  }
+
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
       throw Error(
@@ -1565,5 +1572,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
     this.disconnected = true;
     this.state.setIsUpToDate(false);
+  }
+
+  _flushWsEventQueue() {
+    while (this.wsEventQueue.length) {
+      const event = this.wsEventQueue.shift();
+      if (event) this.getClient().dispatchEvent(event);
+    }
   }
 }
