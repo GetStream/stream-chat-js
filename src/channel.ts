@@ -945,11 +945,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * countUnreadMentions - Count the number of unread messages mentioning the current user
    *
-   * @return {number} Unread mentions count. Value -1 is returned, if channel is not initialized.
+   * @return {number} Unread mentions count
    */
   countUnreadMentions() {
-    if (!this._isInitialized()) return -1;
-
     const lastRead = this.lastRead();
     const userID = this.getClient().userID;
 
