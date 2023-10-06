@@ -21,13 +21,13 @@ describe('Channel count unread', function () {
 	beforeEach(() => {
 		user = { id: 'user' };
 		lastRead = new Date('2020-01-01T00:00:00');
-		const channelResponse = generateChannel();
 
 		client = new StreamChat('apiKey');
 		client.user = user;
 		client.userID = 'user';
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
+		const channelResponse = generateChannel();
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
 		channel.lastRead = () => lastRead;
@@ -156,6 +156,39 @@ describe('Channel count unread', function () {
 		channel.state.messageSets[1].isCurrent = true;
 
 		expect(channel.countUnreadMentions()).to.be.equal(1);
+	});
+
+	describe('channel.lastRead', () => {
+		let channelResponse;
+		beforeEach(() => {
+			channelResponse = generateChannel();
+			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel.initialized = true;
+		});
+
+		it('should return null if no last read message', () => {
+			expect(channel.lastRead()).to.eq(null);
+		});
+
+		it('should return last read message date', () => {
+			const last_read = new Date();
+			const messages = [generateMsg()];
+			channel.state.read[user.id] = {
+				last_read,
+				last_read_message_id: messages[0].id,
+				user: user,
+				unread_messages: 0,
+			};
+			channel.state.addMessagesSorted(messages);
+			expect(channel.lastRead()).to.eq(last_read);
+		});
+
+		it('should return undefined if client user is not set (server-side client)', () => {
+			client = new StreamChat('apiKey', 'secret');
+			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel.initialized = true;
+			expect(channel.lastRead()).to.be.undefined;
+		});
 	});
 });
 
@@ -497,6 +530,21 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
 		});
 	});
+});
+
+describe('Channel WS events buffer', () => {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+	});
 
 	const eventTypes = Object.keys(CHANNEL_HANDLED_EVENTS);
 	const receiveAllChannelEvents = (channel) => {
@@ -505,17 +553,13 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	};
 
-	it('buffers WS events when uninitialized', () => {
-		channel.initialized = false;
-		channel.offlineMode = false;
-
+	it('when uninitialized', () => {
 		receiveAllChannelEvents(channel);
 
 		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
 	});
 
 	it('does not buffer WS events when in offline mode', () => {
-		channel.initialized = false;
 		channel.offlineMode = true;
 
 		receiveAllChannelEvents(channel);
@@ -528,8 +572,6 @@ describe('Channel _handleChannelEvent', function () {
 		client.user = user;
 		client.userID = user.id;
 		channel = client.channel('messaging', 'id');
-		channel.initialized = false;
-		channel.offlineMode = false;
 
 		receiveAllChannelEvents(channel);
 
@@ -545,7 +587,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('buffers WS events and channel.watch() flushes upon channel initialization', async () => {
-		channel.initialized = false;
 		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
 
 		receiveAllChannelEvents(channel);
@@ -557,7 +598,6 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('buffers WS events and channel.query() does not flush the queue', async () => {
-		channel.initialized = false;
 		sinon.stub(client, 'doAxiosRequest').resolves({ channel: generateChannel(), members: [] });
 
 		receiveAllChannelEvents(channel);
@@ -566,6 +606,30 @@ describe('Channel _handleChannelEvent', function () {
 		await channel.query();
 		expect(channel.wsEventQueue).to.have.length(eventTypes.length);
 		client.doAxiosRequest.restore();
+	});
+});
+
+describe('Uninitialized Channel', () => {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+		channel.offlineMode = false;
+	});
+
+	it('returns 0 mentions in unread messages', () => {
+		expect(channel.countUnreadMentions()).to.eq(0);
+	});
+
+	it('reports no lastRead data', () => {
+		expect(channel.lastRead()).to.eq(null);
 	});
 });
 
