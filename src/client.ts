@@ -51,6 +51,7 @@ import {
   ChannelSort,
   ChannelStateOptions,
   CheckPushResponse,
+  CheckSNSResponse,
   CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
@@ -147,6 +148,7 @@ import {
   TaskStatus,
   TestCampaignResponse,
   TestPushDataInput,
+  TestSNSDataInput,
   TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
@@ -713,6 +715,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
     return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
+  }
+
+  /**
+   * testSNSSettings - Tests that the given or configured SNS configuration is valid
+   *
+   * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
+   *  IE: {
+        sns_key: 'auth_key',
+        sns_secret: 'auth_secret',
+        sns_topic_arn: 'topic_to_publish_to',
+      }
+   */
+  async testSNSSettings(data: TestSNSDataInput = {}) {
+    return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
   }
 
   /**

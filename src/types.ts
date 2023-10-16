@@ -144,6 +144,9 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
+    sns_key?: string;
+    sns_secret?: string;
+    sns_topic_arn?: string;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -339,6 +342,12 @@ export type CheckPushResponse = APIResponse & {
 };
 
 export type CheckSQSResponse = APIResponse & {
+  status: string;
+  data?: {};
+  error?: string;
+};
+
+export type CheckSNSResponse = APIResponse & {
   status: string;
   data?: {};
   error?: string;
@@ -1617,6 +1626,9 @@ export type AppSettings = {
   };
   reminders_interval?: number;
   revoke_tokens_issued_before?: string | null;
+  sns_key?: string;
+  sns_secret?: string;
+  sns_topic_arn?: string;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
@@ -2238,6 +2250,12 @@ export type TestSQSDataInput = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+};
+
+export type TestSNSDataInput = {
+  sns_key?: string;
+  sns_secret?: string;
+  sns_topic_arn?: string;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
