@@ -250,6 +250,10 @@ export function removeConnectionEventListeners(cb: (e: Event) => void) {
 export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (params) => {
   const newParams = [];
   for (const k in params) {
+    // Stream backend doesn't treat "undefined" value same as value not being present.
+    // So, we need to skip the undefined values.
+    if (params[k] === undefined) continue;
+
     if (Array.isArray(params[k]) || typeof params[k] === 'object') {
       newParams.push(`${k}=${encodeURIComponent(JSON.stringify(params[k]))}`);
     } else {

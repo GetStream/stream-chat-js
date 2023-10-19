@@ -77,6 +77,7 @@ describe('axiosParamsSerializer', () => {
 				a: 1,
 				b: 2,
 				c: null,
+				d: undefined,
 			},
 			output: 'a=1&b=2&c=null',
 		},
