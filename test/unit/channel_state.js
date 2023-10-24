@@ -645,7 +645,6 @@ describe('ChannelState clean', () => {
 		client.userID = 'observer';
 		channel = new Channel(client, 'live', 'stream', {});
 		client.activeChannels[channel.cid] = channel;
-		channel.initialized = true;
 	});
 
 	it('should remove any stale typing events with either string or Date received_at', async () => {
