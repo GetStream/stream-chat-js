@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  SendMessageOptions,
 } from './types';
 import { Role } from './permissions';
 
@@ -168,18 +169,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
-  async sendMessage(
-    message: Message<StreamChatGenerics>,
-    options?: {
-      force_moderation?: boolean;
-      is_pending_message?: boolean;
-      keep_channel_hidden?: boolean;
-      pending?: boolean;
-      pending_message_metadata?: Record<string, string>;
-      skip_enrich_url?: boolean;
-      skip_push?: boolean;
-    },
-  ) {
+  async sendMessage(message: Message<StreamChatGenerics>, options?: SendMessageOptions) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
@@ -251,8 +241,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       query?: string;
     } = {},
   ) {
-    if (options.offset && (options.sort || options.next)) {
-      throw Error(`Cannot specify offset with sort or next parameters`);
+    if (options.offset && options.next) {
+      throw Error(`Cannot specify offset with next`);
     }
     // Return a list of channels
     const payload: SearchPayload<StreamChatGenerics> = {
@@ -900,7 +890,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Date | null | undefined}
    */
   lastRead() {
-    this._checkInitialized();
     const { userID } = this.getClient();
     if (userID) {
       return this.state.read[userID] ? this.state.read[userID].last_read : null;
@@ -1243,6 +1232,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.read[event.user.id] = {
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: new Date(event.created_at),
+            last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
           };
