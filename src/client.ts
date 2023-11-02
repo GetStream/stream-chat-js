@@ -1094,7 +1094,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   };
 
   /**
-   * Updates the members and watchers of the currently active channels that contain this user
+   * Updates the members, watchers and read references of the currently active channels that contain this user
    *
    * @param {UserResponse<StreamChatGenerics>} user
    */
@@ -1102,13 +1102,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      /** search the members and watchers and update as needed... */
       if (channel?.state) {
         if (channel.state.members[user.id]) {
           channel.state.members[user.id].user = user;
         }
         if (channel.state.watchers[user.id]) {
           channel.state.watchers[user.id] = user;
+        }
+        if (channel.state.read[user.id]) {
+          channel.state.read[user.id].user = user;
         }
       }
     }
