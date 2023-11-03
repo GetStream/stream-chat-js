@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.1](https://github.com/GetStream/stream-chat-js/compare/v8.14.0...v8.14.1) (2023-11-03)
+
 ## [8.14.0](https://github.com/GetStream/stream-chat-js/compare/v8.13.1...v8.14.0) (2023-11-01)
 
 
