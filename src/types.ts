@@ -93,6 +93,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         message_retention?: string;
         mutes?: boolean;
         name?: string;
+        polls?: boolean;
         push_notifications?: boolean;
         quotes?: boolean;
         reactions?: boolean;
@@ -793,6 +794,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   mutes?: boolean;
   name?: string;
   permissions?: PermissionObject[];
+  polls?: boolean;
   push_notifications?: boolean;
   quotes?: boolean;
   reactions?: boolean;
@@ -1731,6 +1733,7 @@ export type ChannelConfigFields = {
   message_retention?: string;
   mutes?: boolean;
   name?: string;
+  polls?: boolean;
   push_notifications?: boolean;
   quotes?: boolean;
   reactions?: boolean;
