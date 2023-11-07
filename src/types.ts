@@ -2599,4 +2599,5 @@ export class ErrorFromResponse<T> extends Error {
   code?: number;
   response?: AxiosResponse<T>;
   status?: number;
+  details?: unknown;
 }

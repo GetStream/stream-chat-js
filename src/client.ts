@@ -1053,6 +1053,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
     err.response = response;
     err.status = response.status;
+
+    if (response.data?.details) {
+      err.details = response.data.details;
+    }
     return err;
   }
 
