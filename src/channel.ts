@@ -891,7 +891,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Date | null | undefined}
    */
   lastRead() {
-    this._checkInitialized();
     const { userID } = this.getClient();
     if (userID) {
       return this.state.read[userID] ? this.state.read[userID].last_read : null;

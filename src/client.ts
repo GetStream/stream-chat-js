@@ -14,6 +14,7 @@ import { WSConnectionFallback } from './connection_fallback';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
   addFileToFormData,
+  axiosParamsSerializer,
   chatCodes,
   isFunction,
   isOnline,
@@ -50,6 +51,7 @@ import {
   ChannelSort,
   ChannelStateOptions,
   CheckPushResponse,
+  CheckSNSResponse,
   CheckSQSResponse,
   Configs,
   ConnectAPIResponse,
@@ -156,6 +158,7 @@ import {
   TaskStatus,
   TestCampaignResponse,
   TestPushDataInput,
+  TestSNSDataInput,
   TestSQSDataInput,
   TokenOrProvider,
   UnBanUserOptions,
@@ -316,6 +319,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.defaultWSTimeoutWithFallback = 6000;
     this.defaultWSTimeout = 15000;
+
+    this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
 
     /**
      * logger function should accept 3 parameters:
@@ -725,6 +730,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * testSNSSettings - Tests that the given or configured SNS configuration is valid
+   *
+   * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
+   *  IE: {
+        sns_key: 'auth_key',
+        sns_secret: 'auth_secret',
+        sns_topic_arn: 'topic_to_publish_to',
+      }
+   */
+  async testSNSSettings(data: TestSNSDataInput = {}) {
+    return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
+  }
+
+  /**
    * Disconnects the websocket and removes the user from client.
    *
    * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
@@ -1087,7 +1106,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   };
 
   /**
-   * Updates the members and watchers of the currently active channels that contain this user
+   * Updates the members, watchers and read references of the currently active channels that contain this user
    *
    * @param {UserResponse<StreamChatGenerics>} user
    */
@@ -1095,13 +1114,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      /** search the members and watchers and update as needed... */
       if (channel?.state) {
         if (channel.state.members[user.id]) {
           channel.state.members[user.id].user = user;
         }
         if (channel.state.watchers[user.id]) {
           channel.state.watchers[user.id] = user;
+        }
+        if (channel.state.read[user.id]) {
+          channel.state.read[user.id].user = user;
         }
       }
     }
