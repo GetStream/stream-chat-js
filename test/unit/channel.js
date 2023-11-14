@@ -7,6 +7,7 @@ import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
+import sinon from 'sinon';
 
 import { StreamChat } from '../../src/client';
 import { ChannelState } from '../../src';
@@ -476,6 +477,22 @@ describe('Channel _handleChannelEvent', function () {
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(true);
+	});
+
+	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {
+		const event = {
+			channel: { frozen: true },
+			type: 'channel.updated',
+		};
+		channel.data.frozen = false;
+		sinon.spy(channel, 'query');
+
+		channel._handleChannelEvent(event);
+		expect(channel.data.frozen).eq(true);
+		expect(channel.query.called).to.be.true;
+
+		channel._handleChannelEvent(event);
+		expect(channel.query.calledOnce).to.be.true;
 	});
 
 	it('should update channel member ban state on user.banned and user.unbanned events', () => {

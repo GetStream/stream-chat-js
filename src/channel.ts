@@ -1351,6 +1351,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'channel.updated':
         if (event.channel) {
+          const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
+          if (isFrozenChanged) {
+            this.query({}, 'latest');
+          }
           channel.data = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
