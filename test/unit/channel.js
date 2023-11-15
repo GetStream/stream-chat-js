@@ -8,9 +8,11 @@ import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import sinon from 'sinon';
+import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { StreamChat } from '../../src/client';
 import { ChannelState } from '../../src';
+import exp from 'constants';
 
 const expect = chai.expect;
 
@@ -493,6 +495,36 @@ describe('Channel _handleChannelEvent', function () {
 
 		channel._handleChannelEvent(event);
 		expect(channel.query.calledOnce).to.be.true;
+	});
+
+	it('should dispatch "capabilities.changed" event', async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
+		mock.expects('post').returns(Promise.resolve(response));
+		const spy = sinon.spy();
+		channel.on('capabilities.changed', spy);
+
+		await channel.query();
+
+		expect(spy.calledOnce).to.be.true;
+
+		const arg = spy.firstCall.args[0];
+		// We don't care about received_at in the assertion
+		delete arg.received_at;
+		sinon.assert.match(arg, {
+			type: 'capabilities.changed',
+			cid: channel.cid,
+			own_capabilities: response.channel.own_capabilities,
+		});
+
+		channel.data.own_capabilities = response.channel.own_capabilities;
+		mock.expects('post').returns(Promise.resolve(response));
+		spy.resetHistory();
+
+		await channel.query();
+
+		expect(spy.notCalled).to.be.true;
 	});
 
 	it('should update channel member ban state on user.banned and user.unbanned events', () => {

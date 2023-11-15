@@ -1026,8 +1026,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
+    const areCapabilitiesChanged =
+      [...(state.channel.own_capabilities || [])].sort().join() !==
+      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
     this.data = state.channel;
     this.offlineMode = false;
+
+    if (areCapabilitiesChanged) {
+      this.getClient().dispatchEvent({
+        type: 'capabilities.changed',
+        cid: this.cid,
+        own_capabilities: state.channel.own_capabilities,
+      });
+    }
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
