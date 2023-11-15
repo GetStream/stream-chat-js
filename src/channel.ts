@@ -1024,7 +1024,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     this.getClient()._addChannelConfig(state.channel);
 
     // add any messages to our channel state
-    const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
+    // workaround for respecting options.members.limit setting
+    const shouldReplaceMembers = options.members?.limit !== 0;
+    const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist, shouldReplaceMembers);
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
@@ -1364,7 +1366,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         if (event.channel) {
           const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
-            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+            this.query({ state: false, members: { limit: 0 }, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
           channel.data = {
             ...event.channel,
@@ -1468,6 +1470,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   _initializeState(
     state: ChannelAPIResponse<StreamChatGenerics>,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
+    shouldReplaceMembers = true,
   ) {
     const { state: clientState, user, userID } = this.getClient();
 
@@ -1538,7 +1541,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    if (state.members) {
+    if (state.members && shouldReplaceMembers) {
       this.state.members = state.members.reduce((acc, member) => {
         if (member.user) {
           acc[member.user.id] = member;

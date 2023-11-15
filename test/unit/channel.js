@@ -517,7 +517,7 @@ describe('Channel _handleChannelEvent', function () {
 		channel.state.addPinnedMessages([generateMsg()]);
 		channel.state.watcher_count = 5;
 
-		await channel.query();
+		await channel.query({ members: { limit: 0 } });
 
 		expect(Object.keys(channel.state.members).length).to.be.eq(1);
 		expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
@@ -535,7 +535,7 @@ describe('Channel _handleChannelEvent', function () {
 		const spy = sinon.spy();
 		channel.on('capabilities.changed', spy);
 
-		await channel.query();
+		await channel.query({});
 
 		expect(spy.calledOnce).to.be.true;
 
@@ -552,7 +552,7 @@ describe('Channel _handleChannelEvent', function () {
 		mock.expects('post').returns(Promise.resolve(response));
 		spy.resetHistory();
 
-		await channel.query();
+		await channel.query({});
 
 		expect(spy.notCalled).to.be.true;
 	});

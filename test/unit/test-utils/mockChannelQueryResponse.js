@@ -134,6 +134,27 @@ export const mockChannelQueryResponse = {
 			channel_role: 'channel_member',
 			notifications_muted: false,
 		},
+		{
+			user_id: 'sara-angular-test2',
+			user: {
+				id: 'sara-angular-test2',
+				role: 'user',
+				created_at: '2023-06-27T10:13:12.796304Z',
+				updated_at: '2023-11-03T09:48:35.748166Z',
+				last_active: '2023-11-14T07:47:29.732473872Z',
+				banned: false,
+				online: false,
+				name: 'Jack',
+				email: '',
+			},
+			created_at: '2023-08-18T09:06:45.431978Z',
+			updated_at: '2023-08-18T09:06:45.431978Z',
+			banned: false,
+			shadow_banned: false,
+			role: 'member',
+			channel_role: 'channel_member',
+			notifications_muted: false,
+		},
 	],
 	membership: {
 		user: {
