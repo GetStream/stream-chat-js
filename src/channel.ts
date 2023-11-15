@@ -1495,7 +1495,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
-    this.state.watcher_count = state.watcher_count || 0;
+    if (state.watcher_count !== undefined) {
+      this.state.watcher_count = state.watcher_count || 0;
+    }
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
       for (const watcher of state.watchers) {
