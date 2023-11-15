@@ -1364,7 +1364,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         if (event.channel) {
           const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
-            this.query({ state: false, members: { limit: 0 }, messages: { limit: 0 }, watchers: { limit: 0 } });
+            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
           channel.data = {
             ...event.channel,

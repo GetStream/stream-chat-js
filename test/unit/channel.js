@@ -495,6 +495,36 @@ describe('Channel _handleChannelEvent', function () {
 
 		channel._handleChannelEvent(event);
 		expect(channel.query.calledOnce).to.be.true;
+
+		// Make sure that we don't wipe out any data
+	});
+
+	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		mock.expects('post').returns(Promise.resolve(response));
+
+		channel.state.members = {
+			user: { id: 'user' },
+		};
+		channel.state.watchers = {
+			user: { id: 'user' },
+		};
+		channel.state.read = {
+			user: { id: 'user' },
+		};
+		channel.state.addMessageSorted(generateMsg());
+		channel.state.addPinnedMessages([generateMsg()]);
+		channel.state.watcher_count = 5;
+
+		await channel.query();
+
+		expect(Object.keys(channel.state.members).length).to.be.eq(1);
+		expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
+		expect(Object.keys(channel.state.read).length).to.be.eq(1);
+		expect(channel.state.messages.length).to.be.eq(1);
+		expect(channel.state.pinnedMessages.length).to.be.eq(1);
+		expect(channel.state.watcher_count).to.be.eq(5);
 	});
 
 	it('should dispatch "capabilities.changed" event', async () => {
