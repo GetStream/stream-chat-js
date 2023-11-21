@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.2](https://github.com/GetStream/stream-chat-js/compare/v8.14.1...v8.14.2) (2023-11-16)
+
+
+### Bug Fixes
+
+* reload channel state if frozen flag changed ([#1196](https://github.com/GetStream/stream-chat-js/issues/1196)) ([c88d941](https://github.com/GetStream/stream-chat-js/commit/c88d9412ea2c1ce64403e557a977c446fa069b04))
+
 ### [8.14.1](https://github.com/GetStream/stream-chat-js/compare/v8.14.0...v8.14.1) (2023-11-03)
 
 ## [8.14.0](https://github.com/GetStream/stream-chat-js/compare/v8.13.1...v8.14.0) (2023-11-01)

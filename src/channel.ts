@@ -1027,8 +1027,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
+    const areCapabilitiesChanged =
+      [...(state.channel.own_capabilities || [])].sort().join() !==
+      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
     this.data = state.channel;
     this.offlineMode = false;
+
+    if (areCapabilitiesChanged) {
+      this.getClient().dispatchEvent({
+        type: 'capabilities.changed',
+        cid: this.cid,
+        own_capabilities: state.channel.own_capabilities,
+      });
+    }
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
@@ -1366,6 +1377,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'channel.updated':
         if (event.channel) {
+          const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
+          if (isFrozenChanged) {
+            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+          }
           channel.data = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
@@ -1510,7 +1525,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
-    this.state.watcher_count = state.watcher_count || 0;
+    if (state.watcher_count !== undefined) {
+      this.state.watcher_count = state.watcher_count;
+    }
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
       for (const watcher of state.watchers) {

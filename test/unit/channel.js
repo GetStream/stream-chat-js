@@ -7,9 +7,12 @@ import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
+import sinon from 'sinon';
+import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { StreamChat } from '../../src/client';
 import { ChannelState } from '../../src';
+import exp from 'constants';
 
 const expect = chai.expect;
 
@@ -476,6 +479,82 @@ describe('Channel _handleChannelEvent', function () {
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(true);
+	});
+
+	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {
+		const event = {
+			channel: { frozen: true },
+			type: 'channel.updated',
+		};
+		channel.data.frozen = false;
+		sinon.spy(channel, 'query');
+
+		channel._handleChannelEvent(event);
+		expect(channel.data.frozen).eq(true);
+		expect(channel.query.called).to.be.true;
+
+		channel._handleChannelEvent(event);
+		expect(channel.query.calledOnce).to.be.true;
+
+		// Make sure that we don't wipe out any data
+	});
+
+	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		mock.expects('post').returns(Promise.resolve(response));
+
+		channel.state.members = {
+			user: { id: 'user' },
+		};
+		channel.state.watchers = {
+			user: { id: 'user' },
+		};
+		channel.state.read = {
+			user: { id: 'user' },
+		};
+		channel.state.addMessageSorted(generateMsg());
+		channel.state.addPinnedMessages([generateMsg()]);
+		channel.state.watcher_count = 5;
+
+		await channel.query();
+
+		expect(Object.keys(channel.state.members).length).to.be.eq(1);
+		expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
+		expect(Object.keys(channel.state.read).length).to.be.eq(1);
+		expect(channel.state.messages.length).to.be.eq(1);
+		expect(channel.state.pinnedMessages.length).to.be.eq(1);
+		expect(channel.state.watcher_count).to.be.eq(5);
+	});
+
+	it('should dispatch "capabilities.changed" event', async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
+		mock.expects('post').returns(Promise.resolve(response));
+		const spy = sinon.spy();
+		channel.on('capabilities.changed', spy);
+
+		await channel.query();
+
+		expect(spy.calledOnce).to.be.true;
+
+		const arg = spy.firstCall.args[0];
+		// We don't care about received_at in the assertion
+		delete arg.received_at;
+		sinon.assert.match(arg, {
+			type: 'capabilities.changed',
+			cid: channel.cid,
+			own_capabilities: response.channel.own_capabilities,
+		});
+
+		channel.data.own_capabilities = response.channel.own_capabilities;
+		mock.expects('post').returns(Promise.resolve(response));
+		spy.resetHistory();
+
+		await channel.query();
+
+		expect(spy.notCalled).to.be.true;
 	});
 
 	it('should update channel member ban state on user.banned and user.unbanned events', () => {
