@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.3](https://github.com/GetStream/stream-chat-js/compare/v8.14.2...v8.14.3) (2023-11-22)
+
+
+### Bug Fixes
+
+* use postForm instead of post for sending files ([#1199](https://github.com/GetStream/stream-chat-js/issues/1199)) ([2b06ca4](https://github.com/GetStream/stream-chat-js/commit/2b06ca48db8a50e40d870f87e0ea7d7ccbb7369b))
+
 ### [8.14.2](https://github.com/GetStream/stream-chat-js/compare/v8.14.1...v8.14.2) (2023-11-16)
 
 
