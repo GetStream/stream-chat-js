@@ -968,6 +968,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         case 'post':
           response = await this.axiosInstance.post(url, data, requestConfig);
           break;
+        case 'postForm':
+          response = await this.axiosInstance.postForm(url, data, requestConfig);
+          break;
         case 'put':
           response = await this.axiosInstance.put(url, data, requestConfig);
           break;
@@ -1034,7 +1037,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const data = addFileToFormData(uri, name, contentType);
     if (user != null) data.append('user', JSON.stringify(user));
 
-    return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
+    return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
         timeout: 0,
