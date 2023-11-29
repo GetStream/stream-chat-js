@@ -408,16 +408,19 @@ export type ExportChannelsResult = {
 export type ExportChannelError = {
   description?: string;
   stacktrace?: string;
+  status?: string;
+  task_id?: string;
   type?: string;
   version?: string;
 };
 
 export type ExportChannelStatusResponse = {
-  status: string;
+  duration: string;
   task_id: string;
   created_at?: string;
-  error?: ExportChannelError | null;
+  error?: ExportChannelError;
   result?: ExportChannelsResult | null;
+  status?: string;
   updated_at?: string;
 };
 
