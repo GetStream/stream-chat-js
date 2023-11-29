@@ -405,12 +405,19 @@ export type ExportChannelsResult = {
   url?: string;
 };
 
+export type ExportChannelError = {
+  description?: string;
+  stacktrace?: string;
+  type?: string;
+  version?: string;
+};
+
 export type ExportChannelStatusResponse = {
   status: string;
   task_id: string;
   created_at?: string;
-  error?: ExportChannelsResult | null;
-  result?: {} | null;
+  error?: ExportChannelError | null;
+  result?: ExportChannelsResult | null;
   updated_at?: string;
 };
 
