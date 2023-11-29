@@ -319,8 +319,10 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invite_rejected_at?: string;
   invited?: boolean;
   is_moderator?: boolean;
+  notifications_muted?: boolean;
   role?: string;
   shadow_banned?: boolean;
+  status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
@@ -1745,8 +1747,10 @@ export type ChannelMembership<StreamChatGenerics extends ExtendableGenerics = De
   channel_role?: Role;
   created_at?: string;
   is_moderator?: boolean;
+  notifications_muted?: boolean;
   role?: string;
   shadow_banned?: boolean;
+  status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
 };
@@ -2043,6 +2047,8 @@ type GiphyVersionInfo = {
   height: string;
   url: string;
   width: string;
+  frames?: string;
+  size?: string;
 };
 
 type GiphyVersions =
