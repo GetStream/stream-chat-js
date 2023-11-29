@@ -7,9 +7,12 @@ import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
+import sinon from 'sinon';
+import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { StreamChat } from '../../src/client';
 import { ChannelState } from '../../src';
+import exp from 'constants';
 
 const expect = chai.expect;
 
@@ -156,6 +159,39 @@ describe('Channel count unread', function () {
 		channel.state.messageSets[1].isCurrent = true;
 
 		expect(channel.countUnreadMentions()).to.be.equal(1);
+	});
+
+	describe('channel.lastRead', () => {
+		let channelResponse;
+		beforeEach(() => {
+			channelResponse = generateChannel();
+			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel.initialized = true;
+		});
+
+		it('should return null if no last read message', () => {
+			expect(channel.lastRead()).to.eq(null);
+		});
+
+		it('should return last read message date', () => {
+			const last_read = new Date();
+			const messages = [generateMsg()];
+			channel.state.read[user.id] = {
+				last_read,
+				last_read_message_id: messages[0].id,
+				user: user,
+				unread_messages: 0,
+			};
+			channel.state.addMessagesSorted(messages);
+			expect(channel.lastRead()).to.eq(last_read);
+		});
+
+		it('should return undefined if client user is not set (server-side client)', () => {
+			client = new StreamChat('apiKey', 'secret');
+			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel.initialized = true;
+			expect(channel.lastRead()).to.be.undefined;
+		});
 	});
 });
 
@@ -445,6 +481,82 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.data.hidden).eq(true);
 	});
 
+	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {
+		const event = {
+			channel: { frozen: true },
+			type: 'channel.updated',
+		};
+		channel.data.frozen = false;
+		sinon.spy(channel, 'query');
+
+		channel._handleChannelEvent(event);
+		expect(channel.data.frozen).eq(true);
+		expect(channel.query.called).to.be.true;
+
+		channel._handleChannelEvent(event);
+		expect(channel.query.calledOnce).to.be.true;
+
+		// Make sure that we don't wipe out any data
+	});
+
+	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		mock.expects('post').returns(Promise.resolve(response));
+
+		channel.state.members = {
+			user: { id: 'user' },
+		};
+		channel.state.watchers = {
+			user: { id: 'user' },
+		};
+		channel.state.read = {
+			user: { id: 'user' },
+		};
+		channel.state.addMessageSorted(generateMsg());
+		channel.state.addPinnedMessages([generateMsg()]);
+		channel.state.watcher_count = 5;
+
+		await channel.query();
+
+		expect(Object.keys(channel.state.members).length).to.be.eq(1);
+		expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
+		expect(Object.keys(channel.state.read).length).to.be.eq(1);
+		expect(channel.state.messages.length).to.be.eq(1);
+		expect(channel.state.pinnedMessages.length).to.be.eq(1);
+		expect(channel.state.watcher_count).to.be.eq(5);
+	});
+
+	it('should dispatch "capabilities.changed" event', async () => {
+		const mock = sinon.mock(client);
+		const response = mockChannelQueryResponse;
+		channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
+		mock.expects('post').returns(Promise.resolve(response));
+		const spy = sinon.spy();
+		channel.on('capabilities.changed', spy);
+
+		await channel.query();
+
+		expect(spy.calledOnce).to.be.true;
+
+		const arg = spy.firstCall.args[0];
+		// We don't care about received_at in the assertion
+		delete arg.received_at;
+		sinon.assert.match(arg, {
+			type: 'capabilities.changed',
+			cid: channel.cid,
+			own_capabilities: response.channel.own_capabilities,
+		});
+
+		channel.data.own_capabilities = response.channel.own_capabilities;
+		mock.expects('post').returns(Promise.resolve(response));
+		spy.resetHistory();
+
+		await channel.query();
+
+		expect(spy.notCalled).to.be.true;
+	});
+
 	it('should update channel member ban state on user.banned and user.unbanned events', () => {
 		const user = { id: 'user_id' };
 		const shadowBanEvent = {
@@ -496,6 +608,30 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.members[user.id].banned).eq(expectAfterSecond.banned);
 			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
 		});
+	});
+});
+
+describe('Uninitialized Channel', () => {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+		channel.initialized = false;
+		channel.offlineMode = false;
+	});
+
+	it('returns 0 mentions in unread messages', () => {
+		expect(channel.countUnreadMentions()).to.eq(0);
+	});
+
+	it('reports no lastRead data', () => {
+		expect(channel.lastRead()).to.eq(null);
 	});
 });
 
@@ -716,6 +852,137 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
+
+	it('channel created using member list - case 3', async () => {
+		clientVish.activeChannels = {};
+
+		// Mock channel.watch call.
+		const userVish = generateUser();
+		const userAmin = generateUser();
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Lets start testing
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		await channelVish_copy1.watch();
+
+		// tempCid should be replaced with actual cid at this point.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// Should not populate tmpCid again.
+		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+
+		await channelVish_copy2.watch();
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using member list - case 4', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			members: [userAmin.id, userVish.id],
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			members: [userVish.id, userAmin.id],
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
+		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy2);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+	});
+
+	it('channel created using type only', async () => {
+		clientVish.activeChannels = {};
+
+		const userVish = generateUser();
+		const userAmin = generateUser();
+
+		const memberVish = generateMember({ user: userVish });
+		const memberAmin = generateMember({ user: userAmin });
+
+		// Case 1 =======================>
+		const mockedChannelResponse = generateChannel({
+			members: [memberVish, memberAmin],
+		});
+
+		// to mock the channel.watch call
+		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		// Case 1 =======================>
+		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
+
+		// activeChannels should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
+			custom: 'X',
+		});
+
+		// activeChannels still should have tmpCid now.
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy2.cid);
+
+		await channelVish_copy1.watch();
+		await channelVish_copy2.watch();
+
+		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
+
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
+		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy2.cid);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(channelVish_copy2);
+	});
 });
 
 describe('event subscription and unsubscription', () => {
@@ -750,8 +1017,8 @@ describe('Channel search', async () => {
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
-	it('sorting and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.rejectedWith(Error);
+	it('sorting and offset works', async () => {
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.fulfilled;
 	});
 	it('next and offset fails', async () => {
 		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
@@ -842,37 +1109,5 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
-	});
-});
-
-describe('pending message', () => {
-	it('should not allow setting is_pending_message from client side', async () => {
-		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
-		try {
-			await channel.sendMessage(
-				{ text: 'hi' },
-				{
-					is_pending_message: true,
-				},
-			);
-		} catch (e) {
-			expect(e.message).to.be.equal('Setting is_pending_message on client side is not supported');
-		}
-
-		const serverClient = new StreamChat('apiKey', 'secret');
-		serverClient.post = () =>
-			new Promise((resolve) => {
-				resolve(true);
-			});
-		const serverChannel = serverClient.channel('messaging', uuidv4());
-		const response = await serverChannel.sendMessage(
-			{ text: 'hi' },
-			{
-				is_pending_message: true,
-			},
-		);
-
-		expect(response).to.be.equal(true);
 	});
 });

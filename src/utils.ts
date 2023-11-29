@@ -1,5 +1,6 @@
 import FormData from 'form-data';
 import { AscDesc, ExtendableGenerics, DefaultGenerics, OwnUserBase, OwnUserResponse, UserResponse } from './types';
+import { AxiosRequestConfig } from 'axios';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -245,3 +246,20 @@ export function removeConnectionEventListeners(cb: (e: Event) => void) {
     window.removeEventListener('online', cb);
   }
 }
+
+export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (params) => {
+  const newParams = [];
+  for (const k in params) {
+    // Stream backend doesn't treat "undefined" value same as value not being present.
+    // So, we need to skip the undefined values.
+    if (params[k] === undefined) continue;
+
+    if (Array.isArray(params[k]) || typeof params[k] === 'object') {
+      newParams.push(`${k}=${encodeURIComponent(JSON.stringify(params[k]))}`);
+    } else {
+      newParams.push(`${k}=${encodeURIComponent(params[k])}`);
+    }
+  }
+
+  return newParams.join('&');
+};

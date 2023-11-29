@@ -88,6 +88,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
+        mark_messages_pending?: boolean;
         max_message_length?: number;
         message_retention?: string;
         mutes?: boolean;
@@ -117,6 +118,12 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
     file_upload_config?: FileUploadConfig;
+    geofences?: Array<{
+      country_codes: Array<string>;
+      description: string;
+      name: string;
+      type: string;
+    }>;
     grants?: Record<string, string[]>;
     hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
@@ -137,6 +144,9 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
+    sns_key?: string;
+    sns_secret?: string;
+    sns_topic_arn?: string;
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
@@ -309,8 +319,10 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invite_rejected_at?: string;
   invited?: boolean;
   is_moderator?: boolean;
+  notifications_muted?: boolean;
   role?: string;
   shadow_banned?: boolean;
+  status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
@@ -332,6 +344,12 @@ export type CheckPushResponse = APIResponse & {
 };
 
 export type CheckSQSResponse = APIResponse & {
+  status: string;
+  data?: {};
+  error?: string;
+};
+
+export type CheckSNSResponse = APIResponse & {
   status: string;
   data?: {};
   error?: string;
@@ -542,6 +560,7 @@ export type MessageResponseBase<
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
+  deleted_reply_count?: number;
   i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
     language: TranslationLanguages;
   };
@@ -555,7 +574,6 @@ export type MessageResponseBase<
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
-  silent?: boolean;
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
@@ -735,7 +753,9 @@ export type ReviewFlagReportOptions = {
   user_id?: string;
 };
 
-export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'>;
+export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'> & {
+  exclude_expired_bans?: boolean;
+};
 
 export type BanUserOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = UnBanUserOptions & {
   banned_by?: UserResponse<StreamChatGenerics>;
@@ -786,6 +806,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   connection_id?: string;
   custom_events?: boolean;
   grants?: Record<string, string[]>;
+  mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1044,6 +1065,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   connection_id?: string;
   created_at?: string;
   hard_delete?: boolean;
+  last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
@@ -1614,6 +1636,9 @@ export type AppSettings = {
   };
   reminders_interval?: number;
   revoke_tokens_issued_before?: string | null;
+  sns_key?: string;
+  sns_secret?: string;
+  sns_topic_arn?: string;
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
@@ -1695,6 +1720,7 @@ export type ChannelConfigFields = {
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
+  mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
   mutes?: boolean;
@@ -1729,8 +1755,10 @@ export type ChannelMembership<StreamChatGenerics extends ExtendableGenerics = De
   channel_role?: Role;
   created_at?: string;
   is_moderator?: boolean;
+  notifications_muted?: boolean;
   role?: string;
   shadow_banned?: boolean;
+  status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
 };
@@ -2027,6 +2055,8 @@ type GiphyVersionInfo = {
   height: string;
   url: string;
   width: string;
+  frames?: string;
+  size?: string;
 };
 
 type GiphyVersions =
@@ -2079,12 +2109,27 @@ export type MessageBase<
   pinned_at?: string | null;
   quoted_message_id?: string;
   show_in_channel?: boolean;
+  silent?: boolean;
   text?: string;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
 };
 
 export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
+
+export type SendMessageOptions = {
+  force_moderation?: boolean;
+  is_pending_message?: boolean;
+  keep_channel_hidden?: boolean;
+  pending?: boolean;
+  pending_message_metadata?: Record<string, string>;
+  skip_enrich_url?: boolean;
+  skip_push?: boolean;
+};
+
+export type UpdateMessageOptions = {
+  skip_enrich_url?: boolean;
+};
 
 export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
@@ -2221,6 +2266,12 @@ export type TestSQSDataInput = {
   sqs_url?: string;
 };
 
+export type TestSNSDataInput = {
+  sns_key?: string;
+  sns_secret?: string;
+  sns_topic_arn?: string;
+};
+
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
@@ -2257,6 +2308,7 @@ export type TranslationLanguages =
   | 'ja'
   | 'ka'
   | 'ko'
+  | 'lt'
   | 'lv'
   | 'ms'
   | 'nl'

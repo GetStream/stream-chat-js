@@ -2,6 +2,125 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.4](https://github.com/GetStream/stream-chat-js/compare/v8.14.3...v8.14.4) (2023-11-29)
+
+
+### Bug Fixes
+
+* add default contentType as multipart/form-data in sendFile ([#1202](https://github.com/GetStream/stream-chat-js/issues/1202)) ([64e2a2a](https://github.com/GetStream/stream-chat-js/commit/64e2a2aeba1176be1eb8816f654fcf78c1c07066))
+
+### [8.14.3](https://github.com/GetStream/stream-chat-js/compare/v8.14.2...v8.14.3) (2023-11-22)
+
+
+### Bug Fixes
+
+* use postForm instead of post for sending files ([#1199](https://github.com/GetStream/stream-chat-js/issues/1199)) ([2b06ca4](https://github.com/GetStream/stream-chat-js/commit/2b06ca48db8a50e40d870f87e0ea7d7ccbb7369b))
+
+### [8.14.2](https://github.com/GetStream/stream-chat-js/compare/v8.14.1...v8.14.2) (2023-11-16)
+
+
+### Bug Fixes
+
+* reload channel state if frozen flag changed ([#1196](https://github.com/GetStream/stream-chat-js/issues/1196)) ([c88d941](https://github.com/GetStream/stream-chat-js/commit/c88d9412ea2c1ce64403e557a977c446fa069b04))
+
+### [8.14.1](https://github.com/GetStream/stream-chat-js/compare/v8.14.0...v8.14.1) (2023-11-03)
+
+## [8.14.0](https://github.com/GetStream/stream-chat-js/compare/v8.13.1...v8.14.0) (2023-11-01)
+
+
+### Features
+
+* axios upgrade to v1 ([#1192](https://github.com/GetStream/stream-chat-js/issues/1192)) ([77b8bc8](https://github.com/GetStream/stream-chat-js/commit/77b8bc8964b5a454dafbc4fe81415570b5def45e))
+
+### [8.13.1](https://github.com/GetStream/stream-chat-js/compare/v8.13.0...v8.13.1) (2023-10-19)
+
+
+### Bug Fixes
+
+* undefined values in query params ([#1187](https://github.com/GetStream/stream-chat-js/issues/1187)) ([a325737](https://github.com/GetStream/stream-chat-js/commit/a325737d8318e58d891d7106b543b1a36ed401a0))
+
+## [8.13.0](https://github.com/GetStream/stream-chat-js/compare/v8.12.4...v8.13.0) (2023-10-16)
+
+
+### Features
+
+* support for SNS ([#1185](https://github.com/GetStream/stream-chat-js/issues/1185)) ([9a4bdfb](https://github.com/GetStream/stream-chat-js/commit/9a4bdfb68424cc02083c1e05f8512900696c0efc))
+
+### [8.12.4](https://github.com/GetStream/stream-chat-js/compare/v8.12.3...v8.12.4) (2023-10-06)
+
+
+### Bug Fixes
+
+* evaluate channel.lastRead when channel is not initialized ([#1183](https://github.com/GetStream/stream-chat-js/issues/1183)) ([13fa28a](https://github.com/GetStream/stream-chat-js/commit/13fa28a75ca623fc5b7b328aaa9edb3e87f99f1c))
+
+### [8.12.3](https://github.com/GetStream/stream-chat-js/compare/v8.12.2...v8.12.3) (2023-10-03)
+
+
+### Bug Fixes
+
+* queue channel WS events until the channel is initialized ([#1179](https://github.com/GetStream/stream-chat-js/issues/1179)) ([2073579](https://github.com/GetStream/stream-chat-js/commit/2073579ecfe4e8a1d5d37aa7f0a43b53bb57cd02))
+
+### [8.12.2](https://github.com/GetStream/stream-chat-js/compare/v8.12.1...v8.12.2) (2023-10-03)
+
+
+### Bug Fixes
+
+* axios param serializer to comply with RFC 3986 ([#1180](https://github.com/GetStream/stream-chat-js/issues/1180)) ([d2ff8ec](https://github.com/GetStream/stream-chat-js/commit/d2ff8ecc68bd6a48fe76bc22ab8404b6cfa42a85)), closes https://github.com/GetStream/stream-chat-react-native/issues/2235
+
+### [8.12.1](https://github.com/GetStream/stream-chat-js/compare/v8.12.0...v8.12.1) (2023-09-20)
+
+
+### Bug Fixes
+
+* allow search with offset and sort ([d0c3f35](https://github.com/GetStream/stream-chat-js/commit/d0c3f357e8f559d2e60922098223525f9b06da8e))
+* allow search with offset and sort ([#1174](https://github.com/GetStream/stream-chat-js/issues/1174)) ([fd24276](https://github.com/GetStream/stream-chat-js/commit/fd242769717ef44068cacd61503aa0d958febabc))
+* remove unused unread count api endpoint ([33823be](https://github.com/GetStream/stream-chat-js/commit/33823be128ad917bec51447038e34f56256f8986))
+
+## [8.12.0](https://github.com/GetStream/stream-chat-js/compare/v8.11.0...v8.12.0) (2023-09-18)
+
+
+### Features
+
+* add field deleted_reply_count to MessageResponseBase ([#1172](https://github.com/GetStream/stream-chat-js/issues/1172)) ([f350692](https://github.com/GetStream/stream-chat-js/commit/f35069251740c9831816ce36c1e2ff73d03a4b09))
+* declare and export types SendMessageOptions and UpdateMessageOptions ([#1170](https://github.com/GetStream/stream-chat-js/issues/1170)) ([8a2ad69](https://github.com/GetStream/stream-chat-js/commit/8a2ad699e058016b61ecef91c8c782c4cb0c9be7))
+
+
+### Bug Fixes
+
+* handle getting channel by members with channel id explicitly undefined ([#1169](https://github.com/GetStream/stream-chat-js/issues/1169)) ([a721b59](https://github.com/GetStream/stream-chat-js/commit/a721b591bf3fbde3a59116eeb63f4a15f3f3d389))
+
+## [8.11.0](https://github.com/GetStream/stream-chat-js/compare/v8.10.1...v8.11.0) (2023-08-21)
+
+
+### Features
+
+* add the option to exclude expired bans ([#1147](https://github.com/GetStream/stream-chat-js/issues/1147)) ([9a488a6](https://github.com/GetStream/stream-chat-js/commit/9a488a6d66c00daf6b932f954be4ca470338b004))
+* update last_read_message_id on message.read ([#1155](https://github.com/GetStream/stream-chat-js/issues/1155)) ([83f1c56](https://github.com/GetStream/stream-chat-js/commit/83f1c5640d6df1cb928c0a774bce6b43726366a4))
+
+
+### Bug Fixes
+
+* add geofences type ([#1148](https://github.com/GetStream/stream-chat-js/issues/1148)) ([31da90b](https://github.com/GetStream/stream-chat-js/commit/31da90b4a2ef881284f07268e06a2600cebea97c))
+* add missing property 'silent' to MessageBase type ([#1154](https://github.com/GetStream/stream-chat-js/issues/1154)) ([ba30397](https://github.com/GetStream/stream-chat-js/commit/ba30397fed441bc797836806129117f9707b83e0))
+
+### [8.10.1](https://github.com/GetStream/stream-chat-js/compare/v8.10.0...v8.10.1) (2023-07-06)
+
+
+### Bug Fixes
+
+* remove unused unread count api endpoint ([#1143](https://github.com/GetStream/stream-chat-js/issues/1143)) ([5700abd](https://github.com/GetStream/stream-chat-js/commit/5700abdb072e41c23e4439b8fb01eafd1993d5e8))
+
+## [8.10.0](https://github.com/GetStream/stream-chat-js/compare/v8.9.0...v8.10.0) (2023-07-03)
+
+
+### Features
+
+* added 'pending' property to message ([#1137](https://github.com/GetStream/stream-chat-js/issues/1137)) ([6209380](https://github.com/GetStream/stream-chat-js/commit/6209380e145e9f6ffcde3abd282effed24540172))
+
+### Bug Fixes
+
+* prevent truncating message timestamps when updating references to deleted quoted message ([#1141](https://github.com/GetStream/stream-chat-js/issues/1141)) ([ab54f94](https://github.com/GetStream/stream-chat-js/commit/ab54f94a384a772902027f50f84038ac01cbf728))
+
 ## [8.9.0](https://github.com/GetStream/stream-chat-js/compare/v8.8.0...v8.9.0) (2023-06-09)
 
 

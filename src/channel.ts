@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  SendMessageOptions,
 } from './types';
 import { Role } from './permissions';
 
@@ -161,27 +162,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {Message<StreamChatGenerics>} message The Message object
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    * @param {boolean} [options.skip_push] Skip sending push notifications
-   * @param {boolean} [options.is_pending_message] Make this message pending
+   * @param {boolean} [options.is_pending_message] DEPRECATED, please use `pending` instead.
+   * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
    *
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
-  async sendMessage(
-    message: Message<StreamChatGenerics>,
-    options?: {
-      force_moderation?: boolean;
-      is_pending_message?: boolean;
-      keep_channel_hidden?: boolean;
-      pending_message_metadata?: Record<string, string>;
-      skip_enrich_url?: boolean;
-      skip_push?: boolean;
-    },
-  ) {
-    if (options?.is_pending_message !== undefined && !this._client._isUsingServerAuth()) {
-      throw new Error('Setting is_pending_message on client side is not supported');
-    }
-
+  async sendMessage(message: Message<StreamChatGenerics>, options?: SendMessageOptions) {
     const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
       this._channelURL() + '/message',
       {
@@ -253,8 +241,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       query?: string;
     } = {},
   ) {
-    if (options.offset && (options.sort || options.next)) {
-      throw Error(`Cannot specify offset with sort or next parameters`);
+    if (options.offset && options.next) {
+      throw Error(`Cannot specify offset with next`);
     }
     // Return a list of channels
     const payload: SearchPayload<StreamChatGenerics> = {
@@ -902,7 +890,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Date | null | undefined}
    */
   lastRead() {
-    this._checkInitialized();
     const { userID } = this.getClient();
     if (userID) {
       return this.state.read[userID] ? this.state.read[userID].last_read : null;
@@ -1039,8 +1026,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
 
+    const areCapabilitiesChanged =
+      [...(state.channel.own_capabilities || [])].sort().join() !==
+      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
     this.data = state.channel;
     this.offlineMode = false;
+
+    if (areCapabilitiesChanged) {
+      this.getClient().dispatchEvent({
+        type: 'capabilities.changed',
+        cid: this.cid,
+        own_capabilities: state.channel.own_capabilities,
+      });
+    }
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',
@@ -1245,6 +1243,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           channelState.read[event.user.id] = {
             // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: new Date(event.created_at),
+            last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
           };
@@ -1363,6 +1362,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'channel.updated':
         if (event.channel) {
+          const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
+          if (isFrozenChanged) {
+            this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
+          }
           channel.data = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
@@ -1492,7 +1495,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
-    this.state.watcher_count = state.watcher_count || 0;
+    if (state.watcher_count !== undefined) {
+      this.state.watcher_count = state.watcher_count;
+    }
     // convert the arrays into objects for easier syncing...
     if (state.watchers) {
       for (const watcher of state.watchers) {
