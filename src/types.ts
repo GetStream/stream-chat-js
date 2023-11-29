@@ -415,12 +415,11 @@ export type ExportChannelError = {
 };
 
 export type ExportChannelStatusResponse = {
-  duration: string;
+  status: string;
   task_id: string;
   created_at?: string;
   error?: ExportChannelError;
   result?: ExportChannelsResult | null;
-  status?: string;
   updated_at?: string;
 };
 
