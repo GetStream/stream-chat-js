@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.4](https://github.com/GetStream/stream-chat-js/compare/v8.14.3...v8.14.4) (2023-11-29)
+
+
+### Bug Fixes
+
+* add default contentType as multipart/form-data in sendFile ([#1202](https://github.com/GetStream/stream-chat-js/issues/1202)) ([64e2a2a](https://github.com/GetStream/stream-chat-js/commit/64e2a2aeba1176be1eb8816f654fcf78c1c07066))
+
 ### [8.14.3](https://github.com/GetStream/stream-chat-js/compare/v8.14.2...v8.14.3) (2023-11-22)
 
 
