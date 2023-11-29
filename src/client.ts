@@ -1034,7 +1034,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     contentType?: string,
     user?: UserResponse<StreamChatGenerics>,
   ) {
-    const data = addFileToFormData(uri, name, contentType);
+    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
     if (user != null) data.append('user', JSON.stringify(user));
 
     return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
