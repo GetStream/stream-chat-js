@@ -393,6 +393,7 @@ export type EventAPIResponse<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ExportChannelResponse = {
   task_id: string;
+  duration?: string;
 };
 
 export type ExportUsersResponse = {
@@ -407,6 +408,7 @@ export type ExportChannelsResult = {
 
 export type ExportChannelError = {
   description?: string;
+  duration?: string;
   stacktrace?: string;
   status?: string;
   task_id?: string;
@@ -416,6 +418,7 @@ export type ExportChannelError = {
 
 export type ExportChannelStatusResponse = {
   created_at?: string;
+  duration?: string;
   error?: ExportChannelError;
   result?: ExportChannelsResult | null;
   status?: string;
