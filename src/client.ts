@@ -95,6 +95,7 @@ import {
   GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
+  GetThreadsAPIResponse,
   GetUnreadCountAPIResponse,
   ListChannelResponse,
   ListCommandsResponse,
@@ -2576,6 +2577,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
     );
+  }
+
+  async getThreads() {
+    return await this.get<GetThreadsAPIResponse>(this.baseURL + `/threads`);
   }
 
   getUserAgent() {
