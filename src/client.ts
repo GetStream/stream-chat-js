@@ -2879,7 +2879,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * updateSegment - Update a segment
    *
    * @param {string} id Segment ID
-   * @param {Partial<UpdateSegmentParams>} params Segment data to update
+   * @param {Partial<UpdateSegmentParams>} params Update parameters
    *
    * @return {Segment} Updated Segment
    */
