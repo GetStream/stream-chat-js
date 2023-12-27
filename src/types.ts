@@ -2383,21 +2383,43 @@ export type DeleteUserOptions = {
   new_channel_owner_id?: string;
 };
 
+export type SegmentType = 'channel' | 'user'
+
 export type SegmentData = {
   description: string;
   filter: {};
-  name: string;
-  type: 'channel' | 'user';
 };
 
 export type Segment = {
-  created_at: string;
   id: string;
-  in_use: boolean;
+  name: string;
+  type: SegmentType;
   size: number;
-  status: 'computing' | 'ready';
+  locked: boolean;
+  created_at: string;
   updated_at: string;
+  deleted_at: string;
 } & SegmentData;
+
+export type UpdateSegmentParams = {
+  name: string;
+} & SegmentData;
+
+export type SortParam = {
+  field: string;
+  direction?: 'asc' | 'desc';
+}
+
+export type Pager = {
+  limit?: number;
+  next?: string;
+  prev?: string;
+}
+
+export type QuerySegmentsOptions = {
+  sort?: SortParam[];
+  pager?: Pager;
+}
 
 export type CampaignSortField = {
   field: string;

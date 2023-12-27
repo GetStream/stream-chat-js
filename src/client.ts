@@ -123,6 +123,7 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QuerySegmentsOptions,
   ReactionResponse,
   ReactivateUserOptions,
   ReactivateUsersOptions,
@@ -139,7 +140,7 @@ import {
   Segment,
   SegmentData,
   SegmentFilters,
-  SegmentQueryOptions,
+  SegmentType,
   SendFileAPIResponse,
   StreamChatOptions,
   SyncOptions,
@@ -159,6 +160,7 @@ import {
   UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
+  UpdateSegmentParams,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -2824,24 +2826,75 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * createSegment - Creates a Campaign Segment
+   * createSegment - Creates a segment
    *
+   * @private
+   * @param {SegmentType} type Segment type
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name (valid UUID)
    * @param {SegmentData} params Segment data
    *
-   * @return {Segment} The Created Segment
+   * @return {Segment} The created Segment
    */
-  async createSegment(params: SegmentData) {
-    const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, { segment: params });
+  private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData): Promise<Segment> {
+    const body = {
+      id: id,
+      type: type,
+      name: name,
+      data: data
+    }
+    const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, body);
     return segment;
   }
 
   /**
-   * querySegments - Query Campaign Segments
+   * createUserSegment - Creates a user segment
+   *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
+   *
+   * @return {Segment} The created Segment
+   */
+  async createUserSegment(id: string, name: string,  data?: SegmentData): Promise<Segment> {
+    const segment = await this.createSegment('user', id, name, data)
+    return segment;
+  }
+
+  /**
+   * createChannelSegment - Creates a channel segment
+   *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
+   *
+   * @return {Segment} The created Segment
+   */
+  async createChannelSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
+    const segment = await this.createSegment('channel', id, name, data)
+    return segment;  
+  }
+
+  /**
+   * updateSegment - Update a segment
+   *
+   * @param {string} id Segment ID
+   * @param {Partial<UpdateSegmentParams>} params Segment data to update
+   *
+   * @return {Segment} Updated Segment
+   */
+  async updateSegment(id: string, params: Partial<UpdateSegmentParams>) {
+    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, params );
+    return segment;
+  }
+
+  /**
+   * querySegments - Query Segments
    *
    *
    * @return {Segment[]} Segments
    */
-  async querySegments(filters: SegmentFilters, options: SegmentQueryOptions = {}) {
+  async querySegments(filters: SegmentFilters, options: QuerySegmentsOptions = {}) {
     return await this.get<{
       segments: Segment[];
     }>(this.baseURL + `/segments`, {
@@ -2850,19 +2903,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         ...options,
       },
     });
-  }
-
-  /**
-   * updateSegment - Update a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   * @param {Partial<SegmentData>} params Segment data
-   *
-   * @return {Segment} Updated Segment
-   */
-  async updateSegment(id: string, params: Partial<SegmentData>) {
-    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, { segment: params });
-    return segment;
   }
 
   /**
