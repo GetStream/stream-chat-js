@@ -2409,7 +2409,7 @@ export type UpdateSegmentParams = {
 
 export type SortParam = {
   field: string;
-  direction?: 'asc' | 'desc';
+  direction?: AscDesc;
 }
 
 export type Pager = {
@@ -2420,8 +2420,7 @@ export type Pager = {
 
 export type QuerySegmentsOptions = {
   sort?: SortParam[];
-  pager?: Pager;
-}
+} & Pager;
 
 export type CampaignSortField = {
   field: string;

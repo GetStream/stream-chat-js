@@ -2891,15 +2891,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * querySegments - Query Segments
    *
+   * @param {filter} filter MongoDB style filter conditions
+   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
    *
    * @return {Segment[]} Segments
    */
-  async querySegments(filters: SegmentFilters, options: QuerySegmentsOptions = {}) {
+  async querySegments(filter: {}, options: QuerySegmentsOptions = {}) {
     return await this.get<{
       segments: Segment[];
     }>(this.baseURL + `/segments`, {
       payload: {
-        filter_conditions: filters,
+        filter: filter,
         ...options,
       },
     });
@@ -2914,6 +2916,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async deleteSegment(id: string) {
     return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
+  /**
+   * segmentTargetExists - Check if a target exists in a segment
+   *
+   * @param {string} segmentId Segment ID
+   * @param {string} targetId Target ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async segmentTargetExists(segmentId: string, targetId: string) {
+    return this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
   }
 
   /**
