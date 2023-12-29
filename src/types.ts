@@ -2383,7 +2383,7 @@ export type DeleteUserOptions = {
   new_channel_owner_id?: string;
 };
 
-export type SegmentType = 'channel' | 'user'
+export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
   description: string;
@@ -2391,14 +2391,14 @@ export type SegmentData = {
 };
 
 export type Segment = {
-  id: string;
-  name: string;
-  type: SegmentType;
-  size: number;
-  locked: boolean;
   created_at: string;
-  updated_at: string;
   deleted_at: string;
+  id: string;
+  locked: boolean;
+  name: string;
+  size: number;
+  type: SegmentType;
+  updated_at: string;
 } & SegmentData;
 
 export type UpdateSegmentParams = {
@@ -2410,13 +2410,13 @@ export type UpdateSegmentParams = {
 export type SortParam = {
   field: string;
   direction?: AscDesc;
-}
+};
 
 export type Pager = {
   limit?: number;
   next?: string;
   prev?: string;
-}
+};
 
 export type QuerySegmentsOptions = {
   sort?: SortParam[];

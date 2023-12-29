@@ -2834,11 +2834,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData): Promise<Segment> {
     const body = {
-      id: id,
-      type: type,
-      name: name,
-      data: data
-    }
+      id,
+      type,
+      name,
+      data,
+    };
     const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, body);
     return segment;
   }
@@ -2852,9 +2852,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {Segment} The created Segment
    */
-  async createUserSegment(id: string, name: string,  data?: SegmentData): Promise<Segment> {
-    const segment = await this.createSegment('user', id, name, data)
-    return segment;
+  async createUserSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
+    return await this.createSegment('user', id, name, data);
   }
 
   /**
@@ -2867,8 +2866,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment} The created Segment
    */
   async createChannelSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
-    const segment = await this.createSegment('channel', id, name, data)
-    return segment;  
+    return await this.createSegment('channel', id, name, data);
   }
 
   /**
@@ -2880,7 +2878,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment} Updated Segment
    */
   async updateSegment(id: string, params: Partial<UpdateSegmentParams>) {
-    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, params );
+    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, params);
     return segment;
   }
 
@@ -2897,7 +2895,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       segments: Segment[];
     }>(this.baseURL + `/segments`, {
       payload: {
-        filter: filter,
+        filter,
         ...options,
       },
     });
