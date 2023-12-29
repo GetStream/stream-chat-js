@@ -2439,12 +2439,9 @@ export type CampaignQueryOptions = {
 };
 
 export type SegmentQueryOptions = CampaignQueryOptions;
-export type RecipientQueryOptions = CampaignQueryOptions;
 
 // TODO: add better typing
-export type SegmentFilters = {};
 export type CampaignFilters = {};
-export type RecipientFilters = {};
 
 export type CampaignData = {
   attachments: Attachment[];
@@ -2485,20 +2482,7 @@ export type TestCampaignResponse = {
   results?: Record<string, string>;
 };
 
-export type DeleteCampaignOptions = {
-  recipients?: boolean;
-};
-
-export type Recipient = {
-  campaign_id: string;
-  channel_cid: string;
-  created_at: string;
-  status: 'pending' | 'sent' | 'failed';
-  updated_at: string;
-  details?: string;
-  message_id?: string;
-  receiver_id?: string;
-};
+export type DeleteCampaignOptions = {};
 
 export type TaskStatus = {
   created_at: string;

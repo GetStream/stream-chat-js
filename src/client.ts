@@ -127,9 +127,6 @@ import {
   ReactionResponse,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  Recipient,
-  RecipientFilters,
-  RecipientQueryOptions,
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
@@ -139,7 +136,6 @@ import {
   SearchPayload,
   Segment,
   SegmentData,
-  SegmentFilters,
   SegmentType,
   SendFileAPIResponse,
   StreamChatOptions,
@@ -3039,27 +3035,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
-  }
-
-  /**
-   * queryRecipients - Query Campaign Recipient Results
-   *
-   *
-   * @return {Recipient[]} Recipients
-   */
-  async queryRecipients(filters: RecipientFilters, options: RecipientQueryOptions = {}) {
-    return await this.get<{
-      campaigns: Record<string, Campaign>;
-      recipients: Recipient[];
-      segments: Record<string, Segment>;
-      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
-      users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/recipients`, {
-      payload: {
-        filter_conditions: filters,
-        ...options,
-      },
-    });
   }
 
   /**
