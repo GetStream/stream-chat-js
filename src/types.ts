@@ -2401,7 +2401,7 @@ export type Segment = {
   updated_at: string;
 } & SegmentData;
 
-export type UpdateSegmentParams = {
+export type UpdateSegmentData = {
   name: string;
   add_targets?: string[];
   delete_targets?: string[];

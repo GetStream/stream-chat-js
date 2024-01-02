@@ -156,7 +156,7 @@ import {
   UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
-  UpdateSegmentParams,
+  UpdateSegmentData,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -2873,12 +2873,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * updateSegment - Update a segment
    *
    * @param {string} id Segment ID
-   * @param {Partial<UpdateSegmentParams>} params Update parameters
+   * @param {Partial<UpdateSegmentData>} data Data to update
    *
    * @return {Segment} Updated Segment
    */
-  async updateSegment(id: string, params: Partial<UpdateSegmentParams>) {
-    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, params);
+  async updateSegment(id: string, data: Partial<UpdateSegmentData>) {
+    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, data);
     return segment;
   }
 
