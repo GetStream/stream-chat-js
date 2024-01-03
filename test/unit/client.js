@@ -328,6 +328,49 @@ describe('Detect node environment', () => {
 	});
 });
 
+describe('Client deleteUsers', () => {
+	it('should allow completely optional options', async () => {
+		const client = await getClientWithUser();
+
+		client.post = () => Promise.resolve();
+
+		await expect(client.deleteUsers(['_'])).to.eventually.equal();
+	});
+
+	it('delete types - options.conversations', async () => {
+		const client = await getClientWithUser();
+
+		client.post = () => Promise.resolve();
+
+		await expect(client.deleteUsers(['_'], { conversations: 'hard' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { conversations: 'soft' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { conversations: 'pruning' })).to.be.rejectedWith();
+		await expect(client.deleteUsers(['_'], { conversations: '' })).to.be.rejectedWith();
+	});
+
+	it('delete types - options.messages', async () => {
+		const client = await getClientWithUser();
+
+		client.post = () => Promise.resolve();
+
+		await expect(client.deleteUsers(['_'], { messages: 'hard' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { messages: 'soft' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { messages: 'pruning' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { messages: '' })).to.be.rejectedWith();
+	});
+
+	it('delete types - options.user', async () => {
+		const client = await getClientWithUser();
+
+		client.post = () => Promise.resolve();
+
+		await expect(client.deleteUsers(['_'], { user: 'hard' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { user: 'soft' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { user: 'pruning' })).to.eventually.equal();
+		await expect(client.deleteUsers(['_'], { user: '' })).to.be.rejectedWith();
+	});
+});
+
 describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
 		const client = await getClientWithUser();
