@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.14.5](https://github.com/GetStream/stream-chat-js/compare/v8.14.4...v8.14.5) (2024-01-09)
+
+
+### Bug Fixes
+
+* deleteUsers - add pruning to options enums ([#1206](https://github.com/GetStream/stream-chat-js/issues/1206)) ([c9af1bb](https://github.com/GetStream/stream-chat-js/commit/c9af1bb7af424f542398d5d660c0c6f220c5f0c0))
+
 ### [8.14.4](https://github.com/GetStream/stream-chat-js/compare/v8.14.3...v8.14.4) (2023-11-29)
 
 
