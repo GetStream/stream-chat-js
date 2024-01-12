@@ -1055,8 +1055,13 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   cid?: string;
   clear_history?: boolean;
   connection_id?: string;
+  // event creation timestamp, format Date ISO string
   created_at?: string;
+  // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
+  first_unread_message_id?: string;
   hard_delete?: boolean;
+  // creation date of a message with last_read_message_id, formatted as Date ISO string
+  last_read_at?: string;
   last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
@@ -1072,9 +1077,14 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
+  // @deprecated number of all unread messages across all current user's unread channels, equals unread_count
   total_unread_count?: number;
+  // number of all current user's channels with at least one unread message including the channel in this event
   unread_channels?: number;
+  // number of all unread messages across all current user's unread channels
   unread_count?: number;
+  // number of unread messages in the channel from this event (notification.mark_unread)
+  unread_messages?: number;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;

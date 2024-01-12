@@ -10,9 +10,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
-import { StreamChat } from '../../src/client';
-import { ChannelState } from '../../src';
-import exp from 'constants';
+import { ChannelState, StreamChat } from '../../src';
 
 const expect = chai.expect;
 
@@ -353,6 +351,72 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message.deleted_at).to.be.ok;
 	});
 
+	describe('notification.mark_unread', () => {
+		let initialCountUnread;
+		let initialReadState;
+		let notificationMarkUnreadEvent;
+		beforeEach(() => {
+			initialCountUnread = 0;
+			initialReadState = {
+				last_read: new Date().toISOString(),
+				last_read_message_id: '6',
+				user,
+				unread_messages: initialCountUnread,
+			};
+			notificationMarkUnreadEvent = {
+				type: 'notification.mark_unread',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				channel_id: channel.id,
+				channel_type: channel.type,
+				channel: null,
+				user,
+				first_unread_message_id: '2',
+				last_read_at: new Date(new Date(initialReadState.last_read).getTime() - 1000).toISOString(),
+				last_read_message_id: '1',
+				unread_messages: 5,
+				unread_count: 6,
+				total_unread_count: 6,
+				unread_channels: 2,
+			};
+		});
+
+		it('should update channel read state produced for current user', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const event = notificationMarkUnreadEvent;
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).to.be.equal(event.unread_messages);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
+				new Date(event.last_read_at).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).to.be.equal(event.last_read_message_id);
+			expect(channel.state.read[user.id].unread_messages).to.be.equal(event.unread_messages);
+		});
+
+		it('should not update channel read state produced for another user or user is missing', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const { user: excludedUser, ...eventMissingUser } = notificationMarkUnreadEvent;
+			const eventWithAnotherUser = { ...notificationMarkUnreadEvent, user: { id: 'another-user' } };
+
+			[eventWithAnotherUser, eventMissingUser].forEach((event) => {
+				channel._handleChannelEvent(event);
+
+				expect(channel.state.unreadCount).to.be.equal(initialCountUnread);
+				expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
+					new Date(initialReadState.last_read).getTime(),
+				);
+				expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
+					initialReadState.last_read_message_id,
+				);
+				expect(channel.state.read[user.id].unread_messages).to.be.equal(initialReadState.unread_messages);
+			});
+		});
+	});
+
 	it('should include unread_messages for message events from another user', () => {
 		channel.state.read['id'] = {
 			unread_messages: 2,
@@ -501,8 +565,7 @@ describe('Channel _handleChannelEvent', function () {
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
 		const mock = sinon.mock(client);
-		const response = mockChannelQueryResponse;
-		mock.expects('post').returns(Promise.resolve(response));
+		mock.expects('post').returns(Promise.resolve(mockChannelQueryResponse));
 
 		channel.state.members = {
 			user: { id: 'user' },

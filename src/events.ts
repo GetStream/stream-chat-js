@@ -24,6 +24,7 @@ export const EVENT_MAP = {
   'notification.invite_rejected': true,
   'notification.invited': true,
   'notification.mark_read': true,
+  'notification.mark_unread': true,
   'notification.message_new': true,
   'notification.mutes_updated': true,
   'notification.removed_from_channel': true,
