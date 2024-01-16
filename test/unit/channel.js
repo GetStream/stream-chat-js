@@ -204,6 +204,13 @@ describe('Channel _handleChannelEvent', function () {
 		client.userID = user.id;
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
+		channel.state.read = {
+			[user.id]: {
+				last_read: new Date(),
+				user,
+				unread_messages: 0,
+			},
+		};
 		channel.initialized = true;
 	});
 
@@ -284,6 +291,25 @@ describe('Channel _handleChannelEvent', function () {
 			message: generateMsg({ user: { id: 'mute1' } }),
 		});
 		expect(channel.state.unreadCount).to.be.equal(30);
+	});
+
+	it('message.new register first unread message id for first unread message only', function () {
+		const msg1 = generateMsg({ user: { id: 'id' } });
+		const msg2 = generateMsg({ user: { id: 'id' } });
+		const otherUser = { id: 'id' };
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: msg1,
+		});
+		expect(channel.state.read[user.id].first_unread_message_id).to.be.equal(msg1.id);
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: msg2,
+		});
+		expect(channel.state.read[user.id].first_unread_message_id).to.be.equal(msg1.id);
 	});
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
@@ -1166,10 +1192,16 @@ describe('Channel lastMessage', async () => {
 });
 
 describe('Channel _initializeState', () => {
-	it('should not keep members that have unwatched since last watch', async () => {
-		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+	let client;
+	let channel;
 
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
+		channel = client.channel('messaging', 'id');
+	});
+
+	it('should not keep members that have unwatched since last watch', async () => {
 		const firstState = {
 			members: [
 				{
@@ -1202,5 +1234,29 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+
+	it('should register first unread message id present in message set', async () => {
+		const msg = generateMsg();
+		const lastReadEarlier = new Date(new Date(msg.created_at).getTime() - 1000).toISOString();
+		const state = { messages: [msg], read: [{ last_read: lastReadEarlier, user: client.user }] };
+		channel._initializeState(state);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.equal(msg.id);
+	});
+
+	it('should not register first unread message id if all messages are read', async () => {
+		const msg = generateMsg();
+		const lastReadLater = new Date(new Date(msg.created_at).getTime() + 1000).toISOString();
+		const state = { messages: [msg], read: [{ last_read: lastReadLater, user: client.user }] };
+		channel._initializeState(state);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.undefined;
+	});
+
+	it('should not register first unread message id for own messages', async () => {
+		const msg = generateMsg({ user: client.user });
+		const lastReadEarlier = new Date(new Date(msg.created_at).getTime() - 1000).toISOString();
+		const state = { messages: [msg], read: [{ last_read: lastReadEarlier, user: client.user }] };
+		channel._initializeState(state);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.undefined;
 	});
 });

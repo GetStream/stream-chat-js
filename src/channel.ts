@@ -1270,8 +1270,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'message.new':
         if (event.message) {
+          const ownUserId = this.getClient().user?.id;
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
-          const ownMessage = event.user?.id === this.getClient().user?.id;
+          const ownMessage = event.user?.id === ownUserId;
           const isThreadMessage = event.message.parent_id && !event.message.show_in_channel;
 
           if (this.state.isUpToDate || isThreadMessage) {
@@ -1297,6 +1298,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
                 };
               } else {
                 channelState.read[userId].unread_messages += 1;
+              }
+              if (userId === ownUserId && channelState.read[ownUserId].unread_messages === 1) {
+                channelState.read[ownUserId].first_unread_message_id = event.message.id;
               }
             }
           }
@@ -1481,7 +1485,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     state: ChannelAPIResponse<StreamChatGenerics>,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
-    const { state: clientState, user, userID } = this.getClient();
+    const { state: clientState, user } = this.getClient();
 
     // add the Users
     if (state.members) {
@@ -1520,20 +1524,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    // initialize read state to last message or current time if the channel is empty
-    // if the user is a member, this value will be overwritten later on otherwise this ensures
-    // that everything up to this point is not marked as unread
-    if (userID != null) {
-      const last_read = this.state.last_message_at || new Date();
-      if (user) {
-        this.state.read[user.id] = {
-          user,
-          last_read,
-          unread_messages: 0,
-        };
-      }
-    }
-
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
@@ -1545,6 +1535,17 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         };
 
         if (read.user.id === user?.id) {
+          if (this.state.read[user.id].last_read) {
+            for (let i = 0; i < messageSet.messages.length; i++) {
+              const msg = messageSet.messages[i];
+              const isOwnMsg = msg.user?.id === user.id;
+              const isRead = !msg.created_at || new Date(msg.created_at) <= this.state.read[user.id].last_read;
+              if (isOwnMsg || isRead) continue;
+              this.state.read[read.user.id].first_unread_message_id = msg.id;
+              break;
+            }
+          }
+
           this.state.unreadCount = this.state.read[read.user.id].unread_messages;
         }
       }
