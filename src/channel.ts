@@ -1241,7 +1241,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       case 'message.read':
         if (event.user?.id && event.created_at) {
           channelState.read[event.user.id] = {
-            // because in client.ts the handleEvent call that flows to this sets this `event.received_at = new Date();`
             last_read: new Date(event.created_at),
             last_read_message_id: event.last_read_message_id,
             user: event.user,
@@ -1360,6 +1359,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           delete channelState.members[event.user.id];
         }
         break;
+      case 'notification.mark_unread': {
+        const ownMessage = event.user?.id === this.getClient().user?.id;
+        if (!(ownMessage && event.user)) break;
+
+        channelState.read[event.user.id] = {
+          first_unread_message_id: event.first_unread_message_id,
+          last_read: new Date(event.last_read_at as string),
+          last_read_message_id: event.last_read_message_id,
+          user: event.user,
+          unread_messages: event.unread_messages ?? 0,
+        };
+
+        channelState.unreadCount = event.unread_messages ?? 0;
+        break;
+      }
       case 'channel.updated':
         if (event.channel) {
           const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;

@@ -1055,8 +1055,13 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   cid?: string;
   clear_history?: boolean;
   connection_id?: string;
+  // event creation timestamp, format Date ISO string
   created_at?: string;
+  // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
+  first_unread_message_id?: string;
   hard_delete?: boolean;
+  // creation date of a message with last_read_message_id, formatted as Date ISO string
+  last_read_at?: string;
   last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
@@ -1072,9 +1077,14 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
+  // @deprecated number of all unread messages across all current user's unread channels, equals unread_count
   total_unread_count?: number;
+  // number of all current user's channels with at least one unread message including the channel in this event
   unread_channels?: number;
+  // number of all unread messages across all current user's unread channels
   unread_count?: number;
+  // number of unread messages in the channel from this event (notification.mark_unread)
+  unread_messages?: number;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;
@@ -2365,22 +2375,29 @@ export type DeleteChannelsResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
 
-export type DeleteType = 'soft' | 'hard';
+export type DeleteType = 'soft' | 'hard' | 'pruning';
 
 /*
   DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
 
-  `user` soft|hard determines if the user needs to be hard- or soft-deleted, where hard-delete
-  implies that all related objects (messages, flags, etc) will be hard-deleted as well.
-  `conversations` soft|hard will delete any 1to1 channels that the user was a member of.
-  `messages` soft-hard will delete any messages that the user has sent.
-  `new_channel_owner_id` any channels owned by the hard-deleted user will be transferred to this user ID
+  `user`:
+    - soft: marks user as deleted and retains all user data 
+    - pruning: marks user as deleted and nullifies user information 
+    - hard: deletes user completely - this requires hard option for messages and conversation as well
+  `conversations`:
+    - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
+    - hard: deletes channel and all its data completely including messages (same effect as Delete Channels with 'hard' option enabled)
+  `messages`:
+    - soft: marks all user messages as deleted without removing any related message data
+    - pruning: marks all user messages as deleted, nullifies message information and removes some message data such as reactions and flags
+    - hard: deletes messages completely with all related information
+  `new_channel_owner_id`: any channels owned by the hard-deleted user will be transferred to this user ID
  */
 export type DeleteUserOptions = {
-  user: DeleteType;
-  conversations?: DeleteType;
+  conversations?: Exclude<DeleteType, 'pruning'>;
   messages?: DeleteType;
   new_channel_owner_id?: string;
+  user?: DeleteType;
 };
 
 export type SegmentType = 'channel' | 'user';

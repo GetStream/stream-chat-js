@@ -3079,15 +3079,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {TaskResponse} A task ID
    */
-  async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
-    if (options?.user !== 'soft' && options?.user !== 'hard') {
-      throw new Error('Invalid delete user options. user must be one of [soft hard]');
+  async deleteUsers(user_ids: string[], options: DeleteUserOptions = {}) {
+    if (typeof options.user !== 'undefined' && !['soft', 'hard', 'pruning'].includes(options.user)) {
+      throw new Error('Invalid delete user options. user must be one of [soft hard pruning]');
     }
-    if (options.messages !== undefined && options.messages !== 'soft' && options.messages !== 'hard') {
-      throw new Error('Invalid delete user options. messages must be one of [soft hard]');
-    }
-    if (options.conversations !== undefined && options.conversations !== 'soft' && options.conversations !== 'hard') {
+    if (typeof options.conversations !== 'undefined' && !['soft', 'hard'].includes(options.conversations)) {
       throw new Error('Invalid delete user options. conversations must be one of [soft hard]');
+    }
+    if (typeof options.messages !== 'undefined' && !['soft', 'hard', 'pruning'].includes(options.messages)) {
+      throw new Error('Invalid delete user options. messages must be one of [soft hard pruning]');
     }
     return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
       user_ids,
