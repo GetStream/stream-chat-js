@@ -1259,4 +1259,38 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(state);
 		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.undefined;
 	});
+
+	it('should update first unread message id if last_read has not changed', async () => {
+		const createdAtMsg3 = new Date();
+		const createdAtMsg2 = new Date(new Date(createdAtMsg3).getTime() - 500);
+		const createdAtMsg1 = new Date(new Date(createdAtMsg3).getTime() - 1000);
+		const messages = [
+			generateMsg({ date: createdAtMsg1.toISOString() }),
+			generateMsg({ date: createdAtMsg2.toISOString() }),
+			generateMsg({ date: createdAtMsg3.toISOString() }),
+		];
+		let newState = { messages, read: [{ last_read: createdAtMsg1.toISOString(), user: client.user }] };
+		channel._initializeState(newState);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.equal(messages[1].id);
+		newState = { messages, read: [{ last_read: createdAtMsg2.toISOString(), user: client.user }] };
+		channel._initializeState(newState);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.equal(messages[2].id);
+	});
+
+	it('should not update first unread message id if last_read has not changed', async () => {
+		const createdAtMsg3 = new Date();
+		const createdAtMsg2 = new Date(new Date(createdAtMsg3).getTime() - 500);
+		const createdAtMsg1 = new Date(new Date(createdAtMsg3).getTime() - 1000);
+		const messages = [
+			generateMsg({ date: createdAtMsg1.toISOString() }),
+			generateMsg({ date: createdAtMsg2.toISOString() }),
+			generateMsg({ date: createdAtMsg3.toISOString() }),
+		];
+		let newState = { messages, read: [{ last_read: createdAtMsg1.toISOString(), user: client.user }] };
+		channel._initializeState(newState);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.equal(messages[1].id);
+		newState = { messages, read: [{ last_read: createdAtMsg1.toISOString(), user: client.user }] };
+		channel._initializeState(newState);
+		expect(channel.state.read[client.user.id].first_unread_message_id).to.be.equal(messages[1].id);
+	});
 });

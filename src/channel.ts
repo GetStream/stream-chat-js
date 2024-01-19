@@ -1528,15 +1528,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        this.state.read[read.user.id] = {
+        const previousReadState = this.state.read[read.user.id];
+        const newReadState = {
           last_read: new Date(read.last_read),
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };
+        this.state.read[read.user.id] = newReadState;
 
         if (read.user.id === user?.id) {
-          if (this.state.read[user.id].last_read) {
+          const lastReadChanged =
+            newReadState.last_read && newReadState.last_read.getTime() !== previousReadState?.last_read.getTime();
+          if (lastReadChanged) {
             for (let i = 0; i < messageSet.messages.length; i++) {
               const msg = messageSet.messages[i];
               const isOwnMsg = msg.user?.id === user.id;
@@ -1545,6 +1549,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
               this.state.read[read.user.id].first_unread_message_id = msg.id;
               break;
             }
+          } else {
+            this.state.read[read.user.id].first_unread_message_id = previousReadState.first_unread_message_id;
           }
 
           this.state.unreadCount = this.state.read[read.user.id].unread_messages;
