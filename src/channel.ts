@@ -1299,6 +1299,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
               } else {
                 channelState.read[userId].unread_messages += 1;
               }
+              // register the first unread msg id for the current user if this new message is the only one unread
               if (userId === ownUserId && channelState.read[ownUserId].unread_messages === 1) {
                 channelState.read[ownUserId].first_unread_message_id = event.message.id;
               }
