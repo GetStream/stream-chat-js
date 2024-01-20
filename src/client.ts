@@ -95,7 +95,7 @@ import {
   GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
-  GetThreadsAPIResponse,
+  QueryThreadsAPIResponse,
   GetUnreadCountAPIResponse,
   ListChannelResponse,
   ListCommandsResponse,
@@ -165,8 +165,11 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  GetThreadAPIResponse,
+  PartialThreadUpdate,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { Thread } from './thread';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -2579,8 +2582,101 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
-  async getThreads() {
-    return await this.get<GetThreadsAPIResponse>(this.baseURL + `/threads`);
+  async queryThreads(options?: {
+    limit?: number;
+    next?: string;
+    participant_limit?: number;
+    prev?: string;
+    reply_limit?: number;
+    watch?: boolean;
+  }) {
+    const opts = {
+      limit: 2,
+      participant_limit: 100,
+      reply_limit: 3,
+      watch: true,
+      ...(options || {}),
+    };
+
+    const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
+    const threads: Thread<StreamChatGenerics>[] = [];
+
+    for (const t of res.threads) {
+      const thread = new Thread<StreamChatGenerics>(this, t);
+      threads.push(thread);
+    }
+
+    // TODO: Currently we are handling watch on client level. We should move this to server side.
+    const cids = threads.map((thread) => thread.channel.cid);
+    if (options?.watch && cids.length > 0) {
+      await this.queryChannels(
+        {
+          cid: { $in: cids },
+        } as ChannelFilters<StreamChatGenerics>,
+        {},
+        {
+          limit: 30,
+          message_limit: 0,
+          watch: true,
+        },
+      );
+    }
+
+    return {
+      threads,
+      next: res.next,
+    };
+  }
+
+  async getThread(
+    messageId: string,
+    options: { participant_limit?: number; reply_limit?: number; watch?: boolean } = {},
+  ) {
+    const opts = {
+      participant_limit: 100,
+      reply_limit: 3,
+      ...options,
+    };
+
+    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
+
+    if (options?.watch) {
+      const channel = this.channel(res.thread.channel.type, res.thread.channel.id);
+      await channel.watch();
+    }
+
+    return new Thread<StreamChatGenerics>(this, res.thread);
+  }
+  async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
+    if (!messageId) {
+      throw Error('Please specify the message id when calling updateThread');
+    }
+
+    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
+    // Throw error if any of the reserved field is found.
+    const reservedThreadFields = [
+      'created_at',
+      'id',
+      'last_message_at',
+      'type',
+      'updated_at',
+      'user',
+      'reply_count',
+      'participants',
+      'channel',
+    ];
+
+    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
+      if (reservedThreadFields.includes(key)) {
+        throw Error(
+          `You cannot set ${key} field. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
+        );
+      }
+    }
+
+    return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, {
+      ...partialThreadObject,
+    });
   }
 
   getUserAgent() {

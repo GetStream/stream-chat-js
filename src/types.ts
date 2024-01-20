@@ -473,7 +473,36 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export type GetThreadsAPIResponse = APIResponse;
+export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  channel: ChannelResponse<StreamChatGenerics>;
+  channel_cid: string;
+  created_at: string;
+  deleted_at: string;
+  latest_replies: MessageResponse<StreamChatGenerics>[];
+  parent_message: MessageResponse<StreamChatGenerics>;
+  parent_message_id: string;
+  reply_count: number;
+  thread_participants: {
+    created_at: string;
+    user: UserResponse<StreamChatGenerics>;
+  }[];
+  title: string;
+  updated_at: string;
+};
+
+// TODO: Figure out a way to strongly type set and unset.
+export type PartialThreadUpdate = {
+  set?: Partial<Record<string, unknown>>;
+  unset?: Partial<Record<string, unknown>>;
+};
+
+export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  threads: ThreadResponse<StreamChatGenerics>[];
+  next?: string;
+};
+export type GetThreadAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  thread: ThreadResponse<StreamChatGenerics>;
+};
 
 export type GetMultipleMessagesAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
@@ -1079,6 +1108,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
+  thread?: ThreadResponse<StreamChatGenerics>;
   // @deprecated number of all unread messages across all current user's unread channels, equals unread_count
   total_unread_count?: number;
   // number of all current user's channels with at least one unread message including the channel in this event
