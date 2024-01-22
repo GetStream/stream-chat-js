@@ -2591,8 +2591,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     watch?: boolean;
   }) {
     const opts = {
-      limit: 2,
-      participant_limit: 100,
+      limit: 10,
+      participant_limit: 10,
       reply_limit: 3,
       watch: true,
       ...(options || {}),

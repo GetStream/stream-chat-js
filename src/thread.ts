@@ -6,6 +6,7 @@ import {
   ThreadResponse,
   ChannelResponse,
   FormatMessageResponse,
+  ReactionResponse,
 } from './types';
 import { addToMessageList, formatMessage } from './utils';
 
@@ -15,9 +16,10 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   participants: ThreadResponse['thread_participants'] = [];
   message: FormatMessageResponse<StreamChatGenerics>;
   channel: ChannelResponse<StreamChatGenerics>;
+  _channel: ReturnType<StreamChat<StreamChatGenerics>['channel']>;
   replyCount = 0;
   _client: StreamChat<StreamChatGenerics>;
-
+  read: ThreadResponse['read'] = [];
   constructor(client: StreamChat<StreamChatGenerics>, t: ThreadResponse<StreamChatGenerics>) {
     this.id = t.parent_message.id;
     this.message = formatMessage(t.parent_message);
@@ -25,7 +27,9 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     this.participants = t.thread_participants;
     this.replyCount = t.reply_count;
     this.channel = t.channel;
+    this._channel = client.channel(t.channel.type, t.channel.id);
     this._client = client;
+    this.read = t.read;
   }
 
   getClient(): StreamChat<StreamChatGenerics> {
@@ -61,5 +65,35 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     if (!message.parent_id && message.id === this.message.id) {
       this.message = formatMessage(message);
     }
+  }
+
+  addReaction(
+    reaction: ReactionResponse<StreamChatGenerics>,
+    message?: MessageResponse<StreamChatGenerics>,
+    enforce_unique?: boolean,
+  ) {
+    if (!message) return;
+
+    this.latestReplies = this.latestReplies.map((m) => {
+      if (m.id === message.id) {
+        return formatMessage(
+          this._channel.state.addReaction(reaction, message, enforce_unique) as MessageResponse<StreamChatGenerics>,
+        );
+      }
+      return m;
+    });
+  }
+
+  removeReaction(reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) {
+    if (!message) return;
+
+    this.latestReplies = this.latestReplies.map((m) => {
+      if (m.id === message.id) {
+        return formatMessage(
+          this._channel.state.removeReaction(reaction, message) as MessageResponse<StreamChatGenerics>,
+        );
+      }
+      return m;
+    });
   }
 }

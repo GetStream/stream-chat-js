@@ -481,6 +481,12 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
   latest_replies: MessageResponse<StreamChatGenerics>[];
   parent_message: MessageResponse<StreamChatGenerics>;
   parent_message_id: string;
+  read: {
+    last_read: string;
+    last_read_message_id: string;
+    unread_messages: number;
+    user: UserResponse<StreamChatGenerics>;
+  }[];
   reply_count: number;
   thread_participants: {
     created_at: string;
@@ -536,7 +542,14 @@ export type GetUnreadCountAPIResponse = APIResponse & {
     last_read: string;
     unread_count: number;
   }[];
+  threads: {
+    last_read: string;
+    last_read_message_id: string;
+    parent_message_id: string;
+    unread_count: number;
+  }[];
   total_unread_count: number;
+  total_unread_threads_count: number;
 };
 
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -902,6 +915,7 @@ export type MarkChannelsReadOptions<StreamChatGenerics extends ExtendableGeneric
 export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
+  thread_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
