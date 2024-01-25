@@ -7,9 +7,19 @@ import {
   ChannelResponse,
   FormatMessageResponse,
   ReactionResponse,
+  UserResponse,
 } from './types';
 import { addToMessageList, formatMessage } from './utils';
 
+type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+  string,
+  {
+    last_read: Date;
+    last_read_message_id: string;
+    unread_messages: number;
+    user: UserResponse<StreamChatGenerics>;
+  }
+>;
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   id: string;
   latestReplies: FormatMessageResponse<StreamChatGenerics>[] = [];
@@ -19,7 +29,8 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   _channel: ReturnType<StreamChat<StreamChatGenerics>['channel']>;
   replyCount = 0;
   _client: StreamChat<StreamChatGenerics>;
-  read: ThreadResponse['read'] = [];
+  read: ThreadReadStatus<StreamChatGenerics> = {};
+
   constructor(client: StreamChat<StreamChatGenerics>, t: ThreadResponse<StreamChatGenerics>) {
     this.id = t.parent_message.id;
     this.message = formatMessage(t.parent_message);
@@ -29,7 +40,12 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     this.channel = t.channel;
     this._channel = client.channel(t.channel.type, t.channel.id);
     this._client = client;
-    this.read = t.read;
+    for (const r of t.read) {
+      this.read[r.user.id] = {
+        ...r,
+        last_read: new Date(r.last_read),
+      };
+    }
   }
 
   getClient(): StreamChat<StreamChatGenerics> {
