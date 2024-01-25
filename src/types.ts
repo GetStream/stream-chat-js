@@ -573,7 +573,7 @@ export type MessageResponseBase<
 };
 
 export type ModerationDetailsResponse = {
-  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | string;
+  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | (string & {});
   error_msg: string;
   harms: ModerationHarmResponse[];
   original_text: string;
