@@ -114,6 +114,10 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
+    datadog_info?: {
+      api_key: string;
+      site: string;
+    };
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
@@ -247,6 +251,7 @@ export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = 
 
 export type BlockListResponse = BlockList & {
   created_at?: string;
+  type?: string;
   updated_at?: string;
 };
 
@@ -506,6 +511,10 @@ export type GetUnreadCountAPIResponse = APIResponse & {
     unread_count: number;
   }[];
   total_unread_count: number;
+};
+
+export type GetUnreadCountBatchAPIResponse = APIResponse & {
+  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
 };
 
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
