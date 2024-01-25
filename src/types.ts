@@ -509,7 +509,7 @@ export type GetUnreadCountAPIResponse = APIResponse & {
 };
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
-  counts_by_user: GetUnreadCountAPIResponse[];
+  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
 };
 
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
