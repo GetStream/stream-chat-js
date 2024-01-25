@@ -558,6 +558,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
@@ -569,6 +570,18 @@ export type MessageResponseBase<
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
+};
+
+export type ModerationDetailsResponse = {
+  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | string;
+  error_msg: string;
+  harms: ModerationHarmResponse[];
+  original_text: string;
+};
+
+export type ModerationHarmResponse = {
+  name: string;
+  phrase_list_ids: number[];
 };
 
 export type MuteResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
