@@ -513,6 +513,10 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_count: number;
 };
 
+export type GetUnreadCountBatchAPIResponse = APIResponse & {
+  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
+};
+
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel_types: Record<
     string,
