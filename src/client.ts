@@ -2590,12 +2590,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     reply_limit?: number;
     watch?: boolean;
   }) {
+    // eslint-disable-next-line
+    const { watch, ...optionsWithoutWatch } = options || {};
     const opts = {
       limit: 10,
       participant_limit: 10,
       reply_limit: 3,
-      watch: true,
-      ...(options || {}),
+      ...optionsWithoutWatch,
     };
 
     const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
