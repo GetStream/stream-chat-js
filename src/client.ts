@@ -2591,12 +2591,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     watch?: boolean;
   }) {
     // eslint-disable-next-line
-    const { watch, ...optionsWithoutWatch } = options || {};
     const opts = {
       limit: 10,
       participant_limit: 10,
       reply_limit: 3,
-      ...optionsWithoutWatch,
+      watch: true,
+      ...options,
     };
 
     const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
@@ -2605,22 +2605,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     for (const t of res.threads) {
       const thread = new Thread<StreamChatGenerics>(this, t);
       threads.push(thread);
-    }
-
-    // TODO: Currently we are handling watch on client level. We should move this to server side.
-    const cids = threads.map((thread) => thread.channel.cid);
-    if (options?.watch && cids.length > 0) {
-      await this.queryChannels(
-        {
-          cid: { $in: cids },
-        } as ChannelFilters<StreamChatGenerics>,
-        {},
-        {
-          limit: 30,
-          message_limit: 0,
-          watch: true,
-        },
-      );
     }
 
     return {
@@ -2636,18 +2620,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const opts = {
       participant_limit: 100,
       reply_limit: 3,
+      watch: true,
       ...options,
     };
 
     const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
 
-    if (options?.watch) {
-      const channel = this.channel(res.thread.channel.type, res.thread.channel.id);
-      await channel.watch();
-    }
-
     return new Thread<StreamChatGenerics>(this, res.thread);
   }
+
   async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
     if (!messageId) {
       throw Error('Please specify the message id when calling updateThread');
