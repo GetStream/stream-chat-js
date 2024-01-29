@@ -96,6 +96,7 @@ import {
   GetMessageAPIResponse,
   GetRateLimitsResponse,
   GetUnreadCountAPIResponse,
+  GetUnreadCountBatchAPIResponse,
   ListChannelResponse,
   ListCommandsResponse,
   ListImportsPaginationOptions,
@@ -1686,8 +1687,26 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
+  /**
+   * getUnreadCount - Returns unread counts for a single user
+   *
+   * @param {string} [userID] User ID.
+   *
+   * @return {<GetUnreadCountAPIResponse>}
+   */
   async getUnreadCount(userID?: string) {
     return await this.get<GetUnreadCountAPIResponse>(this.baseURL + '/unread', userID ? { user_id: userID } : {});
+  }
+
+  /**
+   * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
+   *
+   * @param {string[]} [userIDs] List of user IDs to fetch unread counts for.
+   *
+   * @return {<GetUnreadCountBatchAPIResponse>}
+   */
+  async getUnreadCountBatch(userIDs: string[]) {
+    return await this.post<GetUnreadCountBatchAPIResponse>(this.baseURL + '/unread_batch', { user_ids: userIDs });
   }
 
   /**
