@@ -2883,6 +2883,32 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * addSegmentTargets - Add targets to a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async addSegmentTargets(id: string, targets: string[]) {
+    const body = { targets }
+    return await this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
+  }
+
+  /**
+   * deleteSegmentTargets - Delete targets from a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async deleteSegmentTargets(id: string, targets: string[]) {
+    const body = { targets }
+    return await this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
+  }
+
+  /**
    * querySegments - Query Segments
    *
    * @param {filter} filter MongoDB style filter conditions
@@ -2909,7 +2935,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async deleteSegment(id: string) {
-    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+    return await this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
   }
 
   /**
@@ -2921,7 +2947,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async segmentTargetExists(segmentId: string, targetId: string) {
-    return this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
+    return await this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
   }
 
   /**

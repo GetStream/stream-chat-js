@@ -2420,8 +2420,6 @@ export type Segment = {
 
 export type UpdateSegmentData = {
   name: string;
-  add_targets?: string[];
-  delete_targets?: string[];
 } & SegmentData;
 
 export type SortParam = {
