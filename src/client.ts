@@ -2891,7 +2891,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async addSegmentTargets(id: string, targets: string[]) {
-    const body = { targets }
+    const body = { targets };
     return await this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
   }
 
@@ -2904,7 +2904,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async deleteSegmentTargets(id: string, targets: string[]) {
-    const body = { targets }
+    const body = { targets };
     return await this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
   }
 
