@@ -622,4 +622,9 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       }
     }, this.connectionCheckTimeout);
   };
+
+  refreshToken = (token: string) => {
+    const d = JSON.stringify({ api_key: this.client.key, token });
+    this.ws?.send(d);
+  };
 }

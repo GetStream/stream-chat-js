@@ -3263,4 +3263,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async commitMessage(id: string) {
     return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
   }
+
+  /**
+   * send over a WS the new token to the server, from server you would expect `token.ack` event in case of success.
+   * @param token the new token
+   *
+   */
+  refreshToken(token: string) {
+    return this.wsConnection?.refreshToken(token);
+  }
 }
