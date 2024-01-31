@@ -124,12 +124,10 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QuerySegmentsOptions,
   ReactionResponse,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  Recipient,
-  RecipientFilters,
-  RecipientQueryOptions,
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
@@ -139,8 +137,7 @@ import {
   SearchPayload,
   Segment,
   SegmentData,
-  SegmentFilters,
-  SegmentQueryOptions,
+  SegmentType,
   SendFileAPIResponse,
   StreamChatOptions,
   SyncOptions,
@@ -160,6 +157,7 @@ import {
   UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
+  UpdateSegmentData,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -2843,45 +2841,109 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * createSegment - Creates a Campaign Segment
+   * createSegment - Creates a segment
    *
+   * @private
+   * @param {SegmentType} type Segment type
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name (valid UUID)
    * @param {SegmentData} params Segment data
    *
-   * @return {Segment} The Created Segment
+   * @return {Segment} The created Segment
    */
-  async createSegment(params: SegmentData) {
-    const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, { segment: params });
+  private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData): Promise<Segment> {
+    const body = {
+      id,
+      type,
+      name,
+      data,
+    };
+    const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, body);
     return segment;
   }
 
   /**
-   * querySegments - Query Campaign Segments
+   * createUserSegment - Creates a user segment
    *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
+   *
+   * @return {Segment} The created Segment
+   */
+  async createUserSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
+    return await this.createSegment('user', id, name, data);
+  }
+
+  /**
+   * createChannelSegment - Creates a channel segment
+   *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
+   *
+   * @return {Segment} The created Segment
+   */
+  async createChannelSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
+    return await this.createSegment('channel', id, name, data);
+  }
+
+  /**
+   * updateSegment - Update a segment
+   *
+   * @param {string} id Segment ID
+   * @param {Partial<UpdateSegmentData>} data Data to update
+   *
+   * @return {Segment} Updated Segment
+   */
+  async updateSegment(id: string, data: Partial<UpdateSegmentData>) {
+    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, data);
+    return segment;
+  }
+
+  /**
+   * addSegmentTargets - Add targets to a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async addSegmentTargets(id: string, targets: string[]) {
+    const body = { targets };
+    return await this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
+  }
+
+  /**
+   * deleteSegmentTargets - Delete targets from a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async deleteSegmentTargets(id: string, targets: string[]) {
+    const body = { targets };
+    return await this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
+  }
+
+  /**
+   * querySegments - Query Segments
+   *
+   * @param {filter} filter MongoDB style filter conditions
+   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
    *
    * @return {Segment[]} Segments
    */
-  async querySegments(filters: SegmentFilters, options: SegmentQueryOptions = {}) {
+  async querySegments(filter: {}, options: QuerySegmentsOptions = {}) {
     return await this.get<{
       segments: Segment[];
     }>(this.baseURL + `/segments`, {
       payload: {
-        filter_conditions: filters,
+        filter,
         ...options,
       },
     });
-  }
-
-  /**
-   * updateSegment - Update a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   * @param {Partial<SegmentData>} params Segment data
-   *
-   * @return {Segment} Updated Segment
-   */
-  async updateSegment(id: string, params: Partial<SegmentData>) {
-    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, { segment: params });
-    return segment;
   }
 
   /**
@@ -2892,7 +2954,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async deleteSegment(id: string) {
-    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+    return await this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
+  /**
+   * segmentTargetExists - Check if a target exists in a segment
+   *
+   * @param {string} segmentId Segment ID
+   * @param {string} targetId Target ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async segmentTargetExists(segmentId: string, targetId: string) {
+    return await this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
   }
 
   /**
@@ -3004,27 +3078,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async testCampaign(id: string, params: { users: string[] }) {
     const { users } = params;
     return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
-  }
-
-  /**
-   * queryRecipients - Query Campaign Recipient Results
-   *
-   *
-   * @return {Recipient[]} Recipients
-   */
-  async queryRecipients(filters: RecipientFilters, options: RecipientQueryOptions = {}) {
-    return await this.get<{
-      campaigns: Record<string, Campaign>;
-      recipients: Recipient[];
-      segments: Record<string, Segment>;
-      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
-      users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/recipients`, {
-      payload: {
-        filter_conditions: filters,
-        ...options,
-      },
-    });
   }
 
   /**
