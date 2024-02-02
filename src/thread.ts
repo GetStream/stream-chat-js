@@ -20,6 +20,7 @@ type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     user: UserResponse<StreamChatGenerics>;
   }
 >;
+
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   id: string;
   latestReplies: FormatMessageResponse<StreamChatGenerics>[] = [];

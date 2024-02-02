@@ -507,10 +507,25 @@ export type PartialThreadUpdate = {
   unset?: Partial<Record<string, unknown>>;
 };
 
+export type QueryThreadsOptions = {
+  limit?: number;
+  next?: string;
+  participant_limit?: number;
+  reply_limit?: number;
+  watch?: boolean;
+};
+
 export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   threads: ThreadResponse<StreamChatGenerics>[];
   next?: string;
 };
+
+export type GetThreadOptions = {
+  participant_limit?: number;
+  reply_limit?: number;
+  watch?: boolean;
+};
+
 export type GetThreadAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   thread: ThreadResponse<StreamChatGenerics>;
 };
