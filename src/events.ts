@@ -28,6 +28,7 @@ export const EVENT_MAP = {
   'notification.message_new': true,
   'notification.mutes_updated': true,
   'notification.removed_from_channel': true,
+  'notification.thread_message_new': true,
   'reaction.deleted': true,
   'reaction.new': true,
   'reaction.updated': true,

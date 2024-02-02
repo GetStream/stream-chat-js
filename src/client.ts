@@ -95,6 +95,7 @@ import {
   GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
+  QueryThreadsAPIResponse,
   GetUnreadCountAPIResponse,
   GetUnreadCountBatchAPIResponse,
   ListChannelResponse,
@@ -163,8 +164,13 @@ import {
   UserOptions,
   UserResponse,
   UserSort,
+  GetThreadAPIResponse,
+  PartialThreadUpdate,
+  QueryThreadsOptions,
+  GetThreadOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { Thread } from './thread';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -2592,6 +2598,103 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async getMessage(messageID: string) {
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+    );
+  }
+
+  /**
+   * queryThreads - returns the list of threads of current user.
+   *
+   * @param {QueryThreadsOptions} options Options object for pagination and limiting the participants and replies.
+   * @param {number}  options.limit Limits the number of threads to be returned.
+   * @param {boolean} options.watch Subscribes the user to the channels of the threads.
+   * @param {number}  options.participant_limit Limits the number of participants returned per threads.
+   * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   *
+   * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
+   */
+  async queryThreads(options?: QueryThreadsOptions) {
+    const opts = {
+      limit: 10,
+      participant_limit: 10,
+      reply_limit: 3,
+      watch: true,
+      ...options,
+    };
+
+    const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
+
+    return {
+      threads: res.threads.map((thread) => new Thread(this, thread)),
+      next: res.next,
+    };
+  }
+
+  /**
+   * getThread - returns the thread of a message by its id.
+   *
+   * @param {string}            messageId The message id
+   * @param {GetThreadOptions}  options Options object for pagination and limiting the participants and replies.
+   * @param {boolean}           options.watch Subscribes the user to the channel of the thread.
+   * @param {number}            options.participant_limit Limits the number of participants returned per threads.
+   * @param {number}            options.reply_limit Limits the number of replies returned per threads.
+   *
+   * @returns {Thread<StreamChatGenerics>} Returns the thread.
+   */
+  async getThread(messageId: string, options: GetThreadOptions = {}) {
+    if (!messageId) {
+      throw Error('Please specify the message id when calling partialUpdateThread');
+    }
+
+    const opts = {
+      participant_limit: 100,
+      reply_limit: 3,
+      watch: true,
+      ...options,
+    };
+
+    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
+
+    return new Thread<StreamChatGenerics>(this, res.thread);
+  }
+
+  /**
+   * partialUpdateThread - updates the given thread
+   *
+   * @param {string}              messageId The id of the thread message which needs to be updated.
+   * @param {PartialThreadUpdate} partialThreadObject should contain "set" or "unset" params for any of the thread's non-reserved fields.
+   *
+   * @returns {GetThreadAPIResponse<StreamChatGenerics>} Returns the updated thread.
+   */
+  async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
+    if (!messageId) {
+      throw Error('Please specify the message id when calling partialUpdateThread');
+    }
+
+    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
+    // Throw error if any of the reserved field is found.
+    const reservedThreadFields = [
+      'created_at',
+      'id',
+      'last_message_at',
+      'type',
+      'updated_at',
+      'user',
+      'reply_count',
+      'participants',
+      'channel',
+    ];
+
+    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
+      if (reservedThreadFields.includes(key)) {
+        throw Error(
+          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
+        );
+      }
+    }
+
+    return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/threads/${messageId}`,
+      partialThreadObject,
     );
   }
 
