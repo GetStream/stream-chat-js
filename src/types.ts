@@ -572,6 +572,10 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_threads_count: number;
 };
 
+export type GetUnreadCountBatchAPIResponse = APIResponse & {
+  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
+};
+
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel_types: Record<
     string,
@@ -622,6 +626,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
@@ -633,6 +638,18 @@ export type MessageResponseBase<
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
+};
+
+export type ModerationDetailsResponse = {
+  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | (string & {});
+  error_msg: string;
+  harms: ModerationHarmResponse[];
+  original_text: string;
+};
+
+export type ModerationHarmResponse = {
+  name: string;
+  phrase_list_ids: number[];
 };
 
 export type MuteResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -2466,21 +2483,42 @@ export type DeleteUserOptions = {
   user?: DeleteType;
 };
 
+export type SegmentType = 'channel' | 'user';
+
 export type SegmentData = {
   description: string;
   filter: {};
-  name: string;
-  type: 'channel' | 'user';
 };
 
 export type Segment = {
   created_at: string;
+  deleted_at: string;
   id: string;
-  in_use: boolean;
+  locked: boolean;
+  name: string;
   size: number;
-  status: 'computing' | 'ready';
+  type: SegmentType;
   updated_at: string;
 } & SegmentData;
+
+export type UpdateSegmentData = {
+  name: string;
+} & SegmentData;
+
+export type SortParam = {
+  field: string;
+  direction?: AscDesc;
+};
+
+export type Pager = {
+  limit?: number;
+  next?: string;
+  prev?: string;
+};
+
+export type QuerySegmentsOptions = {
+  sort?: SortParam[];
+} & Pager;
 
 export type CampaignSortField = {
   field: string;
@@ -2499,12 +2537,9 @@ export type CampaignQueryOptions = {
 };
 
 export type SegmentQueryOptions = CampaignQueryOptions;
-export type RecipientQueryOptions = CampaignQueryOptions;
 
 // TODO: add better typing
-export type SegmentFilters = {};
 export type CampaignFilters = {};
-export type RecipientFilters = {};
 
 export type CampaignData = {
   attachments: Attachment[];
@@ -2545,20 +2580,7 @@ export type TestCampaignResponse = {
   results?: Record<string, string>;
 };
 
-export type DeleteCampaignOptions = {
-  recipients?: boolean;
-};
-
-export type Recipient = {
-  campaign_id: string;
-  channel_cid: string;
-  created_at: string;
-  status: 'pending' | 'sent' | 'failed';
-  updated_at: string;
-  details?: string;
-  message_id?: string;
-  receiver_id?: string;
-};
+export type DeleteCampaignOptions = {};
 
 export type TaskStatus = {
   created_at: string;
