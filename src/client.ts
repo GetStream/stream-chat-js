@@ -3041,6 +3041,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async querySegments(filter: {}, options: QuerySegmentsOptions = {}) {
     return await this.get<{
       segments: Segment[];
+      next?: string;
     }>(this.baseURL + `/segments`, {
       payload: {
         filter,
