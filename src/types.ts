@@ -673,6 +673,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   total_unread_count: number;
   unread_channels: number;
   unread_count: number;
+  unread_threads: number;
   invisible?: boolean;
   roles?: string[];
 };
