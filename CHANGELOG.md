@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.16.0](https://github.com/GetStream/stream-chat-js/compare/v8.15.0...v8.16.0) (2024-02-05)
+
+
+### Features
+
+* threads 2.0  ([#1204](https://github.com/GetStream/stream-chat-js/issues/1204)) ([7bb64a8](https://github.com/GetStream/stream-chat-js/commit/7bb64a8fd3e11c043343c79935dfe77b97fc3d6e))
+
+
+### Bug Fixes
+
+* allow user_id in keystroke and stopTyping function ([#1221](https://github.com/GetStream/stream-chat-js/issues/1221)) ([c81586b](https://github.com/GetStream/stream-chat-js/commit/c81586b2f82d60814588b442106ddd228a4a35b1))
+
 ## [8.15.0](https://github.com/GetStream/stream-chat-js/compare/v8.14.5...v8.15.0) (2024-02-01)
 
 
