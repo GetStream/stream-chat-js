@@ -641,7 +641,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async keystroke(parent_id?: string) {
+  async keystroke(parent_id?: string, options?: { user_id: string }) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -655,6 +655,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
+        ...(options || {}),
       } as Event<StreamChatGenerics>);
     }
   }
@@ -664,7 +665,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping(parent_id?: string) {
+  async stopTyping(parent_id?: string, options?: { user_id: string }) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -673,6 +674,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     await this.sendEvent({
       type: 'typing.stop',
       parent_id,
+      ...(options || {}),
     } as Event<StreamChatGenerics>);
   }
 
