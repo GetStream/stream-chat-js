@@ -170,18 +170,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Promise<SendMessageAPIResponse<StreamChatGenerics>>} The Server Response
    */
   async sendMessage(message: Message<StreamChatGenerics>, options?: SendMessageOptions) {
-    const sendMessageResponse = await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
-      this._channelURL() + '/message',
-      {
-        message,
-        ...options,
-      },
-    );
-
-    // Reset unreadCount to 0.
-    this.state.unreadCount = 0;
-
-    return sendMessageResponse;
+    return await this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(this._channelURL() + '/message', {
+      message,
+      ...options,
+    });
   }
 
   sendFile(
@@ -649,7 +641,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async keystroke(parent_id?: string) {
+  async keystroke(parent_id?: string, options?: { user_id: string }) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -663,6 +655,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       await this.sendEvent({
         type: 'typing.start',
         parent_id,
+        ...(options || {}),
       } as Event<StreamChatGenerics>);
     }
   }
@@ -672,7 +665,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping(parent_id?: string) {
+  async stopTyping(parent_id?: string, options?: { user_id: string }) {
     if (!this.getConfig()?.typing_events) {
       return;
     }
@@ -681,6 +674,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     await this.sendEvent({
       type: 'typing.stop',
       parent_id,
+      ...(options || {}),
     } as Event<StreamChatGenerics>);
   }
 
@@ -1289,6 +1283,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             channelState.addPinnedMessage(event.message);
           }
 
+          // do not increase the unread count - the back-end does not increase the count neither in the following cases:
+          // 1. the message is mine
+          // 2. the message is a thread reply from any user
+          const preventUnreadCountUpdate = ownMessage || isThreadMessage;
+          if (preventUnreadCountUpdate) break;
+
           if (event.user?.id) {
             for (const userId in channelState.read) {
               if (userId === event.user.id) {
@@ -1303,9 +1303,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             }
           }
 
-          if (ownMessage) {
-            channelState.unreadCount = 0;
-          } else if (this._countMessageAsUnread(event.message)) {
+          if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
         }
@@ -1363,15 +1361,17 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         const ownMessage = event.user?.id === this.getClient().user?.id;
         if (!(ownMessage && event.user)) break;
 
+        const unreadCount = event.unread_messages ?? 0;
+
         channelState.read[event.user.id] = {
           first_unread_message_id: event.first_unread_message_id,
           last_read: new Date(event.last_read_at as string),
           last_read_message_id: event.last_read_message_id,
           user: event.user,
-          unread_messages: event.unread_messages ?? 0,
+          unread_messages: unreadCount,
         };
 
-        channelState.unreadCount = event.unread_messages ?? 0;
+        channelState.unreadCount = unreadCount;
         break;
       }
       case 'channel.updated':

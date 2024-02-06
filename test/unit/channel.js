@@ -207,7 +207,7 @@ describe('Channel _handleChannelEvent', function () {
 		channel.initialized = true;
 	});
 
-	it('message.new reset the unreadCount for current user messages', function () {
+	it('message.new does not reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -215,7 +215,37 @@ describe('Channel _handleChannelEvent', function () {
 			message: generateMsg(),
 		});
 
-		expect(channel.state.unreadCount).to.be.equal(0);
+		expect(channel.state.unreadCount).to.be.equal(100);
+	});
+
+	it('message.new does not reset the unreadCount for own thread replies', function () {
+		channel.state.unreadCount = 100;
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user,
+			message: generateMsg({
+				parent_id: 'parentId',
+				type: 'reply',
+				user,
+			}),
+		});
+
+		expect(channel.state.unreadCount).to.be.equal(100);
+	});
+
+	it('message.new does not reset the unreadCount for others thread replies', function () {
+		channel.state.unreadCount = 100;
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: { id: 'id' },
+			message: generateMsg({
+				parent_id: 'parentId',
+				type: 'reply',
+				user: { id: 'id' },
+			}),
+		});
+
+		expect(channel.state.unreadCount).to.be.equal(100);
 	});
 
 	it('message.new increment unreadCount properly', function () {
