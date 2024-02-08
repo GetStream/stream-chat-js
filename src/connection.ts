@@ -624,7 +624,8 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
   };
 
   refreshToken = (token: string) => {
-    const d = JSON.stringify({ api_key: this.client.key, token });
+    // you can expect `token.ack` event if backend registered the new token for the WS connection
+    const d = JSON.stringify({ type: 'token.refresh', api_key: this.client.key, token });
     this.ws?.send(d);
   };
 }

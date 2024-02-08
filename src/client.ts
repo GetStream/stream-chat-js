@@ -1238,9 +1238,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
 
     if (event.type === 'token.expiring' && !this.tokenManager.isStatic()) {
-      this.tokenManager.loadToken().then(() => {
-        this.refreshToken();
-      });
+      this.refreshToken();
     }
 
     if (event.type === 'user.presence.changed' || event.type === 'user.updated' || event.type === 'user.deleted') {
@@ -3374,15 +3372,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * send over a WS the new token to the server, from server you would expect `token.ack` event in case of success.
-   * @param token the new token
+   * Calls the token provider to retrieve a new token
+   *
+   * This is an internal method, you only need to use it if, for some reason, the existing refresh logic of the client doesn't suit your needs.
    *
    */
-  refreshToken() {
-    const token = this._getToken();
-    if (!token) {
-      throw Error('Refresh token called, but there is no token set');
-    }
+  async refreshToken() {
+    const token = await this.tokenManager.loadToken();
     return this.wsConnection?.refreshToken(token);
   }
 }
