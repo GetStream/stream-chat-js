@@ -168,6 +168,7 @@ import {
   PartialThreadUpdate,
   QueryThreadsOptions,
   GetThreadOptions,
+  CampaignSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3081,8 +3082,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} The Created Campaign
    */
   async createCampaign(params: CampaignData) {
-    const { campaign } = await this.post<{ campaign: Campaign }>(this.baseURL + `/campaigns`, { campaign: params });
-    return campaign;
+    const res = await this.post<{ campaign: Campaign }>(this.baseURL + `/campaigns`, { ...params });
+    return res.campaign;
+  }
+
+  async getCampaign(id: string) {
+    return await this.get<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`);
   }
 
   /**
@@ -3091,7 +3096,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {Campaign[]} Campaigns
    */
-  async queryCampaigns(filters: CampaignFilters, options: CampaignQueryOptions = {}) {
+  async queryCampaigns(filters: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
     return await this.get<{
       campaigns: Campaign[];
       segments: Record<string, Segment>;
@@ -3099,8 +3104,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       users?: Record<string, UserResponse<StreamChatGenerics>>;
     }>(this.baseURL + `/campaigns`, {
       payload: {
-        filter_conditions: filters,
-        ...options,
+        filters,
+        sort,
+        ...(options || {}),
       },
     });
   }

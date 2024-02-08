@@ -2542,14 +2542,14 @@ export type SegmentQueryOptions = CampaignQueryOptions;
 export type CampaignFilters = {};
 
 export type CampaignData = {
-  attachments: Attachment[];
-  channel_type: string;
-  defaults: Record<string, string>;
-  name: string;
-  segment_id: string;
-  text: string;
+  message_template: {
+    text: string;
+    attachments?: Attachment[];
+  };
+  segments: string[];
+  sender_id: string;
   description?: string;
-  sender_id?: string;
+  name?: string;
 };
 
 export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
