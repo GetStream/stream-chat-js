@@ -1237,6 +1237,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       event,
     });
 
+    if (event.type === 'token.expiring' && !this.tokenManager.isStatic()) {
+      this.tokenManager.loadToken().then(() => {
+        this.refreshToken();
+      });
+    }
+
     if (event.type === 'user.presence.changed' || event.type === 'user.updated' || event.type === 'user.deleted') {
       this._handleUserEvent(event);
     }
@@ -3372,7 +3378,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param token the new token
    *
    */
-  refreshToken(token: string) {
+  refreshToken() {
+    const token = this._getToken();
+    if (!token) {
+      throw Error('Refresh token called, but there is no token set');
+    }
     return this.wsConnection?.refreshToken(token);
   }
 }
