@@ -2545,6 +2545,7 @@ export type CampaignData = {
   message_template: {
     text: string;
     attachments?: Attachment[];
+    custom?: {};
   };
   segment_ids: string[];
   sender_id: string;
