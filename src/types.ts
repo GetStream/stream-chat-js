@@ -2546,8 +2546,9 @@ export type CampaignData = {
     text: string;
     attachments?: Attachment[];
   };
-  segments: string[];
+  segment_ids: string[];
   sender_id: string;
+  deleted_at?: string;
   description?: string;
   name?: string;
 };

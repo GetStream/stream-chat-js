@@ -3090,13 +3090,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.get<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`);
   }
 
+  async startCampaign(id: string) {
+    return await this.post<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/start`);
+  }
   /**
    * queryCampaigns - Query Campaigns
    *
    *
    * @return {Campaign[]} Campaigns
    */
-  async queryCampaigns(filters: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
+  async queryCampaigns(filter: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
     return await this.get<{
       campaigns: Campaign[];
       segments: Record<string, Segment>;
@@ -3104,7 +3107,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       users?: Record<string, UserResponse<StreamChatGenerics>>;
     }>(this.baseURL + `/campaigns`, {
       payload: {
-        filters,
+        filter,
         sort,
         ...(options || {}),
       },
@@ -3120,9 +3123,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} Updated Campaign
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
-    const { campaign } = await this.put<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`, {
-      campaign: params,
-    });
+    const { campaign } = await this.put<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`, params);
     return campaign;
   }
 
