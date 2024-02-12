@@ -3044,14 +3044,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment[]} Segments
    */
   async querySegments(filter: {}, options: QuerySegmentsOptions = {}) {
-    return await this.get<{
+    return await this.post<{
       segments: Segment[];
       next?: string;
-    }>(this.baseURL + `/segments`, {
-      payload: {
-        filter,
-        ...options,
-      },
+    }>(this.baseURL + `/segments/query`, {
+      filter,
+      ...options,
     });
   }
 
