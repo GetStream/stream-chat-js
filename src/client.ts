@@ -3104,17 +3104,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign[]} Campaigns
    */
   async queryCampaigns(filter: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
-    return await this.get<{
+    return await this.post<{
       campaigns: Campaign[];
       segments: Record<string, Segment>;
       channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
       users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/campaigns`, {
-      payload: {
-        filter,
-        sort,
-        ...(options || {}),
-      },
+    }>(this.baseURL + `/campaigns/query`, {
+      filter,
+      sort,
+      ...(options || {}),
     });
   }
 

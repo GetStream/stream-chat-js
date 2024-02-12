@@ -2534,6 +2534,8 @@ export type CampaignSort = {
 
 export type CampaignQueryOptions = {
   limit?: number;
+  next?: string;
+  prev?: string;
   sort?: CampaignSort;
 };
 
@@ -2558,7 +2560,9 @@ export type CampaignData = {
   create_channels?: boolean;
   deleted_at?: string;
   description?: string;
+  id?: string;
   name?: string;
+  scheduled_for?: string;
 };
 
 export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
