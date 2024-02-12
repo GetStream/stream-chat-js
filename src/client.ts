@@ -1238,6 +1238,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       event,
     });
 
+    if (event.type === 'token.expiring' && !this.tokenManager.isStatic()) {
+      this.refreshToken();
+    }
+
     if (event.type === 'user.presence.changed' || event.type === 'user.updated' || event.type === 'user.deleted') {
       this._handleUserEvent(event);
     }
@@ -3373,5 +3377,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async commitMessage(id: string) {
     return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
+  }
+
+  /**
+   * Calls the token provider to retrieve a new token
+   *
+   * This is an internal method, you only need to use it if, for some reason, the existing refresh logic of the client doesn't suit your needs.
+   *
+   */
+  async refreshToken() {
+    const token = await this.tokenManager.loadToken();
+    return this.wsConnection?.refreshToken(token);
   }
 }

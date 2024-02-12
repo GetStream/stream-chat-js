@@ -1507,6 +1507,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
           $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
+          $in?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
         }>
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
     username?:
