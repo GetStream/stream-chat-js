@@ -2549,6 +2549,12 @@ export type CampaignData = {
   };
   segment_ids: string[];
   sender_id: string;
+  channel_template?: {
+    type: string;
+    custom?: {};
+    id?: string;
+  };
+  create_channels?: boolean;
   deleted_at?: string;
   description?: string;
   name?: string;
