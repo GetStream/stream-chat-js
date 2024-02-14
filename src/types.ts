@@ -2489,15 +2489,16 @@ export type SegmentType = 'channel' | 'user';
 export type SegmentData = {
   description?: string;
   filter?: {};
+  name?: string;
 };
 
-export type Segment = {
+export type SegmentResponse = {
   created_at: string;
   deleted_at: string;
   id: string;
   locked: boolean;
-  name: string;
   size: number;
+  task_id: string;
   type: SegmentType;
   updated_at: string;
 } & SegmentData;
@@ -2545,13 +2546,6 @@ export type SegmentQueryOptions = CampaignQueryOptions;
 export type CampaignFilters = {};
 
 export type CampaignData = {
-  message_template: {
-    text: string;
-    attachments?: Attachment[];
-    custom?: {};
-  };
-  segment_ids: string[];
-  sender_id: string;
   channel_template?: {
     type: string;
     custom?: {};
@@ -2560,9 +2554,16 @@ export type CampaignData = {
   create_channels?: boolean;
   deleted_at?: string;
   description?: string;
-  id?: string;
+  id?: string | null;
+  message_template?: {
+    text: string;
+    attachments?: Attachment[];
+    custom?: {};
+  };
   name?: string;
   scheduled_for?: string;
+  segment_ids?: string[];
+  sender_id?: string;
 };
 
 export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
@@ -2580,7 +2581,7 @@ export type CampaignStatus = {
   task_id?: string;
 };
 
-export type Campaign = {
+export type CampaignResponse = {
   created_at: string;
   id: string;
   updated_at: string;
