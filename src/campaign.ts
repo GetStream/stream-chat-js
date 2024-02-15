@@ -23,9 +23,14 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
       description: this.data?.description,
       name: this.data?.name,
       scheduled_for: this.data?.scheduled_for,
+      user_ids: this.data?.user_ids,
     };
 
-    return this.client.createCampaign(body);
+    const result = await this.client.createCampaign(body);
+
+    this.id = result.campaign.id;
+    this.data = result.campaign;
+    return result;
   }
 
   async start() {

@@ -1,5 +1,5 @@
 import { StreamChat } from './client';
-import { DefaultGenerics, ExtendableGenerics, SegmentData, SegmentResponse } from './types';
+import { DefaultGenerics, ExtendableGenerics, QuerySegmentTargetsOptions, SegmentData, SegmentResponse } from './types';
 
 type SegmentType = 'user' | 'channel';
 
@@ -68,5 +68,13 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw new Error('id is not set');
     }
     return this.client.segmentTargetExists(this.id, targetId);
+  }
+
+  async queryTargets(options: QuerySegmentTargetsOptions = {}) {
+    if (!this.id) {
+      throw new Error('id is not set');
+    }
+
+    return this.client.querySegmentTargets(this.id, options);
   }
 }

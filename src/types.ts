@@ -2507,6 +2507,12 @@ export type UpdateSegmentData = {
   name: string;
 } & SegmentData;
 
+export type SegmentTargetsResponse = {
+  created_at: string;
+  segment_id: string;
+  target_id: string;
+};
+
 export type SortParam = {
   field: string;
   direction?: AscDesc;
@@ -2522,6 +2528,7 @@ export type QuerySegmentsOptions = {
   sort?: SortParam[];
 } & Pager;
 
+export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 export type CampaignSortField = {
   field: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2564,6 +2571,7 @@ export type CampaignData = {
   scheduled_for?: string;
   segment_ids?: string[];
   sender_id?: string;
+  user_ids?: string[];
 };
 
 export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';

@@ -107,6 +107,7 @@ import {
   MarkChannelsReadOptions,
   Message,
   MessageFilters,
+  QuerySegmentTargetsOptions,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
   MessageFlagsResponse,
@@ -170,6 +171,7 @@ import {
   QueryThreadsOptions,
   GetThreadOptions,
   CampaignSort,
+  SegmentTargetsResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3033,10 +3035,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async addSegmentTargets(id: string, targets: string[]) {
-    const body = { targets };
+    const body = { target_ids: targets };
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
   }
 
+  async querySegmentTargets(id: string, options: QuerySegmentTargetsOptions = {}) {
+    return this.post<{ targets: SegmentTargetsResponse[] } & APIResponse>(
+      this.baseURL + `/segments/${id}/targets/query`,
+      options,
+    );
+  }
   /**
    * deleteSegmentTargets - Delete targets from a segment
    *
@@ -3046,7 +3054,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async deleteSegmentTargets(id: string, targets: string[]) {
-    const body = { targets };
+    const body = { target_ids: targets };
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
   }
 
