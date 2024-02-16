@@ -2557,6 +2557,7 @@ export type CampaignData = {
     type: string;
     custom?: {};
     id?: string;
+    members?: string[];
   };
   create_channels?: boolean;
   deleted_at?: string;
