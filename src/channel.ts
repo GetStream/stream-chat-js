@@ -708,7 +708,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   async markRead(data: MarkReadOptions<StreamChatGenerics> = {}) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events) {
+    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
       return Promise.resolve(null);
     }
 
@@ -726,7 +726,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   async markUnread(data: MarkUnreadOptions<StreamChatGenerics>) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events) {
+    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
       return Promise.resolve(null);
     }
 
