@@ -447,6 +447,67 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	});
 
+	describe('notification.mark_read', () => {
+		let initialCountUnread;
+		let initialReadState;
+		let notificationMarkReadEvent;
+		beforeEach(() => {
+			initialCountUnread = 3;
+			initialReadState = {
+				last_read: new Date(new Date().getTime() - 1000).toISOString(),
+				last_read_message_id: '6',
+				user,
+				unread_messages: initialCountUnread,
+			};
+			notificationMarkReadEvent = {
+				type: 'notification.mark_read',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				channel_id: channel.id,
+				channel_type: channel.type,
+				channel: null,
+				user,
+				last_read_at: new Date(new Date()).toISOString(),
+				last_read_message_id: '8',
+			};
+		});
+
+		it('should update channel read state produced for current user', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const event = notificationMarkReadEvent;
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).to.be.equal(0);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
+				new Date(event.last_read_at).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).to.be.equal(event.last_read_message_id);
+			expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
+		});
+
+		it('should not update channel read state produced for another user or user is missing', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const { user: excludedUser, ...eventMissingUser } = notificationMarkReadEvent;
+			const eventWithAnotherUser = { ...notificationMarkReadEvent, user: { id: 'another-user' } };
+
+			[eventWithAnotherUser, eventMissingUser].forEach((event) => {
+				channel._handleChannelEvent(event);
+
+				expect(channel.state.unreadCount).to.be.equal(initialCountUnread);
+				expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
+					new Date(initialReadState.last_read).getTime(),
+				);
+				expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
+					initialReadState.last_read_message_id,
+				);
+				expect(channel.state.read[user.id].unread_messages).to.be.equal(initialReadState.unread_messages);
+			});
+		});
+	});
+
 	it('should include unread_messages for message events from another user', () => {
 		channel.state.read['id'] = {
 			unread_messages: 2,

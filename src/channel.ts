@@ -1236,7 +1236,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         if (event.user?.id && event.created_at) {
           channelState.read[event.user.id] = {
             last_read: new Date(event.created_at),
-            last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
           };
@@ -1365,6 +1364,23 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
         channelState.read[event.user.id] = {
           first_unread_message_id: event.first_unread_message_id,
+          last_read: new Date(event.last_read_at as string),
+          last_read_message_id: event.last_read_message_id,
+          user: event.user,
+          unread_messages: unreadCount,
+        };
+
+        channelState.unreadCount = unreadCount;
+        break;
+      }
+      case 'notification.mark_read': {
+        const ownMessage = event.user?.id === this.getClient().user?.id;
+        if (!(ownMessage && event.user)) break;
+
+        const unreadCount = 0;
+
+        channelState.read[event.user.id] = {
+          first_unread_message_id: undefined,
           last_read: new Date(event.last_read_at as string),
           last_read_message_id: event.last_read_message_id,
           user: event.user,
