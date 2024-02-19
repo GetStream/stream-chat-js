@@ -41,47 +41,43 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return this.client.post<{ segment: SegmentResponse }>(this.client.baseURL + `/segments`, body);
   }
 
-  async update(data: Partial<SegmentUpdatableFields>) {
+  verifySegmentId() {
     if (!this.id) {
-      throw new Error('id is not set');
+      throw new Error(
+        'Segment id is missing. Either create the segment using segment.create() or set the id during instantiation - const segment = client.segment(id)',
+      );
     }
+  }
 
-    return this.client.updateSegment(this.id, data);
+  async update(data: Partial<SegmentUpdatableFields>) {
+    this.verifySegmentId();
+
+    return this.client.updateSegment(this.id as string, data);
   }
 
   async addTargets(targets: string[]) {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
-    return this.client.addSegmentTargets(this.id, targets);
+    this.verifySegmentId();
+    return this.client.addSegmentTargets(this.id as string, targets);
   }
 
   async deleteTargets(targets: string[]) {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
-    return this.client.deleteSegmentTargets(this.id, targets);
+    this.verifySegmentId();
+    return this.client.deleteSegmentTargets(this.id as string, targets);
   }
 
   async delete() {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
-    return this.client.deleteSegment(this.id);
+    this.verifySegmentId();
+    return this.client.deleteSegment(this.id as string);
   }
 
   async targetExists(targetId: string) {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
-    return this.client.segmentTargetExists(this.id, targetId);
+    this.verifySegmentId();
+    return this.client.segmentTargetExists(this.id as string, targetId);
   }
 
   async queryTargets(filter: QuerySegmentTargetsFilter | null = {}, sort: SortParam[] | null | [] = [], options = {}) {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
+    this.verifySegmentId();
 
-    return this.client.querySegmentTargets(this.id, filter, sort, options);
+    return this.client.querySegmentTargets(this.id as string, filter, sort, options);
   }
 }

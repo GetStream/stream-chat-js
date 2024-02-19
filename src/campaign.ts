@@ -33,27 +33,35 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return result;
   }
 
-  async start() {
+  verifyCampaignId() {
     if (!this.id) {
-      throw new Error('id is not set');
+      throw new Error(
+        'Campaign id is missing. Either create the campaign using campaign.create() or set the id during instantiation - const campaign = client.campaign(id)',
+      );
     }
+  }
 
-    return await this.client.startCampaign(this.id);
+  async start() {
+    this.verifyCampaignId();
+
+    return await this.client.startCampaign(this.id as string);
   }
 
   async update(data: Partial<CampaignData>) {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
+    this.verifyCampaignId();
 
-    return this.client.updateCampaign(this.id, data);
+    return this.client.updateCampaign(this.id as string, data);
   }
 
   async delete() {
+    this.verifyCampaignId();
+
     return await this.client.delete<APIResponse>(this.client.baseURL + `/campaigns/${this.id}`);
   }
 
   async schedule(params: { scheduledFor: number }) {
+    this.verifyCampaignId();
+
     const { scheduledFor } = params;
     const { campaign } = await this.client.patch<{ campaign: Campaign }>(
       this.client.baseURL + `/campaigns/${this.id}/schedule`,
@@ -65,22 +73,26 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
   }
 
   async stop() {
+    this.verifyCampaignId();
+
     return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/stop`);
   }
 
   async pause() {
+    this.verifyCampaignId();
+
     return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/pause`);
   }
 
   async resume() {
+    this.verifyCampaignId();
+
     return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/resume`);
   }
 
   async get() {
-    if (!this.id) {
-      throw new Error('id is not set');
-    }
+    this.verifyCampaignId();
 
-    return this.client.getCampaign(this.id);
+    return this.client.getCampaign(this.id as string);
   }
 }
