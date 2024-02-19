@@ -60,9 +60,9 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return this.client.addSegmentTargets(this.id as string, targets);
   }
 
-  async deleteTargets(targets: string[]) {
+  async removeTargets(targets: string[]) {
     this.verifySegmentId();
-    return this.client.deleteSegmentTargets(this.id as string, targets);
+    return this.client.removeSegmentTargets(this.id as string, targets);
   }
 
   async delete() {

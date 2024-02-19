@@ -3056,14 +3056,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
   /**
-   * deleteSegmentTargets - Delete targets from a segment
+   * removeSegmentTargets - Remove targets from a segment
    *
    * @param {string} id Segment ID
    * @param {string[]} targets Targets to add to the segment
    *
    * @return {APIResponse} API response
    */
-  async deleteSegmentTargets(id: string, targets: string[]) {
+  async removeSegmentTargets(id: string, targets: string[]) {
     const body = { target_ids: targets };
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
   }
