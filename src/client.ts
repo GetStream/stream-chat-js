@@ -107,7 +107,6 @@ import {
   MarkChannelsReadOptions,
   Message,
   MessageFilters,
-  QuerySegmentTargetsOptions,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
   MessageFlagsResponse,
@@ -172,6 +171,8 @@ import {
   GetThreadOptions,
   CampaignSort,
   SegmentTargetsResponse,
+  QuerySegmentTargetsFilter,
+  SortParam,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3039,10 +3040,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
   }
 
-  async querySegmentTargets(id: string, options: QuerySegmentTargetsOptions = {}) {
-    return this.post<{ targets: SegmentTargetsResponse[] } & APIResponse>(
+  async querySegmentTargets(
+    id: string,
+    filter: QuerySegmentTargetsFilter | null = {},
+    sort: SortParam[] | null | [] = [],
+    options = {},
+  ) {
+    return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
       this.baseURL + `/segments/${id}/targets/query`,
-      options,
+      {
+        filter: filter || {},
+        sort: sort || [],
+        ...options,
+      },
     );
   }
   /**

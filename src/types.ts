@@ -2528,6 +2528,15 @@ export type QuerySegmentsOptions = {
   sort?: SortParam[];
 } & Pager;
 
+export type QuerySegmentTargetsFilter = {
+  target_id?: {
+    $eq?: string;
+    $gte?: string;
+    $in?: string[];
+    $lte?: string;
+  };
+};
+export type QuerySegmentTargetsSort = {};
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 export type CampaignSortField = {
   field: string;
