@@ -2487,6 +2487,7 @@ export type DeleteUserOptions = {
 export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
+  all_users?: boolean;
   description?: string;
   filter?: {};
   name?: string;
