@@ -398,7 +398,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       this._channelURL(),
       update,
     );
+
+    const areCapabilitiesChanged =
+      [...(data.channel.own_capabilities || [])].sort().join() !==
+      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
     this.data = data.channel;
+    // If the capabiltities are changed, we trigger the `capabilities.changed` event.
+    if (areCapabilitiesChanged) {
+      this.getClient().dispatchEvent({
+        type: 'capabilities.changed',
+        cid: this.cid,
+        own_capabilities: data.channel.own_capabilities,
+      });
+    }
     return data;
   }
 
