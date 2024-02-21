@@ -50,6 +50,11 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
+  async get() {
+    this.verifySegmentId();
+    return this.client.getSegment(this.id as string);
+  }
+
   async update(data: Partial<SegmentUpdatableFields>) {
     this.verifySegmentId();
 

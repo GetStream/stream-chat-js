@@ -3015,6 +3015,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.createSegment('channel', id, name, data);
   }
 
+  async getSegment(id: string) {
+    return this.get<{ segment: SegmentResponse } & APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
   /**
    * updateSegment - Update a segment
    *
@@ -3076,7 +3080,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {Segment[]} Segments
    */
-  async querySegments(filter: {}, options: QuerySegmentsOptions = {}) {
+  async querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
     return this.post<
       {
         segments: SegmentResponse[];
@@ -3084,6 +3088,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       } & APIResponse
     >(this.baseURL + `/segments/query`, {
       filter,
+      sort,
       ...options,
     });
   }

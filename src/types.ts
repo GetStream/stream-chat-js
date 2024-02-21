@@ -2525,9 +2525,7 @@ export type Pager = {
   prev?: string;
 };
 
-export type QuerySegmentsOptions = {
-  sort?: SortParam[];
-} & Pager;
+export type QuerySegmentsOptions = Pager;
 
 export type QuerySegmentTargetsFilter = {
   target_id?: {
