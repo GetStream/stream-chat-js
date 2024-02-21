@@ -146,7 +146,6 @@ import {
   SyncResponse,
   TaskResponse,
   TaskStatus,
-  TestCampaignResponse,
   TestPushDataInput,
   TestSNSDataInput,
   TestSQSDataInput,
@@ -2968,6 +2967,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return new Segment(this, type, null, idOrData);
   }
 
+  validateServerSideAuth() {
+    if (!this.secret) {
+      throw new Error(
+        'Campaigns is a server-side only feature. Please initialize the client with a secret to use this feature.',
+      );
+    }
+  }
+
   /**
    * createSegment - Creates a segment
    *
@@ -2980,6 +2987,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {{segment: SegmentResponse} & APIResponse} The created Segment
    */
   private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
     const body = {
       id,
       type,
@@ -2999,6 +3007,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment} The created Segment
    */
   async createUserSegment(id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
     return this.createSegment('user', id, name, data);
   }
 
@@ -3012,10 +3021,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment} The created Segment
    */
   async createChannelSegment(id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
     return this.createSegment('channel', id, name, data);
   }
 
   async getSegment(id: string) {
+    this.validateServerSideAuth();
     return this.get<{ segment: SegmentResponse } & APIResponse>(this.baseURL + `/segments/${id}`);
   }
 
@@ -3028,6 +3039,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment} Updated Segment
    */
   async updateSegment(id: string, data: Partial<UpdateSegmentData>) {
+    this.validateServerSideAuth();
     return this.put<{ segment: SegmentResponse }>(this.baseURL + `/segments/${id}`, data);
   }
 
@@ -3040,6 +3052,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async addSegmentTargets(id: string, targets: string[]) {
+    this.validateServerSideAuth();
     const body = { target_ids: targets };
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
   }
@@ -3050,6 +3063,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: SortParam[] | null | [] = [],
     options = {},
   ) {
+    this.validateServerSideAuth();
     return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
       this.baseURL + `/segments/${id}/targets/query`,
       {
@@ -3068,6 +3082,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} API response
    */
   async removeSegmentTargets(id: string, targets: string[]) {
+    this.validateServerSideAuth();
     const body = { target_ids: targets };
     return this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
   }
@@ -3081,6 +3096,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Segment[]} Segments
    */
   async querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
+    this.validateServerSideAuth();
     return this.post<
       {
         segments: SegmentResponse[];
@@ -3101,6 +3117,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async deleteSegment(id: string) {
+    this.validateServerSideAuth();
     return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
   }
 
@@ -3113,6 +3130,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async segmentTargetExists(segmentId: string, targetId: string) {
+    this.validateServerSideAuth();
     return this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
   }
 
@@ -3124,14 +3142,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} The Created Campaign
    */
   async createCampaign(params: CampaignData) {
+    this.validateServerSideAuth();
     return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns`, { ...params });
   }
 
   async getCampaign(id: string) {
+    this.validateServerSideAuth();
     return this.get<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}`);
   }
 
   async startCampaign(id: string, scheduledFor?: string) {
+    this.validateServerSideAuth();
     return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}/start`, {
       scheduled_for: scheduledFor,
     });
@@ -3143,6 +3164,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign[]} Campaigns
    */
   async queryCampaigns(filter: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
+    this.validateServerSideAuth();
     return await this.post<{
       campaigns: CampaignResponse[];
       segments: Record<string, Segment>;
@@ -3164,6 +3186,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} Updated Campaign
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
+    this.validateServerSideAuth();
     return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}`, params);
   }
 
@@ -3175,23 +3198,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async deleteCampaign(id: string) {
+    this.validateServerSideAuth();
     return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
-  }
-
-  /**
-   * scheduleCampaign - Schedule a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {{scheduledFor: number}} params Schedule params
-   *
-   * @return {Campaign} Scheduled Campaign
-   */
-  async scheduleCampaign(id: string, params: { scheduledFor: number }) {
-    const { scheduledFor } = params;
-    const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/schedule`, {
-      scheduled_for: scheduledFor,
-    });
-    return campaign;
   }
 
   /**
@@ -3202,33 +3210,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} Stopped Campaign
    */
   async stopCampaign(id: string) {
+    this.validateServerSideAuth();
     const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
     return campaign;
-  }
-
-  /**
-   * resumeCampaign - Resume a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Resumed Campaign
-   */
-  async resumeCampaign(id: string) {
-    const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/resume`);
-    return campaign;
-  }
-
-  /**
-   * testCampaign - Test a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {{users: string[]}} params Test params
-   *
-   * @return {TestCampaignResponse} Test campaign response
-   */
-  async testCampaign(id: string, params: { users: string[] }) {
-    const { users } = params;
-    return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
   }
 
   /**
