@@ -22,7 +22,6 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
       create_channels: this.data?.create_channels,
       description: this.data?.description,
       name: this.data?.name,
-      scheduled_for: this.data?.scheduled_for,
       user_ids: this.data?.user_ids,
     };
 
@@ -41,10 +40,10 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     }
   }
 
-  async start() {
+  async start(scheduledFor?: string) {
     this.verifyCampaignId();
 
-    return await this.client.startCampaign(this.id as string);
+    return await this.client.startCampaign(this.id as string, scheduledFor);
   }
 
   async update(data: Partial<CampaignData>) {

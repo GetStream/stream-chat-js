@@ -2579,7 +2579,6 @@ export type CampaignData = {
     custom?: {};
   };
   name?: string;
-  scheduled_for?: string;
   segment_ids?: string[];
   sender_id?: string;
   user_ids?: string[];
