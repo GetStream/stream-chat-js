@@ -1507,6 +1507,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
           $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
+          $in?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
         }>
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
     username?:
@@ -2486,8 +2487,8 @@ export type DeleteUserOptions = {
 export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
-  description: string;
-  filter: {};
+  description?: string;
+  filter?: {};
 };
 
 export type Segment = {
