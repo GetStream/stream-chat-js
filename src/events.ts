@@ -42,8 +42,6 @@ export const EVENT_MAP = {
   'user.updated': true,
   'user.watching.start': true,
   'user.watching.stop': true,
-  'token.expiring': true,
-  'token.ack': true,
 
   // local events
   'channels.queried': true,
