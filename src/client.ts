@@ -2952,15 +2952,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @private
    * @param {SegmentType} type Segment type
-   * @param {string} id Segment ID (valid UUID)
    * @param {string} name Segment name (valid UUID)
    * @param {SegmentData} params Segment data
    *
    * @return {Segment} The created Segment
    */
-  private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData): Promise<Segment> {
+  private async createSegment(type: SegmentType, name: string, data?: SegmentData): Promise<Segment> {
     const body = {
-      id,
       type,
       name,
       data,
@@ -2972,27 +2970,25 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * createUserSegment - Creates a user segment
    *
-   * @param {string} id Segment ID (valid UUID)
    * @param {string} name Segment name
    * @param {SegmentData} data Segment data
    *
    * @return {Segment} The created Segment
    */
-  async createUserSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
-    return await this.createSegment('user', id, name, data);
+  async createUserSegment(name: string, data?: SegmentData): Promise<Segment> {
+    return await this.createSegment('user', name, data);
   }
 
   /**
    * createChannelSegment - Creates a channel segment
    *
-   * @param {string} id Segment ID (valid UUID)
    * @param {string} name Segment name
    * @param {SegmentData} data Segment data
    *
    * @return {Segment} The created Segment
    */
-  async createChannelSegment(id: string, name: string, data?: SegmentData): Promise<Segment> {
-    return await this.createSegment('channel', id, name, data);
+  async createChannelSegment(name: string, data?: SegmentData): Promise<Segment> {
+    return await this.createSegment('channel', name, data);
   }
 
   /**
