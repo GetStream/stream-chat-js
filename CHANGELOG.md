@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.18.0](https://github.com/GetStream/stream-chat-js/compare/v8.17.0...v8.18.0) (2024-02-22)
+
+
+### Features
+
+* campaigns api ([#1225](https://github.com/GetStream/stream-chat-js/issues/1225)) ([bcb8ad7](https://github.com/GetStream/stream-chat-js/commit/bcb8ad784009216fa6252dba294afa8d900e4625))
+
 ## [8.17.0](https://github.com/GetStream/stream-chat-js/compare/v8.16.0...v8.17.0) (2024-02-22)
 
 
