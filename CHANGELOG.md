@@ -7,7 +7,6 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### Features
 
-* add new api for send a refresh-token ([#1216](https://github.com/GetStream/stream-chat-js/issues/1216)) ([af8828b](https://github.com/GetStream/stream-chat-js/commit/af8828bb99379c503f70520b17cc7b9c24b33c8b))
 * dispatch capabilties.changed event on partial update if own_capabilties are changed ([#1230](https://github.com/GetStream/stream-chat-js/issues/1230)) ([0b935a9](https://github.com/GetStream/stream-chat-js/commit/0b935a907edc1d1b3d8627ba3d8fef5ea90c5a4e))
 
 
