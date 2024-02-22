@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.17.0](https://github.com/GetStream/stream-chat-js/compare/v8.16.0...v8.17.0) (2024-02-22)
+
+
+### Features
+
+* add new api for send a refresh-token ([#1216](https://github.com/GetStream/stream-chat-js/issues/1216)) ([af8828b](https://github.com/GetStream/stream-chat-js/commit/af8828bb99379c503f70520b17cc7b9c24b33c8b))
+* dispatch capabilties.changed event on partial update if own_capabilties are changed ([#1230](https://github.com/GetStream/stream-chat-js/issues/1230)) ([0b935a9](https://github.com/GetStream/stream-chat-js/commit/0b935a907edc1d1b3d8627ba3d8fef5ea90c5a4e))
+
+
+### Bug Fixes
+
+* add missing in$ operator for teams filter in queryUsers ([#1226](https://github.com/GetStream/stream-chat-js/issues/1226)) ([3c2166c](https://github.com/GetStream/stream-chat-js/commit/3c2166c226e303475f54bf516079a4e9c5592e23))
+* markRead and markUnread can be called from server-side ([#1228](https://github.com/GetStream/stream-chat-js/issues/1228)) ([c477fef](https://github.com/GetStream/stream-chat-js/commit/c477fef26ba7b109e8206ac46c186105ba7462f6))
+* segment ts issue ([#1220](https://github.com/GetStream/stream-chat-js/issues/1220)) ([e2c385c](https://github.com/GetStream/stream-chat-js/commit/e2c385c31e4d684399b005f2b2d6354cfd6498e9))
+
 ## [8.17.0](https://github.com/GetStream/stream-chat-js/compare/v8.16.0...v8.17.0) (2024-02-21)
 
 
