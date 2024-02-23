@@ -3165,12 +3165,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async queryCampaigns(filter: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
     this.validateServerSideAuth();
-    return await this.post<{
-      campaigns: CampaignResponse[];
-      segments: Record<string, Segment>;
-      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
-      users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/campaigns/query`, {
+    return await this.post<
+      {
+        campaigns: CampaignResponse[];
+        next?: string;
+      } & APIResponse
+    >(this.baseURL + `/campaigns/query`, {
       filter,
       sort,
       ...(options || {}),
