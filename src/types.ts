@@ -673,6 +673,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   total_unread_count: number;
   unread_channels: number;
   unread_count: number;
+  unread_threads: number;
   invisible?: boolean;
   roles?: string[];
 };
@@ -2579,36 +2580,25 @@ export type CampaignData = {
   name?: string;
   segment_ids?: string[];
   sender_id?: string;
+  skip_push?: boolean;
+  skip_webhook?: boolean;
   user_ids?: string[];
 };
 
-export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
-
-export type CampaignStatus = {
-  status: CampaignStatusName;
-  completed_at?: string;
-  errored_messages?: number;
-  failed_at?: string;
-  resumed_at?: string;
-  scheduled_at?: string;
-  scheduled_for?: string;
-  sent_messages?: number;
-  stopped_at?: string;
-  task_id?: string;
+export type CampaignStats = {
+  progress?: number;
+  stats_channels_created?: number;
+  stats_completed_at?: string;
+  stats_messages_sent?: number;
+  stats_started_at?: string;
 };
-
 export type CampaignResponse = {
   created_at: string;
   id: string;
+  stats: CampaignStats;
   updated_at: string;
-} & CampaignData &
-  CampaignStatus;
-
-export type TestCampaignResponse = {
-  status: CampaignStatusName;
-  details?: string;
-  results?: Record<string, string>;
-};
+  scheduled_for?: string;
+} & CampaignData;
 
 export type DeleteCampaignOptions = {};
 
