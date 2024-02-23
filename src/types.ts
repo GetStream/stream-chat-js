@@ -1508,6 +1508,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
           $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
+          $in?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
         }>
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
     username?:
@@ -2487,17 +2488,19 @@ export type DeleteUserOptions = {
 export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
+  all_users?: boolean;
   description?: string;
   filter?: {};
+  name?: string;
 };
 
-export type Segment = {
+export type SegmentResponse = {
   created_at: string;
   deleted_at: string;
   id: string;
   locked: boolean;
-  name: string;
   size: number;
+  task_id: string;
   type: SegmentType;
   updated_at: string;
 } & SegmentData;
@@ -2505,6 +2508,12 @@ export type Segment = {
 export type UpdateSegmentData = {
   name: string;
 } & SegmentData;
+
+export type SegmentTargetsResponse = {
+  created_at: string;
+  segment_id: string;
+  target_id: string;
+};
 
 export type SortParam = {
   field: string;
@@ -2517,10 +2526,18 @@ export type Pager = {
   prev?: string;
 };
 
-export type QuerySegmentsOptions = {
-  sort?: SortParam[];
-} & Pager;
+export type QuerySegmentsOptions = Pager;
 
+export type QuerySegmentTargetsFilter = {
+  target_id?: {
+    $eq?: string;
+    $gte?: string;
+    $in?: string[];
+    $lte?: string;
+  };
+};
+export type QuerySegmentTargetsSort = {};
+export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 export type CampaignSortField = {
   field: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2534,6 +2551,8 @@ export type CampaignSort = {
 
 export type CampaignQueryOptions = {
   limit?: number;
+  next?: string;
+  prev?: string;
   sort?: CampaignSort;
 };
 
@@ -2543,14 +2562,25 @@ export type SegmentQueryOptions = CampaignQueryOptions;
 export type CampaignFilters = {};
 
 export type CampaignData = {
-  attachments: Attachment[];
-  channel_type: string;
-  defaults: Record<string, string>;
-  name: string;
-  segment_id: string;
-  text: string;
+  channel_template?: {
+    type: string;
+    custom?: {};
+    id?: string;
+    members?: string[];
+  };
+  create_channels?: boolean;
+  deleted_at?: string;
   description?: string;
+  id?: string | null;
+  message_template?: {
+    text: string;
+    attachments?: Attachment[];
+    custom?: {};
+  };
+  name?: string;
+  segment_ids?: string[];
   sender_id?: string;
+  user_ids?: string[];
 };
 
 export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
@@ -2568,7 +2598,7 @@ export type CampaignStatus = {
   task_id?: string;
 };
 
-export type Campaign = {
+export type CampaignResponse = {
   created_at: string;
   id: string;
   updated_at: string;

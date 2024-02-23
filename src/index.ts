@@ -11,4 +11,6 @@ export * from './signing';
 export * from './token_manager';
 export * from './insights';
 export * from './types';
+export * from './segment';
+export * from './campaign';
 export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';
