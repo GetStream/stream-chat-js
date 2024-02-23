@@ -2616,7 +2616,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async undeleteMessage(messageID: string) {
     if (!this._isUsingServerAuth()) {
-      throw Error('Messages can only be deleted with a server-side client');
+      throw new Error('Messages can only be undeleted with a server-side client');
     }
 
     return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
