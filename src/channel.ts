@@ -1331,6 +1331,17 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           }
         }
         break;
+      case 'message.undeleted':
+        if (event.message) {
+          this._extendEventWithOwnReactions(event);
+          channelState.addMessageSorted(event.message, false, false);
+          if (event.message.pinned) {
+            channelState.addPinnedMessage(event.message);
+          } else {
+            channelState.removePinnedMessage(event.message);
+          }
+        }
+        break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
           const truncatedAt = +new Date(event.channel.truncated_at);
