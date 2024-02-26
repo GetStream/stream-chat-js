@@ -1,5 +1,14 @@
 import FormData from 'form-data';
-import { AscDesc, ExtendableGenerics, DefaultGenerics, OwnUserBase, OwnUserResponse, UserResponse } from './types';
+import {
+  AscDesc,
+  ExtendableGenerics,
+  DefaultGenerics,
+  OwnUserBase,
+  OwnUserResponse,
+  UserResponse,
+  MessageResponse,
+  FormatMessageResponse,
+} from './types';
 import { AxiosRequestConfig } from 'axios';
 
 /**
@@ -75,6 +84,7 @@ export function isOwnUserBaseProperty(property: string) {
     total_unread_count: true,
     unread_channels: true,
     unread_count: true,
+    unread_threads: true,
     invisible: true,
     roles: true,
   };
@@ -263,3 +273,94 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 
   return newParams.join('&');
 };
+
+/**
+ * formatMessage - Takes the message object. Parses the dates, sets __html
+ * and sets the status to received if missing. Returns a message object
+ *
+ * @param {MessageResponse<StreamChatGenerics>} message a message object
+ *
+ */
+export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  message: MessageResponse<StreamChatGenerics>,
+): FormatMessageResponse<StreamChatGenerics> {
+  return {
+    ...message,
+    /**
+     * @deprecated please use `html`
+     */
+    __html: message.html,
+    // parse the date..
+    pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
+    created_at: message.created_at ? new Date(message.created_at) : new Date(),
+    updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+    status: message.status || 'received',
+  };
+}
+
+export function addToMessageList<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  messages: Array<FormatMessageResponse<StreamChatGenerics>>,
+  message: FormatMessageResponse<StreamChatGenerics>,
+  timestampChanged = false,
+  sortBy: 'pinned_at' | 'created_at' = 'created_at',
+  addIfDoesNotExist = true,
+) {
+  const addMessageToList = addIfDoesNotExist || timestampChanged;
+  let messageArr = messages;
+
+  // if created_at has changed, message should be filtered and re-inserted in correct order
+  // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
+  if (timestampChanged) {
+    messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
+  }
+
+  // Get array length after filtering
+  const messageArrayLength = messageArr.length;
+
+  // for empty list just concat and return unless it's an update or deletion
+  if (messageArrayLength === 0 && addMessageToList) {
+    return messageArr.concat(message);
+  } else if (messageArrayLength === 0) {
+    return [...messageArr];
+  }
+
+  const messageTime = (message[sortBy] as Date).getTime();
+  const messageIsNewest = (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
+
+  // if message is newer than last item in the list concat and return unless it's an update or deletion
+  if (messageIsNewest && addMessageToList) {
+    return messageArr.concat(message);
+  } else if (messageIsNewest) {
+    return [...messageArr];
+  }
+
+  // find the closest index to push the new message
+  let left = 0;
+  let middle = 0;
+  let right = messageArrayLength - 1;
+  while (left <= right) {
+    middle = Math.floor((right + left) / 2);
+    if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime) left = middle + 1;
+    else right = middle - 1;
+  }
+
+  // message already exists and not filtered due to timestampChanged, update and return
+  if (!timestampChanged && message.id) {
+    if (messageArr[left] && message.id === messageArr[left].id) {
+      messageArr[left] = message;
+      return [...messageArr];
+    }
+
+    if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
+      messageArr[left - 1] = message;
+      return [...messageArr];
+    }
+  }
+
+  // Do not add updated or deleted messages to the list if they do not already exist
+  // or have a timestamp change.
+  if (addMessageToList) {
+    messageArr.splice(left, 0, message);
+  }
+  return [...messageArr];
+}

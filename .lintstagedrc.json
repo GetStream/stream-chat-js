@@ -1,0 +1,4 @@
+{
+  "{**/*.{js,ts,md,css,scss,json}, .eslintrc.json, .prettierrc, .babelrc}": "prettier --list-different",
+  "**/*.{js,md,ts}": "eslint --max-warnings 0"
+}

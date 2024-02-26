@@ -114,6 +114,10 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
+    datadog_info?: {
+      api_key: string;
+      site: string;
+    };
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
@@ -247,6 +251,7 @@ export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = 
 
 export type BlockListResponse = BlockList & {
   created_at?: string;
+  type?: string;
   updated_at?: string;
 };
 
@@ -493,6 +498,58 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
+export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  channel: ChannelResponse<StreamChatGenerics>;
+  channel_cid: string;
+  created_at: string;
+  deleted_at: string;
+  latest_replies: MessageResponse<StreamChatGenerics>[];
+  parent_message: MessageResponse<StreamChatGenerics>;
+  parent_message_id: string;
+  read: {
+    last_read: string;
+    last_read_message_id: string;
+    unread_messages: number;
+    user: UserResponse<StreamChatGenerics>;
+  }[];
+  reply_count: number;
+  thread_participants: {
+    created_at: string;
+    user: UserResponse<StreamChatGenerics>;
+  }[];
+  title: string;
+  updated_at: string;
+};
+
+// TODO: Figure out a way to strongly type set and unset.
+export type PartialThreadUpdate = {
+  set?: Partial<Record<string, unknown>>;
+  unset?: Partial<Record<string, unknown>>;
+};
+
+export type QueryThreadsOptions = {
+  limit?: number;
+  next?: string;
+  participant_limit?: number;
+  reply_limit?: number;
+  watch?: boolean;
+};
+
+export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  threads: ThreadResponse<StreamChatGenerics>[];
+  next?: string;
+};
+
+export type GetThreadOptions = {
+  participant_limit?: number;
+  reply_limit?: number;
+  watch?: boolean;
+};
+
+export type GetThreadAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  thread: ThreadResponse<StreamChatGenerics>;
+};
+
 export type GetMultipleMessagesAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = APIResponse & {
@@ -525,7 +582,18 @@ export type GetUnreadCountAPIResponse = APIResponse & {
     last_read: string;
     unread_count: number;
   }[];
+  threads: {
+    last_read: string;
+    last_read_message_id: string;
+    parent_message_id: string;
+    unread_count: number;
+  }[];
   total_unread_count: number;
+  total_unread_threads_count: number;
+};
+
+export type GetUnreadCountBatchAPIResponse = APIResponse & {
+  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
 };
 
 export type ListChannelResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -578,6 +646,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
@@ -589,6 +658,18 @@ export type MessageResponseBase<
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
+};
+
+export type ModerationDetailsResponse = {
+  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | (string & {});
+  error_msg: string;
+  harms: ModerationHarmResponse[];
+  original_text: string;
+};
+
+export type ModerationHarmResponse = {
+  name: string;
+  phrase_list_ids: number[];
 };
 
 export type MuteResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -612,6 +693,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   total_unread_count: number;
   unread_channels: number;
   unread_count: number;
+  unread_threads: number;
   invisible?: boolean;
   roles?: string[];
 };
@@ -891,6 +973,7 @@ export type MarkChannelsReadOptions<StreamChatGenerics extends ExtendableGeneric
 export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client_id?: string;
   connection_id?: string;
+  thread_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
@@ -1075,8 +1158,13 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   cid?: string;
   clear_history?: boolean;
   connection_id?: string;
+  // event creation timestamp, format Date ISO string
   created_at?: string;
+  // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
+  first_unread_message_id?: string;
   hard_delete?: boolean;
+  // creation date of a message with last_read_message_id, formatted as Date ISO string
+  last_read_at?: string;
   last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
@@ -1092,9 +1180,15 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   reaction?: ReactionResponse<StreamChatGenerics>;
   received_at?: string | Date;
   team?: string;
+  thread?: ThreadResponse<StreamChatGenerics>;
+  // @deprecated number of all unread messages across all current user's unread channels, equals unread_count
   total_unread_count?: number;
+  // number of all current user's channels with at least one unread message including the channel in this event
   unread_channels?: number;
+  // number of all unread messages across all current user's unread channels
   unread_count?: number;
+  // number of unread messages in the channel from this event (notification.mark_unread)
+  unread_messages?: number;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;
@@ -1434,6 +1528,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
           $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
+          $in?: PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
         }>
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['teams']>;
     username?:
@@ -2385,40 +2480,84 @@ export type DeleteChannelsResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
 
-export type DeleteType = 'soft' | 'hard';
+export type DeleteType = 'soft' | 'hard' | 'pruning';
 
 /*
   DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
 
-  `user` soft|hard determines if the user needs to be hard- or soft-deleted, where hard-delete
-  implies that all related objects (messages, flags, etc) will be hard-deleted as well.
-  `conversations` soft|hard will delete any 1to1 channels that the user was a member of.
-  `messages` soft-hard will delete any messages that the user has sent.
-  `new_channel_owner_id` any channels owned by the hard-deleted user will be transferred to this user ID
+  `user`:
+    - soft: marks user as deleted and retains all user data 
+    - pruning: marks user as deleted and nullifies user information 
+    - hard: deletes user completely - this requires hard option for messages and conversation as well
+  `conversations`:
+    - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
+    - hard: deletes channel and all its data completely including messages (same effect as Delete Channels with 'hard' option enabled)
+  `messages`:
+    - soft: marks all user messages as deleted without removing any related message data
+    - pruning: marks all user messages as deleted, nullifies message information and removes some message data such as reactions and flags
+    - hard: deletes messages completely with all related information
+  `new_channel_owner_id`: any channels owned by the hard-deleted user will be transferred to this user ID
  */
 export type DeleteUserOptions = {
-  user: DeleteType;
-  conversations?: DeleteType;
+  conversations?: Exclude<DeleteType, 'pruning'>;
   messages?: DeleteType;
   new_channel_owner_id?: string;
+  user?: DeleteType;
 };
+
+export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
-  description: string;
-  filter: {};
-  name: string;
-  type: 'channel' | 'user';
+  all_users?: boolean;
+  description?: string;
+  filter?: {};
+  name?: string;
 };
 
-export type Segment = {
+export type SegmentResponse = {
   created_at: string;
+  deleted_at: string;
   id: string;
-  in_use: boolean;
+  locked: boolean;
   size: number;
-  status: 'computing' | 'ready';
+  task_id: string;
+  type: SegmentType;
   updated_at: string;
 } & SegmentData;
 
+export type UpdateSegmentData = {
+  name: string;
+} & SegmentData;
+
+export type SegmentTargetsResponse = {
+  created_at: string;
+  segment_id: string;
+  target_id: string;
+};
+
+export type SortParam = {
+  field: string;
+  direction?: AscDesc;
+};
+
+export type Pager = {
+  limit?: number;
+  next?: string;
+  prev?: string;
+};
+
+export type QuerySegmentsOptions = Pager;
+
+export type QuerySegmentTargetsFilter = {
+  target_id?: {
+    $eq?: string;
+    $gte?: string;
+    $in?: string[];
+    $lte?: string;
+  };
+};
+export type QuerySegmentTargetsSort = {};
+export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 export type CampaignSortField = {
   field: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2432,70 +2571,56 @@ export type CampaignSort = {
 
 export type CampaignQueryOptions = {
   limit?: number;
+  next?: string;
+  prev?: string;
   sort?: CampaignSort;
 };
 
 export type SegmentQueryOptions = CampaignQueryOptions;
-export type RecipientQueryOptions = CampaignQueryOptions;
 
 // TODO: add better typing
-export type SegmentFilters = {};
 export type CampaignFilters = {};
-export type RecipientFilters = {};
 
 export type CampaignData = {
-  attachments: Attachment[];
-  channel_type: string;
-  defaults: Record<string, string>;
-  name: string;
-  segment_id: string;
-  text: string;
+  channel_template?: {
+    type: string;
+    custom?: {};
+    id?: string;
+    members?: string[];
+  };
+  create_channels?: boolean;
+  deleted_at?: string;
   description?: string;
+  id?: string | null;
+  message_template?: {
+    text: string;
+    attachments?: Attachment[];
+    custom?: {};
+  };
+  name?: string;
+  segment_ids?: string[];
   sender_id?: string;
+  skip_push?: boolean;
+  skip_webhook?: boolean;
+  user_ids?: string[];
 };
 
-export type CampaignStatusName = 'draft' | 'stopped' | 'scheduled' | 'completed' | 'failed' | 'in_progress';
-
-export type CampaignStatus = {
-  status: CampaignStatusName;
-  completed_at?: string;
-  errored_messages?: number;
-  failed_at?: string;
-  resumed_at?: string;
-  scheduled_at?: string;
-  scheduled_for?: string;
-  sent_messages?: number;
-  stopped_at?: string;
-  task_id?: string;
+export type CampaignStats = {
+  progress?: number;
+  stats_channels_created?: number;
+  stats_completed_at?: string;
+  stats_messages_sent?: number;
+  stats_started_at?: string;
 };
-
-export type Campaign = {
+export type CampaignResponse = {
   created_at: string;
   id: string;
+  stats: CampaignStats;
   updated_at: string;
-} & CampaignData &
-  CampaignStatus;
+  scheduled_for?: string;
+} & CampaignData;
 
-export type TestCampaignResponse = {
-  status: CampaignStatusName;
-  details?: string;
-  results?: Record<string, string>;
-};
-
-export type DeleteCampaignOptions = {
-  recipients?: boolean;
-};
-
-export type Recipient = {
-  campaign_id: string;
-  channel_cid: string;
-  created_at: string;
-  status: 'pending' | 'sent' | 'failed';
-  updated_at: string;
-  details?: string;
-  message_id?: string;
-  receiver_id?: string;
-};
+export type DeleteCampaignOptions = {};
 
 export type TaskStatus = {
   created_at: string;

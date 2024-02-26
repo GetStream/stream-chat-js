@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "8.14.4",
+  "version": "8.18.2",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -94,7 +94,7 @@
     "eslint-plugin-sonarjs": "^0.6.0",
     "eslint-plugin-typescript-sort-keys": "1.5.0",
     "husky": "^4.3.8",
-    "lint-staged": "^10.5.4",
+    "lint-staged": "^15.2.2",
     "mocha": "^9.1.3",
     "nyc": "^15.1.0",
     "prettier": "^2.2.1",
@@ -124,15 +124,11 @@
     "testwatch": "NODE_ENV=test nodemon ./node_modules/.bin/mocha --timeout 20000 --require test-entry.js test/test.js",
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
+    "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "prepare": "yarn run build",
     "preversion": "yarn && yarn lint && yarn test-unit",
     "version": "git add yarn.lock",
     "postversion": "git push && git push --tags && npm publish"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "yarn run lint"
-    }
   },
   "engines": {
     "node": ">=16"
