@@ -2610,17 +2610,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * cannot be undeleted. This is only allowed to be called from server-side
    * clients.
    *
-   * @param {string} messageID
+   * @param {string} messageID The id of the message to undelete
+   * @param {string} userID The id of the user who undeleted the message
    *
    * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
    */
-  async undeleteMessage(messageID: string) {
+  async undeleteMessage(messageID: string, userID: string) {
     if (!this._isUsingServerAuth()) {
       throw new Error('Messages can only be undeleted with a server-side client');
     }
 
     return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
       this.baseURL + `/messages/${messageID}/undelete`,
+      { undeleted_by: userID },
     );
   }
 
