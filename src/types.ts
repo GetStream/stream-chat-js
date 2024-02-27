@@ -2127,6 +2127,7 @@ export type FileUploadConfig = {
   allowed_mime_types?: string[] | null;
   blocked_file_extensions?: string[] | null;
   blocked_mime_types?: string[] | null;
+  size_limit?: number | null;
 };
 
 export type FirebaseConfig = {
