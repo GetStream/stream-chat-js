@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.19.0](https://github.com/GetStream/stream-chat-js/compare/v8.18.2...v8.19.0) (2024-02-27)
+
+
+### Features
+
+* added support for stop_at for campaign ([#1243](https://github.com/GetStream/stream-chat-js/issues/1243)) ([ec9ec8b](https://github.com/GetStream/stream-chat-js/commit/ec9ec8b8cbca2b833023a00f5c367fab578d8775))
+
 ### [8.18.2](https://github.com/GetStream/stream-chat-js/compare/v8.18.1...v8.18.2) (2024-02-23)
 
 
