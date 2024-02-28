@@ -3147,10 +3147,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.get<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}`);
   }
 
-  async startCampaign(id: string, scheduledFor?: string) {
+  async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
     this.validateServerSideAuth();
     return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}/start`, {
-      scheduled_for: scheduledFor,
+      scheduled_for: options?.scheduledFor,
+      stop_at: options?.stopAt,
     });
   }
   /**

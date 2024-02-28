@@ -40,10 +40,10 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     }
   }
 
-  async start(scheduledFor?: string) {
+  async start(options?: { scheduledFor?: string; stopAt?: string }) {
     this.verifyCampaignId();
 
-    return await this.client.startCampaign(this.id as string, scheduledFor);
+    return await this.client.startCampaign(this.id as string, options);
   }
 
   async update(data: Partial<CampaignData>) {
