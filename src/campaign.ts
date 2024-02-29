@@ -40,10 +40,10 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     }
   }
 
-  async start(scheduledFor?: string) {
+  async start(options?: { scheduledFor?: string; stopAt?: string }) {
     this.verifyCampaignId();
 
-    return await this.client.startCampaign(this.id as string, scheduledFor);
+    return await this.client.startCampaign(this.id as string, options);
   }
 
   async update(data: Partial<CampaignData>) {
@@ -58,35 +58,10 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return await this.client.delete<APIResponse>(this.client.baseURL + `/campaigns/${this.id}`);
   }
 
-  async schedule(params: { scheduledFor: number }) {
-    this.verifyCampaignId();
-
-    const { scheduledFor } = params;
-    const { campaign } = await this.client.patch<{ campaign: Campaign }>(
-      this.client.baseURL + `/campaigns/${this.id}/schedule`,
-      {
-        scheduled_for: scheduledFor,
-      },
-    );
-    return campaign;
-  }
-
   async stop() {
     this.verifyCampaignId();
 
     return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/stop`);
-  }
-
-  async pause() {
-    this.verifyCampaignId();
-
-    return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/pause`);
-  }
-
-  async resume() {
-    this.verifyCampaignId();
-
-    return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/resume`);
   }
 
   async get() {

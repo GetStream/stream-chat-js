@@ -41,11 +41,13 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     this.channel = t.channel;
     this._channel = client.channel(t.channel.type, t.channel.id);
     this._client = client;
-    for (const r of t.read) {
-      this.read[r.user.id] = {
-        ...r,
-        last_read: new Date(r.last_read),
-      };
+    if (t.read) {
+      for (const r of t.read) {
+        this.read[r.user.id] = {
+          ...r,
+          last_read: new Date(r.last_read),
+        };
+      }
     }
   }
 
@@ -53,8 +55,17 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     return this._client;
   }
 
+  /**
+   * addReply - Adds or updates a latestReplies to the thread
+   *
+   * @param {MessageResponse<StreamChatGenerics>} message reply message to be added.
+   */
   addReply(message: MessageResponse<StreamChatGenerics>) {
-    this.latestReplies = addToMessageList(this.latestReplies, formatMessage(message));
+    if (message.parent_id !== this.message.id) {
+      throw new Error('Message does not belong to this thread');
+    }
+
+    this.latestReplies = addToMessageList(this.latestReplies, formatMessage(message), true);
   }
 
   updateReply(message: MessageResponse<StreamChatGenerics>) {
@@ -77,6 +88,7 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 
     if (message.parent_id && message.parent_id === this.message.id) {
       this.updateReply(message);
+      return;
     }
 
     if (!message.parent_id && message.id === this.message.id) {
