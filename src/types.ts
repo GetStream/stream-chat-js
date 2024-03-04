@@ -2218,6 +2218,10 @@ export type UpdateMessageOptions = {
   skip_enrich_url?: boolean;
 };
 
+export type GetMessageOptions = {
+  show_deleted_message?: boolean;
+};
+
 export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   target: UserResponse<StreamChatGenerics>;
