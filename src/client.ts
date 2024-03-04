@@ -1147,6 +1147,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
+
+      if (!channel) continue;
+
       const state = channel.state;
 
       /** update the messages from this user. */
