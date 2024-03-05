@@ -172,6 +172,7 @@ import {
   SegmentTargetsResponse,
   QuerySegmentTargetsFilter,
   SortParam,
+  GetMessageOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1147,6 +1148,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
+
+      if (!channel) continue;
+
       const state = channel.state;
 
       /** update the messages from this user. */
@@ -2599,9 +2603,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
-  async getMessage(messageID: string) {
+  async getMessage(messageID: string, options?: GetMessageOptions) {
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+      { ...options },
     );
   }
 

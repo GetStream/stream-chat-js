@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.20.0](https://github.com/GetStream/stream-chat-js/compare/v8.19.1...v8.20.0) (2024-03-05)
+
+
+### Features
+
+* add message edited timestamp ([#1248](https://github.com/GetStream/stream-chat-js/issues/1248)) ([a80813f](https://github.com/GetStream/stream-chat-js/commit/a80813f6cc1ec83fcfc770d4196146db3bbcef55))
+* add support for show_deleted_message in `getMessage` ([#1252](https://github.com/GetStream/stream-chat-js/issues/1252)) ([dc4e44e](https://github.com/GetStream/stream-chat-js/commit/dc4e44ed4119d3ff4916957c6dc1c501927c462b))
+
+### [8.19.1](https://github.com/GetStream/stream-chat-js/compare/v8.19.0...v8.19.1) (2024-03-04)
+
+
+### Bug Fixes
+
+* skip updateUserMessageReferences if channel is undefined ([#1249](https://github.com/GetStream/stream-chat-js/issues/1249)) ([e88b8ec](https://github.com/GetStream/stream-chat-js/commit/e88b8ec3f9652ea7eecca960cd754c7b82b7c42b))
+
 ## [8.19.0](https://github.com/GetStream/stream-chat-js/compare/v8.18.2...v8.19.0) (2024-02-27)
 
 

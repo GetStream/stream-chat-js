@@ -626,6 +626,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  message_text_updated_at?: string;
   moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
@@ -2218,6 +2219,10 @@ export type SendMessageOptions = {
 
 export type UpdateMessageOptions = {
   skip_enrich_url?: boolean;
+};
+
+export type GetMessageOptions = {
+  show_deleted_message?: boolean;
 };
 
 export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
