@@ -626,6 +626,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  message_text_updated_at?: string;
   moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;

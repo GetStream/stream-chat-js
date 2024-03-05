@@ -2604,13 +2604,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   async getMessage(messageID: string, options?: GetMessageOptions) {
-    const url = this.baseURL + `/messages/${messageID}`;
-    let params = {};
-    if (options?.show_deleted_message) {
-      params = { show_deleted_message: true };
-    }
-
-    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(url, params);
+    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+      { ...options },
+    );
   }
 
   /**
