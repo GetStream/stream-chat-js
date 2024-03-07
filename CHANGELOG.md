@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.21.0](https://github.com/GetStream/stream-chat-js/compare/v8.20.0...v8.21.0) (2024-03-07)
+
+
+### Features
+
+* add message attachment fields for voice messages ([#1254](https://github.com/GetStream/stream-chat-js/issues/1254)) ([a9d38a1](https://github.com/GetStream/stream-chat-js/commit/a9d38a13addf90ecc07f0acecce82cbc47f8f3fb))
+
 ## [8.20.0](https://github.com/GetStream/stream-chat-js/compare/v8.19.1...v8.20.0) (2024-03-05)
 
 
