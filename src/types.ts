@@ -1748,6 +1748,7 @@ export type Attachment<
   author_link?: string;
   author_name?: string;
   color?: string;
+  duration?: number;
   fallback?: string;
   fields?: Field[];
   file_size?: number | string;
@@ -1765,6 +1766,7 @@ export type Attachment<
   title?: string;
   title_link?: string;
   type?: string;
+  waveform_data?: Array<number>;
 };
 
 export type OGAttachment = {
