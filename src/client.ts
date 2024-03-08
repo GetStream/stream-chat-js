@@ -2603,6 +2603,25 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
+  /**
+   * undeleteMessage - Undelete a message
+   *
+   * undeletes a message that was previous soft deleted. Hard deleted messages
+   * cannot be undeleted. This is only allowed to be called from server-side
+   * clients.
+   *
+   * @param {string} messageID The id of the message to undelete
+   * @param {string} userID The id of the user who undeleted the message
+   *
+   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
+   */
+  async undeleteMessage(messageID: string, userID: string) {
+    return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+      this.baseURL + `/messages/${messageID}/undelete`,
+      { undeleted_by: userID },
+    );
+  }
+
   async getMessage(messageID: string, options?: GetMessageOptions) {
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
