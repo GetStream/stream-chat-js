@@ -1117,6 +1117,7 @@ export type UpdateCommandOptions<StreamChatGenerics extends ExtendableGenerics =
 };
 
 export type UserOptions = {
+  include_deactivated_users?: boolean;
   limit?: number;
   offset?: number;
   presence?: boolean;
