@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.22.0](https://github.com/GetStream/stream-chat-js/compare/v8.21.0...v8.22.0) (2024-03-08)
+
+
+### Features
+
+* add a way to undelete a deleted messages ([#1237](https://github.com/GetStream/stream-chat-js/issues/1237)) ([d2193a2](https://github.com/GetStream/stream-chat-js/commit/d2193a2fb4e41685bb98c49b89bc3b003be992fb))
+
 ## [8.21.0](https://github.com/GetStream/stream-chat-js/compare/v8.20.0...v8.21.0) (2024-03-07)
 
 
