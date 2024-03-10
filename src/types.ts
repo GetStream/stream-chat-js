@@ -117,6 +117,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     datadog_info?: {
       api_key: string;
       site: string;
+      enabled?: boolean;
     };
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
@@ -301,6 +302,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  threads?: ThreadResponse[];
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   watcher_count?: number;
