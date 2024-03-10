@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.22.0](https://github.com/GetStream/stream-chat-js/compare/v8.21.0...v8.22.0) (2024-03-08)
+
+
+### Features
+
+* add a way to undelete a deleted messages ([#1237](https://github.com/GetStream/stream-chat-js/issues/1237)) ([d2193a2](https://github.com/GetStream/stream-chat-js/commit/d2193a2fb4e41685bb98c49b89bc3b003be992fb))
+
+## [8.21.0](https://github.com/GetStream/stream-chat-js/compare/v8.20.0...v8.21.0) (2024-03-07)
+
+
+### Features
+
+* add message attachment fields for voice messages ([#1254](https://github.com/GetStream/stream-chat-js/issues/1254)) ([a9d38a1](https://github.com/GetStream/stream-chat-js/commit/a9d38a13addf90ecc07f0acecce82cbc47f8f3fb))
+
+## [8.20.0](https://github.com/GetStream/stream-chat-js/compare/v8.19.1...v8.20.0) (2024-03-05)
+
+
+### Features
+
+* add message edited timestamp ([#1248](https://github.com/GetStream/stream-chat-js/issues/1248)) ([a80813f](https://github.com/GetStream/stream-chat-js/commit/a80813f6cc1ec83fcfc770d4196146db3bbcef55))
+* add support for show_deleted_message in `getMessage` ([#1252](https://github.com/GetStream/stream-chat-js/issues/1252)) ([dc4e44e](https://github.com/GetStream/stream-chat-js/commit/dc4e44ed4119d3ff4916957c6dc1c501927c462b))
+
+### [8.19.1](https://github.com/GetStream/stream-chat-js/compare/v8.19.0...v8.19.1) (2024-03-04)
+
+
+### Bug Fixes
+
+* skip updateUserMessageReferences if channel is undefined ([#1249](https://github.com/GetStream/stream-chat-js/issues/1249)) ([e88b8ec](https://github.com/GetStream/stream-chat-js/commit/e88b8ec3f9652ea7eecca960cd754c7b82b7c42b))
+
+## [8.19.0](https://github.com/GetStream/stream-chat-js/compare/v8.18.2...v8.19.0) (2024-02-27)
+
+
+### Features
+
+* added support for stop_at for campaign ([#1243](https://github.com/GetStream/stream-chat-js/issues/1243)) ([ec9ec8b](https://github.com/GetStream/stream-chat-js/commit/ec9ec8b8cbca2b833023a00f5c367fab578d8775))
+
 ### [8.18.2](https://github.com/GetStream/stream-chat-js/compare/v8.18.1...v8.18.2) (2024-02-23)
 
 

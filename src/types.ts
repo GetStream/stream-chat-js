@@ -117,6 +117,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     datadog_info?: {
       api_key: string;
       site: string;
+      enabled?: boolean;
     };
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
@@ -303,6 +304,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   membership?: ChannelMembership<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
+  threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
 };
@@ -646,6 +648,7 @@ export type MessageResponseBase<
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
+  message_text_updated_at?: string;
   moderation_details?: ModerationDetailsResponse;
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
@@ -1767,6 +1770,7 @@ export type Attachment<
   author_link?: string;
   author_name?: string;
   color?: string;
+  duration?: number;
   fallback?: string;
   fields?: Field[];
   file_size?: number | string;
@@ -1784,6 +1788,7 @@ export type Attachment<
   title?: string;
   title_link?: string;
   type?: string;
+  waveform_data?: Array<number>;
 };
 
 export type OGAttachment = {
@@ -2236,6 +2241,10 @@ export type SendMessageOptions = {
 
 export type UpdateMessageOptions = {
   skip_enrich_url?: boolean;
+};
+
+export type GetMessageOptions = {
+  show_deleted_message?: boolean;
 };
 
 export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
