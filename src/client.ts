@@ -172,6 +172,7 @@ import {
   SegmentTargetsResponse,
   QuerySegmentTargetsFilter,
   SortParam,
+  GetMessageOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1147,6 +1148,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
+
+      if (!channel) continue;
+
       const state = channel.state;
 
       /** update the messages from this user. */
@@ -2599,9 +2603,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
-  async getMessage(messageID: string) {
+  /**
+   * undeleteMessage - Undelete a message
+   *
+   * undeletes a message that was previous soft deleted. Hard deleted messages
+   * cannot be undeleted. This is only allowed to be called from server-side
+   * clients.
+   *
+   * @param {string} messageID The id of the message to undelete
+   * @param {string} userID The id of the user who undeleted the message
+   *
+   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
+   */
+  async undeleteMessage(messageID: string, userID: string) {
+    return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+      this.baseURL + `/messages/${messageID}/undelete`,
+      { undeleted_by: userID },
+    );
+  }
+
+  async getMessage(messageID: string, options?: GetMessageOptions) {
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+      { ...options },
     );
   }
 
