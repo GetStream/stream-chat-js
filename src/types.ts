@@ -302,6 +302,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMembership<StreamChatGenerics> | null;
+  threads?: ThreadResponse[];
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
