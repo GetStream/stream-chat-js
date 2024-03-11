@@ -914,7 +914,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
       return false;
 
-    console.log('received new message', message);
     if (this.muteStatus().muted) return false;
 
     return true;
@@ -1486,13 +1485,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
-      console.log('this.cid', this.cid);
-      console.log('this.initialized', this.initialized);
-      console.log('this.offlineMode', this.offlineMode);
-      console.log('this.user', this.getClient().user);
-      console.log('channel data', this.data);
-      console.log('this.getClient()._isUsingServerAuth()', this.getClient()._isUsingServerAuth());
-
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
