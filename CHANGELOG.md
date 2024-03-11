@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.23.0](https://github.com/GetStream/stream-chat-js/compare/v8.22.0...v8.23.0) (2024-03-11)
+
+
+### Bug Fixes
+
+* lint fix ([240def4](https://github.com/GetStream/stream-chat-js/commit/240def42c69276b538099f05a5453e0240109fa1))
+* typescript for datadog info and threads ([c1d49a6](https://github.com/GetStream/stream-chat-js/commit/c1d49a6ec128bbbc94e9702170e7dce3fe488f3f))
+* typescript for datadog info and threads ([8b8eab5](https://github.com/GetStream/stream-chat-js/commit/8b8eab534947595a6d41a580977f5debe6fbfc53))
+
 ## [8.22.0](https://github.com/GetStream/stream-chat-js/compare/v8.21.0...v8.22.0) (2024-03-08)
 
 
