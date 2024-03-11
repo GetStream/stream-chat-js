@@ -13,10 +13,17 @@ import {
   PendingMessageResponse,
   PollVote,
 } from './types';
+import { addToMessageList } from './utils';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
-  { last_read: Date; unread_messages: number; user: UserResponse<StreamChatGenerics>; last_read_message_id?: string }
+  {
+    last_read: Date;
+    unread_messages: number;
+    user: UserResponse<StreamChatGenerics>;
+    first_unread_message_id?: string;
+    last_read_message_id?: string;
+  }
 >;
 
 /**
@@ -436,64 +443,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = true,
   ) {
-    const addMessageToList = addIfDoesNotExist || timestampChanged;
-    let messageArr = messages;
-
-    // if created_at has changed, message should be filtered and re-inserted in correct order
-    // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
-    if (timestampChanged) {
-      messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
-    }
-
-    // Get array length after filtering
-    const messageArrayLength = messageArr.length;
-
-    // for empty list just concat and return unless it's an update or deletion
-    if (messageArrayLength === 0 && addMessageToList) {
-      return messageArr.concat(message);
-    } else if (messageArrayLength === 0) {
-      return [...messageArr];
-    }
-
-    const messageTime = (message[sortBy] as Date).getTime();
-    const messageIsNewest = (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
-
-    // if message is newer than last item in the list concat and return unless it's an update or deletion
-    if (messageIsNewest && addMessageToList) {
-      return messageArr.concat(message);
-    } else if (messageIsNewest) {
-      return [...messageArr];
-    }
-
-    // find the closest index to push the new message
-    let left = 0;
-    let middle = 0;
-    let right = messageArrayLength - 1;
-    while (left <= right) {
-      middle = Math.floor((right + left) / 2);
-      if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime) left = middle + 1;
-      else right = middle - 1;
-    }
-
-    // message already exists and not filtered due to timestampChanged, update and return
-    if (!timestampChanged && message.id) {
-      if (messageArr[left] && message.id === messageArr[left].id) {
-        messageArr[left] = message;
-        return [...messageArr];
-      }
-
-      if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
-        messageArr[left - 1] = message;
-        return [...messageArr];
-      }
-    }
-
-    // Do not add updated or deleted messages to the list if they do not already exist
-    // or have a timestamp change.
-    if (addMessageToList) {
-      messageArr.splice(left, 0, message);
-    }
-    return [...messageArr];
+    return addToMessageList(messages, message, timestampChanged, sortBy, addIfDoesNotExist);
   }
 
   /**

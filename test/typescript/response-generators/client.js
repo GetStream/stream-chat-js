@@ -89,11 +89,15 @@ async function listCommands() {
 	} catch {
 		// No command to delete
 	}
-	await authClient.createCommand({
-		description: 'testListCommand',
-		name: 'testListCommand',
-		set: 'testListCommand_set',
-	});
+	try {
+		await authClient.createCommand({
+			description: 'testListCommand',
+			name: 'testListCommand',
+			set: 'testListCommand_set',
+		});
+	} catch {
+		// Command exists
+	}
 	const result = await authClient.listCommands();
 	await authClient.deleteCommand('testListCommand');
 	return result;

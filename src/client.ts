@@ -11,6 +11,8 @@ import { StableWSConnection } from './connection';
 import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
+import { Campaign } from './campaign';
+import { Segment } from './segment';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
   addFileToFormData,
@@ -38,7 +40,7 @@ import {
   BaseDeviceFields,
   BlockList,
   BlockListResponse,
-  Campaign,
+  CampaignResponse,
   CampaignData,
   CampaignFilters,
   CampaignQueryOptions,
@@ -65,7 +67,6 @@ import {
   CustomPermissionOptions,
   DeactivateUsersOptions,
   DefaultGenerics,
-  DeleteCampaignOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteUserOptions,
@@ -95,7 +96,9 @@ import {
   GetImportResponse,
   GetMessageAPIResponse,
   GetRateLimitsResponse,
+  QueryThreadsAPIResponse,
   GetUnreadCountAPIResponse,
+  GetUnreadCountBatchAPIResponse,
   ListChannelResponse,
   ListCommandsResponse,
   ListImportsPaginationOptions,
@@ -132,13 +135,11 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QuerySegmentsOptions,
   QueryPollsResponse,
   ReactionResponse,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  Recipient,
-  RecipientFilters,
-  RecipientQueryOptions,
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
@@ -146,17 +147,15 @@ import {
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  Segment,
+  SegmentResponse,
   SegmentData,
-  SegmentFilters,
-  SegmentQueryOptions,
+  SegmentType,
   SendFileAPIResponse,
   StreamChatOptions,
   SyncOptions,
   SyncResponse,
   TaskResponse,
   TaskStatus,
-  TestCampaignResponse,
   TestPushDataInput,
   TestSNSDataInput,
   TestSQSDataInput,
@@ -169,15 +168,26 @@ import {
   UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
+  UpdateSegmentData,
   UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
   UserSort,
+  GetThreadAPIResponse,
+  PartialThreadUpdate,
+  QueryThreadsOptions,
+  GetThreadOptions,
+  CampaignSort,
+  SegmentTargetsResponse,
+  QuerySegmentTargetsFilter,
+  SortParam,
+  GetMessageOptions,
   VoteFilters,
   VoteSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { Thread } from './thread';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -980,6 +990,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         case 'post':
           response = await this.axiosInstance.post(url, data, requestConfig);
           break;
+        case 'postForm':
+          response = await this.axiosInstance.postForm(url, data, requestConfig);
+          break;
         case 'put':
           response = await this.axiosInstance.put(url, data, requestConfig);
           break;
@@ -1043,10 +1056,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     contentType?: string,
     user?: UserResponse<StreamChatGenerics>,
   ) {
-    const data = addFileToFormData(uri, name, contentType);
+    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
     if (user != null) data.append('user', JSON.stringify(user));
 
-    return this.doAxiosRequest<SendFileAPIResponse>('post', url, data, {
+    return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
       headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
       config: {
         timeout: 0,
@@ -1147,6 +1160,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
+
+      if (!channel) continue;
+
       const state = channel.state;
 
       /** update the messages from this user. */
@@ -1698,12 +1714,25 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * @ignore
-   * @param userID
-   * @returns
+   * getUnreadCount - Returns unread counts for a single user
+   *
+   * @param {string} [userID] User ID.
+   *
+   * @return {<GetUnreadCountAPIResponse>}
    */
   async getUnreadCount(userID?: string) {
     return await this.get<GetUnreadCountAPIResponse>(this.baseURL + '/unread', userID ? { user_id: userID } : {});
+  }
+
+  /**
+   * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
+   *
+   * @param {string[]} [userIDs] List of user IDs to fetch unread counts for.
+   *
+   * @return {<GetUnreadCountBatchAPIResponse>}
+   */
+  async getUnreadCountBatch(userIDs: string[]) {
+    return await this.post<GetUnreadCountBatchAPIResponse>(this.baseURL + '/unread_batch', { user_ids: userIDs });
   }
 
   /**
@@ -2586,9 +2615,126 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
-  async getMessage(messageID: string) {
+  /**
+   * undeleteMessage - Undelete a message
+   *
+   * undeletes a message that was previous soft deleted. Hard deleted messages
+   * cannot be undeleted. This is only allowed to be called from server-side
+   * clients.
+   *
+   * @param {string} messageID The id of the message to undelete
+   * @param {string} userID The id of the user who undeleted the message
+   *
+   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
+   */
+  async undeleteMessage(messageID: string, userID: string) {
+    return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+      this.baseURL + `/messages/${messageID}/undelete`,
+      { undeleted_by: userID },
+    );
+  }
+
+  async getMessage(messageID: string, options?: GetMessageOptions) {
     return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+      { ...options },
+    );
+  }
+
+  /**
+   * queryThreads - returns the list of threads of current user.
+   *
+   * @param {QueryThreadsOptions} options Options object for pagination and limiting the participants and replies.
+   * @param {number}  options.limit Limits the number of threads to be returned.
+   * @param {boolean} options.watch Subscribes the user to the channels of the threads.
+   * @param {number}  options.participant_limit Limits the number of participants returned per threads.
+   * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   *
+   * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
+   */
+  async queryThreads(options?: QueryThreadsOptions) {
+    const opts = {
+      limit: 10,
+      participant_limit: 10,
+      reply_limit: 3,
+      watch: true,
+      ...options,
+    };
+
+    const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
+
+    return {
+      threads: res.threads.map((thread) => new Thread(this, thread)),
+      next: res.next,
+    };
+  }
+
+  /**
+   * getThread - returns the thread of a message by its id.
+   *
+   * @param {string}            messageId The message id
+   * @param {GetThreadOptions}  options Options object for pagination and limiting the participants and replies.
+   * @param {boolean}           options.watch Subscribes the user to the channel of the thread.
+   * @param {number}            options.participant_limit Limits the number of participants returned per threads.
+   * @param {number}            options.reply_limit Limits the number of replies returned per threads.
+   *
+   * @returns {Thread<StreamChatGenerics>} Returns the thread.
+   */
+  async getThread(messageId: string, options: GetThreadOptions = {}) {
+    if (!messageId) {
+      throw Error('Please specify the message id when calling partialUpdateThread');
+    }
+
+    const opts = {
+      participant_limit: 100,
+      reply_limit: 3,
+      watch: true,
+      ...options,
+    };
+
+    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
+
+    return new Thread<StreamChatGenerics>(this, res.thread);
+  }
+
+  /**
+   * partialUpdateThread - updates the given thread
+   *
+   * @param {string}              messageId The id of the thread message which needs to be updated.
+   * @param {PartialThreadUpdate} partialThreadObject should contain "set" or "unset" params for any of the thread's non-reserved fields.
+   *
+   * @returns {GetThreadAPIResponse<StreamChatGenerics>} Returns the updated thread.
+   */
+  async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
+    if (!messageId) {
+      throw Error('Please specify the message id when calling partialUpdateThread');
+    }
+
+    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
+    // Throw error if any of the reserved field is found.
+    const reservedThreadFields = [
+      'created_at',
+      'id',
+      'last_message_at',
+      'type',
+      'updated_at',
+      'user',
+      'reply_count',
+      'participants',
+      'channel',
+    ];
+
+    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
+      if (reservedThreadFields.includes(key)) {
+        throw Error(
+          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
+        );
+      }
+    }
+
+    return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/threads/${messageId}`,
+      partialThreadObject,
     );
   }
 
@@ -2837,46 +2983,162 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.get<APIResponse & ExportChannelStatusResponse>(`${this.baseURL}/export_channels/${id}`);
   }
 
+  campaign(idOrData: string | CampaignData, data?: CampaignData) {
+    if (typeof idOrData === 'string') {
+      return new Campaign(this, idOrData, data);
+    }
+
+    return new Campaign(this, null, idOrData);
+  }
+
+  segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
+    if (typeof idOrData === 'string') {
+      return new Segment(this, type, idOrData, data);
+    }
+
+    return new Segment(this, type, null, idOrData);
+  }
+
+  validateServerSideAuth() {
+    if (!this.secret) {
+      throw new Error(
+        'Campaigns is a server-side only feature. Please initialize the client with a secret to use this feature.',
+      );
+    }
+  }
+
   /**
-   * createSegment - Creates a Campaign Segment
+   * createSegment - Creates a segment
    *
+   * @private
+   * @param {SegmentType} type Segment type
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name (valid UUID)
    * @param {SegmentData} params Segment data
    *
-   * @return {Segment} The Created Segment
+   * @return {{segment: SegmentResponse} & APIResponse} The created Segment
    */
-  async createSegment(params: SegmentData) {
-    const { segment } = await this.post<{ segment: Segment }>(this.baseURL + `/segments`, { segment: params });
-    return segment;
+  private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
+    const body = {
+      id,
+      type,
+      name,
+      data,
+    };
+    return this.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
   }
 
   /**
-   * querySegments - Query Campaign Segments
+   * createUserSegment - Creates a user segment
    *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
    *
-   * @return {Segment[]} Segments
+   * @return {Segment} The created Segment
    */
-  async querySegments(filters: SegmentFilters, options: SegmentQueryOptions = {}) {
-    return await this.get<{
-      segments: Segment[];
-    }>(this.baseURL + `/segments`, {
-      payload: {
-        filter_conditions: filters,
-        ...options,
-      },
-    });
+  async createUserSegment(id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
+    return this.createSegment('user', id, name, data);
   }
 
   /**
-   * updateSegment - Update a Campaign Segment
+   * createChannelSegment - Creates a channel segment
+   *
+   * @param {string} id Segment ID (valid UUID)
+   * @param {string} name Segment name
+   * @param {SegmentData} data Segment data
+   *
+   * @return {Segment} The created Segment
+   */
+  async createChannelSegment(id: string, name: string, data?: SegmentData) {
+    this.validateServerSideAuth();
+    return this.createSegment('channel', id, name, data);
+  }
+
+  async getSegment(id: string) {
+    this.validateServerSideAuth();
+    return this.get<{ segment: SegmentResponse } & APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
+  /**
+   * updateSegment - Update a segment
    *
    * @param {string} id Segment ID
-   * @param {Partial<SegmentData>} params Segment data
+   * @param {Partial<UpdateSegmentData>} data Data to update
    *
    * @return {Segment} Updated Segment
    */
-  async updateSegment(id: string, params: Partial<SegmentData>) {
-    const { segment } = await this.put<{ segment: Segment }>(this.baseURL + `/segments/${id}`, { segment: params });
-    return segment;
+  async updateSegment(id: string, data: Partial<UpdateSegmentData>) {
+    this.validateServerSideAuth();
+    return this.put<{ segment: SegmentResponse }>(this.baseURL + `/segments/${id}`, data);
+  }
+
+  /**
+   * addSegmentTargets - Add targets to a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async addSegmentTargets(id: string, targets: string[]) {
+    this.validateServerSideAuth();
+    const body = { target_ids: targets };
+    return this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
+  }
+
+  async querySegmentTargets(
+    id: string,
+    filter: QuerySegmentTargetsFilter | null = {},
+    sort: SortParam[] | null | [] = [],
+    options = {},
+  ) {
+    this.validateServerSideAuth();
+    return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
+      this.baseURL + `/segments/${id}/targets/query`,
+      {
+        filter: filter || {},
+        sort: sort || [],
+        ...options,
+      },
+    );
+  }
+  /**
+   * removeSegmentTargets - Remove targets from a segment
+   *
+   * @param {string} id Segment ID
+   * @param {string[]} targets Targets to add to the segment
+   *
+   * @return {APIResponse} API response
+   */
+  async removeSegmentTargets(id: string, targets: string[]) {
+    this.validateServerSideAuth();
+    const body = { target_ids: targets };
+    return this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
+  }
+
+  /**
+   * querySegments - Query Segments
+   *
+   * @param {filter} filter MongoDB style filter conditions
+   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
+   *
+   * @return {Segment[]} Segments
+   */
+  async querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
+    this.validateServerSideAuth();
+    return this.post<
+      {
+        segments: SegmentResponse[];
+        next?: string;
+      } & APIResponse
+    >(this.baseURL + `/segments/query`, {
+      filter,
+      sort,
+      ...options,
+    });
   }
 
   /**
@@ -2887,7 +3149,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async deleteSegment(id: string) {
+    this.validateServerSideAuth();
     return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+  }
+
+  /**
+   * segmentTargetExists - Check if a target exists in a segment
+   *
+   * @param {string} segmentId Segment ID
+   * @param {string} targetId Target ID
+   *
+   * @return {Promise<APIResponse>} The Server Response
+   */
+  async segmentTargetExists(segmentId: string, targetId: string) {
+    this.validateServerSideAuth();
+    return this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
   }
 
   /**
@@ -2898,27 +3174,39 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} The Created Campaign
    */
   async createCampaign(params: CampaignData) {
-    const { campaign } = await this.post<{ campaign: Campaign }>(this.baseURL + `/campaigns`, { campaign: params });
-    return campaign;
+    this.validateServerSideAuth();
+    return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns`, { ...params });
   }
 
+  async getCampaign(id: string) {
+    this.validateServerSideAuth();
+    return this.get<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}`);
+  }
+
+  async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
+    this.validateServerSideAuth();
+    return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}/start`, {
+      scheduled_for: options?.scheduledFor,
+      stop_at: options?.stopAt,
+    });
+  }
   /**
    * queryCampaigns - Query Campaigns
    *
    *
    * @return {Campaign[]} Campaigns
    */
-  async queryCampaigns(filters: CampaignFilters, options: CampaignQueryOptions = {}) {
-    return await this.get<{
-      campaigns: Campaign[];
-      segments: Record<string, Segment>;
-      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
-      users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/campaigns`, {
-      payload: {
-        filter_conditions: filters,
-        ...options,
-      },
+  async queryCampaigns(filter: CampaignFilters, sort?: CampaignSort, options?: CampaignQueryOptions) {
+    this.validateServerSideAuth();
+    return await this.post<
+      {
+        campaigns: CampaignResponse[];
+        next?: string;
+      } & APIResponse
+    >(this.baseURL + `/campaigns/query`, {
+      filter,
+      sort,
+      ...(options || {}),
     });
   }
 
@@ -2931,10 +3219,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} Updated Campaign
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
-    const { campaign } = await this.put<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}`, {
-      campaign: params,
-    });
-    return campaign;
+    this.validateServerSideAuth();
+    return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}`, params);
   }
 
   /**
@@ -2944,24 +3230,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {Promise<APIResponse>} The Server Response
    */
-  async deleteCampaign(id: string, params: DeleteCampaignOptions = {}) {
-    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`, params);
-  }
-
-  /**
-   * scheduleCampaign - Schedule a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {{scheduledFor: number}} params Schedule params
-   *
-   * @return {Campaign} Scheduled Campaign
-   */
-  async scheduleCampaign(id: string, params: { scheduledFor: number }) {
-    const { scheduledFor } = params;
-    const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/schedule`, {
-      scheduled_for: scheduledFor,
-    });
-    return campaign;
+  async deleteCampaign(id: string) {
+    this.validateServerSideAuth();
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
   }
 
   /**
@@ -2972,54 +3243,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Campaign} Stopped Campaign
    */
   async stopCampaign(id: string) {
-    const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/stop`);
+    this.validateServerSideAuth();
+    const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
     return campaign;
-  }
-
-  /**
-   * resumeCampaign - Resume a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Resumed Campaign
-   */
-  async resumeCampaign(id: string) {
-    const { campaign } = await this.patch<{ campaign: Campaign }>(this.baseURL + `/campaigns/${id}/resume`);
-    return campaign;
-  }
-
-  /**
-   * testCampaign - Test a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {{users: string[]}} params Test params
-   *
-   * @return {TestCampaignResponse} Test campaign response
-   */
-  async testCampaign(id: string, params: { users: string[] }) {
-    const { users } = params;
-    return await this.post<APIResponse & TestCampaignResponse>(this.baseURL + `/campaigns/${id}/test`, { users });
-  }
-
-  /**
-   * queryRecipients - Query Campaign Recipient Results
-   *
-   *
-   * @return {Recipient[]} Recipients
-   */
-  async queryRecipients(filters: RecipientFilters, options: RecipientQueryOptions = {}) {
-    return await this.get<{
-      campaigns: Record<string, Campaign>;
-      recipients: Recipient[];
-      segments: Record<string, Segment>;
-      channels?: Record<string, ChannelResponse<StreamChatGenerics>>;
-      users?: Record<string, UserResponse<StreamChatGenerics>>;
-    }>(this.baseURL + `/recipients`, {
-      payload: {
-        filter_conditions: filters,
-        ...options,
-      },
-    });
   }
 
   /**
@@ -3066,15 +3292,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {TaskResponse} A task ID
    */
-  async deleteUsers(user_ids: string[], options: DeleteUserOptions) {
-    if (options?.user !== 'soft' && options?.user !== 'hard') {
-      throw new Error('Invalid delete user options. user must be one of [soft hard]');
+  async deleteUsers(user_ids: string[], options: DeleteUserOptions = {}) {
+    if (typeof options.user !== 'undefined' && !['soft', 'hard', 'pruning'].includes(options.user)) {
+      throw new Error('Invalid delete user options. user must be one of [soft hard pruning]');
     }
-    if (options.messages !== undefined && options.messages !== 'soft' && options.messages !== 'hard') {
-      throw new Error('Invalid delete user options. messages must be one of [soft hard]');
-    }
-    if (options.conversations !== undefined && options.conversations !== 'soft' && options.conversations !== 'hard') {
+    if (typeof options.conversations !== 'undefined' && !['soft', 'hard'].includes(options.conversations)) {
       throw new Error('Invalid delete user options. conversations must be one of [soft hard]');
+    }
+    if (typeof options.messages !== 'undefined' && !['soft', 'hard', 'pruning'].includes(options.messages)) {
+      throw new Error('Invalid delete user options. messages must be one of [soft hard pruning]');
     }
     return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
       user_ids,

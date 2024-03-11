@@ -2,6 +2,130 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.23.0](https://github.com/GetStream/stream-chat-js/compare/v8.22.0...v8.23.0) (2024-03-11)
+
+
+### Bug Fixes
+
+* lint fix ([240def4](https://github.com/GetStream/stream-chat-js/commit/240def42c69276b538099f05a5453e0240109fa1))
+* typescript for datadog info and threads ([c1d49a6](https://github.com/GetStream/stream-chat-js/commit/c1d49a6ec128bbbc94e9702170e7dce3fe488f3f))
+* typescript for datadog info and threads ([8b8eab5](https://github.com/GetStream/stream-chat-js/commit/8b8eab534947595a6d41a580977f5debe6fbfc53))
+
+## [8.22.0](https://github.com/GetStream/stream-chat-js/compare/v8.21.0...v8.22.0) (2024-03-08)
+
+
+### Features
+
+* add a way to undelete a deleted messages ([#1237](https://github.com/GetStream/stream-chat-js/issues/1237)) ([d2193a2](https://github.com/GetStream/stream-chat-js/commit/d2193a2fb4e41685bb98c49b89bc3b003be992fb))
+
+## [8.21.0](https://github.com/GetStream/stream-chat-js/compare/v8.20.0...v8.21.0) (2024-03-07)
+
+
+### Features
+
+* add message attachment fields for voice messages ([#1254](https://github.com/GetStream/stream-chat-js/issues/1254)) ([a9d38a1](https://github.com/GetStream/stream-chat-js/commit/a9d38a13addf90ecc07f0acecce82cbc47f8f3fb))
+
+## [8.20.0](https://github.com/GetStream/stream-chat-js/compare/v8.19.1...v8.20.0) (2024-03-05)
+
+
+### Features
+
+* add message edited timestamp ([#1248](https://github.com/GetStream/stream-chat-js/issues/1248)) ([a80813f](https://github.com/GetStream/stream-chat-js/commit/a80813f6cc1ec83fcfc770d4196146db3bbcef55))
+* add support for show_deleted_message in `getMessage` ([#1252](https://github.com/GetStream/stream-chat-js/issues/1252)) ([dc4e44e](https://github.com/GetStream/stream-chat-js/commit/dc4e44ed4119d3ff4916957c6dc1c501927c462b))
+
+### [8.19.1](https://github.com/GetStream/stream-chat-js/compare/v8.19.0...v8.19.1) (2024-03-04)
+
+
+### Bug Fixes
+
+* skip updateUserMessageReferences if channel is undefined ([#1249](https://github.com/GetStream/stream-chat-js/issues/1249)) ([e88b8ec](https://github.com/GetStream/stream-chat-js/commit/e88b8ec3f9652ea7eecca960cd754c7b82b7c42b))
+
+## [8.19.0](https://github.com/GetStream/stream-chat-js/compare/v8.18.2...v8.19.0) (2024-02-27)
+
+
+### Features
+
+* added support for stop_at for campaign ([#1243](https://github.com/GetStream/stream-chat-js/issues/1243)) ([ec9ec8b](https://github.com/GetStream/stream-chat-js/commit/ec9ec8b8cbca2b833023a00f5c367fab578d8775))
+
+### [8.18.2](https://github.com/GetStream/stream-chat-js/compare/v8.18.1...v8.18.2) (2024-02-23)
+
+
+### Bug Fixes
+
+* remove obsolete endpoints ([#1241](https://github.com/GetStream/stream-chat-js/issues/1241)) ([f27d82d](https://github.com/GetStream/stream-chat-js/commit/f27d82dcdcb8dead056f0856975803d5436a2e6b))
+
+### [8.18.1](https://github.com/GetStream/stream-chat-js/compare/v8.18.0...v8.18.1) (2024-02-23)
+
+## [8.18.0](https://github.com/GetStream/stream-chat-js/compare/v8.17.0...v8.18.0) (2024-02-22)
+
+
+### Features
+
+* campaigns api ([#1225](https://github.com/GetStream/stream-chat-js/issues/1225)) ([bcb8ad7](https://github.com/GetStream/stream-chat-js/commit/bcb8ad784009216fa6252dba294afa8d900e4625))
+
+## [8.17.0](https://github.com/GetStream/stream-chat-js/compare/v8.16.0...v8.17.0) (2024-02-22)
+
+
+### Features
+
+* dispatch capabilties.changed event on partial update if own_capabilties are changed ([#1230](https://github.com/GetStream/stream-chat-js/issues/1230)) ([0b935a9](https://github.com/GetStream/stream-chat-js/commit/0b935a907edc1d1b3d8627ba3d8fef5ea90c5a4e))
+
+
+### Bug Fixes
+
+* add missing in$ operator for teams filter in queryUsers ([#1226](https://github.com/GetStream/stream-chat-js/issues/1226)) ([3c2166c](https://github.com/GetStream/stream-chat-js/commit/3c2166c226e303475f54bf516079a4e9c5592e23))
+* markRead and markUnread can be called from server-side ([#1228](https://github.com/GetStream/stream-chat-js/issues/1228)) ([c477fef](https://github.com/GetStream/stream-chat-js/commit/c477fef26ba7b109e8206ac46c186105ba7462f6))
+* segment ts issue ([#1220](https://github.com/GetStream/stream-chat-js/issues/1220)) ([e2c385c](https://github.com/GetStream/stream-chat-js/commit/e2c385c31e4d684399b005f2b2d6354cfd6498e9))
+
+## [8.16.0](https://github.com/GetStream/stream-chat-js/compare/v8.15.0...v8.16.0) (2024-02-05)
+
+
+### Features
+
+* threads 2.0  ([#1204](https://github.com/GetStream/stream-chat-js/issues/1204)) ([7bb64a8](https://github.com/GetStream/stream-chat-js/commit/7bb64a8fd3e11c043343c79935dfe77b97fc3d6e))
+
+
+### Bug Fixes
+
+* allow user_id in keystroke and stopTyping function ([#1221](https://github.com/GetStream/stream-chat-js/issues/1221)) ([c81586b](https://github.com/GetStream/stream-chat-js/commit/c81586b2f82d60814588b442106ddd228a4a35b1))
+
+## [8.15.0](https://github.com/GetStream/stream-chat-js/compare/v8.14.5...v8.15.0) (2024-02-01)
+
+
+### Features
+
+* add batch unread endpoint ([#1212](https://github.com/GetStream/stream-chat-js/issues/1212)) ([5ea11db](https://github.com/GetStream/stream-chat-js/commit/5ea11dbaef4683ad0b2e58716190973180965294))
+* add moderation types ([#1213](https://github.com/GetStream/stream-chat-js/issues/1213)) ([2a13b05](https://github.com/GetStream/stream-chat-js/commit/2a13b053c7006fd64f7187160ca5ea22e486d3a5))
+* handle notification.mark_unread ([#1208](https://github.com/GetStream/stream-chat-js/issues/1208)) ([4d73838](https://github.com/GetStream/stream-chat-js/commit/4d73838c7e9aa174b1367d334a011d579b67573f))
+* segments API v2 ([#1205](https://github.com/GetStream/stream-chat-js/issues/1205)) ([d2bf603](https://github.com/GetStream/stream-chat-js/commit/d2bf603673400bdcb57b75989825eb3cb638eee9))
+
+
+### Bug Fixes
+
+* missing types for datadog_info and blocklist type ([33f09b9](https://github.com/GetStream/stream-chat-js/commit/33f09b9fdfb9388312a6e715eba6fff0e5c956f6))
+* prevent channel unread count reset to 0 when sending message and on new own or thread messages ([#1210](https://github.com/GetStream/stream-chat-js/issues/1210)) ([9cedf6f](https://github.com/GetStream/stream-chat-js/commit/9cedf6ff14e9cc039722371ada3b7e0a5a2fab05))
+
+### [8.14.5](https://github.com/GetStream/stream-chat-js/compare/v8.14.4...v8.14.5) (2024-01-09)
+
+
+### Bug Fixes
+
+* deleteUsers - add pruning to options enums ([#1206](https://github.com/GetStream/stream-chat-js/issues/1206)) ([c9af1bb](https://github.com/GetStream/stream-chat-js/commit/c9af1bb7af424f542398d5d660c0c6f220c5f0c0))
+
+### [8.14.4](https://github.com/GetStream/stream-chat-js/compare/v8.14.3...v8.14.4) (2023-11-29)
+
+
+### Bug Fixes
+
+* add default contentType as multipart/form-data in sendFile ([#1202](https://github.com/GetStream/stream-chat-js/issues/1202)) ([64e2a2a](https://github.com/GetStream/stream-chat-js/commit/64e2a2aeba1176be1eb8816f654fcf78c1c07066))
+
+### [8.14.3](https://github.com/GetStream/stream-chat-js/compare/v8.14.2...v8.14.3) (2023-11-22)
+
+
+### Bug Fixes
+
+* use postForm instead of post for sending files ([#1199](https://github.com/GetStream/stream-chat-js/issues/1199)) ([2b06ca4](https://github.com/GetStream/stream-chat-js/commit/2b06ca48db8a50e40d870f87e0ea7d7ccbb7369b))
+
 ### [8.14.2](https://github.com/GetStream/stream-chat-js/compare/v8.14.1...v8.14.2) (2023-11-16)
 
 

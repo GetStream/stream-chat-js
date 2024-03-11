@@ -4,7 +4,7 @@ export const generateMsg = (msg = {}) => {
 	const date = msg.date || new Date().toISOString();
 	return {
 		id: uuidv4(),
-		text: 'x',
+		text: uuidv4(),
 		html: '<p>x</p>\n',
 		type: 'regular',
 		user: { id: 'id' },
