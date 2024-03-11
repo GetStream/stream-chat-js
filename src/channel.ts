@@ -1321,6 +1321,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'message.updated':
+      case 'message.undeleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
