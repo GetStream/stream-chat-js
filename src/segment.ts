@@ -18,7 +18,7 @@ type SegmentUpdatableFields = {
 
 export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   type: SegmentType;
-  id?: string | null;
+  id: string | null;
   client: StreamChat<StreamChatGenerics>;
   data?: SegmentData | SegmentResponse;
 
@@ -31,8 +31,6 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   async create() {
     const body = {
-      id: this.id,
-      type: this.type,
       name: this.data?.name,
       filter: this.data?.filter,
       description: this.data?.description,
@@ -40,7 +38,7 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       all_users: this.data?.all_users,
     };
 
-    return this.client.post<{ segment: SegmentResponse }>(this.client.baseURL + `/segments`, body);
+    return this.client.createSegment(this.type, this.id, body);
   }
 
   verifySegmentId() {
