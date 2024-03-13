@@ -36,6 +36,7 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       name: this.data?.name,
       filter: this.data?.filter,
       description: this.data?.description,
+      all_sender_channels: this.data?.all_sender_channels,
       all_users: this.data?.all_users,
     };
 
