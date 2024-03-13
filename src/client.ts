@@ -3446,8 +3446,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param id string The poll id
    * @returns {APIResponse & PollResponse} The poll
    */
-  async getPoll(id: string): Promise<APIResponse & PollResponse> {
-    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`);
+  async getPoll(id: string, userId?: string): Promise<APIResponse & PollResponse> {
+    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, {
+      ...(userId ? { user_id: userId } : {})
+    });
   }
 
   /**
