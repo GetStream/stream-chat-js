@@ -506,7 +506,7 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
   set?: Partial<Record<string, unknown>>;
-  unset?: Partial<Record<string, unknown>>;
+  unset?: Array<string>;
 };
 
 export type QueryThreadsOptions = {

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.23.1](https://github.com/GetStream/stream-chat-js/compare/v8.23.0...v8.23.1) (2024-03-11)
+
+
+### Bug Fixes
+
+* types for `PartialThreadUpdate` ([37efc4a](https://github.com/GetStream/stream-chat-js/commit/37efc4a84b87d9cbe32cff154321a839d0702c67))
+
 ## [8.23.0](https://github.com/GetStream/stream-chat-js/compare/v8.22.0...v8.23.0) (2024-03-11)
 
 
