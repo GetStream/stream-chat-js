@@ -2547,18 +2547,12 @@ export type QuerySegmentTargetsFilter = {
     $lte?: string;
   };
 };
-export type QuerySegmentTargetsSort = {};
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
-export type CampaignSortField = {
-  field: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  value: any;
-};
 
 export type CampaignSort = {
-  fields: CampaignSortField[];
-  direction?: 'asc' | 'desc';
-};
+  field: string;
+  direction?: number;
+}[];
 
 export type CampaignQueryOptions = {
   limit?: number;
