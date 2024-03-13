@@ -962,9 +962,10 @@ export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = Defa
 };
 
 export type MarkUnreadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  message_id: string;
   client_id?: string;
   connection_id?: string;
+  message_id?: string;
+  thread_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
