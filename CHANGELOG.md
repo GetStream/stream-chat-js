@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.24.0](https://github.com/GetStream/stream-chat-js/compare/v8.23.1...v8.24.0) (2024-03-13)
+
+
+### Features
+
+* add support for all_sender_channels for segment ([#1258](https://github.com/GetStream/stream-chat-js/issues/1258)) ([d6c2c48](https://github.com/GetStream/stream-chat-js/commit/d6c2c48bfe572a8ac74d08d07dafcde00a847018))
+
+
+### Bug Fixes
+
+* add thread_id to mark unread options typescript ([#1262](https://github.com/GetStream/stream-chat-js/issues/1262)) ([20b184d](https://github.com/GetStream/stream-chat-js/commit/20b184d2a1d7d2f31370be939b560e70e527e57a))
+* fixing typescript for queryCampaigns sort option ([#1261](https://github.com/GetStream/stream-chat-js/issues/1261)) ([95ae2f6](https://github.com/GetStream/stream-chat-js/commit/95ae2f6846f485858e2fbd502800f4a256cd5475))
+
 ### [8.23.1](https://github.com/GetStream/stream-chat-js/compare/v8.23.0...v8.23.1) (2024-03-11)
 
 
