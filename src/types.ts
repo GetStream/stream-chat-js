@@ -507,7 +507,7 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
   set?: Partial<Record<string, unknown>>;
-  unset?: Partial<Record<string, unknown>>;
+  unset?: Array<string>;
 };
 
 export type QueryThreadsOptions = {
@@ -964,9 +964,10 @@ export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = Defa
 };
 
 export type MarkUnreadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  message_id: string;
   client_id?: string;
   connection_id?: string;
+  message_id?: string;
+  thread_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
@@ -2530,6 +2531,7 @@ export type DeleteUserOptions = {
 export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
+  all_sender_channels?: boolean;
   all_users?: boolean;
   description?: string;
   filter?: {};
@@ -2578,18 +2580,12 @@ export type QuerySegmentTargetsFilter = {
     $lte?: string;
   };
 };
-export type QuerySegmentTargetsSort = {};
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
-export type CampaignSortField = {
-  field: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  value: any;
-};
 
 export type CampaignSort = {
-  fields: CampaignSortField[];
-  direction?: 'asc' | 'desc';
-};
+  field: string;
+  direction?: number;
+}[];
 
 export type CampaignQueryOptions = {
   limit?: number;
