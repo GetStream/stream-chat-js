@@ -3578,11 +3578,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: PollPaginationOptions = {},
   ): Promise<APIResponse & QueryPollsResponse> {
-    return await this.get<APIResponse & QueryPollsResponse>(this.baseURL + '/polls', {
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-      },
+    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + '/polls/query', {
+      filter_conditions: filterConditions,
+      sort: normalizeQuerySort(sort),
       ...options,
     });
   }
@@ -3602,11 +3600,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: PollPaginationOptions = {},
   ): Promise<APIResponse & PollVoteResponse> {
-    return await this.get<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-      },
+    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+      filter_conditions: filterConditions,
+      sort: normalizeQuerySort(sort),
       ...options,
     });
   }
