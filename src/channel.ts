@@ -914,8 +914,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
       return false;
 
-    if (this.muteStatus().muted) return false;
-
     return true;
   }
 
