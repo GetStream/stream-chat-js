@@ -2602,8 +2602,12 @@ export type CampaignResponse = {
   created_at: string;
   id: string;
   stats: CampaignStats;
+  status: "draft" | "scheduled" | "in_progress" | "completed" | "stopped";
   updated_at: string;
   scheduled_for?: string;
+  sender: UserResponse;
+  users: UserResponse[];
+  segments: SegmentResponse[];
 } & CampaignData;
 
 export type DeleteCampaignOptions = {};
