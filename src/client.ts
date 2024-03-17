@@ -3233,8 +3233,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async stopCampaign(id: string) {
     this.validateServerSideAuth();
-    const { campaign } = await this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
-    return campaign;
+    return this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
   }
 
   /**
