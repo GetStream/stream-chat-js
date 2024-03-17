@@ -1,5 +1,5 @@
 import { StreamChat } from './client';
-import { APIResponse, CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
+import { CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
 
 export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   id: string | null;

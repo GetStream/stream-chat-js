@@ -2601,13 +2601,13 @@ export type CampaignStats = {
 export type CampaignResponse = {
   created_at: string;
   id: string;
-  stats: CampaignStats;
-  status: "draft" | "scheduled" | "in_progress" | "completed" | "stopped";
-  updated_at: string;
-  scheduled_for?: string;
-  sender: UserResponse;
-  users: UserResponse[];
   segments: SegmentResponse[];
+  sender: UserResponse;
+  stats: CampaignStats;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'stopped';
+  updated_at: string;
+  users: UserResponse[];
+  scheduled_for?: string;
 } & CampaignData;
 
 export type DeleteCampaignOptions = {};
