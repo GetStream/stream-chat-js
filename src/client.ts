@@ -128,7 +128,7 @@ import {
   PollPaginationOptions,
   PollResponse,
   PollVoteData,
-  PollVoteResponse,
+  PollVotesAPIResponse,
   PushProvider,
   PushProviderConfig,
   PushProviderID,
@@ -185,6 +185,11 @@ import {
   GetMessageOptions,
   VoteFilters,
   VoteSort,
+  CreatePollAPIResponse,
+  GetPollAPIResponse,
+  UpdatePollAPIResponse,
+  CreatePollOptionAPIResponse,
+  GetPollOptionAPIResponse, UpdatePollOptionAPIResponse, PollVote,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3436,8 +3441,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param params PollData The poll that will be created
    * @returns {APIResponse & PollResponse} The poll
    */
-  async createPoll(poll: PollData): Promise<APIResponse & PollResponse> {
-    return await this.post<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  async createPoll(poll: PollData) {
+    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, poll);
   }
 
   /**
@@ -3445,8 +3450,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param id string The poll id
    * @returns {APIResponse & PollResponse} The poll
    */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & PollResponse> {
-    return await this.get<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, {
+  async getPoll(id: string, userId?: string) {
+    return await this.get<APIResponse & GetPollAPIResponse>(this.baseURL + `/polls/${id}`, {
       ...(userId ? { user_id: userId } : {})
     });
   }
@@ -3456,8 +3461,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param poll PollData The poll that will be updated
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData): Promise<APIResponse & PollResponse> {
-    return await this.put<APIResponse & PollResponse>(this.baseURL + `/polls`, poll);
+  async updatePoll(poll: PollData) {
+    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, poll);
   }
 
   /**
@@ -3467,8 +3472,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & PollResponse} The poll
    */
-  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate): Promise<APIResponse & PollResponse> {
-    return await this.patch<APIResponse & PollResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
+    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
   }
 
   /**
@@ -3489,8 +3494,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param option PollOptionData The poll option that will be created
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData): Promise<APIResponse & PollOptionResponse> {
-    return await this.post<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  async createPollOption(pollId: string, option: PollOptionData) {
+    return await this.post<APIResponse & CreatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, option);
   }
 
   /**
@@ -3499,8 +3504,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param optionId string The poll option id
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async getPollOption(pollId: string, optionId: string): Promise<APIResponse & PollOptionResponse> {
-    return await this.get<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  async getPollOption(pollId: string, optionId: string) {
+    return await this.get<APIResponse & GetPollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
   }
 
   /**
@@ -3509,8 +3514,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param option PollOptionData The poll option that will be updated
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData): Promise<APIResponse & PollOptionResponse> {
-    return await this.put<APIResponse & PollOptionResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  async updatePollOption(pollId: string, option: PollOptionData) {
+    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, option);
   }
 
   /**
@@ -3524,8 +3529,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     pollId: string,
     optionId: string,
     partialPollOptionObject: PartialPollOptionUpdate,
-  ): Promise<APIResponse & PollOptionResponse> {
-    return await this.patch<APIResponse & PollOptionResponse>(
+  ) {
+    return await this.patch<APIResponse & UpdatePollOptionAPIResponse>(
       this.baseURL + `/polls/${pollId}/options/${optionId}`,
       partialPollOptionObject,
     );
@@ -3537,7 +3542,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param optionId string The poll option id
    * @returns {APIResponse} The poll option
    */
-  async deletePollOption(pollId: string, optionId: string): Promise<APIResponse> {
+  async deletePollOption(pollId: string, optionId: string) {
     return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
   }
 
@@ -3545,22 +3550,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Cast or cancel one or more votes on a poll
    * @param pollId string The poll id
    * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
-   * @returns {APIResponse & PollVoteResponse} The poll votes
+   * @returns {APIResponse & PollVotesAPIResponse} The poll votes
    */
   async voteOnPoll(
     messageId: string,
     pollId: string,
     votes: PollVoteData[],
     options = {},
-  ): Promise<APIResponse & PollVoteResponse> {
-    return await this.post<APIResponse & PollVoteResponse>(
+  ) {
+    return await this.post<APIResponse & PollVotesAPIResponse>(
       this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
       { votes, ...options },
     );
   }
 
-  async removeVote(messageId: string, pollId: string, voteId: string): Promise<APIResponse & PollVoteResponse> {
-    return await this.delete<APIResponse & PollVoteResponse>(
+  async removeVote(messageId: string, pollId: string, voteId: string) {
+    return await this.delete<APIResponse & { vote: PollVote  }>(
       this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`,
     );
   }
@@ -3591,15 +3596,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
 
-   * @returns {APIResponse & PollVoteResponse} The poll votes
+   * @returns {APIResponse & PollVotesAPIResponse} The poll votes
    */
   async queryPollVotes(
     pollId: string,
     filterConditions: VoteFilters = {},
     sort: VoteSort = [],
     options: PollPaginationOptions = {},
-  ): Promise<APIResponse & PollVoteResponse> {
-    return await this.post<APIResponse & PollVoteResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+  ): Promise<APIResponse & PollVotesAPIResponse> {
+    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
       filter_conditions: filterConditions,
       sort: normalizeQuerySort(sort),
       ...options,

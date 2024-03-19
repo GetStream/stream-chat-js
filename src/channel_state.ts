@@ -511,7 +511,6 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       return { ...attachment };
     });
 
-    console.log('>>> from addPollVote function');
     this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
@@ -539,7 +538,6 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       return { ...attachment };
     });
 
-    console.log('>>> from removePollVote function');
     this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
