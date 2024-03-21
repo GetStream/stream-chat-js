@@ -620,6 +620,7 @@ export type MessageResponseBase<
 > = MessageBase<StreamChatGenerics> & {
   type: MessageLabel;
   args?: string;
+  before_message_send_failed?: boolean;
   channel?: ChannelResponse<StreamChatGenerics>;
   cid?: string;
   command?: string;
