@@ -492,24 +492,24 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if (!message) return;
     const messageWithPoll = message;
 
-    messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
-      if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
-        attachment.poll.options = attachment.poll.options.map((option) => {
-          if (option.id === pollVote.option_id) {
-            option.votes?.push(pollVote);
-            option.vote_count += 1;
-          }
+    // messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
+    //   if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
+    //     attachment.poll.options = attachment.poll.options.map((option) => {
+    //       if (option.id === pollVote.option_id) {
+    //         option.votes?.push(pollVote);
+    //         option.vote_count += 1;
+    //       }
 
-          return { ...option };
-        });
-        if (pollVote.user_id === this._channel.getClient().userID) {
-          attachment.poll.own_votes?.push(pollVote);
-        }
+    //       return { ...option };
+    //     });
+    //     if (pollVote.user_id === this._channel.getClient().userID) {
+    //       attachment.poll.own_votes?.push(pollVote);
+    //     }
 
-        attachment.poll.vote_count += 1;
-      }
-      return { ...attachment };
-    });
+    //     attachment.poll.vote_count += 1;
+    //   }
+    //   return { ...attachment };
+    // });
 
     this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
@@ -519,24 +519,24 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if (!message) return;
     const messageWithPoll = message;
 
-    messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
-      if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
-        attachment.poll.options = attachment.poll.options.map((option) => {
-          if (option.id === pollVote.option_id) {
-            option.votes = option.votes?.filter((vote) => vote.user_id !== pollVote.user_id);
-            option.vote_count -= 1;
-          }
+    // messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
+    //   if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
+    //     attachment.poll.options = attachment.poll.options.map((option) => {
+    //       if (option.id === pollVote.option_id) {
+    //         option.votes = option.votes?.filter((vote) => vote.user_id !== pollVote.user_id);
+    //         option.vote_count -= 1;
+    //       }
 
-          return { ...option };
-        });
-        if (pollVote.user_id === this._channel.getClient().userID) {
-          attachment.poll.own_votes = attachment.poll.own_votes?.filter((vote) => vote.user_id !== pollVote.user_id);
-        }
+    //       return { ...option };
+    //     });
+    //     if (pollVote.user_id === this._channel.getClient().userID) {
+    //       attachment.poll.own_votes = attachment.poll.own_votes?.filter((vote) => vote.user_id !== pollVote.user_id);
+    //     }
 
-        attachment.poll.vote_count -= 1;
-      }
-      return { ...attachment };
-    });
+    //     attachment.poll.vote_count -= 1;
+    //   }
+    //   return { ...attachment };
+    // });
 
     this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
