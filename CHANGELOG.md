@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.24.0](https://github.com/GetStream/stream-chat-js/compare/v8.23.1...v8.24.0) (2024-03-13)
+
+
+### Features
+
+* add support for all_sender_channels for segment ([#1258](https://github.com/GetStream/stream-chat-js/issues/1258)) ([d6c2c48](https://github.com/GetStream/stream-chat-js/commit/d6c2c48bfe572a8ac74d08d07dafcde00a847018))
+
+
+### Bug Fixes
+
+* add thread_id to mark unread options typescript ([#1262](https://github.com/GetStream/stream-chat-js/issues/1262)) ([20b184d](https://github.com/GetStream/stream-chat-js/commit/20b184d2a1d7d2f31370be939b560e70e527e57a))
+* fixing typescript for queryCampaigns sort option ([#1261](https://github.com/GetStream/stream-chat-js/issues/1261)) ([95ae2f6](https://github.com/GetStream/stream-chat-js/commit/95ae2f6846f485858e2fbd502800f4a256cd5475))
+
+### [8.23.1](https://github.com/GetStream/stream-chat-js/compare/v8.23.0...v8.23.1) (2024-03-11)
+
+
+### Bug Fixes
+
+* types for `PartialThreadUpdate` ([37efc4a](https://github.com/GetStream/stream-chat-js/commit/37efc4a84b87d9cbe32cff154321a839d0702c67))
+
+## [8.23.0](https://github.com/GetStream/stream-chat-js/compare/v8.22.0...v8.23.0) (2024-03-11)
+
+
+### Bug Fixes
+
+* lint fix ([240def4](https://github.com/GetStream/stream-chat-js/commit/240def42c69276b538099f05a5453e0240109fa1))
+* typescript for datadog info and threads ([c1d49a6](https://github.com/GetStream/stream-chat-js/commit/c1d49a6ec128bbbc94e9702170e7dce3fe488f3f))
+* typescript for datadog info and threads ([8b8eab5](https://github.com/GetStream/stream-chat-js/commit/8b8eab534947595a6d41a580977f5debe6fbfc53))
+
 ## [8.22.0](https://github.com/GetStream/stream-chat-js/compare/v8.21.0...v8.22.0) (2024-03-08)
 
 
