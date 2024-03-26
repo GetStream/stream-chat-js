@@ -1,5 +1,5 @@
 import { StreamChat } from './client';
-import { APIResponse, CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
+import { CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
 
 export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   id: string | null;
@@ -55,13 +55,13 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
   async delete() {
     this.verifyCampaignId();
 
-    return await this.client.delete<APIResponse>(this.client.baseURL + `/campaigns/${this.id}`);
+    return await this.client.deleteCampaign(this.id as string);
   }
 
   async stop() {
     this.verifyCampaignId();
 
-    return this.client.patch<{ campaign: Campaign }>(this.client.baseURL + `/campaigns/${this.id}/stop`);
+    return this.client.stopCampaign(this.id as string);
   }
 
   async get() {
