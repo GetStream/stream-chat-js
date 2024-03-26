@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.25.0](https://github.com/GetStream/stream-chat-js/compare/v8.24.0...v8.25.0) (2024-03-26)
+
+
+### Features
+
+* support size_limit in upload config ([#1244](https://github.com/GetStream/stream-chat-js/issues/1244)) ([ba3dc29](https://github.com/GetStream/stream-chat-js/commit/ba3dc29510da1ff197e5bea5985807ba4236df08))
+
+
+### Bug Fixes
+
+* add before_message_send_failed to Message ([#1268](https://github.com/GetStream/stream-chat-js/issues/1268)) ([6b096b8](https://github.com/GetStream/stream-chat-js/commit/6b096b8bf8982a347f7a9b79084b937dbd3eb0f5))
+* campaign instantiation without id ([#1267](https://github.com/GetStream/stream-chat-js/issues/1267)) ([b6d3286](https://github.com/GetStream/stream-chat-js/commit/b6d328699d182a6ec1b453b3e413990c8cc4568b))
+
 ## [8.24.0](https://github.com/GetStream/stream-chat-js/compare/v8.23.1...v8.24.0) (2024-03-13)
 
 
