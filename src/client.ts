@@ -2989,11 +2989,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   campaign(idOrData: string | CampaignData, data?: CampaignData) {
-    if (typeof idOrData === 'string') {
-      return new Campaign(this, idOrData, data);
+    if (idOrData && typeof idOrData === 'object') {
+      return new Campaign(this, null, idOrData);
     }
 
-    return new Campaign(this, null, idOrData);
+    return new Campaign(this, idOrData, data);
   }
 
   segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
@@ -3137,6 +3137,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         segments: SegmentResponse[];
         next?: string;
+        prev?: string;
       } & APIResponse
     >(this.baseURL + `/segments/query`, {
       filter,
@@ -3206,6 +3207,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         campaigns: CampaignResponse[];
         next?: string;
+        prev?: string;
       } & APIResponse
     >(this.baseURL + `/campaigns/query`, {
       filter,
@@ -3248,8 +3250,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async stopCampaign(id: string) {
     this.validateServerSideAuth();
-    const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
-    return campaign;
+    return this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
   }
 
   /**

@@ -2313,6 +2313,7 @@ export type FileUploadConfig = {
   allowed_mime_types?: string[] | null;
   blocked_file_extensions?: string[] | null;
   blocked_mime_types?: string[] | null;
+  size_limit?: number | null;
 };
 
 export type FirebaseConfig = {
@@ -2781,8 +2782,12 @@ export type CampaignStats = {
 export type CampaignResponse = {
   created_at: string;
   id: string;
+  segments: SegmentResponse[];
+  sender: UserResponse;
   stats: CampaignStats;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'stopped';
   updated_at: string;
+  users: UserResponse[];
   scheduled_for?: string;
 } & CampaignData;
 
