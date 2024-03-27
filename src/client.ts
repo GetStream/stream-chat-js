@@ -172,7 +172,9 @@ import {
   SegmentTargetsResponse,
   QuerySegmentTargetsFilter,
   SortParam,
-  GetMessageOptions, BlockUserResponse, GetBlockedUsersResponse,
+  GetMessageOptions,
+  BlockUserResponse,
+  GetBlockedUsersResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2139,17 +2141,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
     return await this.unbanUser(targetUserID);
   }
-  async blockUser(blockedUserID: string) {
+  async blockUser(blockedUserID: string, userID?: string) {
     return await this.post<BlockUserResponse<StreamChatGenerics>>(this.baseURL + '/user/block', {
       blocked_user_id: blockedUserID,
+      ...(userID ? { user_id: userID } : {}),
     });
   }
+
   async getBlockedUsers() {
     return await this.get<GetBlockedUsersResponse<StreamChatGenerics>>(this.baseURL + '/user/block');
   }
   async unBlockUser(blockedUserID: string) {
-    return await this.post<StreamChatGenerics>( this.baseURL + '/user/unblock', {
-        blocked_user_id: blockedUserID,
+    return await this.post<StreamChatGenerics>(this.baseURL + '/user/unblock', {
+      blocked_user_id: blockedUserID,
     });
   }
   /** muteUser - mutes a user

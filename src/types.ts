@@ -682,7 +682,7 @@ export type GetBlockedUsersResponse<StreamChatGenerics extends ExtendableGeneric
 export type BlockedUser<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   blocked_user_id: string;
   timestamp: string;
-}
+};
 
 export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_mutes: ChannelMute<StreamChatGenerics>[];
@@ -1855,6 +1855,7 @@ export type ChannelConfigWithInfo<
 export type ChannelData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['channelType'] & {
+  blocked?: boolean;
   members?: string[];
   name?: string;
 };
