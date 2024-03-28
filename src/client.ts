@@ -2126,7 +2126,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserID);
+    return await this.unbanUser(targetUserID, {
+      shadow: true,
+      ...options
+    });
   }
   async blockUser(blockedUserID: string, userID?: string) {
     return await this.post<BlockUserResponse<StreamChatGenerics>>(this.baseURL + '/user/block', {
