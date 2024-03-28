@@ -189,7 +189,13 @@ import {
   GetPollAPIResponse,
   UpdatePollAPIResponse,
   CreatePollOptionAPIResponse,
-  GetPollOptionAPIResponse, UpdatePollOptionAPIResponse, PollVote,
+  GetPollOptionAPIResponse,
+  UpdatePollOptionAPIResponse,
+  PollVote,
+  QueryPollsFilter,
+  PollSort,
+  QueryPollsOptions,
+  QueryVotesOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3573,18 +3579,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   /**
    * Queries polls
-   * @param filterConditions
+   * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
    * @returns {APIResponse & QueryPollsResponse} The polls
    */
   async queryPolls(
-    filterConditions: VoteFilters = {},
-    sort: VoteSort = [],
-    options: PollPaginationOptions = {},
+    filter: VoteFilters = {},
+    sort: PollSort = [],
+    options: QueryPollsOptions = {},
   ): Promise<APIResponse & QueryPollsResponse> {
     return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + '/polls/query', {
-      filter_conditions: filterConditions,
+      filter,
       sort: normalizeQuerySort(sort),
       ...options,
     });
@@ -3593,7 +3599,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Queries poll votes
    * @param pollId
-   * @param filterConditions
+   * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
 
@@ -3601,12 +3607,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async queryPollVotes(
     pollId: string,
-    filterConditions: VoteFilters = {},
+    filter: VoteFilters = {},
     sort: VoteSort = [],
-    options: PollPaginationOptions = {},
+    options: QueryVotesOptions = {},
   ): Promise<APIResponse & PollVotesAPIResponse> {
     return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
-      filter_conditions: filterConditions,
+      filter,
       sort: normalizeQuerySort(sort),
       ...options,
     });

@@ -1408,11 +1408,36 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
     }
 >;
 
+
+// TODO: add better typing
+export type QueryPollsFilter = {
+  created_at?: {
+    $eq?: string;
+    $gt?: string;
+    $gte?: string;
+    $in?: string[];
+    $lt?: string;
+    $lte?: string;
+  }
+  id?: {
+    $eq?: string;
+    $in?: string[];
+  };
+  user_id?: {
+    $eq?: string;
+    $in?: string[];
+  };
+};
+
+export type QueryPollsOptions = Pager
+
 export type VotesFiltersOptions = {
   is_user_suggestion?: boolean;
   option_id?: string;
   user_id?: string;
 };
+
+export type QueryVotesOptions = Pager
 
 // it('queries polls that are anonymous', async () => {
 //   const { polls } = await chatClient.queryPolls({
@@ -1798,13 +1823,22 @@ export type QuerySort<StreamChatGenerics extends ExtendableGenerics = DefaultGen
   | SearchMessageSort<StreamChatGenerics>
   | UserSort<StreamChatGenerics>;
 
+export type PollSort = PollSortBase | Array<PollSortBase>;
+
+export type PollSortBase = {
+  created_at?: AscDesc
+  id?: AscDesc;
+  is_closed?: AscDesc;
+  name?: AscDesc;
+  updated_at?: AscDesc;
+};
+
 export type VoteSort = VoteSortBase | Array<VoteSortBase>;
 
 export type VoteSortBase = {
-  created_at?: AscDesc
-  name?: AscDesc;
+  created_at?: AscDesc;
+  id?: AscDesc;
   updated_at?: AscDesc;
-  is_closed?: AscDesc;
 };
 
 /**
@@ -2658,8 +2692,8 @@ export type DeleteType = 'soft' | 'hard' | 'pruning';
   DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
 
   `user`:
-    - soft: marks user as deleted and retains all user data 
-    - pruning: marks user as deleted and nullifies user information 
+    - soft: marks user as deleted and retains all user data
+    - pruning: marks user as deleted and nullifies user information
     - hard: deletes user completely - this requires hard option for messages and conversation as well
   `conversations`:
     - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
