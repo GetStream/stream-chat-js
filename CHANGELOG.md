@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.25.1](https://github.com/GetStream/stream-chat-js/compare/v8.25.0...v8.25.1) (2024-03-28)
+
+
+### Bug Fixes
+
+* align unread counting on muted channel ([#1265](https://github.com/GetStream/stream-chat-js/issues/1265)) ([1f1934b](https://github.com/GetStream/stream-chat-js/commit/1f1934b0dcfe859b219c40bee554ea7cc619873b))
+
 ## [8.25.0](https://github.com/GetStream/stream-chat-js/compare/v8.24.0...v8.25.0) (2024-03-26)
 
 
