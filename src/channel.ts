@@ -914,6 +914,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
       return false;
 
+    // FIXME: see #1265, adjust and count new messages even when the channel is muted
+    if (this.muteStatus().muted) return false;
+
     return true;
   }
 
