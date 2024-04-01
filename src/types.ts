@@ -141,6 +141,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
+    polls_enabled?: boolean;
     push_notifications?: {
       offline_only: boolean;
       version: string;
