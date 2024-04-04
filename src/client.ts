@@ -1284,19 +1284,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
-      const currentMutedChannelIds: string[] = [];
-      const nextMutedChannelIds: string[] = [];
-
-      this.mutedChannels.forEach((mute) => mute.channel && currentMutedChannelIds.push(mute.channel.cid));
-      event.me.channel_mutes.forEach((mute) => mute.channel && nextMutedChannelIds.push(mute.channel.cid));
-
-      /** Set the unread count of un-muted channels to 0, which is the behaviour of backend */
-      currentMutedChannelIds.forEach((cid) => {
-        if (!nextMutedChannelIds.includes(cid) && this.activeChannels[cid]) {
-          this.activeChannels[cid].state.unreadCount = 0;
-        }
-      });
-
       this.mutedChannels = event.me.channel_mutes;
     }
 
