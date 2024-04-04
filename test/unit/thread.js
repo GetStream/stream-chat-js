@@ -15,7 +15,7 @@ import { generateThread } from './test-utils/generateThread';
 
 const expect = chai.expect;
 
-describe.only('Thread', () => {
+describe('Thread', () => {
 	describe('addReply', async () => {
 		let client;
 		let channel;

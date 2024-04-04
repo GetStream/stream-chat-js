@@ -1261,19 +1261,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
-      const currentMutedChannelIds: string[] = [];
-      const nextMutedChannelIds: string[] = [];
-
-      this.mutedChannels.forEach((mute) => mute.channel && currentMutedChannelIds.push(mute.channel.cid));
-      event.me.channel_mutes.forEach((mute) => mute.channel && nextMutedChannelIds.push(mute.channel.cid));
-
-      /** Set the unread count of un-muted channels to 0, which is the behaviour of backend */
-      currentMutedChannelIds.forEach((cid) => {
-        if (!nextMutedChannelIds.includes(cid) && this.activeChannels[cid]) {
-          this.activeChannels[cid].state.unreadCount = 0;
-        }
-      });
-
       this.mutedChannels = event.me.channel_mutes;
     }
 
@@ -2972,11 +2959,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   campaign(idOrData: string | CampaignData, data?: CampaignData) {
-    if (typeof idOrData === 'string') {
-      return new Campaign(this, idOrData, data);
+    if (idOrData && typeof idOrData === 'object') {
+      return new Campaign(this, null, idOrData);
     }
 
-    return new Campaign(this, null, idOrData);
+    return new Campaign(this, idOrData, data);
   }
 
   segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
@@ -3000,19 +2987,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @private
    * @param {SegmentType} type Segment type
-   * @param {string} id Segment ID (valid UUID)
-   * @param {string} name Segment name (valid UUID)
+   * @param {string} id Segment ID
+   * @param {string} name Segment name
    * @param {SegmentData} params Segment data
    *
    * @return {{segment: SegmentResponse} & APIResponse} The created Segment
    */
-  private async createSegment(type: SegmentType, id: string, name: string, data?: SegmentData) {
+  async createSegment(type: SegmentType, id: string | null, data?: SegmentData) {
     this.validateServerSideAuth();
     const body = {
       id,
       type,
-      name,
-      data,
+      ...data,
     };
     return this.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
   }
@@ -3020,29 +3006,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * createUserSegment - Creates a user segment
    *
-   * @param {string} id Segment ID (valid UUID)
+   * @param {string} id Segment ID
    * @param {string} name Segment name
    * @param {SegmentData} data Segment data
    *
    * @return {Segment} The created Segment
    */
-  async createUserSegment(id: string, name: string, data?: SegmentData) {
+  async createUserSegment(id: string | null, data?: SegmentData) {
     this.validateServerSideAuth();
-    return this.createSegment('user', id, name, data);
+    return this.createSegment('user', id, data);
   }
 
   /**
    * createChannelSegment - Creates a channel segment
    *
-   * @param {string} id Segment ID (valid UUID)
+   * @param {string} id Segment ID
    * @param {string} name Segment name
    * @param {SegmentData} data Segment data
    *
    * @return {Segment} The created Segment
    */
-  async createChannelSegment(id: string, name: string, data?: SegmentData) {
+  async createChannelSegment(id: string | null, data?: SegmentData) {
     this.validateServerSideAuth();
-    return this.createSegment('channel', id, name, data);
+    return this.createSegment('channel', id, data);
   }
 
   async getSegment(id: string) {
@@ -3121,6 +3107,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         segments: SegmentResponse[];
         next?: string;
+        prev?: string;
       } & APIResponse
     >(this.baseURL + `/segments/query`, {
       filter,
@@ -3190,6 +3177,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         campaigns: CampaignResponse[];
         next?: string;
+        prev?: string;
       } & APIResponse
     >(this.baseURL + `/campaigns/query`, {
       filter,
@@ -3232,8 +3220,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async stopCampaign(id: string) {
     this.validateServerSideAuth();
-    const { campaign } = await this.patch<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
-    return campaign;
+    return this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
   }
 
   /**

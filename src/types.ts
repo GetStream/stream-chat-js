@@ -526,7 +526,7 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
   set?: Partial<Record<string, unknown>>;
-  unset?: Partial<Record<string, unknown>>;
+  unset?: Array<string>;
 };
 
 export type QueryThreadsOptions = {
@@ -636,6 +636,7 @@ export type MessageResponseBase<
 > = MessageBase<StreamChatGenerics> & {
   type: MessageLabel;
   args?: string;
+  before_message_send_failed?: boolean;
   channel?: ChannelResponse<StreamChatGenerics>;
   cid?: string;
   command?: string;
@@ -982,9 +983,10 @@ export type MarkReadOptions<StreamChatGenerics extends ExtendableGenerics = Defa
 };
 
 export type MarkUnreadOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  message_id: string;
   client_id?: string;
   connection_id?: string;
+  message_id?: string;
+  thread_id?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
 };
@@ -1139,6 +1141,7 @@ export type UpdateCommandOptions<StreamChatGenerics extends ExtendableGenerics =
 };
 
 export type UserOptions = {
+  include_deactivated_users?: boolean;
   limit?: number;
   offset?: number;
   presence?: boolean;
@@ -2152,6 +2155,7 @@ export type FileUploadConfig = {
   allowed_mime_types?: string[] | null;
   blocked_file_extensions?: string[] | null;
   blocked_mime_types?: string[] | null;
+  size_limit?: number | null;
 };
 
 export type FirebaseConfig = {
@@ -2517,6 +2521,7 @@ export type DeleteUserOptions = {
 export type SegmentType = 'channel' | 'user';
 
 export type SegmentData = {
+  all_sender_channels?: boolean;
   all_users?: boolean;
   description?: string;
   filter?: {};
@@ -2565,18 +2570,12 @@ export type QuerySegmentTargetsFilter = {
     $lte?: string;
   };
 };
-export type QuerySegmentTargetsSort = {};
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
-export type CampaignSortField = {
-  field: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  value: any;
-};
 
 export type CampaignSort = {
-  fields: CampaignSortField[];
-  direction?: 'asc' | 'desc';
-};
+  field: string;
+  direction?: number;
+}[];
 
 export type CampaignQueryOptions = {
   limit?: number;
@@ -2624,8 +2623,12 @@ export type CampaignStats = {
 export type CampaignResponse = {
   created_at: string;
   id: string;
+  segments: SegmentResponse[];
+  sender: UserResponse;
   stats: CampaignStats;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'stopped';
   updated_at: string;
+  users: UserResponse[];
   scheduled_for?: string;
 } & CampaignData;
 
