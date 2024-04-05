@@ -31,8 +31,20 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   replyCount = 0;
   _client: StreamChat<StreamChatGenerics>;
   read: ThreadReadStatus<StreamChatGenerics> = {};
+  data: Record<string, any> = {};
 
   constructor(client: StreamChat<StreamChatGenerics>, t: ThreadResponse<StreamChatGenerics>) {
+    const {
+      parent_message_id,
+      parent_message,
+      latest_replies,
+      thread_participants,
+      reply_count,
+      channel,
+      read,
+      ...data
+    } = t;
+
     this.id = t.parent_message.id;
     this.message = formatMessage(t.parent_message);
     this.latestReplies = t.latest_replies.map(formatMessage);
@@ -49,6 +61,7 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
         };
       }
     }
+    this.data = data;
   }
 
   getClient(): StreamChat<StreamChatGenerics> {

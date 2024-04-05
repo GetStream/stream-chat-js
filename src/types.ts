@@ -41,9 +41,9 @@ export type DefaultGenerics = {
   commandType: LiteralStringForUnion;
   eventType: UR;
   messageType: UR;
+  pollType: UR;
   reactionType: UR;
   userType: UR;
-  pollType: UR;
 };
 
 export type ExtendableGenerics = {
@@ -52,9 +52,9 @@ export type ExtendableGenerics = {
   commandType: string;
   eventType: UR;
   messageType: UR;
+  pollType: UR;
   reactionType: UR;
   userType: UR;
-  pollType: UR;
 };
 
 export type Unpacked<T> = T extends (infer U)[]
@@ -455,9 +455,9 @@ export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics 
     commandType: StreamChatGenerics['commandType'];
     eventType: StreamChatGenerics['eventType'];
     messageType: {};
+    pollType: StreamChatGenerics['pollType'];
     reactionType: StreamChatGenerics['reactionType'];
     userType: StreamChatGenerics['userType'];
-    pollType: StreamChatGenerics['pollType'];
   }>,
   'created_at' | 'pinned_at' | 'updated_at' | 'status'
 > &
@@ -618,6 +618,7 @@ export type MessageResponse<
 export type MessageResponseBase<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageBase<StreamChatGenerics> & {
+  poll: PollResponse<StreamChatGenerics>;
   type: MessageLabel;
   args?: string;
   before_message_send_failed?: boolean;
@@ -627,7 +628,6 @@ export type MessageResponseBase<
   command_info?: { name?: string };
   created_at?: string;
   deleted_at?: string;
-  deleted_reply_count?: number;
   i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
     language: TranslationLanguages;
   };
@@ -646,7 +646,7 @@ export type MessageResponseBase<
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
-  poll: PollResponse<StreamChatGenerics>;
+  deleted_reply_count?: number;
 };
 
 export type ModerationDetailsResponse = {
@@ -1166,7 +1166,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   online?: boolean;
   parent_id?: string;
   poll?: PollResponse<StreamChatGenerics>;
-  poll_vote?: PollVote;
+  poll_vote?: PollVote<StreamChatGenerics>;
   queriedChannels?: {
     channels: ChannelAPIResponse<StreamChatGenerics>[];
     isLatestMessageSet?: boolean;
@@ -1373,9 +1373,9 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
           messageType: StreamChatGenerics['messageType'];
+          pollType: StreamChatGenerics['pollType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: StreamChatGenerics['userType'];
-          pollType: StreamChatGenerics['pollType'];
         }>,
         'name' | 'members'
       >]:
@@ -1387,9 +1387,9 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
                 messageType: StreamChatGenerics['messageType'];
+                pollType: StreamChatGenerics['pollType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: StreamChatGenerics['userType'];
-                pollType: StreamChatGenerics['pollType'];
               }>[Key]
             >
           >
@@ -1400,9 +1400,9 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
               messageType: StreamChatGenerics['messageType'];
+              pollType: StreamChatGenerics['pollType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: StreamChatGenerics['userType'];
-              pollType: StreamChatGenerics['pollType'];
             }>[Key]
           >;
     }
@@ -1430,7 +1430,7 @@ export type VotesFiltersOptions = {
 
 // it('queries polls that allow user suggestions', async () => {
 //   const { polls } = await chatClient.queryPolls({
-//     allow_user_suggestions: { $eq: true },
+//     allow_comments: { $eq: true },
 //   });
 //   expect(polls).to.have.lengthOf(1);
 // });
@@ -1438,7 +1438,7 @@ export type VotesFiltersOptions = {
 // it('queries polls with multiple filter conditions', async () => {
 //   const { polls } = await chatClient.queryPolls({
 //     is_closed: { $eq: true },
-//     allow_user_suggestions: { $eq: false },
+//     allow_comments: { $eq: false },
 //   });
 //   expect(polls).to.have.lengthOf(0);
 // });
@@ -1506,17 +1506,14 @@ export type VotesFiltersOptions = {
 //   expect(res.polls).to.have.lengthOf(2);
 // });
 export type VoteFilters = QueryFilters<
-    {
-      id?:
-          | RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>>
-          | PrimitiveFilter<PollResponse['id']>;
-    } &
   {
+    id?: RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>> | PrimitiveFilter<PollResponse['id']>;
+  } & {
     option_id?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['option_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<VotesFiltersOptions['option_id']>;
   } & {
-    is_user_suggestion?:
+    is_comment?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['is_user_suggestion']>, '$eq'>>
       | PrimitiveFilter<VotesFiltersOptions['is_user_suggestion']>;
   } & {
@@ -1524,37 +1521,39 @@ export type VoteFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<VotesFiltersOptions['user_id']>;
   } & {
-  is_closed?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['is_closed']>, '$eq'>>
-    | PrimitiveFilter<PollResponse['is_closed']>;
+    is_closed?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['is_closed']>, '$eq'>>
+      | PrimitiveFilter<PollResponse['is_closed']>;
   } & {
-  max_votes_allowed?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['max_votes_allowed']>, '$eq' | '$ne' | '$gt' | '$lt' | '$gte' | '$lte'>>
-    | PrimitiveFilter<PollResponse['max_votes_allowed']>;
+    max_votes_allowed?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<PollResponse['max_votes_allowed']>, '$eq' | '$ne' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<PollResponse['max_votes_allowed']>;
   } & {
-  allow_user_suggestions?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_user_suggestions']>, '$eq'>>
-    | PrimitiveFilter<PollResponse['allow_user_suggestions']>;
+    allow_comments?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_comments']>, '$eq'>>
+      | PrimitiveFilter<PollResponse['allow_comments']>;
   } & {
-  voting_visibility?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['voting_visibility']>, '$eq'>>
-    | PrimitiveFilter<PollResponse['voting_visibility']>;
+    voting_visibility?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['voting_visibility']>, '$eq'>>
+      | PrimitiveFilter<PollResponse['voting_visibility']>;
   } & {
-  created_at?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-    | PrimitiveFilter<PollResponse['created_at']>;
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<PollResponse['created_at']>;
   } & {
-  created_by_id?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_by_id']>, '$eq' | '$in'>>
-    | PrimitiveFilter<PollResponse['created_by_id']>;
+    created_by_id?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_by_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<PollResponse['created_by_id']>;
   } & {
-  updated_at?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-    | PrimitiveFilter<PollResponse['updated_at']>;
+    updated_at?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<PollResponse['updated_at']>;
   } & {
-  name?:
-    | RequireOnlyOne<Pick<QueryFilter<PollResponse['name']>, '$eq' | '$in'>>
-    | PrimitiveFilter<PollResponse['name']>;
+    name?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['name']>, '$eq' | '$in'>>
+      | PrimitiveFilter<PollResponse['name']>;
   }
 >;
 
@@ -1590,9 +1589,9 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
           messageType: {};
+          pollType: StreamChatGenerics['pollType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: StreamChatGenerics['userType'];
-          pollType: StreamChatGenerics['pollType'];
         }>,
         'text'
       >]?:
@@ -1604,9 +1603,9 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
                 messageType: {};
+                pollType: StreamChatGenerics['pollType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: StreamChatGenerics['userType'];
-                pollType: StreamChatGenerics['pollType'];
               }>[Key]
             >
           >
@@ -1617,9 +1616,9 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
               messageType: {};
+              pollType: StreamChatGenerics['pollType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: StreamChatGenerics['userType'];
-              pollType: StreamChatGenerics['pollType'];
             }>[Key]
           >;
     }
@@ -1696,9 +1695,9 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
           messageType: StreamChatGenerics['messageType'];
+          pollType: StreamChatGenerics['pollType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: {};
-          pollType: StreamChatGenerics['pollType'];
         }>,
         'id' | 'name' | 'teams' | 'username'
       >]?:
@@ -1710,9 +1709,9 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
                 messageType: StreamChatGenerics['messageType'];
+                pollType: StreamChatGenerics['pollType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: {};
-                pollType: StreamChatGenerics['pollType'];
               }>[Key]
             >
           >
@@ -1723,9 +1722,9 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
               messageType: StreamChatGenerics['messageType'];
+              pollType: StreamChatGenerics['pollType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: {};
-              pollType: StreamChatGenerics['pollType'];
             }>[Key]
           >;
     }
@@ -1801,10 +1800,10 @@ export type QuerySort<StreamChatGenerics extends ExtendableGenerics = DefaultGen
 export type VoteSort = VoteSortBase | Array<VoteSortBase>;
 
 export type VoteSortBase = {
-  created_at?: AscDesc
+  created_at?: AscDesc;
+  is_closed?: AscDesc;
   name?: AscDesc;
   updated_at?: AscDesc;
-  is_closed?: AscDesc;
 };
 
 /**
@@ -2380,13 +2379,13 @@ export type MessageBase<
   pin_expires?: string | null;
   pinned?: boolean;
   pinned_at?: string | null;
+  poll_id?: string;
   quoted_message_id?: string;
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
-  poll_id?: string;
 };
 
 export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
@@ -2920,44 +2919,48 @@ export class ErrorFromResponse<T> extends Error {
 
 export type QueryPollsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   polls: PollResponse<StreamChatGenerics>[];
+  next?: string;
 };
 
 export type CreatePollAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   poll: PollResponse<StreamChatGenerics>;
-}
+};
 
 export type GetPollAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   poll: PollResponse<StreamChatGenerics>;
-}
+};
 
 export type UpdatePollAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   poll: PollResponse<StreamChatGenerics>;
-}
+};
 
-export type PollResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['pollType'] & {
+export type PollResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = StreamChatGenerics['pollType'] & {
   created_at: string;
   created_by: UserResponse<StreamChatGenerics> | null;
   created_by_id: string;
+  enforce_unique_vote: boolean;
   id: string;
+  latest_comments: PollVote<StreamChatGenerics>[];
+  latest_votes_by_option: Record<string, PollVote<StreamChatGenerics>[]>;
   max_votes_allowed: number;
   name: string;
   options: PollOption<StreamChatGenerics>[];
   updated_at: string;
   vote_count: number;
+  vote_counts_by_option: Record<string, number>;
+  allow_comments?: boolean;
   allow_user_suggestions?: boolean;
-  channel?: ChannelAPIResponse<StreamChatGenerics> | null;
-  cid?: string;
-  description?: string;
   is_closed?: boolean;
   own_votes?: PollVote<StreamChatGenerics>[];
   voting_visibility?: VotingVisibility;
-  vote_counts_by_option: Record<string, number>;
-  latest_votes_by_option: Record<string, PollVote<StreamChatGenerics>[]>;
+  channel?: ChannelAPIResponse<StreamChatGenerics> | null;
+  cid?: string;
+  description?: string;
 };
 
-export type PollOption<
-    StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = {
+export type PollOption<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   id: string;
   poll_id: string;
@@ -2976,12 +2979,14 @@ export type PollData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['pollType'] & {
   name: string;
-  options?: PollOptionData<StreamChatGenerics>[];
+  allow_comments?: boolean;
   allow_user_suggestion?: boolean;
   description?: string;
+  enforce_unique_vote?: boolean;
   id?: string;
   is_closed?: boolean;
   max_votes_allowed?: number;
+  options?: PollOptionData<StreamChatGenerics>[];
   user_id?: string;
   voting_visibility?: VotingVisibility;
 };
@@ -2992,7 +2997,9 @@ export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = De
   unset?: Array<keyof PollResponse<StreamChatGenerics>>;
 };
 
-export type PollOptionData<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['pollType'] & {
+export type PollOptionData<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = StreamChatGenerics['pollType'] & {
   text: string;
   id?: string;
   position?: number;
@@ -3004,23 +3011,30 @@ export type PartialPollOptionUpdate<StreamChatGenerics extends ExtendableGeneric
 };
 
 export type PollVoteData = {
+  comment_text?: string;
+  is_comment?: boolean;
   option_id?: string;
-  user_suggestion?: string;
 };
 
 export type PollPaginationOptions = {
   limit?: number;
-  offset?: number;
+  next?: string;
 };
 
 export type CreatePollOptionAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   poll_option: PollOptionResponse<StreamChatGenerics>;
-}
+};
 
-export type GetPollOptionAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = CreatePollOptionAPIResponse<StreamChatGenerics>;
-export type UpdatePollOptionAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = CreatePollOptionAPIResponse<StreamChatGenerics>;
+export type GetPollOptionAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = CreatePollOptionAPIResponse<StreamChatGenerics>;
+export type UpdatePollOptionAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = CreatePollOptionAPIResponse<StreamChatGenerics>;
 
-export type PollOptionResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['pollType'] & {
+export type PollOptionResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = StreamChatGenerics['pollType'] & {
   created_at: string;
   id: string;
   poll_id: string;
@@ -3034,14 +3048,19 @@ export type PollOptionResponse<StreamChatGenerics extends ExtendableGenerics = D
 export type PollVote<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   id: string;
-  is_user_suggestion: boolean;
+  is_comment: boolean;
   poll_id: string;
   user_id: string;
-  user?: UserResponse<StreamChatGenerics>;
+  comment_text?: string;
   option_id?: string;
-  user_suggestion?: string;
+  user?: UserResponse<StreamChatGenerics>;
 };
 
 export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   votes: PollVote<StreamChatGenerics>[];
+  next?: string;
+};
+
+export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  vote: PollVote<StreamChatGenerics>;
 };

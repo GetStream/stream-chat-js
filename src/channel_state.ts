@@ -12,6 +12,8 @@ import {
   UserResponse,
   PendingMessageResponse,
   PollVote,
+  PollData,
+  PollResponse,
 } from './types';
 import { addToMessageList } from './utils';
 
@@ -487,58 +489,103 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     return { removed: result.length < msgArray.length, result };
   };
 
-  addPollVote = (pollVote: PollVote, messageId: string) => {
+  // this handles the case when vote on poll is changed
+  updatePollVote = (
+    pollVote: PollVote<StreamChatGenerics>,
+    poll: PollResponse<StreamChatGenerics>,
+    messageId: string,
+  ) => {
     const message = this.findMessage(messageId);
     if (!message) return;
-    const messageWithPoll = message;
 
-    // messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
-    //   if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
-    //     attachment.poll.options = attachment.poll.options.map((option) => {
-    //       if (option.id === pollVote.option_id) {
-    //         option.votes?.push(pollVote);
-    //         option.vote_count += 1;
-    //       }
+    if (message.poll_id !== pollVote.poll_id) return;
 
-    //       return { ...option };
-    //     });
-    //     if (pollVote.user_id === this._channel.getClient().userID) {
-    //       attachment.poll.own_votes?.push(pollVote);
-    //     }
+    const updatedPoll = { ...poll };
+    let ownVotes = [...(message.poll.own_votes || [])];
 
-    //     attachment.poll.vote_count += 1;
-    //   }
-    //   return { ...attachment };
-    // });
+    if (pollVote.user_id === this._channel.getClient().userID) {
+      if (pollVote.option_id && poll.enforce_unique_vote) {
+        // remove all previous votes where option_id is not empty
+        ownVotes = ownVotes.filter((vote) => !vote.option_id);
+      } else if (pollVote.comment_text) {
+        // remove all previous votes where option_id is empty
+        ownVotes = ownVotes.filter((vote) => vote.comment_text);
+      }
 
-    this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+      ownVotes.push(pollVote);
+    }
+    // @ts-ignore
+    updatedPoll.own_votes = ownVotes;
+    const newMessage = { ...message, poll: updatedPoll };
+
+    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
-  removePollVote = (pollVote: PollVote, messageId: string) => {
+  addPollVote = (pollVote: PollVote<StreamChatGenerics>, poll: PollResponse<StreamChatGenerics>, messageId: string) => {
     const message = this.findMessage(messageId);
     if (!message) return;
-    const messageWithPoll = message;
 
-    // messageWithPoll.attachments = messageWithPoll.attachments?.map((attachment) => {
-    //   if (attachment.type === 'poll' && attachment.poll?.id === pollVote.poll_id) {
-    //     attachment.poll.options = attachment.poll.options.map((option) => {
-    //       if (option.id === pollVote.option_id) {
-    //         option.votes = option.votes?.filter((vote) => vote.user_id !== pollVote.user_id);
-    //         option.vote_count -= 1;
-    //       }
+    if (message.poll_id !== pollVote.poll_id) return;
 
-    //       return { ...option };
-    //     });
-    //     if (pollVote.user_id === this._channel.getClient().userID) {
-    //       attachment.poll.own_votes = attachment.poll.own_votes?.filter((vote) => vote.user_id !== pollVote.user_id);
-    //     }
+    const updatedPoll = { ...poll };
+    const ownVotes = [...(message.poll.own_votes || [])];
 
-    //     attachment.poll.vote_count -= 1;
-    //   }
-    //   return { ...attachment };
-    // });
+    if (pollVote.user_id === this._channel.getClient().userID) {
+      ownVotes.push(pollVote);
+    }
 
-    this.addMessageSorted(({ ...messageWithPoll } as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+    // @ts-ignore
+    updatedPoll.own_votes = ownVotes;
+    const newMessage = { ...message, poll: updatedPoll };
+
+    console.log('addPollVote event handler: final own_votes', message.poll.own_votes);
+    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+
+    const afterUpdateMessage = this.findMessage(messageId);
+    console.log('addPollVote event handler: afterUpdateMessage', afterUpdateMessage?.poll.own_votes);
+  };
+
+  removePollVote = (
+    pollVote: PollVote<StreamChatGenerics>,
+    poll: PollResponse<StreamChatGenerics>,
+    messageId: string,
+  ) => {
+    const message = this.findMessage(messageId);
+    if (!message) return;
+
+    if (message.poll_id !== pollVote.poll_id) return;
+
+    const updatedPoll = { ...poll };
+    const ownVotes = [...(message.poll.own_votes || [])];
+    if (pollVote.user_id === this._channel.getClient().userID) {
+      const index = ownVotes.findIndex((vote) => vote.option_id === pollVote.option_id);
+      if (index > -1) {
+        ownVotes.splice(index, 1);
+      }
+    }
+
+    // @ts-ignore
+    updatedPoll.own_votes = ownVotes;
+
+    const newMessage = { ...message, poll: updatedPoll };
+    console.log('removePollVote event handler: final own_votes', message.poll.own_votes);
+    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
+  };
+
+  updatePoll = (poll: PollResponse<StreamChatGenerics>, messageId: string) => {
+    const message = this.findMessage(messageId);
+    if (!message) return;
+
+    const ownVotes = [...(message.poll?.own_votes || [])];
+
+    const updatedPoll = {
+      ...poll,
+      own_votes: [...(message.poll?.own_votes || [])],
+    };
+
+    const newMessage = { ...message, poll: updatedPoll };
+
+    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
   /**
