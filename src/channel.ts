@@ -1166,11 +1166,11 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @returns {APIResponse & PollVoteResponse} The poll votes
    */
   async vote(messageId: string, pollId: string, vote: PollVoteData) {
-    return await this.getClient().castVote(messageId, pollId, vote);
+    return await this.getClient().castPollVote(messageId, pollId, vote);
   }
 
   async removeVote(messageId: string, pollId: string, voteId: string) {
-    return await this.getClient().removeVote(messageId, pollId, voteId);
+    return await this.getClient().removePollVote(messageId, pollId, voteId);
   }
 
   /**

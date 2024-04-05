@@ -3518,25 +3518,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.put<APIResponse & UpdatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, option);
   }
 
-  // /**
-  //  * Partically updates a poll
-  //  * @param id string The poll id
-  //  * @param {PartialPollOptionUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
-  //  * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
-  //  * @returns {APIResponse & PollOptionResponse} The poll
-  //  */
-  // async partialUpdatePollOption(
-  //   pollId: string,
-  //   messageId: string,
-  //   optionId: string,
-  //   partialPollOptionObject: PartialPollOptionUpdate,
-  // ) {
-  //   return await this.patch<APIResponse & UpdatePollOptionAPIResponse>(
-  //     this.baseURL + `/polls/${pollId}/options/${optionId}`,
-  //     partialPollOptionObject,
-  //   );
-  // }
-
   /**
    * Delete a poll option
    * @param pollId string The poll id
@@ -3553,14 +3534,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
    * @returns {APIResponse & PollVotesAPIResponse} The poll votes
    */
-  async castVote(messageId: string, pollId: string, vote: PollVoteData, options = {}) {
+  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, options = {}) {
     return await this.post<APIResponse & CastVoteAPIResponse>(
       this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
       { vote, ...options },
     );
   }
 
-  async removeVote(messageId: string, pollId: string, voteId: string) {
+  async removePollVote(messageId: string, pollId: string, voteId: string) {
     return await this.delete<APIResponse & { vote: PollVote }>(
       this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`,
     );
