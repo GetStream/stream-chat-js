@@ -12,7 +12,6 @@ import {
   UserResponse,
   PendingMessageResponse,
   PollVote,
-  PollData,
   PollResponse,
 } from './types';
 import { addToMessageList } from './utils';
@@ -538,8 +537,6 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     const newMessage = { ...message, poll: updatedPoll };
 
     this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
-
-    const afterUpdateMessage = this.findMessage(messageId);
   };
 
   removePollVote = (
