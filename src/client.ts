@@ -3430,7 +3430,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Creates a poll
    * @param params PollData The poll that will be created
-   * @returns {APIResponse & PollResponse} The poll
+   * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
   async createPoll(poll: PollData) {
     return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, poll);
@@ -3439,9 +3439,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Retrieves a poll
    * @param id string The poll id
-   * @returns {APIResponse & PollResponse} The poll
+   * @returns {APIResponse & GetPollAPIResponse} The poll
    */
-  async getPoll(id: string, userId?: string) {
+  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
     return await this.get<APIResponse & GetPollAPIResponse>(this.baseURL + `/polls/${id}`, {
       ...(userId ? { user_id: userId } : {}),
     });
@@ -3457,13 +3457,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * Partically updates a poll
+   * Partially updates a poll
    * @param id string The poll id
    * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
-   * @returns {APIResponse & PollResponse} The poll
+   * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
+  async partialUpdatePoll(
+      id: string,
+      partialPollObject: PartialPollUpdate,
+  ): Promise<APIResponse & UpdatePollAPIResponse> {
     return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
   }
 
@@ -3476,6 +3479,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async deletePoll(id: string, userId?: string): Promise<APIResponse> {
     return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`, {
       ...(userId ? { user_id: userId } : {}),
+    });
+  }
+
+  /**
+   * Close a poll
+   * @param id string The poll id
+   * @returns {APIResponse & UpdatePollAPIResponse} The poll
+   */
+  async closePoll(id: string): Promise<APIResponse & UpdatePollAPIResponse> {
+    return this.partialUpdatePoll(id, {
+      set: {
+        is_closed: true,
+      }
     });
   }
 
@@ -3525,16 +3541,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * Cast or cancel one or more votes on a poll
+   * Cast vote on a poll
+   * @param messageId string The message id
    * @param pollId string The poll id
-   * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
-   * @returns {APIResponse & PollVotesAPIResponse} The poll votes
+   * @param vote PollVoteData The vote that will be casted
+   * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
   async castPollVote(messageId: string, pollId: string, vote: PollVoteData, options = {}) {
     return await this.post<APIResponse & CastVoteAPIResponse>(
       this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
       { vote, ...options },
     );
+  }
+
+  /**
+   * Add a poll answer
+   * @param messageId string The message id
+   * @param pollId string The poll id
+   * @param answerText string The answer text
+   */
+  async addPollAnswer(messageId: string, pollId: string, answerText: string) {
+    return this.castPollVote(messageId, pollId, {
+      answer_text: answerText
+    });
   }
 
   async removePollVote(messageId: string, pollId: string, voteId: string) {
