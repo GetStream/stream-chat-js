@@ -183,7 +183,7 @@ import {
   QuerySegmentTargetsFilter,
   SortParam,
   GetMessageOptions,
-  VoteFilters,
+  QueryVotesFilters,
   VoteSort,
   CreatePollAPIResponse,
   GetPollAPIResponse,
@@ -193,7 +193,7 @@ import {
   UpdatePollOptionAPIResponse,
   PollVote,
   CastVoteAPIResponse,
-  QueryPollsFilter,
+  QueryPollsFilters,
   PollSort,
   QueryPollsOptions,
   QueryVotesOptions,
@@ -3555,7 +3555,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & QueryPollsResponse} The polls
    */
   async queryPolls(
-    filter: VoteFilters = {},
+    filter: QueryPollsFilters = {},
     sort: PollSort = [],
     options: QueryPollsOptions = {},
   ): Promise<APIResponse & QueryPollsResponse> {
@@ -3577,7 +3577,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async queryPollVotes(
     pollId: string,
-    filter: VoteFilters = {},
+    filter: QueryVotesFilters = {},
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
   ): Promise<APIResponse & PollVotesAPIResponse> {

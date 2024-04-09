@@ -507,9 +507,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       if (pollVote.option_id && poll.enforce_unique_vote) {
         // remove all previous votes where option_id is not empty
         ownVotes = ownVotes.filter((vote) => !vote.option_id);
-      } else if (pollVote.comment_text) {
+      } else if (pollVote.answer_text) {
         // remove all previous votes where option_id is empty
-        ownVotes = ownVotes.filter((vote) => vote.comment_text);
+        ownVotes = ownVotes.filter((vote) => vote.answer_text);
       }
 
       ownVotes.push(pollVote);

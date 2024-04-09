@@ -1408,27 +1408,6 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
     }
 >;
 
-
-// TODO: add better typing
-export type QueryPollsFilter = {
-  created_at?: {
-    $eq?: string;
-    $gt?: string;
-    $gte?: string;
-    $in?: string[];
-    $lt?: string;
-    $lte?: string;
-  }
-  id?: {
-    $eq?: string;
-    $in?: string[];
-  };
-  user_id?: {
-    $eq?: string;
-    $in?: string[];
-  };
-};
-
 export type QueryPollsOptions = Pager
 
 export type VotesFiltersOptions = {
@@ -1439,98 +1418,50 @@ export type VotesFiltersOptions = {
 
 export type QueryVotesOptions = Pager
 
-// it('queries polls that are anonymous', async () => {
-//   const { polls } = await chatClient.queryPolls({
-//     voting_visibility: { $eq: 'anonymous' },
-//   });
-//   expect(polls).to.have.lengthOf(1);
-// });
+export type QueryPollsFilters = QueryFilters<
+{
+  id?: RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>> | PrimitiveFilter<PollResponse['id']>;
+} & {
+  user_id?:
+    | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<VotesFiltersOptions['user_id']>;
+} & {
+  is_closed?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['is_closed']>, '$eq'>>
+    | PrimitiveFilter<PollResponse['is_closed']>;
+} & {
+  max_votes_allowed?:
+    | RequireOnlyOne<
+        Pick<QueryFilter<PollResponse['max_votes_allowed']>, '$eq' | '$ne' | '$gt' | '$lt' | '$gte' | '$lte'>
+      >
+    | PrimitiveFilter<PollResponse['max_votes_allowed']>;
+} & {
+  allow_answers?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_answers']>, '$eq'>>
+    | PrimitiveFilter<PollResponse['allow_answers']>;
+} & {
+  voting_visibility?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['voting_visibility']>, '$eq'>>
+    | PrimitiveFilter<PollResponse['voting_visibility']>;
+} & {
+  created_at?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+    | PrimitiveFilter<PollResponse['created_at']>;
+} & {
+  created_by_id?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_by_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<PollResponse['created_by_id']>;
+} & {
+  updated_at?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+    | PrimitiveFilter<PollResponse['updated_at']>;
+} & {
+  name?:
+    | RequireOnlyOne<Pick<QueryFilter<PollResponse['name']>, '$eq' | '$in'>>
+    | PrimitiveFilter<PollResponse['name']>;
+}>;
 
-// it('queries polls that allow multiple votes', async () => {
-//   const { polls } = await chatClient.queryPolls({
-//     max_votes_allowed: { $eq: 10 },
-//   });
-//   expect(polls).to.have.lengthOf(1);
-// });
-
-// it('queries polls that allow user suggestions', async () => {
-//   const { polls } = await chatClient.queryPolls({
-//     allow_comments: { $eq: true },
-//   });
-//   expect(polls).to.have.lengthOf(1);
-// });
-
-// it('queries polls with multiple filter conditions', async () => {
-//   const { polls } = await chatClient.queryPolls({
-//     is_closed: { $eq: true },
-//     allow_comments: { $eq: false },
-//   });
-//   expect(polls).to.have.lengthOf(0);
-// });
-
-// it('queries polls based on name', async () => {
-//   const { polls } = await chatClient.queryPolls({
-//     name: { $in: ['aaa', 'bbb'] },
-//   });
-//   expect(polls).to.have.lengthOf(2);
-// });
-
-// it('queries polls by created_at', async () => {
-//   let res = await chatClient.queryPolls({
-//     created_at: { $lte: new Date() },
-//   });
-//   expect(res.polls).to.have.lengthOf(3);
-
-//   res = await chatClient.queryPolls({
-//     created_at: { $lte: new Date('2023-05-10T00:00:00.000Z') },
-//   });
-//   expect(res.polls).to.have.lengthOf(0);
-
-//   res = await chatClient.queryPolls({
-//     created_at: { $lt: poll3.created_at },
-//   });
-//   expect(res.polls).to.have.lengthOf(2);
-
-//   res = await chatClient.queryPolls({
-//     created_at: { $gte: poll2.created_at },
-//   });
-//   expect(res.polls).to.have.lengthOf(2);
-// });
-
-// it('queries polls based user who created it', async () => {
-//   const res = await chatClient.queryPolls({
-//     created_by_id: { $eq: poll1.created_by_id },
-//   });
-//   expect(res.polls).to.have.lengthOf(3);
-
-//   const res = await chatClient.queryPolls({
-//     created_by_id: { $eq: uuidv4() },
-//   });
-//   expect(res.polls).to.have.lengthOf(0);
-// });
-
-// it('queries polls by updated_at', async () => {
-//   let res = await chatClient.queryPolls({
-//     updated_at: { $lte: new Date() },
-//   });
-//   expect(res.polls).to.have.lengthOf(3);
-
-//   res = await chatClient.queryPolls({
-//     updated_at: { $lte: new Date('2023-05-10T00:00:00.000Z') },
-//   });
-//   expect(res.polls).to.have.lengthOf(0);
-
-//   res = await chatClient.queryPolls({
-//     updated_at: { $lt: poll3.created_at },
-//   });
-//   expect(res.polls).to.have.lengthOf(2);
-
-//   res = await chatClient.queryPolls({
-//     updated_at: { $gte: poll2.created_at },
-//   });
-//   expect(res.polls).to.have.lengthOf(2);
-// });
-export type VoteFilters = QueryFilters<
+export type QueryVotesFilters = QueryFilters<
   {
     id?: RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>> | PrimitiveFilter<PollResponse['id']>;
   } & {
@@ -1538,31 +1469,13 @@ export type VoteFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['option_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<VotesFiltersOptions['option_id']>;
   } & {
-    is_comment?:
+    is_answer?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['is_user_suggestion']>, '$eq'>>
       | PrimitiveFilter<VotesFiltersOptions['is_user_suggestion']>;
   } & {
     user_id?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<VotesFiltersOptions['user_id']>;
-  } & {
-    is_closed?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['is_closed']>, '$eq'>>
-      | PrimitiveFilter<PollResponse['is_closed']>;
-  } & {
-    max_votes_allowed?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<PollResponse['max_votes_allowed']>, '$eq' | '$ne' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
-      | PrimitiveFilter<PollResponse['max_votes_allowed']>;
-  } & {
-    allow_comments?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_comments']>, '$eq'>>
-      | PrimitiveFilter<PollResponse['allow_comments']>;
-  } & {
-    voting_visibility?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['voting_visibility']>, '$eq'>>
-      | PrimitiveFilter<PollResponse['voting_visibility']>;
   } & {
     created_at?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
@@ -1575,10 +1488,6 @@ export type VoteFilters = QueryFilters<
     updated_at?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<PollResponse['updated_at']>;
-  } & {
-    name?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['name']>, '$eq' | '$in'>>
-      | PrimitiveFilter<PollResponse['name']>;
   }
 >;
 
@@ -2983,7 +2892,7 @@ export type PollResponse<
   created_by_id: string;
   enforce_unique_vote: boolean;
   id: string;
-  latest_comments: PollVote<StreamChatGenerics>[];
+  latest_answers: PollVote<StreamChatGenerics>[];
   latest_votes_by_option: Record<string, PollVote<StreamChatGenerics>[]>;
   max_votes_allowed: number;
   name: string;
@@ -2991,8 +2900,8 @@ export type PollResponse<
   updated_at: string;
   vote_count: number;
   vote_counts_by_option: Record<string, number>;
-  allow_comments?: boolean;
-  allow_user_suggestions?: boolean;
+  allow_answers?: boolean;
+  allow_user_suggested_options?: boolean;
   is_closed?: boolean;
   own_votes?: PollVote<StreamChatGenerics>[];
   voting_visibility?: VotingVisibility;
@@ -3020,8 +2929,8 @@ export type PollData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['pollType'] & {
   name: string;
-  allow_comments?: boolean;
-  allow_user_suggestion?: boolean;
+  allow_answers?: boolean;
+  allow_user_suggested_options?: boolean;
   description?: string;
   enforce_unique_vote?: boolean;
   id?: string;
@@ -3052,8 +2961,8 @@ export type PartialPollOptionUpdate<StreamChatGenerics extends ExtendableGeneric
 };
 
 export type PollVoteData = {
-  comment_text?: string;
-  is_comment?: boolean;
+  answer_text?: string;
+  is_answer?: boolean;
   option_id?: string;
 };
 
@@ -3089,10 +2998,10 @@ export type PollOptionResponse<
 export type PollVote<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   id: string;
-  is_comment: boolean;
+  is_answer: boolean;
   poll_id: string;
   user_id: string;
-  comment_text?: string;
+  answer_text?: string;
   option_id?: string;
   user?: UserResponse<StreamChatGenerics>;
 };
