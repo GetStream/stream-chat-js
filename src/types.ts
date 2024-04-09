@@ -1417,7 +1417,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
 export type QueryPollsOptions = Pager;
 
 export type VotesFiltersOptions = {
-  is_user_suggestion?: boolean;
+  is_answer?: boolean;
   option_id?: string;
   user_id?: string;
 };
@@ -1445,6 +1445,10 @@ export type QueryPollsFilters = QueryFilters<
     allow_answers?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_answers']>, '$eq'>>
       | PrimitiveFilter<PollResponse['allow_answers']>;
+  } & {
+    allow_user_suggested_options?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_user_suggested_options']>, '$eq'>>
+      | PrimitiveFilter<PollResponse['allow_user_suggested_options']>;
   } & {
     voting_visibility?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['voting_visibility']>, '$eq'>>
@@ -1477,8 +1481,8 @@ export type QueryVotesFilters = QueryFilters<
       | PrimitiveFilter<VotesFiltersOptions['option_id']>;
   } & {
     is_answer?:
-      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['is_user_suggestion']>, '$eq'>>
-      | PrimitiveFilter<VotesFiltersOptions['is_user_suggestion']>;
+      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['is_answer']>, '$eq'>>
+      | PrimitiveFilter<VotesFiltersOptions['is_answer']>;
   } & {
     user_id?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
@@ -2900,6 +2904,7 @@ export type UpdatePollAPIResponse<StreamChatGenerics extends ExtendableGenerics 
 export type PollResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['pollType'] & {
+  answers_count: number;
   created_at: string;
   created_by: UserResponse<StreamChatGenerics> | null;
   created_by_id: string;
