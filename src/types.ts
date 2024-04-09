@@ -42,6 +42,7 @@ export type DefaultGenerics = {
   eventType: UR;
   messageType: UR;
   pollType: UR;
+  pollOptionType: UR;
   reactionType: UR;
   userType: UR;
 };
@@ -53,6 +54,7 @@ export type ExtendableGenerics = {
   eventType: UR;
   messageType: UR;
   pollType: UR;
+  pollOptionType: UR;
   reactionType: UR;
   userType: UR;
 };
@@ -456,6 +458,7 @@ export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics 
     eventType: StreamChatGenerics['eventType'];
     messageType: {};
     pollType: StreamChatGenerics['pollType'];
+    pollOptionType: StreamChatGenerics['pollOptionType'];
     reactionType: StreamChatGenerics['reactionType'];
     userType: StreamChatGenerics['userType'];
   }>,
@@ -1374,6 +1377,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           eventType: StreamChatGenerics['eventType'];
           messageType: StreamChatGenerics['messageType'];
           pollType: StreamChatGenerics['pollType'];
+          pollOptionType: StreamChatGenerics['pollOptionType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: StreamChatGenerics['userType'];
         }>,
@@ -1388,6 +1392,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 eventType: StreamChatGenerics['eventType'];
                 messageType: StreamChatGenerics['messageType'];
                 pollType: StreamChatGenerics['pollType'];
+                pollOptionType: StreamChatGenerics['pollOptionType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: StreamChatGenerics['userType'];
               }>[Key]
@@ -1401,6 +1406,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               eventType: StreamChatGenerics['eventType'];
               messageType: StreamChatGenerics['messageType'];
               pollType: StreamChatGenerics['pollType'];
+              pollOptionType: StreamChatGenerics['pollOptionType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: StreamChatGenerics['userType'];
             }>[Key]
@@ -1524,6 +1530,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           eventType: StreamChatGenerics['eventType'];
           messageType: {};
           pollType: StreamChatGenerics['pollType'];
+          pollOptionType: StreamChatGenerics['pollOptionType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: StreamChatGenerics['userType'];
         }>,
@@ -1538,6 +1545,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 eventType: StreamChatGenerics['eventType'];
                 messageType: {};
                 pollType: StreamChatGenerics['pollType'];
+                pollOptionType: StreamChatGenerics['pollOptionType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: StreamChatGenerics['userType'];
               }>[Key]
@@ -1551,6 +1559,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               eventType: StreamChatGenerics['eventType'];
               messageType: {};
               pollType: StreamChatGenerics['pollType'];
+              pollOptionType: StreamChatGenerics['pollOptionType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: StreamChatGenerics['userType'];
             }>[Key]
@@ -1630,6 +1639,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
           eventType: StreamChatGenerics['eventType'];
           messageType: StreamChatGenerics['messageType'];
           pollType: StreamChatGenerics['pollType'];
+          pollOptionType: StreamChatGenerics['pollOptionType'];
           reactionType: StreamChatGenerics['reactionType'];
           userType: {};
         }>,
@@ -1644,6 +1654,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
                 eventType: StreamChatGenerics['eventType'];
                 messageType: StreamChatGenerics['messageType'];
                 pollType: StreamChatGenerics['pollType'];
+                pollOptionType: StreamChatGenerics['pollOptionType'];
                 reactionType: StreamChatGenerics['reactionType'];
                 userType: {};
               }>[Key]
@@ -1657,6 +1668,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
               eventType: StreamChatGenerics['eventType'];
               messageType: StreamChatGenerics['messageType'];
               pollType: StreamChatGenerics['pollType'];
+              pollOptionType: StreamChatGenerics['pollOptionType'];
               reactionType: StreamChatGenerics['reactionType'];
               userType: {};
             }>[Key]

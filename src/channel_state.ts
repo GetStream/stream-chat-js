@@ -514,8 +514,8 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
 
       ownVotes.push(pollVote);
     }
-    // @ts-ignore
-    updatedPoll.own_votes = ownVotes;
+
+    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
     const newMessage = { ...message, poll: updatedPoll };
 
     this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
@@ -534,15 +534,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       ownVotes.push(pollVote);
     }
 
-    // @ts-ignore
-    updatedPoll.own_votes = ownVotes;
+    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
     const newMessage = { ...message, poll: updatedPoll };
 
-    console.log('addPollVote event handler: final own_votes', message.poll.own_votes);
     this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
 
     const afterUpdateMessage = this.findMessage(messageId);
-    console.log('addPollVote event handler: afterUpdateMessage', afterUpdateMessage?.poll.own_votes);
   };
 
   removePollVote = (
@@ -564,19 +561,15 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       }
     }
 
-    // @ts-ignore
-    updatedPoll.own_votes = ownVotes;
+    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
 
     const newMessage = { ...message, poll: updatedPoll };
-    console.log('removePollVote event handler: final own_votes', message.poll.own_votes);
     this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
   updatePoll = (poll: PollResponse<StreamChatGenerics>, messageId: string) => {
     const message = this.findMessage(messageId);
     if (!message) return;
-
-    const ownVotes = [...(message.poll?.own_votes || [])];
 
     const updatedPoll = {
       ...poll,
