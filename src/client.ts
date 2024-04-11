@@ -3464,8 +3464,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
   async partialUpdatePoll(
-      id: string,
-      partialPollObject: PartialPollUpdate,
+    id: string,
+    partialPollObject: PartialPollUpdate,
   ): Promise<APIResponse & UpdatePollAPIResponse> {
     return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
   }
@@ -3491,7 +3491,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.partialUpdatePoll(id, {
       set: {
         is_closed: true,
-      }
+      },
     });
   }
 
@@ -3562,7 +3562,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async addPollAnswer(messageId: string, pollId: string, answerText: string) {
     return this.castPollVote(messageId, pollId, {
-      answer_text: answerText
+      answer_text: answerText,
     });
   }
 
