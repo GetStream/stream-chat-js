@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.26.0](https://github.com/GetStream/stream-chat-js/compare/v8.25.1...v8.26.0) (2024-04-12)
+
+
+### Features
+
+* polls feature endpoints ([#1269](https://github.com/GetStream/stream-chat-js/issues/1269)) ([1d81480](https://github.com/GetStream/stream-chat-js/commit/1d8148072af1d899955a3d4b1e9b1957322961ed))
+
 ### [8.25.1](https://github.com/GetStream/stream-chat-js/compare/v8.25.0...v8.25.1) (2024-03-28)
 
 
