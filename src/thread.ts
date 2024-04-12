@@ -31,6 +31,7 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   replyCount = 0;
   _client: StreamChat<StreamChatGenerics>;
   read: ThreadReadStatus<StreamChatGenerics> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: Record<string, any> = {};
 
   constructor(client: StreamChat<StreamChatGenerics>, t: ThreadResponse<StreamChatGenerics>) {
@@ -45,16 +46,16 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
       ...data
     } = t;
 
-    this.id = t.parent_message.id;
-    this.message = formatMessage(t.parent_message);
-    this.latestReplies = t.latest_replies.map(formatMessage);
-    this.participants = t.thread_participants;
-    this.replyCount = t.reply_count;
-    this.channel = t.channel;
+    this.id = parent_message_id;
+    this.message = formatMessage(parent_message);
+    this.latestReplies = latest_replies.map(formatMessage);
+    this.participants = thread_participants;
+    this.replyCount = reply_count;
+    this.channel = channel;
     this._channel = client.channel(t.channel.type, t.channel.id);
     this._client = client;
-    if (t.read) {
-      for (const r of t.read) {
+    if (read) {
+      for (const r of read) {
         this.read[r.user.id] = {
           ...r,
           last_read: new Date(r.last_read),
