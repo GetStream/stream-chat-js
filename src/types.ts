@@ -110,6 +110,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         url_enrichment?: boolean;
       }
     >;
+    chat_default_user_privacy_settings: UserPrivacySettings;
     reminders_interval: number;
     agora_options?: AgoraOptions | null;
     async_moderation_config?: AsyncModerationOptions;
@@ -804,10 +805,24 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  privacy_settings?: Partial<UserPrivacySettings>;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type UserPrivacySettings = {
+  read_receipts: ReadReceiptsPrivacySettings;
+  typing_indicators: TypingIndicatorsPrivacySettings;
+};
+
+export type TypingIndicatorsPrivacySettings = {
+  enabled: boolean;
+};
+
+export type ReadReceiptsPrivacySettings = {
+  enabled: boolean;
 };
 
 export type PushNotificationSettings = {

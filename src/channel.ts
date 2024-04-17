@@ -55,6 +55,7 @@ import {
   QueryChannelAPIResponse,
   PollVoteData,
   SendMessageOptions,
+  UserPrivacySettings,
 } from './types';
 import { Role } from './permissions';
 
@@ -655,7 +656,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async keystroke(parent_id?: string, options?: { user_id: string }) {
-    if (!this.getConfig()?.typing_events) {
+    if (!(await this._shouldReportTyping())) {
       return;
     }
     const now = new Date();
@@ -679,7 +680,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async stopTyping(parent_id?: string, options?: { user_id: string }) {
-    if (!this.getConfig()?.typing_events) {
+    if (!(await this._shouldReportTyping())) {
       return;
     }
     this.lastTypingEvent = null;
@@ -1628,6 +1629,18 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }
+  }
+
+  async _shouldReportTyping() {
+    if (!this.getConfig()?.typing_events) {
+      return false;
+    }
+
+    const userPrivacySettings: Partial<UserPrivacySettings> = this.getClient().user?.privacy_settings || {};
+    const defaultPrivacySettings: Partial<UserPrivacySettings> =
+      (await this.getClient().getAppSettings()).app?.chat_default_user_privacy_settings || {};
+
+    return userPrivacySettings.typing_indicators?.enabled ?? defaultPrivacySettings.typing_indicators?.enabled ?? true;
   }
 
   _disconnect() {
