@@ -249,7 +249,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   private nextRequestAbortController: AbortController | null = null;
-  private _appSettings: AppSettingsAPIResponse | null = null;
 
   /**
    * Initialize a client
@@ -701,15 +700,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   /**
    * getAppSettings - retrieves application settings
-   *
-   * @param [options={}] App settings are cached by default. Pass { force: true } to force cache refresh.
    */
-  async getAppSettings(options: { force?: boolean } = {}) {
-    if (options.force || !this._appSettings) {
-      this._appSettings = await this.get<AppSettingsAPIResponse<StreamChatGenerics>>(this.baseURL + '/app');
-    }
-
-    return this._appSettings;
+  async getAppSettings() {
+    return await this.get<AppSettingsAPIResponse<StreamChatGenerics>>(this.baseURL + '/app');
   }
 
   /**

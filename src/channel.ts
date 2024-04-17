@@ -55,7 +55,6 @@ import {
   QueryChannelAPIResponse,
   PollVoteData,
   SendMessageOptions,
-  UserPrivacySettings,
 } from './types';
 import { Role } from './permissions';
 
@@ -1632,15 +1631,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   async _shouldReportTyping() {
-    if (!this.getConfig()?.typing_events) {
-      return false;
-    }
-
-    const userPrivacySettings: Partial<UserPrivacySettings> = this.getClient().user?.privacy_settings || {};
-    const defaultPrivacySettings: Partial<UserPrivacySettings> =
-      (await this.getClient().getAppSettings()).app?.chat_default_user_privacy_settings || {};
-
-    return userPrivacySettings.typing_indicators?.enabled ?? defaultPrivacySettings.typing_indicators?.enabled ?? true;
+    return !Array.isArray(this.data?.own_capabilities) || this.data?.own_capabilities.includes('typing-events');
   }
 
   _disconnect() {
