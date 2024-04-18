@@ -293,6 +293,12 @@ export type ChannelResponse<
   updated_at?: string;
 };
 
+export type QueryReactionsOptions = Pager;
+
+export type QueryReactionsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  reactions: ReactionResponse<StreamChatGenerics>[];
+};
+
 export type QueryChannelsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channels: Omit<ChannelAPIResponse<StreamChatGenerics>, keyof APIResponse>[];
 };
@@ -1354,6 +1360,26 @@ export type BannedUsersFilters = QueryFilters<
     }
 >;
 
+export type ReactionFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
+  {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReactionResponse<StreamChatGenerics>['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReactionResponse<StreamChatGenerics>['user_id']>;
+  } & {
+    type?:
+      | RequireOnlyOne<Pick<QueryFilter<ReactionResponse<StreamChatGenerics>['type']>, '$eq'>>
+      | PrimitiveFilter<ReactionResponse<StreamChatGenerics>['type']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<PollResponse['created_at']>;
+  } & {
+      [Key in keyof Omit<ReactionResponse<StreamChatGenerics>, 'user_id' | 'type' | 'created_at'>]: RequireOnlyOne<
+        QueryFilter<ReactionResponse<StreamChatGenerics>[Key]>
+      >;
+    }
+>;
+
 export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
   ContainsOperator<StreamChatGenerics['channelType']> & {
     members?:
@@ -1688,6 +1714,16 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
 export type BannedUsersSort = BannedUsersSortBase | Array<BannedUsersSortBase>;
 
 export type BannedUsersSortBase = { created_at?: AscDesc };
+
+export type ReactionSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
+  | ReactionSortBase<StreamChatGenerics>
+  | Array<ReactionSortBase<StreamChatGenerics>>;
+
+export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
+  StreamChatGenerics['reactionType']
+> & {
+  created_at?: AscDesc;
+};
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
