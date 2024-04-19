@@ -193,6 +193,10 @@ import {
   PollSort,
   QueryPollsOptions,
   QueryVotesOptions,
+  ReactionFilters,
+  ReactionSort,
+  QueryReactionsAPIResponse,
+  QueryReactionsOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1588,6 +1592,37 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
 
     return this.hydrateActiveChannels(data.channels, stateOptions);
+  }
+
+  /**
+   * queryReactions - Query reactions
+   *
+   * @param {ReactionFilters<StreamChatGenerics>} filter object MongoDB style filters
+   * @param {ReactionSort<StreamChatGenerics>} [sort] Sort options, for instance {created_at: -1}.
+   * @param {QueryReactionsOptions} [options] Pagination object
+   *
+   * @return {Promise<{ QueryReactionsAPIResponse } search channels response
+   */
+  async queryReactions(
+    messageID: string,
+    filter: ReactionFilters<StreamChatGenerics>,
+    sort: ReactionSort<StreamChatGenerics> = [],
+    options: QueryReactionsOptions = {},
+  ) {
+    // Make sure we wait for the connect promise if there is a pending one
+    await this.wsPromise;
+
+    // Return a list of channels
+    const payload = {
+      filter,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    };
+
+    return await this.post<QueryReactionsAPIResponse<StreamChatGenerics>>(
+      this.baseURL + '/messages/' + messageID + '/reactions',
+      payload,
+    );
   }
 
   hydrateActiveChannels(
