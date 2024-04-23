@@ -1631,7 +1631,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   async _shouldReportTyping() {
-    return !Array.isArray(this.data?.own_capabilities) || this.data?.own_capabilities.includes('typing-events');
+    return this.getClient().user?.privacy_settings?.typing_indicators ?? true;
   }
 
   _disconnect() {
