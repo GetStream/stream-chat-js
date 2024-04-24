@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.27.0](https://github.com/GetStream/stream-chat-js/compare/v8.26.0...v8.27.0) (2024-04-24)
+
+
+### Features
+
+* implement queryReactions ([#1279](https://github.com/GetStream/stream-chat-js/issues/1279)) ([ef21c10](https://github.com/GetStream/stream-chat-js/commit/ef21c1042ab9982600c946bb3a965fde3bdaf0da))
+
 ## [8.26.0](https://github.com/GetStream/stream-chat-js/compare/v8.25.1...v8.26.0) (2024-04-12)
 
 
