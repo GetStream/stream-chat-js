@@ -701,6 +701,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_count: number;
   unread_threads: number;
   invisible?: boolean;
+  privacy_settings?: PrivacySettings;
   roles?: string[];
 };
 
@@ -818,10 +819,20 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PrivacySettings = {
+  read_receipts?: {
+    enabled?: boolean;
+  };
+  typing_indicators?: {
+    enabled?: boolean;
+  };
 };
 
 export type PushNotificationSettings = {
