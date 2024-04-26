@@ -86,6 +86,7 @@ export function isOwnUserBaseProperty(property: string) {
     unread_count: true,
     unread_threads: true,
     invisible: true,
+    privacy_settings: true,
     roles: true,
   };
 
