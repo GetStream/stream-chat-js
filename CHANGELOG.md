@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.28.0](https://github.com/GetStream/stream-chat-js/compare/v8.27.0...v8.28.0) (2024-04-29)
+
+
+### Features
+
+* add reactiongroups in `MessageResponse` ([#1278](https://github.com/GetStream/stream-chat-js/issues/1278)) ([0d5f87f](https://github.com/GetStream/stream-chat-js/commit/0d5f87fe29dc946044dedd1ad6df0e8780a04e8f))
+* sort option on getReplies endpoint ([#1284](https://github.com/GetStream/stream-chat-js/issues/1284)) ([9ad65d3](https://github.com/GetStream/stream-chat-js/commit/9ad65d3ee6e275dc3ac22be1c2f87b082cf58de4))
+
 ## [8.27.0](https://github.com/GetStream/stream-chat-js/compare/v8.26.0...v8.27.0) (2024-04-24)
 
 
