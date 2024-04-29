@@ -53,6 +53,7 @@ import {
   UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
+  PollVoteData,
   SendMessageOptions,
 } from './types';
 import { Role } from './permissions';
@@ -1159,6 +1160,20 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * Cast or cancel one or more votes on a poll
+   * @param pollId string The poll id
+   * @param votes PollVoteData[] The votes that will be casted (or canceled in case of an empty array)
+   * @returns {APIResponse & PollVoteResponse} The poll votes
+   */
+  async vote(messageId: string, pollId: string, vote: PollVoteData) {
+    return await this.getClient().castPollVote(messageId, pollId, vote);
+  }
+
+  async removeVote(messageId: string, pollId: string, voteId: string) {
+    return await this.getClient().removePollVote(messageId, pollId, voteId);
+  }
+
+  /**
    * on - Listen to events on this channel.
    *
    * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
@@ -1399,6 +1414,31 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
             hidden: event.channel?.hidden ?? channel.data?.hidden,
             own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
+        }
+        break;
+      case 'poll.updated':
+        if (event.poll) {
+          channelState.updatePoll(event.poll, event.message?.id || '');
+        }
+        break;
+      case 'poll.vote_casted':
+        if (event.poll_vote && event.poll) {
+          channelState.addPollVote(event.poll_vote, event.poll, event.message?.id || '');
+        }
+        break;
+      case 'poll.vote_changed':
+        if (event.poll_vote && event.poll) {
+          channelState.updatePollVote(event.poll_vote, event.poll, event.message?.id || '');
+        }
+        break;
+      case 'poll.vote_removed':
+        if (event.poll_vote && event.poll) {
+          channelState.removePollVote(event.poll_vote, event.poll, event.message?.id || '');
+        }
+        break;
+      case 'poll.closed':
+        if (event.message) {
+          channelState.addMessageSorted(event.message, false, false);
         }
         break;
       case 'reaction.new':
