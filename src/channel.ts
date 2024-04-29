@@ -55,6 +55,7 @@ import {
   QueryChannelAPIResponse,
   PollVoteData,
   SendMessageOptions,
+  AscDesc,
 } from './types';
 import { Role } from './permissions';
 
@@ -823,10 +824,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   async getReplies(
     parent_id: string,
     options: MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string },
+    sort?: { created_at: AscDesc }[],
   ) {
+    const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
     const data = await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
       this.getClient().baseURL + `/messages/${parent_id}/replies`,
       {
+        sort: normalizedSort,
         ...options,
       },
     );
