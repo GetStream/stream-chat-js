@@ -500,7 +500,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if (message.poll_id !== pollVote.poll_id) return;
 
     const updatedPoll = { ...poll };
-    let ownVotes = [...(message.poll.own_votes || [])];
+    let ownVotes = [...(message.poll?.own_votes || [])];
 
     if (pollVote.user_id === this._channel.getClient().userID) {
       if (pollVote.option_id && poll.enforce_unique_vote) {
@@ -527,7 +527,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if (message.poll_id !== pollVote.poll_id) return;
 
     const updatedPoll = { ...poll };
-    const ownVotes = [...(message.poll.own_votes || [])];
+    const ownVotes = [...(message.poll?.own_votes || [])];
 
     if (pollVote.user_id === this._channel.getClient().userID) {
       ownVotes.push(pollVote);
@@ -550,7 +550,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if (message.poll_id !== pollVote.poll_id) return;
 
     const updatedPoll = { ...poll };
-    const ownVotes = [...(message.poll.own_votes || [])];
+    const ownVotes = [...(message.poll?.own_votes || [])];
     if (pollVote.user_id === this._channel.getClient().userID) {
       const index = ownVotes.findIndex((vote) => vote.option_id === pollVote.option_id);
       if (index > -1) {
