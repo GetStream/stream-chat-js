@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.29.0](https://github.com/GetStream/stream-chat-js/compare/v8.28.0...v8.29.0) (2024-04-30)
+
+
+### Features
+
+* add reaction groups fallback ([#1286](https://github.com/GetStream/stream-chat-js/issues/1286)) ([7183154](https://github.com/GetStream/stream-chat-js/commit/7183154a663701c24d9c573832288d66e9214565))
+
+
+### Bug Fixes
+
+* fix filter type for query reactions ([#1287](https://github.com/GetStream/stream-chat-js/issues/1287)) ([65174a5](https://github.com/GetStream/stream-chat-js/commit/65174a55fd30eec445033cb9af745e6d4164f23d))
+
 ## [8.28.0](https://github.com/GetStream/stream-chat-js/compare/v8.27.0...v8.28.0) (2024-04-29)
 
 
