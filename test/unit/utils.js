@@ -1,5 +1,5 @@
 import chai from 'chai';
-import { axiosParamsSerializer, generateUUIDv4, normalizeQuerySort } from '../../src/utils';
+import { axiosParamsSerializer, formatMessage, normalizeQuerySort } from '../../src/utils';
 import sinon from 'sinon';
 
 const expect = chai.expect;
@@ -98,5 +98,44 @@ describe('axiosParamsSerializer', () => {
 		for (const { input, output } of testCases) {
 			expect(axiosParamsSerializer(input)).to.equal(output);
 		}
+	});
+});
+
+describe('reaction groups fallback', () => {
+	it('uses groups if present', () => {
+		const date = '2024-04-30T11:03:39.217974Z';
+		const groups = {
+			love: {
+				count: 1,
+				sum_scores: 1,
+				first_reaction_at: date,
+				last_reaction_at: date,
+			},
+		};
+
+		const message = formatMessage({ reaction_groups: groups });
+		expect(message.reaction_groups).to.be.equal(groups);
+	});
+
+	it('falls back to counts + scores', () => {
+		const counts = { love: 1, sad: 1 };
+		const scores = { love: 1, sad: 2 };
+
+		const message = formatMessage({
+			reaction_groups: null,
+			reaction_counts: counts,
+			reaction_scores: scores,
+		});
+
+		expect(message.reaction_groups).to.deep.equal({
+			love: {
+				count: 1,
+				sum_scores: 1,
+			},
+			sad: {
+				count: 1,
+				sum_scores: 2,
+			},
+		});
 	});
 });
