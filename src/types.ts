@@ -627,7 +627,6 @@ export type MessageResponse<
 export type MessageResponseBase<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageBase<StreamChatGenerics> & {
-  reaction_groups: Record<string, ReactionGroupResponse>;
   type: MessageLabel;
   args?: string;
   before_message_send_failed?: boolean;
@@ -651,6 +650,7 @@ export type MessageResponseBase<
   pinned_by?: UserResponse<StreamChatGenerics> | null;
   poll?: PollResponse<StreamChatGenerics>;
   reaction_counts?: { [key: string]: number } | null;
+  reaction_groups?: { [key: string]: ReactionGroupResponse } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
