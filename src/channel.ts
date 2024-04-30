@@ -656,9 +656,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async keystroke(parent_id?: string, options?: { user_id: string }) {
-    if (!this.getConfig()?.typing_events) {
-      return;
-    }
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -683,9 +680,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
    */
   async stopTyping(parent_id?: string, options?: { user_id: string }) {
-    if (!this.getConfig()?.typing_events) {
-      return;
-    }
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -699,6 +693,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   _isTypingIndicatorsEnabled(): boolean {
+    if (!this.getConfig()?.typing_events) {
+      return false;
+    }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
   }
 
