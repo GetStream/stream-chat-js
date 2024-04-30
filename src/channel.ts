@@ -659,6 +659,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.getConfig()?.typing_events) {
       return;
     }
+    if (!this._isTypingIndicatorsEnabled()) {
+      return;
+    }
     const now = new Date();
     const diff = this.lastTypingEvent && now.getTime() - this.lastTypingEvent.getTime();
     this.lastKeyStroke = now;
@@ -683,6 +686,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.getConfig()?.typing_events) {
       return;
     }
+    if (!this._isTypingIndicatorsEnabled()) {
+      return;
+    }
     this.lastTypingEvent = null;
     this.isTyping = false;
     await this.sendEvent({
@@ -690,6 +696,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       parent_id,
       ...(options || {}),
     } as Event<StreamChatGenerics>);
+  }
+
+  _isTypingIndicatorsEnabled(): boolean {
+    return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
   }
 
   /**
