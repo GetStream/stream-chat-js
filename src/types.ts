@@ -297,6 +297,7 @@ export type QueryReactionsOptions = Pager;
 
 export type QueryReactionsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   reactions: ReactionResponse<StreamChatGenerics>[];
+  next?: string;
 };
 
 export type QueryChannelsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -1381,11 +1382,7 @@ export type ReactionFilters<StreamChatGenerics extends ExtendableGenerics = Defa
     created_at?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<PollResponse['created_at']>;
-  } & {
-      [Key in keyof Omit<ReactionResponse<StreamChatGenerics>, 'user_id' | 'type' | 'created_at'>]: RequireOnlyOne<
-        QueryFilter<ReactionResponse<StreamChatGenerics>[Key]>
-      >;
-    }
+  }
 >;
 
 export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
