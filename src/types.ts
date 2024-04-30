@@ -2307,6 +2307,7 @@ export type ExportChannelRequest = {
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
   export_users?: boolean;
+  include_soft_deleted_channels?: boolean;
   include_truncated_messages?: boolean;
   version?: string;
 };
