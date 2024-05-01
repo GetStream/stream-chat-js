@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.30.0](https://github.com/GetStream/stream-chat-js/compare/v8.29.0...v8.30.0) (2024-04-30)
+
+
+### Features
+
+* "include_soft_deleted_channels" option to export channels api ([#1288](https://github.com/GetStream/stream-chat-js/issues/1288)) ([dcd7621](https://github.com/GetStream/stream-chat-js/commit/dcd7621594accdadc255b0eb091616d1a83cb602))
+* support privacy settings ([#1283](https://github.com/GetStream/stream-chat-js/issues/1283)) ([f16552b](https://github.com/GetStream/stream-chat-js/commit/f16552b1e50606d47485b7a77925a1340e046626))
+
 ## [8.29.0](https://github.com/GetStream/stream-chat-js/compare/v8.28.0...v8.29.0) (2024-04-30)
 
 
