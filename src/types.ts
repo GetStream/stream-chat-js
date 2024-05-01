@@ -525,6 +525,7 @@ export type PartialThreadUpdate = {
 
 export type QueryThreadsOptions = {
   limit?: number;
+  member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
@@ -537,6 +538,7 @@ export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGeneric
 };
 
 export type GetThreadOptions = {
+  member_limit?: number;
   participant_limit?: number;
   reply_limit?: number;
   watch?: boolean;
