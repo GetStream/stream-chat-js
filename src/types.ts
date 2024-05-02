@@ -2779,6 +2779,7 @@ export type CampaignData = {
     text: string;
     attachments?: Attachment[];
     custom?: {};
+    poll_id?: string;
   };
   name?: string;
   segment_ids?: string[];
