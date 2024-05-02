@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.31.0](https://github.com/GetStream/stream-chat-js/compare/v8.30.0...v8.31.0) (2024-05-02)
+
+
+### Features
+
+* ability to send poll with campaigns ([#1292](https://github.com/GetStream/stream-chat-js/issues/1292)) ([cace193](https://github.com/GetStream/stream-chat-js/commit/cace1935dc808c03a291a28a084898ee5531d087))
+* member_limit option on queryThreads and getThread endpoint ([#1291](https://github.com/GetStream/stream-chat-js/issues/1291)) ([78fae3d](https://github.com/GetStream/stream-chat-js/commit/78fae3d7364150b6b3a7640b4f9b37204702a161))
+
 ## [8.30.0](https://github.com/GetStream/stream-chat-js/compare/v8.29.0...v8.30.0) (2024-04-30)
 
 
