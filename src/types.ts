@@ -1665,6 +1665,11 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
           >
         >
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['name']>;
+    notifications_muted?:
+      | RequireOnlyOne<{
+        $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
+      }>
+    | boolean;
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
