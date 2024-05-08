@@ -8,6 +8,7 @@ import {
   UserResponse,
   MessageResponse,
   FormatMessageResponse,
+  ReactionGroupResponse,
 } from './types';
 import { AxiosRequestConfig } from 'axios';
 
@@ -86,6 +87,7 @@ export function isOwnUserBaseProperty(property: string) {
     unread_count: true,
     unread_threads: true,
     invisible: true,
+    privacy_settings: true,
     roles: true,
   };
 
@@ -295,6 +297,11 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
     updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
     status: message.status || 'received',
+    reaction_groups: maybeGetReactionGroupsFallback(
+      message.reaction_groups,
+      message.reaction_counts,
+      message.reaction_scores,
+    ),
   };
 }
 
@@ -363,4 +370,29 @@ export function addToMessageList<StreamChatGenerics extends ExtendableGenerics =
     messageArr.splice(left, 0, message);
   }
   return [...messageArr];
+}
+
+function maybeGetReactionGroupsFallback(
+  groups: { [key: string]: ReactionGroupResponse } | null | undefined,
+  counts: { [key: string]: number } | null | undefined,
+  scores: { [key: string]: number } | null | undefined,
+): { [key: string]: ReactionGroupResponse } | null {
+  if (groups) {
+    return groups;
+  }
+
+  if (counts && scores) {
+    const fallback: { [key: string]: ReactionGroupResponse } = {};
+
+    for (const type of Object.keys(counts)) {
+      fallback[type] = {
+        count: counts[type],
+        sum_scores: scores[type],
+      };
+    }
+
+    return fallback;
+  }
+
+  return null;
 }

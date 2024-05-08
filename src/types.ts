@@ -297,6 +297,7 @@ export type QueryReactionsOptions = Pager;
 
 export type QueryReactionsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   reactions: ReactionResponse<StreamChatGenerics>[];
+  next?: string;
 };
 
 export type QueryChannelsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -524,6 +525,7 @@ export type PartialThreadUpdate = {
 
 export type QueryThreadsOptions = {
   limit?: number;
+  member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
@@ -536,6 +538,7 @@ export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGeneric
 };
 
 export type GetThreadOptions = {
+  member_limit?: number;
   participant_limit?: number;
   reply_limit?: number;
   watch?: boolean;
@@ -627,7 +630,6 @@ export type MessageResponse<
 export type MessageResponseBase<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = MessageBase<StreamChatGenerics> & {
-  reaction_groups: Record<string, ReactionGroupResponse>;
   type: MessageLabel;
   args?: string;
   before_message_send_failed?: boolean;
@@ -651,6 +653,7 @@ export type MessageResponseBase<
   pinned_by?: UserResponse<StreamChatGenerics> | null;
   poll?: PollResponse<StreamChatGenerics>;
   reaction_counts?: { [key: string]: number } | null;
+  reaction_groups?: { [key: string]: ReactionGroupResponse } | null;
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
@@ -715,6 +718,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_count: number;
   unread_threads: number;
   invisible?: boolean;
+  privacy_settings?: PrivacySettings;
   roles?: string[];
 };
 
@@ -832,10 +836,20 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
+  privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
   updated_at?: string;
+};
+
+export type PrivacySettings = {
+  read_receipts?: {
+    enabled?: boolean;
+  };
+  typing_indicators?: {
+    enabled?: boolean;
+  };
 };
 
 export type PushNotificationSettings = {
@@ -1395,11 +1409,7 @@ export type ReactionFilters<StreamChatGenerics extends ExtendableGenerics = Defa
     created_at?:
       | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<PollResponse['created_at']>;
-  } & {
-      [Key in keyof Omit<ReactionResponse<StreamChatGenerics>, 'user_id' | 'type' | 'created_at'>]: RequireOnlyOne<
-        QueryFilter<ReactionResponse<StreamChatGenerics>[Key]>
-      >;
-    }
+  }
 >;
 
 export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
@@ -1669,6 +1679,11 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
           >
         >
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['name']>;
+    notifications_muted?:
+      | RequireOnlyOne<{
+        $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
+      }>
+    | boolean;
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
@@ -2314,6 +2329,7 @@ export type ExportChannelRequest = {
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
   export_users?: boolean;
+  include_soft_deleted_channels?: boolean;
   include_truncated_messages?: boolean;
   version?: string;
 };
@@ -2783,6 +2799,7 @@ export type CampaignData = {
     text: string;
     attachments?: Attachment[];
     custom?: {};
+    poll_id?: string;
   };
   name?: string;
   segment_ids?: string[];

@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.31.0](https://github.com/GetStream/stream-chat-js/compare/v8.30.0...v8.31.0) (2024-05-02)
+
+
+### Features
+
+* ability to send poll with campaigns ([#1292](https://github.com/GetStream/stream-chat-js/issues/1292)) ([cace193](https://github.com/GetStream/stream-chat-js/commit/cace1935dc808c03a291a28a084898ee5531d087))
+* member_limit option on queryThreads and getThread endpoint ([#1291](https://github.com/GetStream/stream-chat-js/issues/1291)) ([78fae3d](https://github.com/GetStream/stream-chat-js/commit/78fae3d7364150b6b3a7640b4f9b37204702a161))
+
+## [8.30.0](https://github.com/GetStream/stream-chat-js/compare/v8.29.0...v8.30.0) (2024-04-30)
+
+
+### Features
+
+* "include_soft_deleted_channels" option to export channels api ([#1288](https://github.com/GetStream/stream-chat-js/issues/1288)) ([dcd7621](https://github.com/GetStream/stream-chat-js/commit/dcd7621594accdadc255b0eb091616d1a83cb602))
+* support privacy settings ([#1283](https://github.com/GetStream/stream-chat-js/issues/1283)) ([f16552b](https://github.com/GetStream/stream-chat-js/commit/f16552b1e50606d47485b7a77925a1340e046626))
+
+## [8.29.0](https://github.com/GetStream/stream-chat-js/compare/v8.28.0...v8.29.0) (2024-04-30)
+
+
+### Features
+
+* add reaction groups fallback ([#1286](https://github.com/GetStream/stream-chat-js/issues/1286)) ([7183154](https://github.com/GetStream/stream-chat-js/commit/7183154a663701c24d9c573832288d66e9214565))
+
+
+### Bug Fixes
+
+* fix filter type for query reactions ([#1287](https://github.com/GetStream/stream-chat-js/issues/1287)) ([65174a5](https://github.com/GetStream/stream-chat-js/commit/65174a55fd30eec445033cb9af745e6d4164f23d))
+
+## [8.28.0](https://github.com/GetStream/stream-chat-js/compare/v8.27.0...v8.28.0) (2024-04-29)
+
+
+### Features
+
+* add reactiongroups in `MessageResponse` ([#1278](https://github.com/GetStream/stream-chat-js/issues/1278)) ([0d5f87f](https://github.com/GetStream/stream-chat-js/commit/0d5f87fe29dc946044dedd1ad6df0e8780a04e8f))
+* sort option on getReplies endpoint ([#1284](https://github.com/GetStream/stream-chat-js/issues/1284)) ([9ad65d3](https://github.com/GetStream/stream-chat-js/commit/9ad65d3ee6e275dc3ac22be1c2f87b082cf58de4))
+
 ## [8.27.0](https://github.com/GetStream/stream-chat-js/compare/v8.26.0...v8.27.0) (2024-04-24)
 
 
