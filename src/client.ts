@@ -2193,12 +2193,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async getBlockedUsers() {
-    return await this.get<GetBlockedUsersResponse>(this.baseURL + '/user/block');
+  async getBlockedUsers(user_id?: string) {
+    return await this.get<GetBlockedUsersResponse>(this.baseURL + '/user/block', {
+      ...(user_id ? { user_id: user_id } : {}),
+    });
   }
-  async unBlockUser(blockedUserID: string) {
+  async unBlockUser(blockedUserID: string, userID?: string) {
     return await this.post<StreamChatGenerics>(this.baseURL + '/user/unblock', {
       blocked_user_id: blockedUserID,
+      ...(userID ? { user_id: userID } : {}),
     });
   }
   /** muteUser - mutes a user
