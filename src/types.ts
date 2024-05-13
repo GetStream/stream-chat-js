@@ -1667,9 +1667,9 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['name']>;
     notifications_muted?:
       | RequireOnlyOne<{
-        $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
-      }>
-    | boolean;
+          $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
+        }>
+      | boolean;
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
@@ -3092,4 +3092,43 @@ export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics =
 
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   vote: PollVote<StreamChatGenerics>;
+};
+
+export type QueryMessageHistoriesFilters = QueryFilters<
+  {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistory['message_id']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistory['user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<MessageHistory['created_at']>;
+  }
+>;
+
+export type QueryMessageHistoriesSort = QueryMessageHistoriesSortBase | Array<QueryMessageHistoriesSortBase>;
+
+export type QueryMessageHistoriesSortBase = {
+  created_at?: AscDesc;
+  user_id?: AscDesc;
+};
+
+export type QueryMessageHistoriesOptions = Pager;
+
+export type MessageHistory<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  created_at: string;
+  message_id: string;
+  attachments?: Attachment<StreamChatGenerics>[];
+  text?: string;
+  user_id?: string;
+};
+
+export type QueryMessageHistoriesResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_histories: MessageHistory<StreamChatGenerics>[];
+  next?: string;
+  prev?: string;
 };
