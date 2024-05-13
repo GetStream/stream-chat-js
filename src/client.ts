@@ -3664,7 +3664,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: QueryMessageHistorySort = [],
     options: QueryMessageHistoryOptions = {},
   ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/message-histories', {
+    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/messages/history', {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,

@@ -3128,7 +3128,7 @@ export type MessageHistory<StreamChatGenerics extends ExtendableGenerics = Defau
 };
 
 export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  message_histories: MessageHistory<StreamChatGenerics>[];
+  message_history: MessageHistory<StreamChatGenerics>[];
   next?: string;
   prev?: string;
 };
