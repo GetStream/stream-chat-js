@@ -3097,16 +3097,16 @@ export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = 
 export type QueryMessageHistoryFilters = QueryFilters<
   {
     message_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['message_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<MessageHistory['message_id']>;
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_id']>;
   } & {
     user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<MessageHistory['user_id']>;
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['user_id']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistory['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-      | PrimitiveFilter<MessageHistory['created_at']>;
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<MessageHistoryEntry['created_at']>;
   }
 >;
 
@@ -3119,7 +3119,7 @@ export type QueryMessageHistorySortBase = {
 
 export type QueryMessageHistoryOptions = Pager;
 
-export type MessageHistory<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type MessageHistoryEntry<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
   message_id: string;
   attachments?: Attachment<StreamChatGenerics>[];
@@ -3128,7 +3128,7 @@ export type MessageHistory<StreamChatGenerics extends ExtendableGenerics = Defau
 };
 
 export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  message_history: MessageHistory<StreamChatGenerics>[];
+  message_history: MessageHistoryEntry<StreamChatGenerics>[];
   next?: string;
   prev?: string;
 };
