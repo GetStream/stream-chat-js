@@ -3101,12 +3101,14 @@ export type QueryMessageHistoryFilters = QueryFilters<
       | PrimitiveFilter<MessageHistoryEntry['message_id']>;
   } & {
     user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<MessageHistoryEntry['user_id']>;
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_by_id']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-      | PrimitiveFilter<MessageHistoryEntry['created_at']>;
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageHistoryEntry['message_updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_at']>;
   }
 >;
 
@@ -3120,11 +3122,11 @@ export type QueryMessageHistorySortBase = {
 export type QueryMessageHistoryOptions = Pager;
 
 export type MessageHistoryEntry<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  created_at: string;
   message_id: string;
+  message_updated_at: string;
   attachments?: Attachment<StreamChatGenerics>[];
+  message_updated_by_id?: string;
   text?: string;
-  user_id?: string;
 };
 
 export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
