@@ -15,3 +15,4 @@ export * from './types';
 export * from './segment';
 export * from './campaign';
 export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';
+export * from './store/SimpleStateStore';

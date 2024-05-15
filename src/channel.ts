@@ -820,6 +820,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return response;
   }
 
+  // TODO: move to thread
   /**
    * getReplies - List the message replies for a parent message
    *

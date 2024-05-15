@@ -504,14 +504,7 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
   created_at: string;
   deleted_at: string;
   latest_replies: MessageResponse<StreamChatGenerics>[];
-  parent_message: MessageResponse<StreamChatGenerics>;
   parent_message_id: string;
-  read: {
-    last_read: string;
-    last_read_message_id: string;
-    unread_messages: number;
-    user: UserResponse<StreamChatGenerics>;
-  }[];
   reply_count: number;
   thread_participants: {
     created_at: string;
@@ -519,6 +512,13 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
   }[];
   title: string;
   updated_at: string;
+  parent_message?: MessageResponse<StreamChatGenerics>;
+  read?: {
+    last_read: string;
+    last_read_message_id: string;
+    unread_messages: number;
+    user: UserResponse<StreamChatGenerics>;
+  }[];
 };
 
 // TODO: Figure out a way to strongly type set and unset.

@@ -277,11 +277,10 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * formatMessage - Takes the message object. Parses the dates, sets __html
- * and sets the status to received if missing. Returns a message object
+ * Takes the message object, parses the dates, sets `__html`
+ * and sets the status to `received` if missing; returns a new message object.
  *
- * @param {MessageResponse<StreamChatGenerics>} message a message object
- *
+ * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
  */
 export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   message: MessageResponse<StreamChatGenerics>,
@@ -292,7 +291,7 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
      * @deprecated please use `html`
      */
     __html: message.html,
-    // parse the date..
+    // parse the dates
     pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
     updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
@@ -305,71 +304,91 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
   };
 }
 
-export function addToMessageList<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  messages: Array<FormatMessageResponse<StreamChatGenerics>>,
-  message: FormatMessageResponse<StreamChatGenerics>,
+// TODO: does not respect message lists ordered [newest -> oldest] only [oldest -> newest]
+export const findInsertionIndex = <T extends FormatMessageResponse>({
+  message,
+  messages,
+  sortBy = 'created_at',
+}: {
+  message: T;
+  messages: Array<T>;
+  sortBy?: 'pinned_at' | 'created_at';
+}) => {
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const messageTime = message[sortBy]!.getTime();
+
+  let left = 0;
+  let middle = 0;
+  let right = messages.length - 1;
+
+  while (left <= right) {
+    middle = Math.floor((right + left) / 2);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    if (messages[middle][sortBy]!.getTime() <= messageTime) left = middle + 1;
+    else right = middle - 1;
+  }
+
+  return left;
+};
+
+export function addToMessageList<T extends FormatMessageResponse>(
+  messages: readonly T[],
+  newMessage: T,
   timestampChanged = false,
   sortBy: 'pinned_at' | 'created_at' = 'created_at',
   addIfDoesNotExist = true,
 ) {
   const addMessageToList = addIfDoesNotExist || timestampChanged;
-  let messageArr = messages;
+  let newMessages = [...messages];
 
   // if created_at has changed, message should be filtered and re-inserted in correct order
   // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
   if (timestampChanged) {
-    messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
+    newMessages = newMessages.filter((message) => !(message.id && newMessage.id === message.id));
   }
-
-  // Get array length after filtering
-  const messageArrayLength = messageArr.length;
 
   // for empty list just concat and return unless it's an update or deletion
-  if (messageArrayLength === 0 && addMessageToList) {
-    return messageArr.concat(message);
-  } else if (messageArrayLength === 0) {
-    return [...messageArr];
+  if (!newMessages.length) {
+    if (addMessageToList) return newMessages.concat(newMessage);
+
+    return newMessages;
   }
 
-  const messageTime = (message[sortBy] as Date).getTime();
-  const messageIsNewest = (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const messageTime = newMessage[sortBy]!.getTime();
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
 
   // if message is newer than last item in the list concat and return unless it's an update or deletion
-  if (messageIsNewest && addMessageToList) {
-    return messageArr.concat(message);
-  } else if (messageIsNewest) {
-    return [...messageArr];
+  if (messageIsNewest) {
+    if (addMessageToList) return newMessages.concat(newMessage);
+
+    return newMessages;
   }
 
   // find the closest index to push the new message
-  let left = 0;
-  let middle = 0;
-  let right = messageArrayLength - 1;
-  while (left <= right) {
-    middle = Math.floor((right + left) / 2);
-    if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime) left = middle + 1;
-    else right = middle - 1;
-  }
+  const insertionIndex = findInsertionIndex({ message: newMessage, messages: newMessages, sortBy });
 
   // message already exists and not filtered due to timestampChanged, update and return
-  if (!timestampChanged && message.id) {
-    if (messageArr[left] && message.id === messageArr[left].id) {
-      messageArr[left] = message;
-      return [...messageArr];
+  if (!timestampChanged && newMessage.id) {
+    if (newMessages[insertionIndex] && newMessage.id === newMessages[insertionIndex].id) {
+      newMessages[insertionIndex] = newMessage;
+      return newMessages;
     }
 
-    if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
-      messageArr[left - 1] = message;
-      return [...messageArr];
+    if (newMessages[insertionIndex - 1] && newMessage.id === newMessages[insertionIndex - 1].id) {
+      newMessages[insertionIndex - 1] = newMessage;
+      return newMessages;
     }
   }
 
   // Do not add updated or deleted messages to the list if they do not already exist
   // or have a timestamp change.
   if (addMessageToList) {
-    messageArr.splice(left, 0, message);
+    newMessages.splice(insertionIndex, 0, newMessage);
   }
-  return [...messageArr];
+
+  return newMessages;
 }
 
 function maybeGetReactionGroupsFallback(

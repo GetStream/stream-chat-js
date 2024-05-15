@@ -13,7 +13,7 @@ import {
   ReactionResponse,
   UserResponse,
 } from './types';
-import { addToMessageList } from './utils';
+import { addToMessageList, formatMessage } from './utils';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
@@ -61,6 +61,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     isLatest: boolean;
     messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
   }[] = [];
+
   constructor(channel: Channel<StreamChatGenerics>) {
     this._channel = channel;
     this.watcher_count = 0;
@@ -132,26 +133,13 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   /**
-   * formatMessage - Takes the message object. Parses the dates, sets __html
-   * and sets the status to received if missing. Returns a message object
+   * Takes the message object, parses the dates, sets `__html`
+   * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse<StreamChatGenerics>} message a message object
-   *
+   * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
    */
-  formatMessage(message: MessageResponse<StreamChatGenerics>): FormatMessageResponse<StreamChatGenerics> {
-    return {
-      ...message,
-      /**
-       * @deprecated please use `html`
-       */
-      __html: message.html,
-      // parse the date..
-      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
-      created_at: message.created_at ? new Date(message.created_at) : new Date(),
-      updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
-      status: message.status || 'received',
-    };
-  }
+  formatMessage = (message: MessageResponse<StreamChatGenerics>): FormatMessageResponse<StreamChatGenerics> =>
+    formatMessage<StreamChatGenerics>(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
@@ -295,15 +283,16 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.pinnedMessages = result;
   }
 
+  // TODO: clean this up
   addReaction(
     reaction: ReactionResponse<StreamChatGenerics>,
     message?: MessageResponse<StreamChatGenerics>,
-    enforce_unique?: boolean,
+    enforceUnique?: boolean,
   ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforce_unique);
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforceUnique);
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;

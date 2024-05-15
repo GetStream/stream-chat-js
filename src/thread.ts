@@ -1,142 +1,185 @@
 import { StreamChat } from './client';
+import { Channel } from './channel';
 import {
   DefaultGenerics,
   ExtendableGenerics,
   MessageResponse,
   ThreadResponse,
-  ChannelResponse,
   FormatMessageResponse,
   ReactionResponse,
   UserResponse,
 } from './types';
 import { addToMessageList, formatMessage } from './utils';
+import { SimpleStateStore } from './store/SimpleStateStore';
 
 type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
   {
-    last_read: Date;
+    last_read: string;
     last_read_message_id: string;
+    lastRead: Date;
     unread_messages: number;
     user: UserResponse<StreamChatGenerics>;
   }
 >;
 
+// const formatReadState = () =>
+
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  id: string;
-  latestReplies: FormatMessageResponse<StreamChatGenerics>[] = [];
-  participants: ThreadResponse['thread_participants'] = [];
-  message: FormatMessageResponse<StreamChatGenerics>;
-  channel: ChannelResponse<StreamChatGenerics>;
-  _channel: ReturnType<StreamChat<StreamChatGenerics>['channel']>;
-  replyCount = 0;
-  _client: StreamChat<StreamChatGenerics>;
-  read: ThreadReadStatus<StreamChatGenerics> = {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: Record<string, any> = {};
+  public readonly state: SimpleStateStore<{
+    channel: Channel<StreamChatGenerics>;
+    channelData: ThreadResponse<StreamChatGenerics>['channel'];
+    createdAt: string;
+    deletedAt: string;
+    latestReplies: Array<FormatMessageResponse<StreamChatGenerics>>;
+    parentMessage: FormatMessageResponse<StreamChatGenerics> | undefined;
+    participants: ThreadResponse<StreamChatGenerics>['thread_participants'];
+    read: ThreadReadStatus<StreamChatGenerics>;
+    replyCount: number;
+    updatedAt: string;
+  }>;
+  public id: string;
+  private client: StreamChat<StreamChatGenerics>;
 
-  constructor(client: StreamChat<StreamChatGenerics>, t: ThreadResponse<StreamChatGenerics>) {
-    const {
-      parent_message_id,
-      parent_message,
-      latest_replies,
-      thread_participants,
-      reply_count,
-      channel,
+  constructor(client: StreamChat<StreamChatGenerics>, threadData: ThreadResponse<StreamChatGenerics>) {
+    // TODO: move to function "formatReadStatus"
+    const { read: unformattedRead = [] } = threadData;
+    // TODO: check why this one is sometimes undefined (should return empty array instead)
+    const read = unformattedRead.reduce<ThreadReadStatus<StreamChatGenerics>>((pv, cv) => {
+      pv[cv.user.id] ??= {
+        ...cv,
+        lastRead: new Date(cv.last_read),
+      };
+      return pv;
+    }, {});
+
+    console.log({ parent: threadData.parent_message, id: threadData.parent_message_id });
+
+    this.state = new SimpleStateStore({
+      channelData: threadData.channel, // not channel instance
+      channel: client.channel(threadData.channel.type, threadData.channel.id),
+      createdAt: threadData.created_at,
+      deletedAt: threadData.deleted_at,
+      latestReplies: threadData.latest_replies.map(formatMessage),
+      // TODO: check why this is sometimes undefined
+      parentMessage: threadData.parent_message && formatMessage(threadData.parent_message),
+      participants: threadData.thread_participants,
       read,
-      ...data
-    } = t;
+      replyCount: threadData.reply_count,
+      updatedAt: threadData.updated_at,
+    });
 
-    this.id = parent_message_id;
-    this.message = formatMessage(parent_message);
-    this.latestReplies = latest_replies.map(formatMessage);
-    this.participants = thread_participants;
-    this.replyCount = reply_count;
-    this.channel = channel;
-    this._channel = client.channel(t.channel.type, t.channel.id);
-    this._client = client;
-    if (read) {
-      for (const r of read) {
-        this.read[r.user.id] = {
-          ...r,
-          last_read: new Date(r.last_read),
-        };
-      }
-    }
-    this.data = data;
+    // parent_message_id is being re-used as thread.id
+    this.id = threadData.parent_message_id;
+    this.client = client;
+
+    // TODO: register WS listeners (message.new / reply )
+    // client.on()
   }
 
-  getClient(): StreamChat<StreamChatGenerics> {
-    return this._client;
+  get channel() {
+    return this.state.getLatestValue().channel;
   }
 
-  /**
-   * addReply - Adds or updates a latestReplies to the thread
-   *
-   * @param {MessageResponse<StreamChatGenerics>} message reply message to be added.
-   */
-  addReply(message: MessageResponse<StreamChatGenerics>) {
-    if (message.parent_id !== this.message.id) {
+  addReply = (message: MessageResponse<StreamChatGenerics>) => {
+    if (message.parent_id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
 
-    this.latestReplies = addToMessageList(this.latestReplies, formatMessage(message), true);
-  }
+    this.state.next((pv) => ({
+      ...pv,
+      latestReplies: addToMessageList(pv.latestReplies, formatMessage(message), true),
+    }));
+  };
 
-  updateReply(message: MessageResponse<StreamChatGenerics>) {
-    this.latestReplies = this.latestReplies.map((m) => {
-      if (m.id === message.id) {
-        return formatMessage(message);
+  updateReply = (message: MessageResponse<StreamChatGenerics>) => {
+    this.state.next((pv) => ({
+      ...pv,
+      latestReplies: pv.latestReplies.map((m) => {
+        if (m.id === message.id) return formatMessage(message);
+        return m;
+      }),
+    }));
+  };
+
+  updateParentMessage = (message: MessageResponse<StreamChatGenerics>) => {
+    if (message.id !== this.id) {
+      throw new Error('Message does not belong to this thread');
+    }
+
+    this.state.next((pv) => {
+      const newData = { ...pv, parentMessage: formatMessage(message) };
+      // update channel if channelData change (unlikely but handled anyway)
+      if (message.channel) {
+        newData['channel'] = this.client.channel(message.channel.type, message.channel.id);
       }
-      return m;
+      return newData;
     });
-  }
+  };
 
   updateMessageOrReplyIfExists(message: MessageResponse<StreamChatGenerics>) {
-    if (!message.parent_id && message.id !== this.message.id) {
-      return;
-    }
-
-    if (message.parent_id && message.parent_id !== this.message.id) {
-      return;
-    }
-
-    if (message.parent_id && message.parent_id === this.message.id) {
+    if (message.parent_id === this.id) {
       this.updateReply(message);
-      return;
     }
 
-    if (!message.parent_id && message.id === this.message.id) {
-      this.message = formatMessage(message);
+    if (!message.parent_id && message.id === this.id) {
+      this.updateParentMessage(message);
     }
   }
 
   addReaction(
     reaction: ReactionResponse<StreamChatGenerics>,
     message?: MessageResponse<StreamChatGenerics>,
-    enforce_unique?: boolean,
+    enforceUnique?: boolean,
   ) {
     if (!message) return;
 
-    this.latestReplies = this.latestReplies.map((m) => {
-      if (m.id === message.id) {
-        return formatMessage(
-          this._channel.state.addReaction(reaction, message, enforce_unique) as MessageResponse<StreamChatGenerics>,
-        );
-      }
-      return m;
-    });
+    this.state.next((pv) => ({
+      ...pv,
+      latestReplies: pv.latestReplies.map((reply) => {
+        if (reply.id !== message.id) return reply;
+
+        // FIXME: this addReaction API weird (maybe clean it up later)
+        const updatedMessage = pv.channel.state.addReaction(reaction, message, enforceUnique);
+        if (updatedMessage) return formatMessage(updatedMessage);
+
+        return reply;
+      }),
+    }));
   }
 
   removeReaction(reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) {
     if (!message) return;
 
-    this.latestReplies = this.latestReplies.map((m) => {
-      if (m.id === message.id) {
-        return formatMessage(
-          this._channel.state.removeReaction(reaction, message) as MessageResponse<StreamChatGenerics>,
-        );
-      }
-      return m;
-    });
+    this.state.next((pv) => ({
+      ...pv,
+      latestReplies: pv.latestReplies.map((reply) => {
+        if (reply.id !== message.id) return reply;
+
+        // FIXME: this removeReaction API is weird (maybe clean it up later)
+        const updatedMessage = pv.channel.state.removeReaction(reaction, message);
+        if (updatedMessage) return formatMessage(updatedMessage);
+
+        return reply;
+      }),
+    }));
   }
+
+  loadNext = async ({
+    options = {
+      id_gt: this.state.getLatestValue().latestReplies.at(-1)?.id,
+    },
+    sort = [{ created_at: -1 }],
+  }: {
+    options: Parameters<Channel<StreamChatGenerics>['getReplies']>['1'];
+    sort: Parameters<Channel<StreamChatGenerics>['getReplies']>['2'];
+  }) => {
+    // todo: loading/error states
+    const vals = await this.channel.getReplies(this.id, options, sort);
+  };
+
+  // TODO: impl
+  loadPrevious = () => {
+    // ...
+  };
 }
