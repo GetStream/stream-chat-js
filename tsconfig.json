@@ -5,7 +5,7 @@
     "baseUrl": "./src",
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "lib": ["DOM", "ES6"],
+    "lib": ["DOM", "ESNext", "ESNext.Array"],
     "noEmitOnError": false,
     "noImplicitAny": true,
     "preserveConstEnums": true,
