@@ -821,8 +821,6 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
-  devices?: Device<StreamChatGenerics>[];
-  invisible?: boolean;
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
