@@ -40,6 +40,8 @@ type EventType = UR;
 type MessageType = UR;
 type ReactionType = UR;
 type CommandType = string & {};
+type PollType = UR;
+type PollOptionType = UR;
 
 type StreamTypes = {
   attachmentType: AttachmentType;
@@ -49,6 +51,8 @@ type StreamTypes = {
   messageType: MessageType;
   reactionType: ReactionType;
   userType: UserType;
+  pollType: PollType;
+  pollOptionType: PollOptionType;
 };
 
 let voidReturn: void | { unsubscribe: () => void };
@@ -67,6 +71,8 @@ const clientWithoutSecret: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }> = new StreamChat<{
   attachmentType: {};
   channelType: ChannelType;
@@ -75,6 +81,8 @@ const clientWithoutSecret: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }>(apiKey, {
   timeout: 3000,
   logger: (logLevel: string, msg: string, extraData?: Record<string, unknown>) => {},
@@ -90,6 +98,8 @@ const singletonClient1: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }> = StreamChat.getInstance<{
   attachmentType: {};
   channelType: ChannelType;
@@ -98,6 +108,8 @@ const singletonClient1: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }>(apiKey);
 
 const singletonClient2: StreamChat<{
@@ -108,6 +120,8 @@ const singletonClient2: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }> = StreamChat.getInstance<{
   attachmentType: {};
   channelType: ChannelType;
@@ -116,6 +130,8 @@ const singletonClient2: StreamChat<{
   messageType: {};
   reactionType: {};
   userType: UserType;
+  pollType: {};
+  pollOptionType: {};
 }>(apiKey, '', {});
 
 const devToken: string = client.devToken('joshua');
