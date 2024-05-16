@@ -143,6 +143,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
+    poll_enabled?: boolean;
     push_notifications?: {
       offline_only: boolean;
       version: string;
@@ -820,6 +821,8 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  devices?: Device<StreamChatGenerics>[];
+  invisible?: boolean;
   language?: TranslationLanguages | '';
   last_active?: string;
   online?: boolean;
