@@ -22,13 +22,13 @@ const executables = [
 		f: rg.addMembers,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; pollType: {}; pollOptionType: {}; }>['addMembers']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['addMembers']>>",
 	},
 	{
 		f: rg.addModerators,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; pollType: {}; pollOptionType: {}; }>['addModerators']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['addModerators']>>",
 	},
 	{
 		f: rg.banUsers,
@@ -60,13 +60,13 @@ const executables = [
 		f: rg.create,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; pollType: {}; pollOptionType: {}; }>['create']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['create']>>",
 	},
 	{
 		f: rg.createBlockList,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; pollType: {}; pollOptionType: {}; }>['createBlockList']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['createBlockList']>>",
 	},
 	// createChannelType has a limit. So only run this when needed.
 	// {
@@ -320,13 +320,13 @@ const executables = [
 		f: rg.partialUpdateUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { gender: string; unique: string; }; }>['partialUpdateUser']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { gender: string; unique: string; }; pollType: {}; pollOptionType: {}; }>['partialUpdateUser']>>",
 	},
 	{
 		f: rg.partialUpdateUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { gender: string; unique: string; work?: string; }; }>['partialUpdateUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { gender: string; unique: string; work?: string; }; pollType: {}; pollOptionType: {}; }>['partialUpdateUsers']>>",
 	},
 	{
 		f: rg.query,
@@ -351,7 +351,7 @@ const executables = [
 		f: rg.queryUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { nickname?: string; }; }>['queryUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { nickname?: string; }; pollType: {}; pollOptionType: {}; }>['queryUsers']>>",
 	},
 	{
 		f: rg.reactivateUser,
@@ -362,7 +362,7 @@ const executables = [
 		f: rg.rejectInvite,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; image?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { song?: string; }; }>['rejectInvite']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; image?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { song?: string; }; pollType: {}; pollOptionType: {}; }>['rejectInvite']>>",
 	},
 	{
 		f: rg.removeMembers,
@@ -379,7 +379,7 @@ const executables = [
 		f: rg.sendAction,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; }>['sendAction']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; pollType: {}; pollOptionType: {}; }>['sendAction']>>",
 	},
 	{
 		f: rg.sendFile,
@@ -397,7 +397,7 @@ const executables = [
 		f: rg.sendMessage,
 		imports: ['Channel', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; }>['sendMessage']>>",
+			"Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; pollType: {}; pollOptionType: {}; }>['sendMessage']>>",
 	},
 	{
 		f: rg.sendMessageReadEvent,
@@ -518,7 +518,7 @@ const executables = [
 		f: rg.updateMessage,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; }>['updateMessage']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { testString?: string; }; pollType: {}; pollOptionType: {}; }>['updateMessage']>>",
 	},
 	{
 		f: rg.updatePermission,
@@ -529,13 +529,13 @@ const executables = [
 		f: rg.upsertUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { unique: string; }; }>['upsertUsers']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { unique: string; }; pollType: {}; pollOptionType: {}; }>['upsertUsers']>>",
 	},
 	{
 		f: rg.upsertUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type:
-			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { nickname: string; }; }>['upsertUser']>>",
+			"Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: {}; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: { nickname: string; }; pollType: {}; pollOptionType: {}; }>['upsertUser']>>",
 	},
 	{
 		f: rg.watch,
