@@ -3089,3 +3089,44 @@ export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics =
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   vote: PollVote<StreamChatGenerics>;
 };
+
+export type QueryMessageHistoryFilters = QueryFilters<
+  {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_id']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_by_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageHistoryEntry['message_updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_at']>;
+  }
+>;
+
+export type QueryMessageHistorySort = QueryMessageHistorySortBase | Array<QueryMessageHistorySortBase>;
+
+export type QueryMessageHistorySortBase = {
+  created_at?: AscDesc;
+  user_id?: AscDesc;
+};
+
+export type QueryMessageHistoryOptions = Pager;
+
+export type MessageHistoryEntry<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_id: string;
+  message_updated_at: string;
+  attachments?: Attachment<StreamChatGenerics>[];
+  message_updated_by_id?: string;
+  text?: string;
+};
+
+export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_history: MessageHistoryEntry<StreamChatGenerics>[];
+  next?: string;
+  prev?: string;
+};

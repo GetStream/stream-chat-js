@@ -197,6 +197,10 @@ import {
   ReactionSort,
   QueryReactionsAPIResponse,
   QueryReactionsOptions,
+  QueryMessageHistoryFilters,
+  QueryMessageHistorySort,
+  QueryMessageHistoryOptions,
+  QueryMessageHistoryResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3642,6 +3646,25 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: QueryVotesOptions = {},
   ): Promise<APIResponse & PollVotesAPIResponse> {
     return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+      filter,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    });
+  }
+
+  /**
+   * Queries message histories
+   * @param filter
+   * @param sort
+   * @param options Option object, {limit: 10}
+   * @returns {APIResponse & QueryMessageHistoryResponse} The message histories
+   */
+  async queryMessageHistory(
+    filter: QueryMessageHistoryFilters = {},
+    sort: QueryMessageHistorySort = [],
+    options: QueryMessageHistoryOptions = {},
+  ): Promise<APIResponse & QueryMessageHistoryResponse> {
+    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/messages/history', {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
