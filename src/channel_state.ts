@@ -1,7 +1,6 @@
 import { Channel } from './channel';
 import {
   ChannelMemberResponse,
-  ChannelMembership,
   FormatMessageResponse,
   Event,
   ExtendableGenerics,
@@ -42,7 +41,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   watchers: Record<string, UserResponse<StreamChatGenerics>>;
   members: Record<string, ChannelMemberResponse<StreamChatGenerics>>;
   unreadCount: number;
-  membership: ChannelMembership<StreamChatGenerics>;
+  membership: ChannelMemberResponse<StreamChatGenerics>;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.

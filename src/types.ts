@@ -143,6 +143,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
+    poll_enabled?: boolean;
     push_notifications?: {
       offline_only: boolean;
       version: string;
@@ -313,7 +314,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
-  membership?: ChannelMembership<StreamChatGenerics> | null;
+  membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
@@ -331,6 +332,7 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
   created_at?: string;
@@ -2042,18 +2044,12 @@ export type ChannelData<
   name?: string;
 };
 
-export type ChannelMembership<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  banned?: boolean;
-  channel_role?: Role;
-  created_at?: string;
-  is_moderator?: boolean;
-  notifications_muted?: boolean;
-  role?: string;
-  shadow_banned?: boolean;
-  status?: string;
-  updated_at?: string;
-  user?: UserResponse<StreamChatGenerics>;
-};
+/**
+ * @deprecated Use ChannelMemberResponse instead
+ */
+export type ChannelMembership<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = ChannelMemberResponse<StreamChatGenerics>;
 
 export type ChannelMute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   user: UserResponse<StreamChatGenerics>;
