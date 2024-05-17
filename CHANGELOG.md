@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.33.0](https://github.com/GetStream/stream-chat-js/compare/v8.32.0...v8.33.0) (2024-05-17)
+
+
+### Features
+
+* [PBE-1666] add query message histories ([#1298](https://github.com/GetStream/stream-chat-js/issues/1298)) ([c3c030c](https://github.com/GetStream/stream-chat-js/commit/c3c030cd26066c993c874ac7fcb459a006408aa5))
+
 ## [8.32.0](https://github.com/GetStream/stream-chat-js/compare/v8.31.0...v8.32.0) (2024-05-16)
 
 
