@@ -198,7 +198,7 @@ import {
   ReactionFilters,
   ReactionSort,
   QueryReactionsAPIResponse,
-  QueryReactionsOptions,
+  QueryReactionsOptions, BlockUserOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2186,10 +2186,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     });
   }
-  async blockUser(blockedUserID: string, userID?: string) {
+  async blockUser(blockedUserID: string, options? :BlockUserOptions) {
     return await this.post<BlockUserResponse>(this.baseURL + '/user/block', {
       blocked_user_id: blockedUserID,
-      ...(userID ? { user_id: userID } : {}),
+      ...options,
     });
   }
 
