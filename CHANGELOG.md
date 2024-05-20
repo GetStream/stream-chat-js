@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.33.0](https://github.com/GetStream/stream-chat-js/compare/v8.32.0...v8.33.0) (2024-05-17)
+
+
+### Features
+
+* [PBE-1666] add query message histories ([#1298](https://github.com/GetStream/stream-chat-js/issues/1298)) ([c3c030c](https://github.com/GetStream/stream-chat-js/commit/c3c030cd26066c993c874ac7fcb459a006408aa5))
+
+## [8.32.0](https://github.com/GetStream/stream-chat-js/compare/v8.31.0...v8.32.0) (2024-05-16)
+
+
+### Features
+
+* add support for notifications_muted in queryMembers ([#1296](https://github.com/GetStream/stream-chat-js/issues/1296)) ([7e02ac8](https://github.com/GetStream/stream-chat-js/commit/7e02ac8f9d23fd5ca00c9e2c91b5e18ddb04fffb))
+
+
+### Bug Fixes
+
+* fix channel.membership type ([#1300](https://github.com/GetStream/stream-chat-js/issues/1300)) ([367cc20](https://github.com/GetStream/stream-chat-js/commit/367cc20a0609a7c144d08c9f5572b0088c45c13e))
+
 ## [8.31.0](https://github.com/GetStream/stream-chat-js/compare/v8.30.0...v8.31.0) (2024-05-02)
 
 

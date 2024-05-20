@@ -143,6 +143,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     organization?: string;
     permission_version?: string;
     policies?: Record<string, Policy[]>;
+    poll_enabled?: boolean;
     push_notifications?: {
       offline_only: boolean;
       version: string;
@@ -313,7 +314,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
-  membership?: ChannelMembership<StreamChatGenerics> | null;
+  membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
@@ -331,6 +332,7 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
   created_at?: string;
@@ -1686,9 +1688,9 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
       | PrimitiveFilter<UserResponse<StreamChatGenerics>['name']>;
     notifications_muted?:
       | RequireOnlyOne<{
-        $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
-      }>
-    | boolean;
+          $eq?: PrimitiveFilter<UserResponse<StreamChatGenerics>['notifications_muted']>;
+        }>
+      | boolean;
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
@@ -2062,18 +2064,12 @@ export type ChannelData<
   name?: string;
 };
 
-export type ChannelMembership<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  banned?: boolean;
-  channel_role?: Role;
-  created_at?: string;
-  is_moderator?: boolean;
-  notifications_muted?: boolean;
-  role?: string;
-  shadow_banned?: boolean;
-  status?: string;
-  updated_at?: string;
-  user?: UserResponse<StreamChatGenerics>;
-};
+/**
+ * @deprecated Use ChannelMemberResponse instead
+ */
+export type ChannelMembership<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = ChannelMemberResponse<StreamChatGenerics>;
 
 export type ChannelMute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   user: UserResponse<StreamChatGenerics>;
@@ -3112,4 +3108,45 @@ export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics =
 
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   vote: PollVote<StreamChatGenerics>;
+};
+
+export type QueryMessageHistoryFilters = QueryFilters<
+  {
+    message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_id']>;
+  } & {
+    user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_by_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageHistoryEntry['message_updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<MessageHistoryEntry['message_updated_at']>;
+  }
+>;
+
+export type QueryMessageHistorySort = QueryMessageHistorySortBase | Array<QueryMessageHistorySortBase>;
+
+export type QueryMessageHistorySortBase = {
+  created_at?: AscDesc;
+  user_id?: AscDesc;
+};
+
+export type QueryMessageHistoryOptions = Pager;
+
+export type MessageHistoryEntry<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_id: string;
+  message_updated_at: string;
+  attachments?: Attachment<StreamChatGenerics>[];
+  message_updated_by_id?: string;
+  text?: string;
+};
+
+export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  message_history: MessageHistoryEntry<StreamChatGenerics>[];
+  next?: string;
+  prev?: string;
 };
