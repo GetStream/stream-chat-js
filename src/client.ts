@@ -2191,7 +2191,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     });
   }
-  async blockUser(blockedUserID: string, options? :BlockUserOptions) {
+  async blockUser(blockedUserID: string, options?: BlockUserOptions) {
     return await this.post<BlockUserResponse>(this.baseURL + '/user/block', {
       blocked_user_id: blockedUserID,
       ...options,
@@ -2200,7 +2200,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   async getBlockedUsers(user_id?: string) {
     return await this.get<GetBlockedUsersResponse>(this.baseURL + '/user/block', {
-      ...(user_id ? { user_id: user_id } : {}),
+      ...(user_id ? { user_id } : {}),
     });
   }
   async unBlockUser(blockedUserID: string, userID?: string) {
