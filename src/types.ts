@@ -742,6 +742,12 @@ export type ReactionResponse<
   updated_at: string;
 };
 
+export type ReactionResponseEx = ReactionEx & {
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+};
+
 export type ReadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   last_read: string;
   user: UserResponse<StreamChatGenerics>;
@@ -817,6 +823,21 @@ export type UpdateUsersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 };
 
 export type UserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = User<StreamChatGenerics> & {
+  banned?: boolean;
+  created_at?: string;
+  deactivated_at?: string;
+  deleted_at?: string;
+  language?: TranslationLanguages | '';
+  last_active?: string;
+  online?: boolean;
+  privacy_settings?: PrivacySettings;
+  push_notifications?: PushNotificationSettings;
+  revoke_tokens_issued_before?: string;
+  shadow_banned?: boolean;
+  updated_at?: string;
+};
+
+export type UserResponseEx = UserEx & {
   banned?: boolean;
   created_at?: string;
   deactivated_at?: string;
@@ -2511,6 +2532,14 @@ export type Reaction<
   user_id?: string;
 };
 
+export interface ReactionEx {
+  type: string;
+  message_id?: string;
+  score?: number;
+  user?: UserResponseEx | null;
+  user_id?: string;
+}
+
 export type Resource =
   | 'AddLinks'
   | 'BanUser'
@@ -2660,6 +2689,15 @@ export type User<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
   teams?: string[];
   username?: string;
 };
+
+export interface UserEx {
+  id: string;
+  anon?: boolean;
+  name?: string;
+  role?: string;
+  teams?: string[];
+  username?: string;
+}
 
 export type TaskResponse = {
   task_id: string;

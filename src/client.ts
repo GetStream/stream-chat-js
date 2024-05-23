@@ -201,6 +201,7 @@ import {
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
+  ReactionResponseEx,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1623,7 +1624,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    return await this.post<QueryReactionsAPIResponse<StreamChatGenerics>>(
+    return await this.post<{ reactions: ReactionResponseEx[] }>(
       this.baseURL + '/messages/' + messageID + '/reactions',
       payload,
     );
