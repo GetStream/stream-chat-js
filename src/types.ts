@@ -3111,8 +3111,8 @@ export type QueryMessageHistoryFilters = QueryFilters<
 export type QueryMessageHistorySort = QueryMessageHistorySortBase | Array<QueryMessageHistorySortBase>;
 
 export type QueryMessageHistorySortBase = {
-  created_at?: AscDesc;
-  user_id?: AscDesc;
+  message_updated_at?: AscDesc;
+  message_updated_by_id?: AscDesc;
 };
 
 export type QueryMessageHistoryOptions = Pager;
