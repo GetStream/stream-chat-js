@@ -1159,7 +1159,7 @@ export type UnBanUserOptions = {
 };
 
 export type BlockUserOptions = {
-  dont_hide_channel?: boolean;
+  keep_channels_visible?: boolean;
   user_id?: string;
 };
 
