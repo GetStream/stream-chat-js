@@ -27,7 +27,7 @@ describe('Thread', () => {
 			client.userID = 'observer';
 			channel = generateChannel().channel;
 			parent = generateMsg();
-			thread = new Thread(client, generateThread(channel, parent));
+			thread = new Thread({ client, threadData: generateThread(channel, parent) });
 		});
 		it('should throw error if the message is not a reply to the parent', async () => {
 			const reply = generateMsg({

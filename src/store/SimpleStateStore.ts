@@ -2,6 +2,12 @@ type Patch<T> = (value: T) => T;
 type Handler<T> = (nextValue: T) => any;
 type Initiator<T> = (get: SimpleStateStore<T>['getLatestValue'], set: SimpleStateStore<T>['next']) => T;
 
+export type InferStoreValueType<T> = T extends SimpleStateStore<infer R>
+  ? R
+  : T extends { state: SimpleStateStore<infer L> }
+  ? L
+  : never;
+
 function isPatch<T>(value: T | Patch<T>): value is Patch<T> {
   return typeof value === 'function';
 }
@@ -53,27 +59,27 @@ export class SimpleStateStore<
     };
   };
 
-  public subscribeWithSelector = <O extends readonly unknown[]>(selector: (nextValue: T) => O, handler: Handler<O>) => {
-    let selectedValues = selector(this.value);
+  public subscribeWithSelector = <O extends readonly unknown[]>(
+    selector: (nextValue: T) => O,
+    handler: Handler<O>,
+    emitOnSubscribe = false,
+  ) => {
+    // begin with undefined to reduce amount of selector calls
+    let selectedValues: O | undefined;
 
     const wrappedHandler: Handler<T> = (nextValue) => {
       const newlySelectedValues = selector(nextValue);
 
-      const hasUnequalMembers = selectedValues.some((value, index) => value !== newlySelectedValues[index]);
+      const hasUnequalMembers = selectedValues?.some((value, index) => value !== newlySelectedValues[index]);
 
-      if (hasUnequalMembers) {
+      // initial subscription call begins with hasUnequalMembers as undefined (skip comparison), fallback to unset selectedValues
+      if (hasUnequalMembers || !selectedValues) {
+        // skip initial handler call unless explicitly asked for (emitOnSubscribe)
+        if (selectedValues || (!selectedValues && emitOnSubscribe)) handler(newlySelectedValues);
         selectedValues = newlySelectedValues;
-        handler(newlySelectedValues);
       }
     };
 
     return this.subscribe(wrappedHandler);
   };
 }
-
-// const a = new SimpleStateStore({ string: 'aaa', b: 123 });
-
-// a.subscribeWithSelector(
-//   (nv) => [nv.b, nv.string] as const,
-//   ([a, b]) => console.log(),
-// );
