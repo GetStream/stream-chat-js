@@ -382,8 +382,7 @@ export function addToMessageList<T extends FormatMessageResponse>(
     }
   }
 
-  // Do not add updated or deleted messages to the list if they do not already exist
-  // or have a timestamp change.
+  // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
   if (addMessageToList) {
     newMessages.splice(insertionIndex, 0, newMessage);
   }

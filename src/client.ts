@@ -199,7 +199,7 @@ import {
   QueryReactionsOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
-import { Thread } from './thread';
+import { Thread, ThreadManager } from './thread';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -212,6 +212,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   activeChannels: {
     [key: string]: Channel<StreamChatGenerics>;
   };
+  threads: ThreadManager<StreamChatGenerics>;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -314,12 +315,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
 
-    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
-      this.setBaseURL('http://localhost:3030');
-    }
-
-    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_HOST) {
-      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
+    if (typeof process !== 'undefined') {
+      if (process.env.STREAM_LOCAL_TEST_RUN) this.setBaseURL('http://localhost:3030');
+      if (process.env.STREAM_LOCAL_TEST_HOST) this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
     }
 
     // WS connection is initialized when setUser is called
@@ -328,6 +326,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
     this.activeChannels = {};
+    // reusing the same name the channel has (Channel.threads)
+    this.threads = new ThreadManager({ client: this });
     // mapping between channel groups and configs
     this.configs = {};
     this.anonymous = false;
@@ -339,8 +339,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.consecutiveFailures = 0;
     this.insightMetrics = new InsightMetrics();
 
-    this.defaultWSTimeoutWithFallback = 6000;
-    this.defaultWSTimeout = 15000;
+    this.defaultWSTimeoutWithFallback = 6 * 1000;
+    this.defaultWSTimeout = 15 * 1000;
 
     this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
 
@@ -2694,7 +2694,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
 
     return {
-      threads: res.threads.map((thread) => new Thread(this, thread)),
+      threads: res.threads.map((thread) => new Thread({ client: this, threadData: thread })),
       next: res.next,
     };
   }
@@ -2724,7 +2724,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
 
-    return new Thread<StreamChatGenerics>(this, res.thread);
+    return new Thread<StreamChatGenerics>({ client: this, threadData: res.thread });
   }
 
   /**
