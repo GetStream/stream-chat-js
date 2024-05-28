@@ -283,7 +283,7 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
  */
 export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  message: MessageResponse<StreamChatGenerics>,
+  message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>,
 ): FormatMessageResponse<StreamChatGenerics> {
   return {
     ...message,
@@ -348,10 +348,8 @@ export function addToMessageList<T extends FormatMessageResponse>(
   }
 
   // for empty list just concat and return unless it's an update or deletion
-  if (!newMessages.length) {
-    if (addMessageToList) return newMessages.concat(newMessage);
-
-    return newMessages;
+  if (!newMessages.length && addMessageToList) {
+    return newMessages.concat(newMessage);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -360,10 +358,8 @@ export function addToMessageList<T extends FormatMessageResponse>(
   const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
 
   // if message is newer than last item in the list concat and return unless it's an update or deletion
-  if (messageIsNewest) {
-    if (addMessageToList) return newMessages.concat(newMessage);
-
-    return newMessages;
+  if (messageIsNewest && addMessageToList) {
+    return newMessages.concat(newMessage);
   }
 
   // find the closest index to push the new message

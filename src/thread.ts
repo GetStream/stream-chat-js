@@ -6,7 +6,7 @@ import {
   MessageResponse,
   ThreadResponse,
   FormatMessageResponse,
-  ReactionResponse,
+  // ReactionResponse,
   UserResponse,
   Event,
   QueryThreadsOptions,
@@ -28,27 +28,32 @@ type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGen
   }
 >;
 
-// const formatReadState = () =>
-
 type QueryRepliesApiResponse<T extends ExtendableGenerics> = GetRepliesAPIResponse<T>;
 
-type ThreadState<StreamChatGenerics extends ExtendableGenerics> = {
+type QueryRepliesOptions<T extends ExtendableGenerics> = {
+  sort?: { created_at: AscDesc }[];
+} & MessagePaginationOptions & { user?: UserResponse<T>; user_id?: string };
+
+type ThreadState<T extends ExtendableGenerics> = {
   createdAt: string;
   deletedAt: string;
-  latestReplies: Array<FormatMessageResponse<StreamChatGenerics>>;
+  latestReplies: Array<FormatMessageResponse<T>>;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
   nextId: string | null;
-  parentMessage: FormatMessageResponse<StreamChatGenerics> | undefined;
-  participants: ThreadResponse<StreamChatGenerics>['thread_participants'];
+  parentMessage: FormatMessageResponse<T> | undefined;
+  participants: ThreadResponse<T>['thread_participants'];
   previousId: string | null;
-  read: ThreadReadStatus<StreamChatGenerics>;
+  read: ThreadReadStatus<T>;
   replyCount: number;
   updatedAt: string;
 
-  channel?: Channel<StreamChatGenerics>;
-  channelData?: ThreadResponse<StreamChatGenerics>['channel'];
+  channel?: Channel<T>;
+  channelData?: ThreadResponse<T>['channel'];
 };
+
+const DEFAULT_PAGE_LIMIT = 15;
+const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: SimpleStateStore<ThreadState<StreamChatGenerics>>;
@@ -65,14 +70,15 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     registerEventHandlers?: boolean;
     threadData?: Partial<ThreadResponse<StreamChatGenerics>>;
   }) {
-    // TODO: move to function "formatReadStatus"
     const {
+      // TODO: check why this one is sometimes undefined (should return empty array instead)
       read: unformattedRead = [],
       latest_replies: latestReplies = [],
       thread_participants: threadParticipants = [],
       reply_count: replyCount = 0,
     } = threadData;
-    // TODO: check why this one is sometimes undefined (should return empty array instead)
+
+    // TODO: move to a function "formatReadStatus" and figure out whether this format is even useful
     const read = unformattedRead.reduce<ThreadReadStatus<StreamChatGenerics>>((pv, cv) => {
       pv[cv.user.id] ??= {
         ...cv,
@@ -103,9 +109,10 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     });
 
     // parent_message_id is being re-used as thread.id
-    this.id = threadData.parent_message_id ?? `thread-${placeholderDate}`; // FIXME: use instead nanoid
+    this.id = threadData.parent_message_id ?? `thread-no-id-${placeholderDate}`; // FIXME: use instead nanoid
     this.client = client;
 
+    // TODO: temporary - do not register handlers here but rather make ThreadList component have control over this
     if (registerEventHandlers) this.registerEventHandlers();
   }
 
@@ -113,13 +120,20 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     return this.state.getLatestValue().channel;
   }
 
-  private registerEventHandlers = () => {
+  /**
+   * Makes Thread instance listen to events and adjust its state accordingly.
+   */
+  public registerEventHandlers = () => {
+    // check whether this instance has subscriptions and is already listening for changes
+    if (this.unsubscribeFunctions.size) return;
+
     this.unsubscribeFunctions.add(
       this.client.on('notification.thread_message_new', (event) => {
         if (!event.message) return;
         if (event.message.parent_id !== this.id) return;
 
-        this.addReply({ message: event.message });
+        // deal with timestampChanged only related to local user (optimistic updates)
+        this.upsertReply({ message: event.message, timestampChanged: event.message.user?.id === this.client.user?.id });
       }).unsubscribe,
     );
 
@@ -129,10 +143,15 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 
       this.updateParentMessageOrReply(event.message);
     };
-    this.unsubscribeFunctions.add(this.client.on('message.updated', handleMessageUpdate).unsubscribe);
-    this.unsubscribeFunctions.add(this.client.on('message.deleted', handleMessageUpdate).unsubscribe);
-    this.unsubscribeFunctions.add(this.client.on('reaction.new', handleMessageUpdate).unsubscribe);
-    this.unsubscribeFunctions.add(this.client.on('reaction.deleted', handleMessageUpdate).unsubscribe);
+
+    ['message.updated', 'message.deleted', 'reaction.new', 'reaction.deleted'].forEach((eventType) => {
+      this.unsubscribeFunctions.add(this.client.on(eventType, handleMessageUpdate).unsubscribe);
+    });
+  };
+
+  public deregisterEventHandlers = () => {
+    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
+    // TODO: stop watching
   };
 
   private updateLocalState = <T extends InferStoreValueType<Thread>>(key: keyof T, newValue: T[typeof key]) => {
@@ -142,33 +161,20 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     }));
   };
 
-  // TODO: rename to upsert?
-  // does also update through addToMessageList function
-  addReply = ({ message }: { message: MessageResponse<StreamChatGenerics> }) => {
+  upsertReply = ({
+    message,
+    timestampChanged = false,
+  }: {
+    message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>;
+    timestampChanged?: boolean;
+  }) => {
     if (message.parent_id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
 
     this.state.next((current) => ({
       ...current,
-      latestReplies: addToMessageList(
-        current.latestReplies,
-        formatMessage(message),
-        message.user?.id === this.client.user?.id, // deal with timestampChanged only related to local user (optimistic updates)
-      ),
-    }));
-  };
-
-  /**
-   * @deprecated not sure whether we need this
-   */
-  updateReply = (message: MessageResponse<StreamChatGenerics>) => {
-    this.state.next((current) => ({
-      ...current,
-      latestReplies: current.latestReplies.map((m) => {
-        if (m.id === message.id) return formatMessage(message);
-        return m;
-      }),
+      latestReplies: addToMessageList(current.latestReplies, formatMessage(message), timestampChanged),
     }));
   };
 
@@ -179,74 +185,95 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 
     this.state.next((current) => {
       const newData = { ...current, parentMessage: formatMessage(message) };
+
       // update channel on channelData change (unlikely but handled anyway)
       if (message.channel) {
+        newData['channelData'] = message.channel;
         newData['channel'] = this.client.channel(message.channel.type, message.channel.id);
       }
+
       return newData;
     });
   };
 
-  updateParentMessageOrReply(message: MessageResponse<StreamChatGenerics>) {
+  updateParentMessageOrReply = (message: MessageResponse<StreamChatGenerics>) => {
     if (message.parent_id === this.id) {
-      this.updateReply(message);
+      this.upsertReply({ message });
     }
 
     if (!message.parent_id && message.id === this.id) {
       this.updateParentMessage(message);
     }
-  }
+  };
 
-  addReaction(
-    reaction: ReactionResponse<StreamChatGenerics>,
-    message?: MessageResponse<StreamChatGenerics>,
-    enforceUnique?: boolean,
-  ) {
-    if (!message) return;
+  /* 
+  TODO: merge and rename to toggleReaction instead (used for optimistic updates and WS only)
+  & move optimistic logic from stream-chat-react to here
+  */
+  // addReaction = ({
+  //   reaction,
+  //   message,
+  //   enforceUnique,
+  // }: {
+  //   reaction: ReactionResponse<StreamChatGenerics>;
+  //   enforceUnique?: boolean;
+  //   message?: MessageResponse<StreamChatGenerics>;
+  // }) => {
+  //   if (!message) return;
 
-    this.state.next((current) => ({
-      ...current,
-      latestReplies: current.latestReplies.map((reply) => {
-        if (reply.id !== message.id) return reply;
+  //   this.state.next((current) => ({
+  //     ...current,
+  //     latestReplies: current.latestReplies.map((reply) => {
+  //       if (reply.id !== message.id) return reply;
 
-        // FIXME: this addReaction API weird (maybe clean it up later)
-        const updatedMessage = current.channel?.state.addReaction(reaction, message, enforceUnique);
-        if (updatedMessage) return formatMessage(updatedMessage);
+  //       // FIXME: this addReaction API weird (maybe clean it up later)
+  //       const updatedMessage = current.channel?.state.addReaction(reaction, message, enforceUnique);
+  //       if (updatedMessage) return formatMessage(updatedMessage);
 
-        return reply;
-      }),
-    }));
-  }
+  //       return reply;
+  //     }),
+  //   }));
+  // };
 
-  removeReaction(reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) {
-    if (!message) return;
+  // removeReaction = (reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) => {
+  //   if (!message) return;
 
-    this.state.next((current) => ({
-      ...current,
-      latestReplies: current.latestReplies.map((reply) => {
-        if (reply.id !== message.id) return reply;
+  //   this.state.next((current) => ({
+  //     ...current,
+  //     latestReplies: current.latestReplies.map((reply) => {
+  //       if (reply.id !== message.id) return reply;
 
-        // FIXME: this removeReaction API is weird (maybe clean it up later)
-        const updatedMessage = current.channel?.state.removeReaction(reaction, message);
-        if (updatedMessage) return formatMessage(updatedMessage);
+  //       // FIXME: this removeReaction API is weird (maybe clean it up later)
+  //       const updatedMessage = current.channel?.state.removeReaction(reaction, message);
+  //       if (updatedMessage) return formatMessage(updatedMessage);
 
-        return reply;
-      }),
-    }));
-  }
+  //       return reply;
+  //     }),
+  //   }));
+  // };
 
+  public markAsRead = () => {
+    // TODO: impl
+  };
+
+  // moved from channel to thread directly (skipped getClient thing as this call does not need active WS connection)
   public queryReplies = ({
-    sort = [{ created_at: -1 }],
+    sort = DEFAULT_SORT,
+    limit = DEFAULT_PAGE_LIMIT,
     ...otherOptions
-  }: {
-    sort?: { created_at: AscDesc }[];
-  } & MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string } = {}) =>
+  }: QueryRepliesOptions<StreamChatGenerics> = {}) =>
     this.client.get<QueryRepliesApiResponse<StreamChatGenerics>>(`${this.client.baseURL}/messages/${this.id}/replies`, {
       sort: normalizeQuerySort(sort),
+      limit,
       ...otherOptions,
     });
 
-  loadNextPage = async (/* TODO: options? */) => {
+  // loadNextPage and loadPreviousPage rely on pagination id's calculated from previous requests
+  // these functions exclude these options (id_lt, id_lte...) from their options to prevent unexpected pagination behavior
+  loadNextPage = async ({
+    sort,
+    limit = DEFAULT_PAGE_LIMIT,
+  }: Pick<QueryRepliesOptions<StreamChatGenerics>, 'sort' | 'limit'> = {}) => {
     this.updateLocalState('loadingNextPage', true);
 
     const { loadingNextPage, nextId } = this.state.getLatestValue();
@@ -256,8 +283,17 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     try {
       const data = await this.queryReplies({
         id_gt: nextId,
-        limit: 10,
+        limit,
+        sort,
       });
+
+      const lastMessageId = data.messages.at(-1)?.id;
+
+      this.state.next((current) => ({
+        ...current,
+        latestReplies: current.latestReplies.concat(data.messages.map(formatMessage)),
+        nextId: data.messages.length < limit || !lastMessageId ? null : lastMessageId,
+      }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
     } finally {
@@ -265,8 +301,12 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     }
   };
 
-  loadPreviousPage = async (/* TODO: options? */) => {
+  loadPreviousPage = async ({
+    sort,
+    limit = DEFAULT_PAGE_LIMIT,
+  }: Pick<QueryRepliesOptions<StreamChatGenerics>, 'sort' | 'limit'> = {}) => {
     const { loadingPreviousPage, previousId } = this.state.getLatestValue();
+
     if (loadingPreviousPage || previousId === null) return;
 
     this.updateLocalState('loadingPreviousPage', true);
@@ -274,13 +314,16 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     try {
       const data = await this.queryReplies({
         id_lt: previousId,
-        limit: 10,
+        limit,
+        sort,
       });
+
+      const firstMessageId = data.messages.at(0)?.id;
 
       this.state.next((current) => ({
         ...current,
         latestReplies: data.messages.map(formatMessage).concat(current.latestReplies),
-        // TODO: previousId: res.len < opts.limit ? null : res.at(0).id
+        previousId: data.messages.length < limit || !firstMessageId ? null : firstMessageId,
       }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
@@ -291,34 +334,35 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   };
 }
 
-// TODO:
+// TODO?:
 // class ThreadState
 // class ThreadManagerState
 
+type ThreadManagerState<T extends ExtendableGenerics = DefaultGenerics> = {
+  loadingNextPage: boolean;
+  loadingPreviousPage: boolean;
+  threads: Thread<T>[];
+  unreadCount: number;
+  nextId?: string | null; // null means no next page available
+  previousId?: string | null;
+};
+
 export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: SimpleStateStore<{
-    loadingNextPage: boolean;
-    loadingPreviousPage: boolean;
-    threads: Thread<T>[];
-    unreadCount: number;
-    nextId?: string | null; // null means no next page available
-    previousId?: string | null;
-  }>;
+  public readonly state: SimpleStateStore<ThreadManagerState<T>>;
   private client: StreamChat<T>;
 
   constructor({ client }: { client: StreamChat<T> }) {
     this.client = client;
-    this.state = new SimpleStateStore({
+    this.state = new SimpleStateStore<ThreadManagerState<T>>({
       threads: [] as Thread<T>[],
       unreadCount: 0,
-      loadingNextPage: false as boolean, // WHAT IN THE FUCK?
-      loadingPreviousPage: false as boolean,
-      // nextId: undefined,
-      // previousId: undefined,
+      loadingNextPage: false,
+      loadingPreviousPage: false,
+      nextId: undefined,
+      previousId: undefined,
     });
   }
 
-  // TODO: maybe will use?
   // private threadIndexMap = new Map<string, number>();
 
   // remove `next` from options as that is handled internally
