@@ -1159,7 +1159,6 @@ export type UnBanUserOptions = {
 };
 
 export type BlockUserOptions = {
-  keep_channels_visible?: boolean;
   user_id?: string;
 };
 

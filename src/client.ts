@@ -2191,10 +2191,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     });
   }
-  async blockUser(blockedUserID: string, options?: BlockUserOptions) {
+  async blockUser(blockedUserID: string, user_id?: string) {
     return await this.post<BlockUserResponse>(this.baseURL + '/user/block', {
       blocked_user_id: blockedUserID,
-      ...options,
+      ...(user_id ? { user_id } : {}),
     });
   }
 
