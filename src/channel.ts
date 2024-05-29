@@ -1352,7 +1352,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
-          channelState._updateQuotedMessageReferences({message: event.message});
+          channelState._updateQuotedMessageReferences({ message: event.message });
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           } else {

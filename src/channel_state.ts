@@ -243,11 +243,11 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
         this.threads[parentID] = this._addToMessageList(
-            thread,
-            message,
-            timestampChanged,
-            'created_at',
-            addIfDoesNotExist,
+          thread,
+          message,
+          timestampChanged,
+          'created_at',
+          addIfDoesNotExist,
         );
       }
     }
@@ -348,7 +348,13 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     return messageWithReaction;
   }
 
-  _updateQuotedMessageReferences({message, remove}: {message: MessageResponse<StreamChatGenerics>, remove?: boolean} ) {
+  _updateQuotedMessageReferences({
+    message,
+    remove,
+  }: {
+    message: MessageResponse<StreamChatGenerics>;
+    remove?: boolean;
+  }) {
     const parseMessage = (m: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>) =>
       (({
         ...m,
@@ -358,25 +364,25 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       } as unknown) as MessageResponse<StreamChatGenerics>);
 
     const update = (messages: FormatMessageResponse<StreamChatGenerics>[]) => {
-      const updatedMessages = messages
-          .reduce<MessageResponse<StreamChatGenerics>[]>((acc, msg) => {
-            if (msg.quoted_message_id === message.id) {
-              acc.push(({...parseMessage(msg), quoted_message: remove ? {...message, attachments: []} : message}));
-            }
-            return acc;
-          }, []);
+      const updatedMessages = messages.reduce<MessageResponse<StreamChatGenerics>[]>((acc, msg) => {
+        if (msg.quoted_message_id === message.id) {
+          acc.push({ ...parseMessage(msg), quoted_message: remove ? { ...message, attachments: [] } : message });
+        }
+        return acc;
+      }, []);
       this.addMessagesSorted(updatedMessages, true);
     };
 
     if (!message.parent_id) {
       this.messageSets.forEach((set) => update(set.messages));
-    } else if (message.parent_id && this.threads[message.parent_id]) { // prevent going through all the threads even though it is possible to quote a message from another thread
+    } else if (message.parent_id && this.threads[message.parent_id]) {
+      // prevent going through all the threads even though it is possible to quote a message from another thread
       update(this.threads[message.parent_id]);
     }
   }
 
   removeQuotedMessageReferences(message: MessageResponse<StreamChatGenerics>) {
-    this._updateQuotedMessageReferences({message, remove: true});
+    this._updateQuotedMessageReferences({ message, remove: true });
   }
 
   /**
