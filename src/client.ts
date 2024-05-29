@@ -201,6 +201,7 @@ import {
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
+  GetUserModerationReportResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1545,6 +1546,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.get<MessageFlagsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flags/message', {
       payload: { filter_conditions: filterConditions, ...options },
     });
+  }
+
+  async getUserModerationReport(userID: string) {
+    return await this.get<GetUserModerationReportResponse<StreamChatGenerics>>(
+      this.baseURL + `/api/v2/moderation/user_report`,
+      {
+        user_id: userID,
+        include_bans: true,
+        include_user_mutes: true,
+        include_flag_reports: true,
+      },
+    );
   }
 
   /**

@@ -3130,3 +3130,42 @@ export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGen
   next?: string;
   prev?: string;
 };
+
+// Moderation v2
+export type CheckObject = {
+  created_at: string;
+  id: string;
+  custom?: Record<string, any>;
+  images?: string[];
+  texts?: string[];
+  user_id?: string;
+  videos?: string[];
+};
+
+export type ReviewQueueItem = {
+  actions_taken: any[];
+  appealed_by: string;
+  assigned_to: string;
+  completed_at: string;
+  config_key: string;
+  content_type: string;
+  context: any[];
+  created_at: string;
+  created_by: string;
+  id: string;
+  object: CheckObject;
+  options: any;
+  recommended_chat_actions: string[];
+  results: any;
+  status: string;
+  reviewed_at: string;
+  updated_at: string;
+  recommended_feeds_actions: string[];
+};
+
+export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  bans: BannedUsersResponse<StreamChatGenerics>[];
+  latest_flag_reports: ReviewQueueItem[];
+  user: UserResponse<StreamChatGenerics>;
+  user_mutes: Mute<StreamChatGenerics>[];
+};
