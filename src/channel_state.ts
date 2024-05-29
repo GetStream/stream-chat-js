@@ -1,17 +1,17 @@
 import { Channel } from './channel';
 import {
   ChannelMemberResponse,
-  FormatMessageResponse,
+  DefaultGenerics,
   Event,
   ExtendableGenerics,
-  DefaultGenerics,
-  MessageSetType,
+  FormatMessageResponse,
   MessageResponse,
+  MessageSetType,
+  PendingMessageResponse,
+  PollResponse,
+  PollVote,
   ReactionResponse,
   UserResponse,
-  PendingMessageResponse,
-  PollVote,
-  PollResponse,
 } from './types';
 import { addToMessageList } from './utils';
 
@@ -242,14 +242,13 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
        */
       if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
-        const threadMessages = this._addToMessageList(
-          thread,
-          message,
-          timestampChanged,
-          'created_at',
-          addIfDoesNotExist,
+        this.threads[parentID] = this._addToMessageList(
+            thread,
+            message,
+            timestampChanged,
+            'created_at',
+            addIfDoesNotExist,
         );
-        this.threads[parentID] = threadMessages;
       }
     }
 
@@ -349,7 +348,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     return messageWithReaction;
   }
 
-  removeQuotedMessageReferences(message: MessageResponse<StreamChatGenerics>) {
+  _updateQuotedMessageReferences({message, remove}: {message: MessageResponse<StreamChatGenerics>, remove?: boolean} ) {
     const parseMessage = (m: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>) =>
       (({
         ...m,
@@ -358,14 +357,26 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         updated_at: m.updated_at?.toISOString(),
       } as unknown) as MessageResponse<StreamChatGenerics>);
 
-    this.messageSets.forEach((set) => {
-      const updatedMessages = set.messages
-        .filter((msg) => msg.quoted_message_id === message.id)
-        .map(parseMessage)
-        .map((msg) => ({ ...msg, quoted_message: { ...message, attachments: [] } }));
-
+    const update = (messages: FormatMessageResponse<StreamChatGenerics>[]) => {
+      const updatedMessages = messages
+          .reduce<MessageResponse<StreamChatGenerics>[]>((acc, msg) => {
+            if (msg.quoted_message_id === message.id) {
+              acc.push(({...parseMessage(msg), quoted_message: remove ? {...message, attachments: []} : message}));
+            }
+            return acc;
+          }, []);
       this.addMessagesSorted(updatedMessages, true);
-    });
+    };
+
+    if (!message.parent_id) {
+      this.messageSets.forEach((set) => update(set.messages));
+    } else if (message.parent_id && this.threads[message.parent_id]) { // prevent going through all the threads even though it is possible to quote a message from another thread
+      update(this.threads[message.parent_id]);
+    }
+  }
+
+  removeQuotedMessageReferences(message: MessageResponse<StreamChatGenerics>) {
+    this._updateQuotedMessageReferences({message, remove: true});
   }
 
   /**
