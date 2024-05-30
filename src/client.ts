@@ -203,7 +203,6 @@ import {
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
-  BlockUserOptions,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2192,19 +2191,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
   async blockUser(blockedUserID: string, user_id?: string) {
-    return await this.post<BlockUserResponse>(this.baseURL + '/user/block', {
+    return await this.post<BlockUserResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
       ...(user_id ? { user_id } : {}),
     });
   }
 
   async getBlockedUsers(user_id?: string) {
-    return await this.get<GetBlockedUsersResponse>(this.baseURL + '/user/block', {
+    return await this.get<GetBlockedUsersResponse>(this.baseURL + '/users/block', {
       ...(user_id ? { user_id } : {}),
     });
   }
   async unBlockUser(blockedUserID: string, userID?: string) {
-    return await this.post<StreamChatGenerics>(this.baseURL + '/user/unblock', {
+    return await this.post<StreamChatGenerics>(this.baseURL + '/users/unblock', {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });

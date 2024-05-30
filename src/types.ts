@@ -1158,10 +1158,6 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
-export type BlockUserOptions = {
-  user_id?: string;
-};
-
 // TODO: rename to UpdateChannelTypeOptions in the next major update
 export type UpdateChannelOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Omit<
   CreateChannelOptions<StreamChatGenerics>,
