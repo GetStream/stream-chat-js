@@ -704,11 +704,11 @@ export type BlockUserResponse = APIResponse & {
 };
 
 export type GetBlockedUsersResponse = APIResponse & {
-  blocked_users: BlockedUser[];
+  blocks: BlockedUser[];
 };
 export type BlockedUser = APIResponse & {
-  blocked_by_user: UserResponse;
-  blocked_by_user_id: string;
+  user: UserResponse;
+  user_id: string;
 
   blocked_user: UserResponse;
   blocked_user_id: string;
