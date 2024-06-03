@@ -3169,3 +3169,91 @@ export type GetUserModerationReportResponse<StreamChatGenerics extends Extendabl
   user: UserResponse<StreamChatGenerics>;
   user_mutes: Mute<StreamChatGenerics>[];
 };
+
+// async queryReviewQueue(
+//   filterConditions: ReviewQueueFilters = {},
+//   sort: ReviewQueueSort = [],
+//   options: ReviewQueuePaginationOptions = {},
+// ) {
+//   return await this.get<ReviewQueueResponse<StreamChatGenerics>>(this.baseURL + '/moderation/queue', {
+//     payload: {
+//       filter_conditions: filterConditions,
+//       sort: normalizeQuerySort(sort),
+//       ...options,
+//     },
+//   });
+// }
+
+export type ReviewQueueFilters = QueryFilters<
+  {
+    assigned_to?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['assigned_to']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
+  } & {
+    completed_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['completed_at']>;
+  } & {
+    config_key?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['config_key']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['config_key']>;
+  } & {
+    content_type?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['content_type']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['content_type']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['created_at']>;
+  } & {
+    created_by?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['created_by']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['created_by']>;
+  } & {
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['id']>;
+  } & {
+    object_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['object']['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['object']['id']>;
+  } & {
+    object_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['object']['user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['object']['user_id']>;
+  } & {
+    reviewed?: boolean;
+  } & {
+    reviewed_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
+  } & {
+    status?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['status']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['status']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['updated_at']>;
+  }
+>;
+
+export type ReviewQueueSort =
+  | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
+  | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type ReviewQueuePaginationOptions = Pager;
+
+export type ReviewQueueResponse = {
+  items: ReviewQueueItem[];
+  next?: string;
+  prev?: string;
+};

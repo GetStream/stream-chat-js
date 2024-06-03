@@ -202,6 +202,10 @@ import {
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
   GetUserModerationReportResponse,
+  ReviewQueueFilters,
+  ReviewQueueSort,
+  ReviewQueuePaginationOptions,
+  ReviewQueueResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1558,6 +1562,38 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         include_flag_reports: true,
       },
     );
+  }
+
+  async queryReviewQueue(
+    filterConditions: ReviewQueueFilters = {},
+    sort: ReviewQueueSort = [],
+    options: ReviewQueuePaginationOptions = {},
+  ) {
+    return await this.post<ReviewQueueResponse>(this.baseURL + '/api/v2/moderation/review_queue', {
+      filter: filterConditions,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    });
+  }
+
+  async flag(
+    userID: string,
+    flaggedUserID: string,
+    contentType: string,
+    contentID: string,
+    reason: string,
+    content: Record<string, unknown> = {},
+    options: Record<string, unknown> = {},
+  ) {
+    return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/flag', {
+      user_id: userID,
+      flagged_user_id: flaggedUserID,
+      content_type: contentType,
+      content_id: contentID,
+      reason,
+      content,
+      options,
+    });
   }
 
   /**
