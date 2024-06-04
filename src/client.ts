@@ -203,6 +203,7 @@ import {
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
+  BlockUsersAPIResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2191,7 +2192,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
   async blockUser(blockedUserID: string, user_id?: string) {
-    return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
+    return await this.post<BlockUsersAPIResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
       ...(user_id ? { user_id } : {}),
     });
