@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.33.1](https://github.com/GetStream/stream-chat-js/compare/v8.33.0...v8.33.1) (2024-06-03)
+
+
+### Bug Fixes
+
+* update quoted message references on message.updated and message.deleted events ([#1310](https://github.com/GetStream/stream-chat-js/issues/1310)) ([6c4e29a](https://github.com/GetStream/stream-chat-js/commit/6c4e29a01716c9b46c53de4e6fda370e5f731716))
+* wrong sort field names ([#1308](https://github.com/GetStream/stream-chat-js/issues/1308)) ([a361ee7](https://github.com/GetStream/stream-chat-js/commit/a361ee7286e32948487b46a9c16e0ee6b82c367d))
+
 ## [8.33.0](https://github.com/GetStream/stream-chat-js/compare/v8.32.0...v8.33.0) (2024-05-17)
 
 
