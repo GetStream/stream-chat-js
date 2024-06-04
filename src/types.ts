@@ -697,13 +697,13 @@ export type MuteUserResponse<StreamChatGenerics extends ExtendableGenerics = Def
   own_user?: OwnUserResponse<StreamChatGenerics>;
 };
 
-export type BlockUserResponse = APIResponse & {
+export type BlockUserAPIResponse = APIResponse & {
   blocked_by_user_id: string;
   blocked_user_id: string;
   created_at: string;
 };
 
-export type GetBlockedUsersResponse = APIResponse & {
+export type GetBlockedUsersAPIResponse = APIResponse & {
   blocks: BlockedUser[];
 };
 export type BlockedUser = APIResponse & {
