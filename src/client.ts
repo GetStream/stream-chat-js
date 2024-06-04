@@ -40,6 +40,7 @@ import {
   BaseDeviceFields,
   BlockList,
   BlockListResponse,
+  BlockUserAPIResponse,
   CampaignResponse,
   CampaignData,
   CampaignFilters,
@@ -179,6 +180,7 @@ import {
   QuerySegmentTargetsFilter,
   SortParam,
   GetMessageOptions,
+  GetBlockedUsersAPIResponse,
   QueryVotesFilters,
   VoteSort,
   CreatePollAPIResponse,
@@ -2188,7 +2190,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     });
   }
+  async blockUser(blockedUserID: string, user_id?: string) {
+    return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
+      blocked_user_id: blockedUserID,
+      ...(user_id ? { user_id } : {}),
+    });
+  }
 
+  async getBlockedUsers(user_id?: string) {
+    return await this.get<GetBlockedUsersAPIResponse>(this.baseURL + '/users/block', {
+      ...(user_id ? { user_id } : {}),
+    });
+  }
+  async unBlockUser(blockedUserID: string, userID?: string) {
+    return await this.post<APIResponse>(this.baseURL + '/users/unblock', {
+      blocked_user_id: blockedUserID,
+      ...(userID ? { user_id: userID } : {}),
+    });
+  }
   /** muteUser - mutes a user
    *
    * @param {string} targetID

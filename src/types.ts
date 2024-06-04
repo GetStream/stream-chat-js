@@ -697,6 +697,30 @@ export type MuteUserResponse<StreamChatGenerics extends ExtendableGenerics = Def
   own_user?: OwnUserResponse<StreamChatGenerics>;
 };
 
+export type BlockUserResponse = APIResponse & {
+  blocked_at: string;
+  blocked_by_user_id: string;
+  blocked_user_id: string;
+};
+
+export type BlockUserAPIResponse = APIResponse & {
+  blocked_users: BlockUserResponse[];
+};
+
+export type GetBlockedUsersAPIResponse = APIResponse & {
+  blocks: BlockedUser[];
+};
+export type BlockedUser = APIResponse & {
+  blocked_user: UserResponse;
+  blocked_user_id: string;
+
+  created_at: string;
+
+  user: UserResponse;
+
+  user_id: string;
+};
+
 export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_mutes: ChannelMute<StreamChatGenerics>[];
   devices: Device<StreamChatGenerics>[];
@@ -2040,6 +2064,7 @@ export type ChannelConfigWithInfo<
 export type ChannelData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['channelType'] & {
+  blocked?: boolean;
   members?: string[];
   name?: string;
 };
