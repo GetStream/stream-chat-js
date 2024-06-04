@@ -707,13 +707,13 @@ export type GetBlockedUsersResponse = APIResponse & {
   blocks: BlockedUser[];
 };
 export type BlockedUser = APIResponse & {
-  user: UserResponse;
-  user_id: string;
-
   blocked_user: UserResponse;
   blocked_user_id: string;
 
   timestamp: string;
+  user: UserResponse;
+
+  user_id: string;
 };
 
 export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
