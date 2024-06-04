@@ -1991,6 +1991,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.post<
       APIResponse & {
         users: { [key: string]: UserResponse<StreamChatGenerics> };
+        membership_deletion_task_id?: string;
       }
     >(this.baseURL + '/users', { users: userMap });
   }
@@ -2043,6 +2044,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.patch<
       APIResponse & {
         users: { [key: string]: UserResponse<StreamChatGenerics> };
+        membership_deletion_task_id?: string;
       }
     >(this.baseURL + '/users', { users });
   }

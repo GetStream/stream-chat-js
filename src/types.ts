@@ -144,6 +144,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     permission_version?: string;
     policies?: Record<string, Policy[]>;
     poll_enabled?: boolean;
+    polls_enabled?: boolean;
     push_notifications?: {
       offline_only: boolean;
       version: string;
@@ -838,16 +839,23 @@ export type UpdateUsersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 
 export type UserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = User<StreamChatGenerics> & {
   banned?: boolean;
+  channel_mutes?: ChannelMute<StreamChatGenerics>[];
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  devices?: Device<StreamChatGenerics>[];
+  invisible?: boolean | null;
   language?: TranslationLanguages | '';
   last_active?: string;
+  mutes?: Mute<StreamChatGenerics>[];
   online?: boolean;
   privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
+  total_unread_count?: number;
+  unread_channels?: number;
+  unread_threads?: number;
   updated_at?: string;
 };
 
