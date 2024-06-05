@@ -842,6 +842,7 @@ export type UpdateUsersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 
 export type UserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = User<StreamChatGenerics> & {
   banned?: boolean;
+  blocked_user_ids?: string[];
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
@@ -851,8 +852,8 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
-  shadow_banned?: boolean;
   updated_at?: string;
+  shadow_banned?: boolean;
 };
 
 export type PrivacySettings = {
