@@ -852,8 +852,8 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
-  updated_at?: string;
   shadow_banned?: boolean;
+  updated_at?: string;
 };
 
 export type PrivacySettings = {
