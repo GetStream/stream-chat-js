@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.35.0](https://github.com/GetStream/stream-chat-js/compare/v8.34.0...v8.35.0) (2024-06-06)
+
+
+### Features
+
+* list of blocked users should be returned while connecting user ([#1318](https://github.com/GetStream/stream-chat-js/issues/1318)) ([415f9c7](https://github.com/GetStream/stream-chat-js/commit/415f9c7317ac7f87a874ce3b8bc8bc6c13ce8916))
+
+
+### Bug Fixes
+
+* fix blockuser() vars naming ([#1316](https://github.com/GetStream/stream-chat-js/issues/1316)) ([d06acaa](https://github.com/GetStream/stream-chat-js/commit/d06acaa2369d120ca08407f58400970a85d749ae))
+
 ## [8.34.0](https://github.com/GetStream/stream-chat-js/compare/v8.33.1...v8.34.0) (2024-06-04)
 
 
