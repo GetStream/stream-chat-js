@@ -838,6 +838,7 @@ export type UpdateUsersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 
 export type UserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = User<StreamChatGenerics> & {
   banned?: boolean;
+  blocked_user_ids?: string[];
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
