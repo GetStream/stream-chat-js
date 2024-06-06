@@ -3243,6 +3243,12 @@ export type ReviewQueueFilters = QueryFilters<
           Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
         >
       | PrimitiveFilter<ReviewQueueItem['updated_at']>;
+  } & {
+    has_image?: boolean;
+  } & {
+    has_text?: boolean;
+  } & {
+    has_video?: boolean;
   }
 >;
 
