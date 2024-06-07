@@ -542,6 +542,45 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	});
 
+	it('should update quoted_message references on "message.updated" and "message.deleted" event', () => {
+		const originalText = 'XX';
+		const updatedText = 'YY';
+		const parent_id = '0';
+		const parentMesssage = generateMsg({ date: new Date(0).toISOString(), id: parent_id });
+		const quoted_message = generateMsg({
+			date: new Date(2).toISOString(),
+			id: 'quoted-message',
+			text: originalText,
+		});
+		const quotingMessage = generateMsg({
+			date: new Date(3).toISOString(),
+			id: 'quoting-message',
+			quoted_message,
+			quoted_message_id: quoted_message.id,
+		});
+		const updatedQuotedMessage = { ...quoted_message, text: updatedText };
+		const updatedQuotedThreadReply = { ...quoted_message, parent_id, text: updatedText };
+		[
+			[quoted_message, quotingMessage], // channel message
+			[parentMesssage, { ...quoted_message, parent_id }, { ...quotingMessage, parent_id }], // thread message
+		].forEach((messages) => {
+			['message.updated', 'message.deleted'].forEach((eventType) => {
+				channel.state.addMessagesSorted(messages);
+				const isThread = messages.length === 3;
+				const quotingMessage = messages[messages.length - 1];
+				const event = {
+					type: eventType,
+					message: isThread ? updatedQuotedThreadReply : updatedQuotedMessage,
+				};
+				channel._handleChannelEvent(event);
+				expect(
+					channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id).quoted_message.text,
+				).to.equal(updatedQuotedMessage.text);
+				channel.state.clearMessages();
+			});
+		});
+	});
+
 	it('should mark channel visible on channel.visible event', () => {
 		const channelVisibleEvent = {
 			type: 'channel.visible',
