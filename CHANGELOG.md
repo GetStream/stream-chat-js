@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.36.0](https://github.com/GetStream/stream-chat-js/compare/v8.35.0...v8.36.0) (2024-06-10)
+
+
+### Features
+
+* block user update, block_user response ([#1320](https://github.com/GetStream/stream-chat-js/issues/1320)) ([ac60a91](https://github.com/GetStream/stream-chat-js/commit/ac60a910a36c5b8d3fff366eb22134031afb0850))
+
 ## [8.35.0](https://github.com/GetStream/stream-chat-js/compare/v8.34.0...v8.35.0) (2024-06-06)
 
 
