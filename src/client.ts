@@ -339,8 +339,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
     this.activeChannels = {};
-    // reusing the same name the channel has (Channel.threads)
-    this.threads = new ThreadManager({ client: this });
+
     // mapping between channel groups and configs
     this.configs = {};
     this.anonymous = false;
@@ -407,6 +406,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+
+    // reusing the same name the channel has (Channel.threads)
+    this.threads = new ThreadManager({ client: this });
   }
 
   /**

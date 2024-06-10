@@ -8,6 +8,10 @@ export type InferStoreValueType<T> = T extends SimpleStateStore<infer R>
   ? L
   : never;
 
+export type StoreSelector<T> = (
+  nextValue: T extends SimpleStateStore<infer S> ? S : never,
+) => readonly typeof nextValue[keyof typeof nextValue][];
+
 function isPatch<T>(value: T | Patch<T>): value is Patch<T> {
   return typeof value === 'function';
 }
@@ -72,11 +76,11 @@ export class SimpleStateStore<
 
       const hasUnequalMembers = selectedValues?.some((value, index) => value !== newlySelectedValues[index]);
 
+      selectedValues = newlySelectedValues;
+
       // initial subscription call begins with hasUnequalMembers as undefined (skip comparison), fallback to unset selectedValues
-      if (hasUnequalMembers || !selectedValues) {
-        // skip initial handler call unless explicitly asked for (emitOnSubscribe)
-        if (selectedValues || (!selectedValues && emitOnSubscribe)) handler(newlySelectedValues);
-        selectedValues = newlySelectedValues;
+      if (hasUnequalMembers || (typeof hasUnequalMembers === 'undefined' && emitOnSubscribe)) {
+        handler(newlySelectedValues);
       }
     };
 
