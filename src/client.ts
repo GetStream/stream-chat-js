@@ -1578,13 +1578,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async flag(
-    userID: string,
-    flaggedUserID: string,
-    entityType: string,
-    entityID: string,
-    reason: string,
-  ) {
+  async flag(userID: string, flaggedUserID: string, entityType: string, entityID: string, reason: string) {
     return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/flag', {
       user_id: userID,
       flagged_user_id: flaggedUserID,

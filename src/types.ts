@@ -3151,13 +3151,11 @@ export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGen
 };
 
 // Moderation v2
-export type CheckObject = {
+export type ModerationPayload = {
   created_at: string;
-  id: string;
   custom?: Record<string, any>;
   images?: string[];
   texts?: string[];
-  user_id?: string;
   videos?: string[];
 };
 
@@ -3167,19 +3165,23 @@ export type ReviewQueueItem = {
   assigned_to: string;
   completed_at: string;
   config_key: string;
-  content_type: string;
   context: any[];
   created_at: string;
   created_by: string;
+  entity_id: string;
+  entity_type: string;
+  has_image: boolean;
+  has_text: boolean;
+  has_video: boolean;
   id: string;
-  object: CheckObject;
+  moderation_payload: ModerationPayload;
+  moderation_payload_hash: string;
   options: any;
-  recommended_chat_actions: string[];
+  recommended_action: string;
   results: any;
-  status: string;
   reviewed_at: string;
+  status: string;
   updated_at: string;
-  recommended_feeds_actions: string[];
 };
 
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -3210,23 +3212,19 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
   } & {
     completed_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['completed_at']>;
   } & {
     config_key?:
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['config_key']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['config_key']>;
   } & {
-    content_type?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['content_type']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['content_type']>;
+    entity_type?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_type']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['entity_type']>;
   } & {
     created_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['created_at']>;
   } & {
     created_by?:
@@ -3237,20 +3235,14 @@ export type ReviewQueueFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['id']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['id']>;
   } & {
-    object_id?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['object']['id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['object']['id']>;
-  } & {
-    object_user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['object']['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['object']['user_id']>;
+    entity_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['entity_id']>;
   } & {
     reviewed?: boolean;
   } & {
     reviewed_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
   } & {
     status?:
@@ -3258,9 +3250,7 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['status']>;
   } & {
     updated_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['updated_at']>;
   } & {
     has_image?: boolean;
