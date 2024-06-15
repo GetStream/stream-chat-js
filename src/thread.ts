@@ -6,13 +6,13 @@ import {
   MessageResponse,
   ThreadResponse,
   FormatMessageResponse,
-  // ReactionResponse,
   UserResponse,
   Event,
   QueryThreadsOptions,
   MessagePaginationOptions,
   AscDesc,
   GetRepliesAPIResponse,
+  EventAPIResponse,
 } from './types';
 import { addToMessageList, formatMessage, normalizeQuerySort } from './utils';
 import { InferStoreValueType, SimpleStateStore } from './store/SimpleStateStore';
@@ -22,7 +22,7 @@ type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGen
   {
     last_read: string;
     last_read_message_id: string;
-    lastRead: Date;
+    lastReadAt: Date;
     unread_messages: number;
     user: UserResponse<StreamChatGenerics>;
   }
@@ -35,8 +35,8 @@ type QueryRepliesOptions<T extends ExtendableGenerics> = {
 } & MessagePaginationOptions & { user?: UserResponse<T>; user_id?: string };
 
 type ThreadState<T extends ExtendableGenerics> = {
-  createdAt: string;
-  deletedAt: string;
+  createdAt: Date;
+  deletedAt: Date | null;
   latestReplies: Array<FormatMessageResponse<T>>;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
@@ -46,7 +46,7 @@ type ThreadState<T extends ExtendableGenerics> = {
   previousId: string | null;
   read: ThreadReadStatus<T>;
   replyCount: number;
-  updatedAt: string;
+  updatedAt: Date | null;
 
   channel?: Channel<T>;
   channelData?: ThreadResponse<T>['channel'];
@@ -60,8 +60,8 @@ const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
  *
  * When the internet connection drops and during downtime threads receive messages, each thread instance should
  * do a re-fetch with the latest known message in its list (loadNextPage) once connection restores. In case there are 20+
- * thread instances this would cause a creation of 20+requests, instead going through a "batching" mechanism this would be aggregated
- * and requested only once.
+ * thread instances this would cause a creation of 20+requests. Going through a "batching" mechanism instead - these
+ * requests would get aggregated and sent only once.
  *
  * batched req: {[threadId]: { id_gt: "lastKnownMessageId" }, ...}
  * batched res: {[threadId]: { messages: [...] }, ...}
@@ -78,10 +78,8 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   constructor({
     client,
     threadData = {},
-    registerSubscriptions = true,
   }: {
     client: StreamChat<StreamChatGenerics>;
-    registerSubscriptions?: boolean;
     threadData?: Partial<ThreadResponse<StreamChatGenerics>>;
   }) {
     const {
@@ -96,25 +94,26 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     const read = unformattedRead.reduce<ThreadReadStatus<StreamChatGenerics>>((pv, cv) => {
       pv[cv.user.id] ??= {
         ...cv,
-        lastRead: new Date(cv.last_read),
+        lastReadAt: new Date(cv.last_read),
       };
       return pv;
     }, {});
 
-    const placeholderDate = new Date().toISOString();
+    const placeholderDate = new Date();
 
     this.state = new SimpleStateStore<ThreadState<StreamChatGenerics>>({
       channelData: threadData.channel, // not channel instance
       channel: threadData.channel && client.channel(threadData.channel.type, threadData.channel.id),
-      createdAt: threadData.created_at ?? placeholderDate,
-      deletedAt: threadData.deleted_at ?? placeholderDate,
+      createdAt: threadData.created_at ? new Date(threadData.created_at) : placeholderDate,
+      // FIXME: tell Vish to propagate deleted at from parent message upwards
+      deletedAt: threadData.parent_message?.deleted_at?.length ? new Date(threadData.parent_message.deleted_at) : null,
       latestReplies: latestReplies.map(formatMessage),
       // TODO: check why this is sometimes undefined
       parentMessage: threadData.parent_message && formatMessage(threadData.parent_message),
       participants: threadParticipants,
       read,
       replyCount,
-      updatedAt: threadData.updated_at ?? placeholderDate,
+      updatedAt: threadData.updated_at?.length ? new Date(threadData.updated_at) : null,
 
       nextId: latestReplies.at(-1)?.id ?? null,
       previousId: latestReplies.at(0)?.id ?? null,
@@ -125,9 +124,6 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     // parent_message_id is being re-used as thread.id
     this.id = threadData.parent_message_id ?? `thread-no-id-${placeholderDate}`; // FIXME: use nanoid instead
     this.client = client;
-
-    // TODO: temporary - do not register handlers here but rather make ThreadList component have control over this
-    if (registerSubscriptions) this.registerSubscriptions();
   }
 
   get channel() {
@@ -149,7 +145,7 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     if (this.unsubscribeFunctions.size) return;
 
     this.unsubscribeFunctions.add(
-      this.client.on('notification.thread_message_new', (event) => {
+      this.client.on('message.new', (event) => {
         if (!event.message) return;
         if (event.message.parent_id !== this.id) return;
 
@@ -158,9 +154,36 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
       }).unsubscribe,
     );
 
+    this.unsubscribeFunctions.add(
+      this.client.on('message.read', (event) => {
+        if (!event.user || !event.created_at || !event.thread || !this.client.user) return;
+        if (event.user.id !== this.client.user.id) return;
+        if (event.thread.parent_message_id !== this.id) return;
+
+        const currentUserId = event.user.id;
+        const createdAt = event.created_at;
+        const user = event.user;
+
+        // FIXME: not sure if this is correct at all
+        this.state.next((current) => ({
+          ...current,
+          read: {
+            ...current.read,
+            [currentUserId]: {
+              last_read: createdAt,
+              lastReadAt: new Date(createdAt),
+              user,
+              unread_messages: 0,
+              // TODO: fix this (lastestReplies.at(-1) might include message that is still being sent, which is wrong)
+              last_read_message_id: 'unknown',
+            },
+          },
+        }));
+      }).unsubscribe,
+    );
+
     const handleMessageUpdate = (event: Event<StreamChatGenerics>) => {
       if (!event.message) return;
-      if (event.message.parent_id !== this.id) return;
 
       this.updateParentMessageOrReply(event.message);
     };
@@ -193,12 +216,26 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   };
 
   public updateParentMessage = (message: MessageResponse<StreamChatGenerics>) => {
+    const currentUserId = this.client.user!.id;
+
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
 
     this.state.next((current) => {
-      const newData = { ...current, parentMessage: formatMessage(message) };
+      const newData: typeof current = {
+        ...current,
+        parentMessage: formatMessage(message),
+        replyCount: message.reply_count ?? current.replyCount,
+        // TODO: do not do this to "active" (visibly selected) threads, clean this up
+        read: {
+          ...current.read,
+          [currentUserId]: {
+            ...current.read[currentUserId],
+            unread_messages: current.read[currentUserId].unread_messages + 1,
+          },
+        },
+      };
 
       // update channel on channelData change (unlikely but handled anyway)
       if (message.channel) {
@@ -266,8 +303,21 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   //   }));
   // };
 
-  public markAsRead = () => {
-    // TODO: impl
+  public markAsRead = async () => {
+    const { channelData } = this.state.getLatestValue();
+
+    try {
+      await this.client.post<EventAPIResponse<StreamChatGenerics>>(
+        `${this.client.baseURL}/channels/${channelData?.type}/${channelData?.id}/read`,
+        {
+          thread_id: this.id,
+        },
+      );
+    } catch {
+      // ...
+    } finally {
+      // ...
+    }
   };
 
   // moved from channel to thread directly (skipped getClient thing as this call does not need active WS connection)
@@ -348,11 +398,11 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   };
 }
 
-// TODO?:
-// class ThreadState
-// class ThreadManagerState
-
 type ThreadManagerState<T extends ExtendableGenerics = DefaultGenerics> = {
+  // TODO: implement network status handler (network down, isStateStale: true, reset to false once state has been refreshed)
+  // review lazy-reload approach (You're viewing de-synchronized thread, click here to refresh) or refresh on notification.thread_message_new
+  // reset threads approach (the easiest approach but has to be done with ThreadManager - drops all the state and loads anew)
+  isStateStale: boolean;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
   threadIdIndexMap: { [key: string]: number }; // TODO: maybe does not need to live here
@@ -379,7 +429,7 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
         // new threads or threads which have not been loaded and is not possible to paginate to anymore
         // as these threads received new replies which moved them up in the list - used for the badge
         newIds: [],
-        // threads already loaded within the local state but will change positin in `threads` array when
+        // threads already loaded within the local state but will change position in `threads` array when
         // `loadUnreadThreads` gets called - used to calculate proper query limit
         existingReorderedIds: [],
       },
@@ -387,27 +437,47 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       loadingPreviousPage: false,
       nextId: undefined,
       previousId: undefined,
+      isStateStale: false,
     });
 
+    // TODO: temporary - do not register handlers here but rather make Chat component have control over this
     this.registerSubscriptions();
   }
 
   public registerSubscriptions = () => {
+    const handleThreadsChange = (
+      [newThreads]: readonly [Thread<T>[]],
+      previouslySelectedValue?: readonly [Thread<T>[]],
+    ) => {
+      // create new threadIdIndexMap
+      const newThreadIdIndexMap = newThreads.reduce<ThreadManagerState['threadIdIndexMap']>((map, thread, index) => {
+        map[thread.id] ??= index;
+        return map;
+      }, {});
+
+      //  handle individual thread subscriptions
+      if (previouslySelectedValue) {
+        const [previousThreads] = previouslySelectedValue;
+        previousThreads.forEach((t) => {
+          // thread with registered handlers has been removed, deregister and let gc do its thing
+          if (typeof newThreadIdIndexMap[t.id] !== 'undefined') return;
+          t.deregisterSubscriptions();
+        });
+      }
+      newThreads.forEach((t) => t.registerSubscriptions());
+
+      // publish new threadIdIndexMap
+      this.state.next((current) => ({ ...current, threadIdIndexMap: newThreadIdIndexMap }));
+    };
+
     this.unsubscribeFunctions.add(
       // re-generate map each time the threads array changes
-      this.state.subscribeWithSelector(
-        (nextValue) => [nextValue.threads],
-        ([threads]) => {
-          const newThreadIdIndexMap = threads.reduce<ThreadManagerState['threadIdIndexMap']>((map, thread, index) => {
-            map[thread.id] ??= index;
-            return map;
-          }, {});
-
-          this.state.next((current) => ({ ...current, threadIdIndexMap: newThreadIdIndexMap }));
-        },
-        true,
-      ),
+      this.state.subscribeWithSelector((nextValue) => [nextValue.threads] as const, handleThreadsChange),
     );
+
+    // TODO?: handle parent message deleted (extend unreadThreads \w deletedIds?)
+    // delete locally (manually) and run rest of the query loadUnreadThreads
+    // requires BE support (filter deleted threads)
 
     const handleNewReply = (event: Event) => {
       if (!event.message || !event.message.parent_id) return;
@@ -463,7 +533,6 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
     try {
       const data = await this.client.queryThreads({ limit: combinedLimit });
 
-      // TODO: test thoroughly
       this.state.next((current) => {
         // merge existing and new threads, filter out re-ordered
 
@@ -473,18 +542,15 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
           const existingThread: Thread<T> | undefined = current.threads[current.threadIdIndexMap[thread.id]];
 
           newThreads.push(existingThread ?? thread);
-
-          // TODO: remove from here once registration is moved to ThreadManager.registerThreadSubscriptions() and <Chat> to orchestrate it all
-          if (existingThread) thread.deregisterSubscriptions();
         }
 
-        const existingFilteredThreads = current.threads.filter((t) =>
-          current.unreadThreads.existingReorderedIds.includes(t.id),
+        const existingFilteredThreads = current.threads.filter(
+          ({ id }) => !current.unreadThreads.existingReorderedIds.includes(id),
         );
 
         return {
           ...current,
-          unreadThreadIds: { newIds: [], existingReorderedIds: [] }, // reset
+          unreadThreads: { newIds: [], existingReorderedIds: [] }, // reset
           threads: newThreads.concat(existingFilteredThreads),
         };
       });

@@ -1,5 +1,5 @@
 type Patch<T> = (value: T) => T;
-type Handler<T> = (nextValue: T) => any;
+type Handler<T> = (nextValue: T, previousValue?: T) => any;
 type Initiator<T> = (get: SimpleStateStore<T>['getLatestValue'], set: SimpleStateStore<T>['next']) => T;
 
 export type InferStoreValueType<T> = T extends SimpleStateStore<infer R>
@@ -40,9 +40,11 @@ export class SimpleStateStore<
 
     // do not notify subscribers if the value hasn't changed (or mutation has been returned)
     if (newValue === this.value) return;
+
+    const oldValue = this.value;
     this.value = newValue;
 
-    this.handlerSet.forEach((handler) => handler(this.value));
+    this.handlerSet.forEach((handler) => handler(this.value, oldValue));
   };
 
   public getLatestValue = () => this.value;
@@ -66,7 +68,7 @@ export class SimpleStateStore<
   public subscribeWithSelector = <O extends readonly unknown[]>(
     selector: (nextValue: T) => O,
     handler: Handler<O>,
-    emitOnSubscribe = false,
+    emitOnSubscribe = true,
   ) => {
     // begin with undefined to reduce amount of selector calls
     let selectedValues: O | undefined;
@@ -76,11 +78,12 @@ export class SimpleStateStore<
 
       const hasUnequalMembers = selectedValues?.some((value, index) => value !== newlySelectedValues[index]);
 
+      const oldSelectedValues = selectedValues;
       selectedValues = newlySelectedValues;
 
       // initial subscription call begins with hasUnequalMembers as undefined (skip comparison), fallback to unset selectedValues
       if (hasUnequalMembers || (typeof hasUnequalMembers === 'undefined' && emitOnSubscribe)) {
-        handler(newlySelectedValues);
+        handler(newlySelectedValues, oldSelectedValues);
       }
     };
 
