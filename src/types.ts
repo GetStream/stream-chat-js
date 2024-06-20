@@ -699,6 +699,23 @@ export type MuteUserResponse<StreamChatGenerics extends ExtendableGenerics = Def
   own_user?: OwnUserResponse<StreamChatGenerics>;
 };
 
+export type BlockUserAPIResponse = APIResponse & {
+  blocked_at: string;
+  blocked_by_user_id: string;
+  blocked_user_id: string;
+};
+
+export type GetBlockedUsersAPIResponse = APIResponse & {
+  blocks: BlockedUserDetails[];
+};
+export type BlockedUserDetails = APIResponse & {
+  blocked_user: UserResponse;
+  blocked_user_id: string;
+  created_at: string;
+  user: UserResponse;
+  user_id: string;
+};
+
 export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_mutes: ChannelMute<StreamChatGenerics>[];
   devices: Device<StreamChatGenerics>[];
@@ -820,6 +837,7 @@ export type UpdateUsersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 
 export type UserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = User<StreamChatGenerics> & {
   banned?: boolean;
+  blocked_user_ids?: string[];
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
@@ -2043,6 +2061,7 @@ export type ChannelConfigWithInfo<
 export type ChannelData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['channelType'] & {
+  blocked?: boolean;
   members?: string[];
   name?: string;
 };
@@ -3135,81 +3154,16 @@ export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGen
 };
 
 // Moderation v2
-export type CheckObject = {
+export type ModerationPayload = {
   created_at: string;
-  id: string;
   custom?: Record<string, any>;
   images?: string[];
   texts?: string[];
-  user_id?: string;
   videos?: string[];
 };
 
+export type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
 
-// type ReviewQueueItem struct {
-// 	tableName struct{} `pg:"moderation_review_queue,discard_unknown_columns"`
-
-// 	// common
-// 	AppPK     int       `pg:",pk" bun:",pk" json:"-"`
-// 	ID        string    `pg:",pk" bun:",pk" json:"id"`
-// 	CreatedAt time.Time `json:"created_at"`
-// 	UpdatedAt time.Time `json:"updated_at"`
-
-// 	// input
-// 	EntityType      string `json:"entity_type"`                                      // the type of the entity. message, activity, user etc
-// 	EntityID        string `json:"entity_id"`                                        // the id of the entity
-// 	EntityCreatorID string `pg:"entity_creator_id" bun:"entity_creator_id" json:"-"` // the user who created this entity
-
-// 	ModerationPayload     *ModerationPayload `pg:"type:jsonb" bun:"type:jsonb" json:"moderation_payload"` // the text, iamges etc that are moderated
-// 	ModerationPayloadHash string             `json:"moderation_payload_hash"`                             // hash of the object to make it easier to compare
-
-// 	HasImage bool `json:"has_image"`
-// 	HasVideo bool `json:"has_video"`
-// 	HasText  bool `json:"has_text"`
-
-// 	// processing
-// 	Status            string      `json:"status"`
-// 	RecommendedAction APIAction   `json:"recommended_action"`
-// 	CompletedAt       pg.NullTime `json:"completed_at"`
-
-// 	// output
-// 	Languages []string `pg:"type:jsonb" bun:"type:jsonb" json:"languages"`
-// 	Severity  int      `json:"severity"` // 1 is the lowest, 100 as high as it goes
-
-// 	// review
-// 	ReviewedAt pg.NullTime `json:"reviewed_at"`
-// 	ReviewedBy string      `json:"reviewed_by"`
-// 	AssignedTo string      `json:"assigned_to"`
-
-// 	// enrichment convenience fields (not stored, just enriched from the entity_id fields)
-// 	User           *User        `pg:"-" bun:"-" json:"user,omitempty"`
-// 	Message        *Message     `pg:"-" bun:"-" json:"message,omitempty"`
-// 	EntityCreator  *User        `pg:"-" bun:"-" json:"entity_creator,omitempty"`
-// 	Flags          []*Flag2     `pg:"-" bun:"-" json:"flags"`   // JOIN on flags.review_queue_item_id
-// 	Actions        []*ActionLog `pg:"-" bun:"-" json:"actions"` // JOIN on action_log.review_queue_item_id
-// 	ContentChanged bool         `pg:"-" bun:"-" json:"content_changed"`
-// }
-
-type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
-// ID    string `pg:",pk" bun:",pk" json:"-"`
-//
-// Type   string `json:"type,omitempty"` // user flag, bodyguard, image moderation etc
-// UserID string `json:"-"`
-// User   *User  `json:"user,omitempty" bun:"-" pg:"-"`
-//
-// EntityType            string             `pg:"entity_type" json:"entity_type"`
-// EntityID              string             `json:"entity_id"`
-// ModerationPayload     *ModerationPayload `pg:"moderation_payload,type:jsonb" json:"moderation_payload"`
-// ModerationPayloadHash string             `json:"moderation_payload_hash,omitempty"`
-//
-// Reason string         `json:"reason,omitempty"`
-// Custom map[string]any `json:"custom,omitempty"`
-//
-// Result            []map[string]any `pg:"result,type:jsonb" json:"result"`  // store the result of bodyguard, API calls, our own AI etc
-// ReviewQueueItemID string           `json:"review_queue_item_id,omitempty"` // one to many on the review queue item
-//
-// CreatedAt time.Time `pg:",use_zero" json:"created_at"`
-// UpdatedAt time.Time `pg:",use_zero" json:"updated_at"`
 export type ModerationFlag = {
   id: string;
   created_at: string;
@@ -3217,7 +3171,7 @@ export type ModerationFlag = {
   entity_type: string;
   entity_id: string;
   entity_creator_id: string;
-  moderation_payload?: CheckObject;
+  moderation_payload?: ModerationPayload;
   moderation_payload_hash?: string;
   reason: string;
   custom: Record<string, any>;
@@ -3227,26 +3181,28 @@ export type ModerationFlag = {
 }
 
 export type ReviewQueueItem = {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  entity_type: string;
-  entity_id: string;
-  entity_creator_id: string;
-  flags: ModerationFlag[];
-  moderation_payload?: CheckObject;
-  moderation_payload_hash?: string;
-  has_image: boolean;
-  has_video: boolean;
-  has_text: boolean;
-  status: ModV2ReviewStatus;
-  recommended_action: string;
-  completed_at: string;
-  languages: string[];
-  severity: number;
-  reviewed_at: string;
-  reviewed_by: string;
+  actions_taken: any[];
+  appealed_by: string;
   assigned_to: string;
+  completed_at: string;
+  config_key: string;
+  context: any[];
+  created_at: string;
+  created_by: string;
+  entity_id: string;
+  entity_type: string;
+  has_image: boolean;
+  has_text: boolean;
+  has_video: boolean;
+  id: string;
+  moderation_payload: ModerationPayload;
+  moderation_payload_hash: string;
+  options: any;
+  recommended_action: string;
+  results: any;
+  reviewed_at: string;
+  status: string;
+  updated_at: string;
 };
 
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -3256,20 +3212,6 @@ export type GetUserModerationReportResponse<StreamChatGenerics extends Extendabl
   flag_count?: number;
 } & Pick<BannedUsersResponse<StreamChatGenerics>, 'bans'>;
 
-// async queryReviewQueue(
-//   filterConditions: ReviewQueueFilters = {},
-//   sort: ReviewQueueSort = [],
-//   options: ReviewQueuePaginationOptions = {},
-// ) {
-//   return await this.get<ReviewQueueResponse<StreamChatGenerics>>(this.baseURL + '/moderation/queue', {
-//     payload: {
-//       filter_conditions: filterConditions,
-//       sort: normalizeQuerySort(sort),
-//       ...options,
-//     },
-//   });
-// }
-
 export type ReviewQueueFilters = QueryFilters<
   {
     assigned_to?:
@@ -3277,19 +3219,19 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
   } & {
     completed_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['completed_at']>;
+  } & {
+    config_key?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['config_key']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['config_key']>;
   } & {
     entity_type?:
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_type']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['entity_type']>;
   } & {
     created_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['created_at']>;
   } & {
     id?:
@@ -3300,16 +3242,10 @@ export type ReviewQueueFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['entity_id']>;
   } & {
-    entity_creator_id?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_creator_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['entity_creator_id']>;
-  } & {
     reviewed?: boolean;
   } & {
     reviewed_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
   } & {
     status?:
@@ -3317,9 +3253,7 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['status']>;
   } & {
     updated_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
-        >
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ReviewQueueItem['updated_at']>;
   } & {
     has_image?: boolean;
