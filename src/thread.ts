@@ -1,3 +1,5 @@
+import throttle from 'lodash.throttle';
+
 import { StreamChat } from './client';
 import { Channel } from './channel';
 import {
@@ -15,18 +17,17 @@ import {
   EventAPIResponse,
 } from './types';
 import { addToMessageList, formatMessage, normalizeQuerySort } from './utils';
-import { InferStoreValueType, SimpleStateStore } from './store/SimpleStateStore';
+import { Handler, InferStoreValueType, Patch, SimpleStateStore } from './store/SimpleStateStore';
 
-type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
-  string,
-  {
+type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  [key: string]: {
     last_read: string;
     last_read_message_id: string;
     lastReadAt: Date;
     unread_messages: number;
     user: UserResponse<StreamChatGenerics>;
-  }
->;
+  };
+};
 
 type QueryRepliesApiResponse<T extends ExtendableGenerics> = GetRepliesAPIResponse<T>;
 
@@ -37,6 +38,7 @@ type QueryRepliesOptions<T extends ExtendableGenerics> = {
 type ThreadState<T extends ExtendableGenerics> = {
   createdAt: Date;
   deletedAt: Date | null;
+  isStateStale: boolean;
   latestReplies: Array<FormatMessageResponse<T>>;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
@@ -53,10 +55,12 @@ type ThreadState<T extends ExtendableGenerics> = {
 };
 
 const DEFAULT_PAGE_LIMIT = 15;
+const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
+const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 
 /**
- * IDEA: request batching
+ * Request batching?
  *
  * When the internet connection drops and during downtime threads receive messages, each thread instance should
  * do a re-fetch with the latest known message in its list (loadNextPage) once connection restores. In case there are 20+
@@ -72,6 +76,10 @@ const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: SimpleStateStore<ThreadState<StreamChatGenerics>>;
   public id: string;
+  // used as handler helper - actively mark read all of the incoming messages
+  // if the thread is active (visibly selected in the UI)
+  // TODO: figure out whether this API will work with the scrollable list (based on visibility maybe?)
+  public active = false;
   private client: StreamChat<StreamChatGenerics>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
@@ -119,6 +127,10 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
       previousId: latestReplies.at(0)?.id ?? null,
       loadingNextPage: false,
       loadingPreviousPage: false,
+      // TODO: implement network status handler (network down, isStateStale: true, reset to false once state has been refreshed)
+      // review lazy-reload approach (You're viewing de-synchronized thread, click here to refresh) or refresh on notification.thread_message_new
+      // reset threads approach (the easiest approach but has to be done with ThreadManager - drops all the state and loads anew)
+      isStateStale: false,
     });
 
     // parent_message_id is being re-used as thread.id
@@ -130,11 +142,23 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     return this.state.getLatestValue().channel;
   }
 
+  get hasStaleState() {
+    return this.state.getLatestValue().isStateStale;
+  }
+
   private updateLocalState = <T extends InferStoreValueType<Thread>>(key: keyof T, newValue: T[typeof key]) => {
     this.state.next((current) => ({
       ...current,
       [key]: newValue,
     }));
+  };
+
+  public activate = () => {
+    this.active = true;
+  };
+
+  public deactivate = () => {
+    this.active = false;
   };
 
   /**
@@ -144,23 +168,75 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     // check whether this instance has subscriptions and is already listening for changes
     if (this.unsubscribeFunctions.size) return;
 
+    const throttledMarkAsRead = throttle(this.markAsRead, DEFAULT_MARK_AS_READ_THROTTLE_DURATION, {
+      leading: true,
+      trailing: true,
+    });
+
+    const currentuserId = this.client.user?.id;
+
+    if (currentuserId)
+      this.unsubscribeFunctions.add(
+        this.state.subscribeWithSelector(
+          (nextValue) => [nextValue.read[currentuserId]?.unread_messages],
+          ([unreadMessagesCount]) => {
+            if (!this.active || !unreadMessagesCount) return;
+
+            throttledMarkAsRead();
+          },
+        ),
+      );
+
+    this.unsubscribeFunctions.add(
+      // TODO: figure out why we're not receiving this event
+      this.client.on('user.watching.stop', (event) => {
+        if (!event.channel_id) return;
+
+        const { channelData } = this.state.getLatestValue();
+
+        if (!channelData || event.channel_id !== channelData.id) return;
+
+        this.updateLocalState('isStateStale', true);
+      }).unsubscribe,
+    );
+
     this.unsubscribeFunctions.add(
       this.client.on('message.new', (event) => {
-        if (!event.message) return;
+        const currentUserId = this.client.user?.id;
+        if (!event.message || !currentUserId) return;
         if (event.message.parent_id !== this.id) return;
 
-        // deal with timestampChanged only related to local user (optimistic updates)
-        this.upsertReply({ message: event.message, timestampChanged: event.message.user?.id === this.client.user?.id });
+        let updateUnreadMessagesCount: Patch<ThreadState<StreamChatGenerics>> | undefined;
+        // TODO: permissions (read events)
+        // only define side effect function if the message does not belong to the current user
+        if (event.message.user?.id !== currentUserId) {
+          updateUnreadMessagesCount = (current) => ({
+            ...current,
+            read: {
+              ...current.read,
+              [currentUserId]: {
+                ...current.read[currentUserId],
+                unread_messages: (current.read[currentUserId]?.unread_messages ?? 0) + 1,
+              },
+            },
+          });
+        }
+
+        this.upsertReply({
+          message: event.message,
+          // deal with timestampChanged only related to local user (optimistic updates)
+          timestampChanged: event.message.user?.id === this.client.user?.id,
+          stateUpdateSideEffect: updateUnreadMessagesCount,
+        });
       }).unsubscribe,
     );
 
     this.unsubscribeFunctions.add(
       this.client.on('message.read', (event) => {
-        if (!event.user || !event.created_at || !event.thread || !this.client.user) return;
-        if (event.user.id !== this.client.user.id) return;
+        if (!event.user || !event.created_at || !event.thread) return;
         if (event.thread.parent_message_id !== this.id) return;
 
-        const currentUserId = event.user.id;
+        const userId = event.user.id;
         const createdAt = event.created_at;
         const user = event.user;
 
@@ -169,10 +245,11 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
           ...current,
           read: {
             ...current.read,
-            [currentUserId]: {
+            [userId]: {
               last_read: createdAt,
               lastReadAt: new Date(createdAt),
               user,
+              // TODO: rename all of these since it's formatted (find out where it's being used in the SDK)
               unread_messages: 0,
               // TODO: fix this (lastestReplies.at(-1) might include message that is still being sent, which is wrong)
               last_read_message_id: 'unknown',
@@ -201,8 +278,16 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   public upsertReply = ({
     message,
     timestampChanged = false,
+    stateUpdateSideEffect,
   }: {
     message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>;
+    // FIXME: not sure if I like this - THE WHY: main function of this method should be to add/update the message that's coming in
+    // but if the message that's coming in is not ours we would also like to increase the unread count - one atomic update seems
+    // better than two separate ones
+    /**
+     * State-updating side effect
+     */
+    stateUpdateSideEffect?: Patch<ThreadState<StreamChatGenerics>>;
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -212,12 +297,11 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     this.state.next((current) => ({
       ...current,
       latestReplies: addToMessageList(current.latestReplies, formatMessage(message), timestampChanged),
+      ...stateUpdateSideEffect?.(current),
     }));
   };
 
   public updateParentMessage = (message: MessageResponse<StreamChatGenerics>) => {
-    const currentUserId = this.client.user!.id;
-
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
@@ -227,14 +311,6 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
         ...current,
         parentMessage: formatMessage(message),
         replyCount: message.reply_count ?? current.replyCount,
-        // TODO: do not do this to "active" (visibly selected) threads, clean this up
-        read: {
-          ...current.read,
-          [currentUserId]: {
-            ...current.read[currentUserId],
-            unread_messages: current.read[currentUserId].unread_messages + 1,
-          },
-        },
       };
 
       // update channel on channelData change (unlikely but handled anyway)
@@ -304,7 +380,12 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
   // };
 
   public markAsRead = async () => {
-    const { channelData } = this.state.getLatestValue();
+    const { channelData, read } = this.state.getLatestValue();
+    const currentUserId = this.client.user?.id;
+
+    const { unread_messages: unreadMessagesCount } = (currentUserId && read[currentUserId]) || {};
+
+    if (!unreadMessagesCount) return;
 
     try {
       await this.client.post<EventAPIResponse<StreamChatGenerics>>(
@@ -399,10 +480,6 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 }
 
 type ThreadManagerState<T extends ExtendableGenerics = DefaultGenerics> = {
-  // TODO: implement network status handler (network down, isStateStale: true, reset to false once state has been refreshed)
-  // review lazy-reload approach (You're viewing de-synchronized thread, click here to refresh) or refresh on notification.thread_message_new
-  // reset threads approach (the easiest approach but has to be done with ThreadManager - drops all the state and loads anew)
-  isStateStale: boolean;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
   threadIdIndexMap: { [key: string]: number }; // TODO: maybe does not need to live here
@@ -437,7 +514,6 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       loadingPreviousPage: false,
       nextId: undefined,
       previousId: undefined,
-      isStateStale: false,
     });
 
     // TODO: temporary - do not register handlers here but rather make Chat component have control over this
@@ -445,10 +521,33 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public registerSubscriptions = () => {
-    const handleThreadsChange = (
-      [newThreads]: readonly [Thread<T>[]],
-      previouslySelectedValue?: readonly [Thread<T>[]],
-    ) => {
+    if (this.unsubscribeFunctions.size) return;
+
+    // TODO: maybe debounce instead?
+    const throttledHandleConnectionRecovery = throttle(
+      () => {
+        // TODO: cancel possible in-progress queries (loadNextPage...)
+
+        this.state.next((current) => ({
+          ...current,
+          threads: [],
+          unreadThreads: { newIds: [], existingReorderedIds: [] },
+          nextId: undefined,
+          previousId: undefined,
+          isStateStale: false,
+        }));
+
+        this.loadNextPage();
+      },
+      DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
+      { leading: true, trailing: true },
+    );
+
+    this.unsubscribeFunctions.add(
+      this.client.on('connection.recovered', throttledHandleConnectionRecovery).unsubscribe,
+    );
+
+    const handleThreadsChange: Handler<readonly [Thread<T>[]]> = ([newThreads], previouslySelectedValue) => {
       // create new threadIdIndexMap
       const newThreadIdIndexMap = newThreads.reduce<ThreadManagerState['threadIdIndexMap']>((map, thread, index) => {
         map[thread.id] ??= index;
@@ -459,9 +558,11 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       if (previouslySelectedValue) {
         const [previousThreads] = previouslySelectedValue;
         previousThreads.forEach((t) => {
-          // thread with registered handlers has been removed, deregister and let gc do its thing
-          if (typeof newThreadIdIndexMap[t.id] !== 'undefined') return;
-          t.deregisterSubscriptions();
+          // thread with registered handlers has been removed or its signature changed (new instance)
+          // deregister and let gc do its thing
+          if (typeof newThreadIdIndexMap[t.id] === 'undefined' || newThreads[newThreadIdIndexMap[t.id]] !== t) {
+            t.deregisterSubscriptions();
+          }
         });
       }
       newThreads.forEach((t) => t.registerSubscriptions());
@@ -485,8 +586,14 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
 
       const {
         threadIdIndexMap,
+        nextId,
+        threads,
         unreadThreads: { newIds, existingReorderedIds },
       } = this.state.getLatestValue();
+
+      // prevents from handling replies until the threads have been loaded
+      // (does not fill information for "unread threads" banner to appear)
+      if (!threads.length && nextId !== null) return;
 
       const existsLocally = typeof threadIdIndexMap[parentId] !== 'undefined';
 
@@ -512,15 +619,13 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
     };
 
     this.unsubscribeFunctions.add(this.client.on('notification.thread_message_new', handleNewReply).unsubscribe);
-    // TODO: not sure, if this needs to be here, wait for Vish to do the check that "notification.thread_message_new"
-    // comes in as expected
-    this.unsubscribeFunctions.add(this.client.on('message.new', handleNewReply).unsubscribe);
   };
 
   public deregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
   };
 
+  // TODO: add activity status, trigger this method when this instance becomes active
   public loadUnreadThreads = async () => {
     const {
       unreadThreads: { newIds, existingReorderedIds },
@@ -537,16 +642,19 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
         // merge existing and new threads, filter out re-ordered
 
         const newThreads: Thread<T>[] = [];
+        const existingThreadIdsToFilterOut: string[] = [];
 
         for (const thread of data.threads) {
           const existingThread: Thread<T> | undefined = current.threads[current.threadIdIndexMap[thread.id]];
 
-          newThreads.push(existingThread ?? thread);
+          // ditch threads which report stale state and use new one
+          // *(state can be considered as stale when channel associated with the thread stops being watched)
+          newThreads.push(existingThread && existingThread.hasStaleState ? thread : existingThread);
+
+          if (existingThread) existingThreadIdsToFilterOut.push(existingThread.id);
         }
 
-        const existingFilteredThreads = current.threads.filter(
-          ({ id }) => !current.unreadThreads.existingReorderedIds.includes(id),
-        );
+        const existingFilteredThreads = current.threads.filter(({ id }) => !existingThreadIdsToFilterOut.includes(id));
 
         return {
           ...current,
@@ -556,6 +664,7 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       });
     } catch (error) {
       // TODO: loading states
+      console.error(error);
     } finally {
       console.log('...');
     }

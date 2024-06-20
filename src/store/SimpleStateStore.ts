@@ -1,5 +1,5 @@
-type Patch<T> = (value: T) => T;
-type Handler<T> = (nextValue: T, previousValue?: T) => any;
+export type Patch<T> = (value: T) => T;
+export type Handler<T> = (nextValue: T, previousValue?: T) => any;
 type Initiator<T> = (get: SimpleStateStore<T>['getLatestValue'], set: SimpleStateStore<T>['next']) => T;
 
 export type InferStoreValueType<T> = T extends SimpleStateStore<infer R>
