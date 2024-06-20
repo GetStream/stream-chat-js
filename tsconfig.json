@@ -15,7 +15,8 @@
     "declarationMap": true,
     "declarationDir": "./dist/types",
     "module": "commonjs",
-    "target": "ES5"
+    "target": "ES5",
+    "skipLibCheck": true
   },
   "include": ["./src/**/*"]
 }
