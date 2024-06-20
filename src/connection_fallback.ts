@@ -81,7 +81,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
 
       this.consecutiveFailures = 0; // always reset in case of no error
       return res;
-    } catch (err) {
+    } catch (err: any) {
       this.consecutiveFailures += 1;
 
       if (retry && isErrorRetryable(err)) {
@@ -107,7 +107,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
             this.client.dispatchEvent(data.events[i]);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         if (axios.isCancel(err)) {
           this._log(`_poll() - axios canceled request`);
           return;
