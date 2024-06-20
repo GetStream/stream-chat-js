@@ -1552,14 +1552,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async getUserModerationReport(userID: string) {
+  async getUserModerationReport(userID: string, options: {
+    include_bans?: boolean;
+    include_user_mutes?: boolean;
+    include_flag_reports?: boolean;
+    include_flag_count?: boolean;
+    include_user_blocks?: boolean;
+    create_user_if_not_exists?: boolean;
+  } = {}) {
     return await this.get<GetUserModerationReportResponse<StreamChatGenerics>>(
       this.baseURL + `/api/v2/moderation/user_report`,
       {
         user_id: userID,
-        include_bans: true,
-        include_user_mutes: true,
-        include_flag_reports: true,
+        ...options,
       },
     );
   }
@@ -1576,23 +1581,30 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async flag(
-    userID: string,
-    flaggedUserID: string,
-    contentType: string,
-    contentID: string,
+  async flagUserV2(
+      flaggedUserID: string,
+      reason: string,
+      options: Record<string, unknown> = {},
+  ) {
+    return this.flagV2(
+        "stream:user",
+        flaggedUserID,
+        reason,
+        options,
+    )
+  }
+
+  async flagV2(
+    entityType: string,
+    entityId: string,
     reason: string,
-    content: Record<string, unknown> = {},
     options: Record<string, unknown> = {},
   ) {
     return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/flag', {
-      user_id: userID,
-      flagged_user_id: flaggedUserID,
-      content_type: contentType,
-      content_id: contentID,
+      entity_type: entityType,
+      entity_id: entityId,
       reason,
-      content,
-      options,
+      ...options,
     });
   }
 
@@ -2288,7 +2300,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async flagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
+  async flagMessage(targetMessageID: string, options: { user_id?: string, reason?: string } = {}) {
     return await this.post<FlagMessageResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flag', {
       target_message_id: targetMessageID,
       ...options,
@@ -2301,7 +2313,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async flagUser(targetID: string, options: { user_id?: string } = {}) {
+  async flagUser(targetID: string, options: { user_id?: string, reason?: string } = {}) {
     return await this.post<FlagUserResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flag', {
       target_user_id: targetID,
       ...options,
