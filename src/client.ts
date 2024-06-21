@@ -202,7 +202,7 @@ import {
   QueryMessageHistoryFilters,
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
-  QueryMessageHistoryResponse,
+  QueryMessageHistoryResponse, FlagFeedbackResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -3687,6 +3687,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
+    });
+  }
+
+  /**
+   * flagFeedback - reviews/unflags flagged message
+   *
+   * @param {string[]} message_ids list of message IDs
+   *
+   * @returns {APIResponse & FlagFeedbackResponse}
+   */
+  async flagFeedback(message_ids: string[]) {
+    return await this.post<APIResponse & FlagFeedbackResponse>(this.baseURL + '/moderation/update_flags', {
+      message_ids,
     });
   }
 }

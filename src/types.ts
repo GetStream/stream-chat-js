@@ -244,6 +244,23 @@ export type ReviewFlagReportResponse<StreamChatGenerics extends ExtendableGeneri
   flag_report: FlagReport<StreamChatGenerics>;
 };
 
+export type FlagFeedback<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  app_pk: number;
+  created_at: string;
+  message_id: string;
+  labels?: MessageLabel;
+};
+
+export type Label<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  name: string;
+  harm_labels?: string[];
+  phrase_list_ids?: number[];
+};
+
+export type FlagFeedbackResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  flag_feedback: FlagFeedback<StreamChatGenerics>;
+};
+
 export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   bans?: Array<{
     user: UserResponse<StreamChatGenerics>;
