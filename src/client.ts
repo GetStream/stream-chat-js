@@ -3691,14 +3691,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * flagFeedback - reviews/unflags flagged message
+   * updateFlags - reviews/unflags flagged message
    *
    * @param {string[]} message_ids list of message IDs
    * @param {string} user_id user ID is set to review all the flagged messages by the user
    * @param {string} reviewed_by user ID who reviewed the flagged message
    * @returns {APIResponse}
    */
-  async flagFeedback(message_ids: string[], user_id: string, reviewed_by: string) {
+  async updateFlags(message_ids: string[], user_id: string, reviewed_by: string) {
     return await this.post<APIResponse>(this.baseURL + '/automod/v1/moderation/update_flags', {
       message_ids,
       user_id,
