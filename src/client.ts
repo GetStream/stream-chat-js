@@ -3702,7 +3702,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.post<APIResponse>(this.baseURL + '/automod/v1/moderation/update_flags', {
       message_ids,
       reviewed_by,
-      ...options
+      ...options,
     });
   }
 }
