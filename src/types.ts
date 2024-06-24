@@ -257,9 +257,6 @@ export type Label<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   phrase_list_ids?: number[];
 };
 
-export type FlagFeedbackResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
-  flag_feedback: FlagFeedback<StreamChatGenerics>;
-};
 
 export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   bans?: Array<{
