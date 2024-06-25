@@ -3780,4 +3780,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     });
   }
+
+  /**
+   * updateFlags - reviews/unflags flagged message
+   *
+   * @param {string[]} message_ids list of message IDs
+   * @param {string} options Option object in case user ID is set to review all the flagged messages by the user
+   * @param {string} reviewed_by user ID who reviewed the flagged message
+   * @returns {APIResponse}
+   */
+  async updateFlags(message_ids: string[], reviewed_by: string, options: { user_id?: string } = {}) {
+    return await this.post<APIResponse>(this.baseURL + '/automod/v1/moderation/update_flags', {
+      message_ids,
+      reviewed_by,
+      ...options,
+    });
+  }
 }
