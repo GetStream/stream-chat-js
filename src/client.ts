@@ -1604,6 +1604,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.flagV2(
         "stream:user",
         flaggedUserID,
+        "",
+        reason,
+        options,
+    )
+  }
+
+  async flagMessageV2(
+      messageID: string,
+      reason: string,
+      options: Record<string, unknown> = {},
+  ) {
+    return this.flagV2(
+        "stream:chat:v1:message",
+        messageID,
+        "",
         reason,
         options,
     )
@@ -1612,12 +1627,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async flagV2(
     entityType: string,
     entityId: string,
+    entityCreatorID: string,
     reason: string,
     options: Record<string, unknown> = {},
   ) {
     return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/flag', {
       entity_type: entityType,
       entity_id: entityId,
+      entity_creator_id: entityCreatorID,
       reason,
       ...options,
     });
