@@ -3275,3 +3275,14 @@ export type ReviewQueueResponse = {
   next?: string;
   prev?: string;
 };
+
+export type Config = {
+};
+
+export type GetConfigResponse = {
+  config: Config;
+};
+
+export type UpsertConfigResponse = {
+  config: Config;
+};

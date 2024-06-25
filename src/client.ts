@@ -207,7 +207,8 @@ import {
   ReviewQueueFilters,
   ReviewQueueSort,
   ReviewQueuePaginationOptions,
-  ReviewQueueResponse,
+  ReviewQueueResponse, GetConfigResponse, UpsertConfigResponse,
+    Config
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -1581,6 +1582,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       sort: normalizeQuerySort(sort),
       ...options,
     });
+  }
+
+  async upsertConfig(
+      config: Config = {},
+  ) {
+    return await this.post<UpsertConfigResponse>(this.baseURL + '/api/v2/moderation/config', config);
+  }
+
+  async getConfig(
+      key: string,
+  ) {
+    return await this.get<GetConfigResponse>(this.baseURL + '/api/v2/moderation/config/'+key);
   }
 
   async flagUserV2(
