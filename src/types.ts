@@ -2009,6 +2009,8 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  type?: string;
+  validate?: boolean;
 };
 
 export type ChannelConfig<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = ChannelConfigFields &
@@ -3203,6 +3205,7 @@ export type ReviewQueueItem = {
   reviewed_at: string;
   status: string;
   updated_at: string;
+  flags: ModerationFlag[];
 };
 
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
