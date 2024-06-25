@@ -1236,6 +1236,8 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   unread_count?: number;
   // number of unread messages in the channel from this event (notification.mark_unread)
   unread_messages?: number;
+  unread_thread_messages?: number;
+  unread_threads?: number;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;
