@@ -1640,6 +1640,30 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
+  async muteUserV2(
+    targetID: string,
+    options: {
+      timeout?: number,
+      user_id?: string,
+    } = {},
+  ) {
+    return await this.post<MuteUserResponse & APIResponse>(this.baseURL + '/api/v2/moderation/mute', {
+      target_ids: [targetID],
+      ...options,
+    });
+  }
+
+  async unmuteUserV2(
+    targetID: string,
+    options: {
+      user_id?: string,
+    },
+  ) {
+    return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/unmute', {
+      target_ids: [targetID],
+      ...options,
+    });
+  }
   /**
    * queryChannels - Query channels
    *
