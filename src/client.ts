@@ -1556,10 +1556,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   async getUserModerationReport(userID: string, options: {
-    include_bans?: boolean;
     include_user_mutes?: boolean;
-    include_flag_reports?: boolean;
-    include_flag_count?: boolean;
     include_user_blocks?: boolean;
     create_user_if_not_exists?: boolean;
   } = {}) {

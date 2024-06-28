@@ -3209,11 +3209,14 @@ export type ReviewQueueItem = {
 };
 
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  latest_flag_reports: ModerationFlag[];
   user: UserResponse<StreamChatGenerics>;
-  user_mutes: Mute<StreamChatGenerics>[];
-  flag_count?: number;
-} & Pick<BannedUsersResponse<StreamChatGenerics>, 'bans'>;
+  user_mutes?: Mute<StreamChatGenerics>[];
+  user_blocks?: Array<{
+    blocked_at: string;
+    blocked_by_user_id: string;
+    blocked_user_id: string;
+  }>
+};
 
 export type ReviewQueueFilters = QueryFilters<
   {
