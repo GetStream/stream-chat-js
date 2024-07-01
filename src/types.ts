@@ -3158,6 +3158,7 @@ export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGen
 // Moderation v2
 export type ModerationPayload = {
   created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   custom?: Record<string, any>;
   images?: string[];
   texts?: string[];
@@ -3167,55 +3168,61 @@ export type ModerationPayload = {
 export type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
 
 export type ModerationFlag = {
-  id: string;
   created_at: string;
-  updated_at: string;
-  entity_type: string;
-  entity_id: string;
-  entity_creator_id: string;
-  moderation_payload?: ModerationPayload;
-  moderation_payload_hash?: string;
-  reason: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   custom: Record<string, any>;
+  entity_creator_id: string;
+  entity_id: string;
+  entity_type: string;
+  id: string;
+  reason: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   result: Record<string, any>[];
   review_queue_item_id: string;
+  updated_at: string;
   user: UserResponse;
-}
+  moderation_payload?: ModerationPayload;
+  moderation_payload_hash?: string;
+};
 
 export type ReviewQueueItem = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   actions_taken: any[];
   appealed_by: string;
   assigned_to: string;
   completed_at: string;
   config_key: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: any[];
   created_at: string;
   created_by: string;
   entity_id: string;
   entity_type: string;
+  flags: ModerationFlag[];
   has_image: boolean;
   has_text: boolean;
   has_video: boolean;
   id: string;
   moderation_payload: ModerationPayload;
   moderation_payload_hash: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options: any;
   recommended_action: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   results: any;
   reviewed_at: string;
   status: string;
   updated_at: string;
-  flags: ModerationFlag[];
 };
 
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   user: UserResponse<StreamChatGenerics>;
-  user_mutes?: Mute<StreamChatGenerics>[];
   user_blocks?: Array<{
     blocked_at: string;
     blocked_by_user_id: string;
     blocked_user_id: string;
-  }>
+  }>;
+  user_mutes?: Mute<StreamChatGenerics>[];
 };
 
 export type ReviewQueueFilters = QueryFilters<
@@ -3282,8 +3289,7 @@ export type ReviewQueueResponse = {
   prev?: string;
 };
 
-export type Config = {
-};
+export type Config = {};
 
 export type GetConfigResponse = {
   config: Config;
