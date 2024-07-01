@@ -442,6 +442,7 @@ export type FlagMessageResponse<StreamChatGenerics extends ExtendableGenerics = 
     reviewed_at?: string;
     reviewed_by?: string;
   };
+  review_queue_item_id?: string;
 };
 
 export type FlagUserResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -457,6 +458,7 @@ export type FlagUserResponse<StreamChatGenerics extends ExtendableGenerics = Def
     reviewed_at?: string;
     reviewed_by?: string;
   };
+  review_queue_item_id?: string;
 };
 
 export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Omit<
@@ -1899,6 +1901,7 @@ export type AsyncModerationOptions = {
 
 export type AppSettings = {
   agora_options?: AgoraOptions | null;
+  allowed_flag_reasons?: string[];
   apn_config?: {
     auth_key?: string;
     auth_type?: string;
@@ -2006,6 +2009,8 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  type?: string;
+  validate?: boolean;
 };
 
 export type ChannelConfig<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = ChannelConfigFields &
@@ -3148,4 +3153,148 @@ export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGen
   message_history: MessageHistoryEntry<StreamChatGenerics>[];
   next?: string;
   prev?: string;
+};
+
+// Moderation v2
+export type ModerationPayload = {
+  created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  custom?: Record<string, any>;
+  images?: string[];
+  texts?: string[];
+  videos?: string[];
+};
+
+export type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
+
+export type ModerationFlag = {
+  created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  custom: Record<string, any>;
+  entity_creator_id: string;
+  entity_id: string;
+  entity_type: string;
+  id: string;
+  reason: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result: Record<string, any>[];
+  review_queue_item_id: string;
+  updated_at: string;
+  user: UserResponse;
+  moderation_payload?: ModerationPayload;
+  moderation_payload_hash?: string;
+};
+
+export type ReviewQueueItem = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  actions_taken: any[];
+  appealed_by: string;
+  assigned_to: string;
+  completed_at: string;
+  config_key: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  context: any[];
+  created_at: string;
+  created_by: string;
+  entity_id: string;
+  entity_type: string;
+  flags: ModerationFlag[];
+  has_image: boolean;
+  has_text: boolean;
+  has_video: boolean;
+  id: string;
+  moderation_payload: ModerationPayload;
+  moderation_payload_hash: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  options: any;
+  recommended_action: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  results: any;
+  reviewed_at: string;
+  status: string;
+  updated_at: string;
+};
+
+export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  user: UserResponse<StreamChatGenerics>;
+  user_blocks?: Array<{
+    blocked_at: string;
+    blocked_by_user_id: string;
+    blocked_user_id: string;
+  }>;
+  user_mutes?: Mute<StreamChatGenerics>[];
+};
+
+export type ReviewQueueFilters = QueryFilters<
+  {
+    assigned_to?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['assigned_to']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
+  } & {
+    completed_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ReviewQueueItem['completed_at']>;
+  } & {
+    config_key?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['config_key']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['config_key']>;
+  } & {
+    entity_type?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_type']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['entity_type']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ReviewQueueItem['created_at']>;
+  } & {
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['id']>;
+  } & {
+    entity_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['entity_id']>;
+  } & {
+    reviewed?: boolean;
+  } & {
+    reviewed_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
+  } & {
+    status?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['status']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ReviewQueueItem['status']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ReviewQueueItem['updated_at']>;
+  } & {
+    has_image?: boolean;
+  } & {
+    has_text?: boolean;
+  } & {
+    has_video?: boolean;
+  }
+>;
+
+export type ReviewQueueSort =
+  | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
+  | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type ReviewQueuePaginationOptions = Pager;
+
+export type ReviewQueueResponse = {
+  items: ReviewQueueItem[];
+  next?: string;
+  prev?: string;
+};
+
+export type Config = {};
+
+export type GetConfigResponse = {
+  config: Config;
+};
+
+export type UpsertConfigResponse = {
+  config: Config;
 };
