@@ -1790,7 +1790,7 @@ export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSo
 export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
 
 export type Sort<T> = {
-  [P in keyof T]?: AscDesc;
+  [P in keyof T]?: AscDesc | string[];
 };
 
 export type UserSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
