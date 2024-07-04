@@ -3289,12 +3289,28 @@ export type ReviewQueueResponse = {
   prev?: string;
 };
 
-export type Config = {};
+export type ModerationConfig = {};
 
 export type GetConfigResponse = {
-  config: Config;
+  config: ModerationConfig;
 };
 
 export type UpsertConfigResponse = {
-  config: Config;
+  config: ModerationConfig;
+};
+
+export type ModerationFlagOptions = {
+  custom?: Record<string, unknown>;
+  moderation_payload?: ModerationPayload;
+  user_id?: string;
+};
+
+export type ModerationMuteOptions = {
+  timeout?: number;
+  user_id?: string;
+};
+export type GetUserModerationReportOptions = {
+  create_user_if_not_exists?: boolean;
+  include_user_blocks?: boolean;
+  include_user_mutes?: boolean;
 };
