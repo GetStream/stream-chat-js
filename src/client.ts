@@ -203,17 +203,10 @@ import {
   QueryMessageHistorySort,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
-  GetUserModerationReportResponse,
-  ReviewQueueFilters,
-  ReviewQueueSort,
-  ReviewQueuePaginationOptions,
-  ReviewQueueResponse,
-  GetConfigResponse,
-  UpsertConfigResponse,
-  Config,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
+import { Moderation } from './moderation';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -247,6 +240,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  moderation: Moderation<StreamChatGenerics>;
   mutedChannels: ChannelMute<StreamChatGenerics>[];
   mutedUsers: Mute<StreamChatGenerics>[];
   node: boolean;
@@ -297,6 +291,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
+
+    this.moderation = new Moderation(this);
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
@@ -1557,91 +1553,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  async getUserModerationReport(
-    userID: string,
-    options: {
-      create_user_if_not_exists?: boolean;
-      include_user_blocks?: boolean;
-      include_user_mutes?: boolean;
-    } = {},
-  ) {
-    return await this.get<GetUserModerationReportResponse<StreamChatGenerics>>(
-      this.baseURL + `/api/v2/moderation/user_report`,
-      {
-        user_id: userID,
-        ...options,
-      },
-    );
-  }
-
-  async queryReviewQueue(
-    filterConditions: ReviewQueueFilters = {},
-    sort: ReviewQueueSort = [],
-    options: ReviewQueuePaginationOptions = {},
-  ) {
-    return await this.post<ReviewQueueResponse>(this.baseURL + '/api/v2/moderation/review_queue', {
-      filter: filterConditions,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
-  }
-
-  async upsertConfig(config: Config = {}) {
-    return await this.post<UpsertConfigResponse>(this.baseURL + '/api/v2/moderation/config', config);
-  }
-
-  async getConfig(key: string) {
-    return await this.get<GetConfigResponse>(this.baseURL + '/api/v2/moderation/config/' + key);
-  }
-
-  async flagUserV2(flaggedUserID: string, reason: string, options: Record<string, unknown> = {}) {
-    return this.flagV2('stream:user', flaggedUserID, '', reason, options);
-  }
-
-  async flagMessageV2(messageID: string, reason: string, options: Record<string, unknown> = {}) {
-    return this.flagV2('stream:chat:v1:message', messageID, '', reason, options);
-  }
-
-  async flagV2(
-    entityType: string,
-    entityId: string,
-    entityCreatorID: string,
-    reason: string,
-    options: Record<string, unknown> = {},
-  ) {
-    return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/flag', {
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_creator_id: entityCreatorID,
-      reason,
-      ...options,
-    });
-  }
-
-  async muteUserV2(
-    targetID: string,
-    options: {
-      timeout?: number;
-      user_id?: string;
-    } = {},
-  ) {
-    return await this.post<MuteUserResponse & APIResponse>(this.baseURL + '/api/v2/moderation/mute', {
-      target_ids: [targetID],
-      ...options,
-    });
-  }
-
-  async unmuteUserV2(
-    targetID: string,
-    options: {
-      user_id?: string;
-    },
-  ) {
-    return await this.post<{ item_id: string } & APIResponse>(this.baseURL + '/api/v2/moderation/unmute', {
-      target_ids: [targetID],
-      ...options,
-    });
-  }
   /**
    * queryChannels - Query channels
    *
