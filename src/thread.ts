@@ -78,12 +78,19 @@ const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
  * Obviously this requires BE support and a batching mechanism on the client-side.
  */
 
+/**
+ * Targeted events?
+ *
+ * <message.id>.message.updated | <message.parent_id>.message.updated
+ */
+
 export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: SimpleStateStore<ThreadState<StreamChatGenerics>>;
   public id: string;
 
   private client: StreamChat<StreamChatGenerics>;
   private unsubscribeFunctions: Set<() => void> = new Set();
+  private failedRepliesMap: Map<string, FormatMessageResponse<StreamChatGenerics>> = new Map();
 
   constructor({
     client,
@@ -119,19 +126,19 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
       channelData: threadData.channel, // not channel instance
       channel: threadData.channel && client.channel(threadData.channel.type, threadData.channel.id),
       createdAt: threadData.created_at ? new Date(threadData.created_at) : placeholderDate,
-      deletedAt: threadData.parent_message?.deleted_at?.length ? new Date(threadData.parent_message.deleted_at) : null,
+      deletedAt: threadData.parent_message?.deleted_at ? new Date(threadData.parent_message.deleted_at) : null,
       latestReplies: latestReplies.map(formatMessage),
       // TODO: check why this is sometimes undefined
       parentMessage: threadData.parent_message && formatMessage(threadData.parent_message),
       participants: threadParticipants,
-      // actual read state representing BE values
+      // actual read state in-sync with BE values
       read,
-      //
       staggeredRead: read,
       replyCount,
-      updatedAt: threadData.updated_at?.length ? new Date(threadData.updated_at) : null,
+      updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
 
       nextId: latestReplies.at(-1)?.id ?? null,
+      // TODO: check whether the amount of replies is less than replies_limit (thread.queriedWithOptions = {...})
       previousId: latestReplies.at(0)?.id ?? null,
       loadingNextPage: false,
       loadingPreviousPage: false,
@@ -169,9 +176,52 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     this.updateLocalState('active', false);
   };
 
+  // take state of one instance and merge it to the current instance
+  public partiallyReplaceState = ({ thread }: { thread: Thread<StreamChatGenerics> }) => {
+    if (thread === this) return; // skip if the instances are the same
+    if (thread.id !== this.id) return; // disallow merging of states of instances that do not match ids
+
+    const {
+      read,
+      staggeredRead,
+      replyCount,
+      latestReplies,
+      parentMessage,
+      participants,
+      createdAt,
+      deletedAt,
+      updatedAt,
+      nextId,
+      previousId,
+      channelData,
+    } = thread.state.getLatestValue();
+
+    this.state.next((current) => {
+      const failedReplies = Array.from(this.failedRepliesMap.values());
+
+      return {
+        ...current,
+        read,
+        staggeredRead,
+        replyCount,
+        latestReplies: latestReplies.concat(failedReplies),
+        parentMessage,
+        participants,
+        createdAt,
+        deletedAt,
+        updatedAt,
+        nextId,
+        previousId,
+        channelData,
+        isStateStale: false,
+      };
+    });
+  };
+
   /**
    * Makes Thread instance listen to events and adjust its state accordingly.
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   public registerSubscriptions = () => {
     // check whether this instance has subscriptions and is already listening for changes
     if (this.unsubscribeFunctions.size) return;
@@ -197,37 +247,64 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
         ),
       );
 
+    // TODO: use debounce instead
+    const throttledHandleStateRecovery = throttle(
+      async () => {
+        // this.updateLocalState('recovering', true);
+
+        // TODO: add online status to prevent recovery attempts during the time the connection is down
+        try {
+          const thread = await this.client.getThread(this.id, { watch: true });
+
+          this.partiallyReplaceState({ thread });
+        } catch (error) {
+          // TODO: handle recovery fail
+          console.warn(error);
+        } finally {
+          // this.updateLocalState('recovering', false);
+        }
+      },
+      DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
+      {
+        leading: true,
+        trailing: true,
+      },
+    );
+
+    // when the thread becomes active or it becomes stale while active (channel stops being watched or connection drops)
+    // the recovery handler pulls its latest state to replace with the current one
+    // failed messages are preserved and appended to the newly recovered replies
     this.unsubscribeFunctions.add(
-      // TODO: re-visit this behavior, not sure whether I like the solution
       this.state.subscribeWithSelector(
         (nextValue) => [nextValue.active, nextValue.isStateStale],
-        ([active, isStateStale]) => {
-          if (active && isStateStale) {
-            // reset state and re-load first page
-
-            this.state.next((current) => ({
-              ...current,
-              previousId: undefined,
-              nextId: undefined,
-              latestReplies: [],
-              isStateStale: false,
-            }));
-
-            this.loadPreviousPage();
-          }
+        async ([active, isStateStale]) => {
+          // TODO: cancel in-progress recovery?
+          if (active && isStateStale) throttledHandleStateRecovery();
         },
       ),
     );
+
+    // this.unsubscribeFunctions.add(
+    //   // mark local state as stale when connection drops
+    //   this.client.on('connection.changed', (event) => {
+    //     if (typeof event.online === 'undefined') return;
+
+    //     // state is already stale or connection recovered
+    //     if (this.state.getLatestValue().isStateStale || event.online) return;
+
+    //     this.updateLocalState('isStateStale', true);
+    //   }).unsubscribe,
+    // );
 
     this.unsubscribeFunctions.add(
       // TODO: figure out why the current user is not receiving this event
       this.client.on('user.watching.stop', (event) => {
         const currentUserId = this.client.user?.id;
-        if (!event.channel_id || !event.user || !currentUserId || currentUserId !== event.user.id) return;
+        if (!event.channel || !event.user || !currentUserId || currentUserId !== event.user.id) return;
 
         const { channelData } = this.state.getLatestValue();
 
-        if (!channelData || event.channel_id !== channelData.id) return;
+        if (!channelData || event.channel.cid !== channelData.cid) return;
 
         this.updateLocalState('isStateStale', true);
       }).unsubscribe,
@@ -238,6 +315,10 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
         const currentUserId = this.client.user?.id;
         if (!event.message || !currentUserId) return;
         if (event.message.parent_id !== this.id) return;
+
+        if (this.failedRepliesMap.has(event.message.id)) {
+          this.failedRepliesMap.delete(event.message.id);
+        }
 
         this.upsertReply({
           message: event.message,
@@ -290,14 +371,12 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 
   public deregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    // TODO: stop watching
   };
 
   public incrementOwnUnreadCount = () => {
     const currentUserId = this.client.user?.id;
     if (!currentUserId) return;
     // TODO: permissions (read events) - use channel._countMessageAsUnread
-    // only define side effect function if the message does not belong to the current user
     this.state.next((current) => {
       return {
         ...current,
@@ -322,10 +401,16 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     if (message.parent_id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
+    const formattedMessage = formatMessage(message);
+
+    // store failed message to reference in state merging
+    if (message.status === 'failed') {
+      this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
+    }
 
     this.state.next((current) => ({
       ...current,
-      latestReplies: addToMessageList(current.latestReplies, formatMessage(message), timestampChanged),
+      latestReplies: addToMessageList(current.latestReplies, formattedMessage, timestampChanged),
     }));
   };
 
@@ -335,10 +420,14 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
     }
 
     this.state.next((current) => {
+      const formattedMessage = formatMessage(message);
+
       const newData: typeof current = {
         ...current,
-        parentMessage: formatMessage(message),
+        parentMessage: formattedMessage,
         replyCount: message.reply_count ?? current.replyCount,
+        // TODO: probably should not have to do this
+        deletedAt: formattedMessage.deleted_at,
       };
 
       // update channel on channelData change (unlikely but handled anyway)
@@ -509,15 +598,14 @@ export class Thread<StreamChatGenerics extends ExtendableGenerics = DefaultGener
 
 type ThreadManagerState<T extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
+  isOnline: boolean;
+  lastConnectionDownAt: Date | null;
   loadingNextPage: boolean;
   loadingPreviousPage: boolean;
   threadIdIndexMap: { [key: string]: number };
   threads: Thread<T>[];
-  unreadThreads: {
-    combinedCount: number;
-    existingReorderedIds: string[];
-    newIds: string[];
-  };
+  unreadThreadsCount: number;
+  unseenThreadIds: string[];
   nextId?: string | null; // null means no next page available
   previousId?: string | null;
 };
@@ -533,16 +621,12 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       active: false,
       threads: [],
       threadIdIndexMap: {},
-      // TODO: re-think the naming
-      unreadThreads: {
-        // new threads or threads which have not been loaded and is not possible to paginate to anymore
-        // as these threads received new replies which moved them up in the list - used for the badge
-        newIds: [],
-        // threads already loaded within the local state but will change position in `threads` array when
-        // `loadUnreadThreads` gets called - used to calculate proper query limit
-        existingReorderedIds: [],
-        combinedCount: 0,
-      },
+      isOnline: false,
+      unreadThreadsCount: 0,
+      // new threads or threads which have not been loaded and is not possible to paginate to anymore
+      // as these threads received new replies which moved them up in the list - used for the badge
+      unseenThreadIds: [],
+      lastConnectionDownAt: null,
       loadingNextPage: false,
       loadingPreviousPage: false,
       nextId: undefined,
@@ -569,59 +653,75 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
     this.updateLocalState('active', false);
   };
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) return;
 
-    this.unsubscribeFunctions.add(
-      // TODO: find out if there's a better version of doing this (client.user is obviously not reactive and unitialized during construction)
-      this.client.on('health.check', (event) => {
-        if (!event.me) return;
+    const handleUnreadThreadsCountChange = (event: Event) => {
+      const { unread_threads: unreadThreadsCount } = event.me ?? event;
 
-        const { unread_threads: unreadThreadsCount } = event.me;
+      if (typeof unreadThreadsCount === 'undefined') return;
 
-        // TODO: extract to a reusable function
-        this.state.next((current) => ({
-          ...current,
-          unreadThreads: { ...current.unreadThreads, combinedCount: unreadThreadsCount },
-        }));
-      }).unsubscribe,
+      this.state.next((current) => ({
+        ...current,
+        unreadThreadsCount,
+      }));
+    };
+
+    [
+      'health.check',
+      'notification.mark_read',
+      'notification.thread_message_new',
+      'notification.channel_deleted',
+    ].forEach((eventType) =>
+      this.unsubscribeFunctions.add(this.client.on(eventType, handleUnreadThreadsCountChange).unsubscribe),
     );
 
-    this.unsubscribeFunctions.add(
-      this.client.on('notification.mark_read', (event) => {
-        if (typeof event.unread_threads === 'undefined') return;
-
-        const { unread_threads: unreadThreadsCount } = event;
-
-        this.state.next((current) => ({
-          ...current,
-          unreadThreads: { ...current.unreadThreads, combinedCount: unreadThreadsCount },
-        }));
-      }).unsubscribe,
-    );
-
-    // TODO: maybe debounce instead?
+    // TODO: return to previous recovery option as state merging is now in place
     const throttledHandleConnectionRecovery = throttle(
-      () => {
-        // TODO: cancel possible in-progress queries (loadNextPage...)
+      async () => {
+        const { lastConnectionDownAt, threads } = this.state.getLatestValue();
 
-        this.state.next((current) => ({
-          ...current,
-          threads: [],
-          unreadThreads: { ...current.unreadThreads, newIds: [], existingReorderedIds: [] },
-          nextId: undefined,
-          previousId: undefined,
-          isStateStale: false,
-        }));
+        if (!lastConnectionDownAt) return;
 
-        this.loadNextPage();
+        const channelCids = new Set<string>();
+        for (const thread of threads) {
+          if (!thread.channel) continue;
+
+          channelCids.add(thread.channel.cid);
+        }
+
+        try {
+          // FIXME: syncing does not work for me
+          await this.client.sync(Array.from(channelCids), lastConnectionDownAt.toISOString(), { watch: true });
+          this.updateLocalState('lastConnectionDownAt', null);
+        } catch (error) {
+          console.warn(error);
+        }
       },
       DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
-      { leading: true, trailing: true },
+      {
+        leading: true,
+        trailing: true,
+      },
     );
 
     this.unsubscribeFunctions.add(
       this.client.on('connection.recovered', throttledHandleConnectionRecovery).unsubscribe,
+    );
+
+    this.unsubscribeFunctions.add(
+      this.client.on('connection.changed', (event) => {
+        if (typeof event.online === 'undefined') return;
+
+        const { lastConnectionDownAt } = this.state.getLatestValue();
+
+        if (!event.online && !lastConnectionDownAt) {
+          this.updateLocalState('lastConnectionDownAt', new Date());
+        }
+
+        this.updateLocalState('isOnline', event.online);
+      }).unsubscribe,
     );
 
     this.unsubscribeFunctions.add(
@@ -631,7 +731,7 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
           if (!active) return;
 
           // automatically clear all the changes that happened "behind the scenes"
-          this.loadUnreadThreads();
+          this.reload();
         },
       ),
     );
@@ -665,20 +765,13 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       this.state.subscribeWithSelector((nextValue) => [nextValue.threads] as const, handleThreadsChange),
     );
 
-    // TODO?: handle parent message deleted (extend unreadThreads \w deletedIds?)
-    // delete locally (manually) and run rest of the query loadUnreadThreads
-    // requires BE support (filter deleted threads)
+    // TODO: handle parent message hard-deleted (extend state with \w hardDeletedThreadIds?)
 
     const handleNewReply = (event: Event) => {
       if (!event.message || !event.message.parent_id) return;
       const parentId = event.message.parent_id;
 
-      const {
-        threadIdIndexMap,
-        nextId,
-        threads,
-        unreadThreads: { newIds, existingReorderedIds },
-      } = this.state.getLatestValue();
+      const { threadIdIndexMap, nextId, threads, unseenThreadIds } = this.state.getLatestValue();
 
       // prevents from handling replies until the threads have been loaded
       // (does not fill information for "unread threads" banner to appear)
@@ -686,79 +779,67 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
 
       const existsLocally = typeof threadIdIndexMap[parentId] !== 'undefined';
 
-      if (existsLocally && !existingReorderedIds.includes(parentId)) {
-        return this.state.next((current) => ({
-          ...current,
-          unreadThreads: {
-            ...current.unreadThreads,
-            existingReorderedIds: current.unreadThreads.existingReorderedIds.concat(parentId),
-          },
-        }));
-      }
+      if (existsLocally || unseenThreadIds.includes(parentId)) return;
 
-      if (!existsLocally && !newIds.includes(parentId)) {
-        return this.state.next((current) => ({
-          ...current,
-          unreadThreads: {
-            ...current.unreadThreads,
-            newIds: current.unreadThreads.newIds.concat(parentId),
-          },
-        }));
-      }
+      return this.state.next((current) => ({
+        ...current,
+        unseenThreadIds: current.unseenThreadIds.concat(parentId),
+      }));
     };
 
     this.unsubscribeFunctions.add(this.client.on('notification.thread_message_new', handleNewReply).unsubscribe);
   };
 
   public deregisterSubscriptions = () => {
+    // TODO: think about state reset or at least invalidation
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
   };
 
-  // TODO: add activity status, trigger this method when this instance becomes active
-  public loadUnreadThreads = async () => {
-    // TODO: redo this whole thing
-    // - do reload with limit which is currently loaded amount of threads but less than max (25) - not working well
-    // - ask BE to allow you to do {id: {$in: [...]}} (always push new to the top) - custom ordering might not work
-    // - re-load 25 at most, drop rest? - again, might not fit custom ordering - at which point the "in" option seems better
-    const {
-      threads,
-      unreadThreads: { newIds, existingReorderedIds },
-    } = this.state.getLatestValue();
+  public reload = async () => {
+    const { threads, unseenThreadIds } = this.state.getLatestValue();
 
-    const triggerLimit = newIds.length + existingReorderedIds.length;
+    if (!unseenThreadIds.length) return;
 
-    if (!triggerLimit) return;
-
-    const combinedLimit = threads.length + newIds.length;
+    const combinedLimit = threads.length + unseenThreadIds.length;
 
     try {
       const data = await this.client.queryThreads({
         limit: combinedLimit <= MAX_QUERY_THREADS_LIMIT ? combinedLimit : MAX_QUERY_THREADS_LIMIT,
       });
 
-      this.state.next((current) => {
-        // merge existing and new threads, filter out re-ordered
-        const newThreads: Thread<T>[] = [];
-        const existingThreadIdsToFilterOut: string[] = [];
+      const { threads, threadIdIndexMap } = this.state.getLatestValue();
 
-        for (const thread of data.threads) {
-          const existingThread: Thread<T> | undefined = current.threads[current.threadIdIndexMap[thread.id]];
+      const newThreads: Thread<T>[] = [];
+      // const existingThreadIdsToFilterOut: string[] = [];
 
-          // ditch threads which report stale state and use new one
-          // *(state can be considered as stale when channel associated with the thread stops being watched)
-          newThreads.push(existingThread && !existingThread.hasStaleState ? existingThread : thread);
+      for (const thread of data.threads) {
+        const existingThread: Thread<T> | undefined = threads[threadIdIndexMap[thread.id]];
 
-          if (existingThread) existingThreadIdsToFilterOut.push(existingThread.id);
+        newThreads.push(existingThread ?? thread);
+
+        // replace state of threads which report stale state
+        // *(state can be considered as stale when channel associated with the thread stops being watched)
+        if (existingThread && existingThread.hasStaleState) {
+          existingThread.partiallyReplaceState({ thread });
         }
 
-        const existingFilteredThreads = current.threads.filter(({ id }) => !existingThreadIdsToFilterOut.includes(id));
+        // if (existingThread) existingThreadIdsToFilterOut.push(existingThread.id);
+      }
 
-        return {
-          ...current,
-          unreadThreads: { ...current.unreadThreads, newIds: [], existingReorderedIds: [] }, // reset
-          threads: newThreads.concat(existingFilteredThreads),
-        };
-      });
+      // TODO: use some form of a "cache" for unused threads
+      // to reach for upon next pagination or re-query
+      // keep them subscribed and "running" behind the scenes but
+      // not in the list for multitude of reasons (clean cache on last pagination which returns empty array - nothing to pair cached threads to)
+      // (this.loadedThreadIdMap)
+      // const existingFilteredThreads = threads.filter(({ id }) => !existingThreadIdsToFilterOut.includes(id));
+
+      this.state.next((current) => ({
+        ...current,
+        unseenThreadIds: [], // reset
+        // TODO: extract merging logic and allow loadNextPage to merge as well (in combination with the cache thing)
+        threads: newThreads, //.concat(existingFilteredThreads),
+        nextId: data.next ?? null, // re-adjust next cursor
+      }));
     } catch (error) {
       // TODO: loading states
       console.error(error);
@@ -789,7 +870,7 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
       const data = await this.client.queryThreads(optionsWithDefaults);
       this.state.next((current) => ({
         ...current,
-        threads: current.threads.concat(data.threads),
+        threads: data.threads.length ? current.threads.concat(data.threads) : current.threads,
         nextId: data.next ?? null,
       }));
     } catch (error) {
@@ -799,7 +880,7 @@ export class ThreadManager<T extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public loadPreviousPage = () => {
-    // TODO: impl
+  private loadPreviousPage = () => {
+    // TODO: impl?
   };
 }

@@ -653,7 +653,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
           messages[i] = {
             ...m,
             type: 'deleted',
-            deleted_at: user.deleted_at,
+            deleted_at: user.deleted_at ? new Date(user.deleted_at) : null,
           };
         }
       }

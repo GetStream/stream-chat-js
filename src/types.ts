@@ -473,10 +473,11 @@ export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics 
     reactionType: StreamChatGenerics['reactionType'];
     userType: StreamChatGenerics['userType'];
   }>,
-  'created_at' | 'pinned_at' | 'updated_at' | 'status'
+  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
 > &
   StreamChatGenerics['messageType'] & {
     created_at: Date;
+    deleted_at: Date | null;
     pinned_at: Date | null;
     status: string;
     updated_at: Date;

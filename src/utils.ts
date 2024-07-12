@@ -295,6 +295,7 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
     pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
     updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+    deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
     status: message.status || 'received',
     reaction_groups: maybeGetReactionGroupsFallback(
       message.reaction_groups,
