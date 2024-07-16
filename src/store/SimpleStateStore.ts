@@ -20,7 +20,7 @@ function isInitiator<T>(value: T | Initiator<T>): value is Initiator<T> {
 }
 
 export class SimpleStateStore<
-  T
+  T // TODO: limit T to object only?
   // O extends {
   // 	[K in keyof T]: T[K] extends Function ? K : never;
   // }[keyof T] = never
@@ -46,6 +46,9 @@ export class SimpleStateStore<
 
     this.handlerSet.forEach((handler) => handler(this.value, oldValue));
   };
+
+  public patchedNext = (key: keyof T, newValue: T[typeof key]) =>
+    this.next((current) => ({ ...current, [key]: newValue }));
 
   public getLatestValue = () => this.value;
 
