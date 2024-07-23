@@ -14,6 +14,7 @@ import {
   ModerationFlagOptions,
   ModerationMuteOptions,
   GetUserModerationReportOptions,
+  SubmitActionOptions,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -178,5 +179,16 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async getConfig(key: string) {
     return await this.client.get<GetConfigResponse>(this.client.baseURL + '/api/v2/moderation/config/' + key);
+  }
+
+  async submitAction(actionType: string, itemID: string, options: SubmitActionOptions = {}) {
+    return await this.client.post<{ item_id: string } & APIResponse>(
+      this.client.baseURL + '/api/v2/moderation/submit_action',
+      {
+        action_type: actionType,
+        item_id: itemID,
+        ...options,
+      },
+    );
   }
 }

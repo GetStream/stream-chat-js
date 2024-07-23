@@ -3215,6 +3215,27 @@ export type ReviewQueueItem = {
   updated_at: string;
 };
 
+export type SubmitActionOptions = {
+  ban?: {
+    channel_ban_only?: boolean;
+    reason?: string;
+    timeout?: number;
+  };
+  delete_message?: {
+    hard_delete?: boolean;
+  };
+  delete_user?: {
+    delete_conversation_channels?: boolean;
+    hard_delete?: boolean;
+    mark_messages_deleted?: boolean;
+  };
+  restore?: {};
+  unban?: {
+    channel_cid?: string;
+  };
+  user_id?: string;
+};
+
 export type GetUserModerationReportResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   user: UserResponse<StreamChatGenerics>;
   user_blocks?: Array<{
