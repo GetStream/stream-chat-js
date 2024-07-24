@@ -13,16 +13,8 @@ import type {
   QueryThreadsOptions,
   MessagePaginationOptions,
   AscDesc,
-  GetRepliesAPIResponse,
-  EventAPIResponse,
 } from './types';
-import {
-  addToMessageList,
-  findInsertionIndex,
-  formatMessage,
-  normalizeQuerySort,
-  transformReadArrayToDictionary,
-} from './utils';
+import { addToMessageList, findInsertionIndex, formatMessage, transformReadArrayToDictionary } from './utils';
 import { Handler, SimpleStateStore } from './store/SimpleStateStore';
 
 type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -34,8 +26,6 @@ type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     user: UserResponse<StreamChatGenerics>;
   };
 };
-
-type QueryRepliesApiResponse<T extends ExtendableGenerics> = GetRepliesAPIResponse<T>;
 
 type QueryRepliesOptions<T extends ExtendableGenerics> = {
   sort?: { created_at: AscDesc }[];
@@ -121,7 +111,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       createdAt: threadData.created_at ? new Date(threadData.created_at) : placeholderDate,
       deletedAt: threadData.parent_message?.deleted_at ? new Date(threadData.parent_message.deleted_at) : null,
       latestReplies: latestReplies.map(formatMessage),
-      // TODO: check why this is sometimes undefined
+      // thread is "parentMessage"
       parentMessage: threadData.parent_message && formatMessage(threadData.parent_message),
       participants: threadParticipants,
       // actual read state in-sync with BE values
@@ -456,19 +446,16 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public markAsRead = () => {
-    const { channelData, read } = this.state.getLatestValue();
+    const { read } = this.state.getLatestValue();
     const currentUserId = this.client.user?.id;
 
     const { unread_messages: unreadMessagesCount } = (currentUserId && read[currentUserId]) || {};
 
     if (!unreadMessagesCount) return;
 
-    return this.client.post<EventAPIResponse<Scg>>(
-      `${this.client.baseURL}/channels/${channelData?.type}/${channelData?.id}/read`,
-      {
-        thread_id: this.id,
-      },
-    );
+    if (!this.channel) throw new Error('markAsRead: This Thread intance has no channel bound to it');
+
+    return this.channel.markRead({ thread_id: this.id });
   };
 
   // moved from channel to thread directly (skipped getClient thing as this call does not need active WS connection)
@@ -476,12 +463,11 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     sort = DEFAULT_SORT,
     limit = DEFAULT_PAGE_LIMIT,
     ...otherOptions
-  }: QueryRepliesOptions<Scg> = {}) =>
-    this.client.get<QueryRepliesApiResponse<Scg>>(`${this.client.baseURL}/messages/${this.id}/replies`, {
-      sort: normalizeQuerySort(sort),
-      limit,
-      ...otherOptions,
-    });
+  }: QueryRepliesOptions<Scg> = {}) => {
+    if (!this.channel) throw new Error('queryReplies: This Thread intance has no channel bound to it');
+
+    return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
+  };
 
   // loadNextPage and loadPreviousPage rely on pagination id's calculated from previous requests
   // these functions exclude these options (id_lt, id_lte...) from their options to prevent unexpected pagination behavior
@@ -638,11 +624,16 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
           channelCids.add(thread.channel.cid);
         }
 
+        if (!channelCids.size) return;
+
         try {
           // FIXME: syncing does not work for me
           await this.client.sync(Array.from(channelCids), lastConnectionDownAt.toISOString(), { watch: true });
           this.state.patchedNext('lastConnectionDownAt', null);
         } catch (error) {
+          // TODO: if error mentions that the amount of events is more than 2k
+          // do a reload-type recovery (re-query threads and merge states)
+
           console.warn(error);
         }
       },
