@@ -31,7 +31,7 @@ type QueryRepliesOptions<T extends ExtendableGenerics> = {
   sort?: { created_at: AscDesc }[];
 } & MessagePaginationOptions & { user?: UserResponse<T>; user_id?: string };
 
-type ThreadState<T extends ExtendableGenerics> = {
+export type ThreadState<T extends ExtendableGenerics> = {
   active: boolean;
 
   createdAt: Date;
@@ -539,11 +539,10 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   };
 }
 
-type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
   lastConnectionDownAt: Date | null;
   loadingNextPage: boolean;
-  loadingPreviousPage: boolean;
   threadIdIndexMap: { [key: string]: number };
   threads: Thread<Scg>[];
   unreadThreadsCount: number;
@@ -551,6 +550,7 @@ type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics> = {
   nextCursor?: string | null; // null means no next page available
   // TODO?: implement once supported by BE
   // previousCursor?: string | null;
+  // loadingPreviousPage: boolean;
 };
 
 export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
@@ -570,7 +570,6 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
       unseenThreadIds: [],
       lastConnectionDownAt: null,
       loadingNextPage: false,
-      loadingPreviousPage: false,
       nextCursor: undefined,
     });
 
