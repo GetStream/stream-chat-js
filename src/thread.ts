@@ -182,7 +182,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         read,
         staggeredRead,
         replyCount,
-        latestReplies: latestReplies.concat(failedReplies),
+        latestReplies: latestReplies.length ? latestReplies.concat(failedReplies) : latestReplies,
         parentMessage,
         participants,
         createdAt,
@@ -290,6 +290,10 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         const currentUserId = this.client.user?.id;
         if (!event.message || !currentUserId) return;
         if (event.message.parent_id !== this.id) return;
+
+        const { isStateStale } = this.state.getLatestValue();
+
+        if (isStateStale) return;
 
         if (this.failedRepliesMap.has(event.message.id)) {
           this.failedRepliesMap.delete(event.message.id);

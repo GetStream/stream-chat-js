@@ -21,9 +21,6 @@ function isInitiator<T>(value: T | Initiator<T>): value is Initiator<T> {
 
 export class SimpleStateStore<
   T // TODO: limit T to object only?
-  // O extends {
-  // 	[K in keyof T]: T[K] extends Function ? K : never;
-  // }[keyof T] = never
 > {
   private value: T;
   private handlerSet = new Set<Handler<T>>();
@@ -47,18 +44,10 @@ export class SimpleStateStore<
     this.handlerSet.forEach((handler) => handler(this.value, oldValue));
   };
 
-  public patchedNext = (key: keyof T, newValue: T[typeof key]) =>
+  public patchedNext = <L extends keyof T>(key: L, newValue: T[L]) =>
     this.next((current) => ({ ...current, [key]: newValue }));
 
   public getLatestValue = () => this.value;
-
-  // TODO: filter and return actions (functions) only in a type-safe manner (only allows state T to be a dict)
-  // public get actions(): { [K in O]: T[K] } {
-  // 	return {};
-  // }
-  public get actions() {
-    return this.value;
-  }
 
   public subscribe = (handler: Handler<T>) => {
     handler(this.value);
