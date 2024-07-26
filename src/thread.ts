@@ -1,5 +1,3 @@
-import throttle from 'lodash.throttle';
-
 import { StreamChat } from './client';
 import { Channel } from './channel';
 import type {
@@ -14,7 +12,7 @@ import type {
   MessagePaginationOptions,
   AscDesc,
 } from './types';
-import { addToMessageList, findInsertionIndex, formatMessage, transformReadArrayToDictionary } from './utils';
+import { addToMessageList, findInsertionIndex, formatMessage, transformReadArrayToDictionary, throttle } from './utils';
 import { Handler, SimpleStateStore } from './store/SimpleStateStore';
 
 type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {

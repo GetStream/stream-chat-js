@@ -43,7 +43,6 @@
     "form-data": "^4.0.0",
     "isomorphic-ws": "^4.0.1",
     "jsonwebtoken": "~9.0.0",
-    "lodash.throttle": "^4.1.1",
     "ws": "^7.4.4"
   },
   "devDependencies": {
@@ -72,7 +71,6 @@
     "@types/chai-as-promised": "^7.1.4",
     "@types/chai-like": "^1.1.1",
     "@types/eslint": "7.2.7",
-    "@types/lodash.throttle": "^4.1.9",
     "@types/mocha": "^9.0.0",
     "@types/node": "^16.11.11",
     "@types/prettier": "^2.2.2",
