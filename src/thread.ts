@@ -29,7 +29,7 @@ type QueryRepliesOptions<T extends ExtendableGenerics> = {
   sort?: { created_at: AscDesc }[];
 } & MessagePaginationOptions & { user?: UserResponse<T>; user_id?: string };
 
-export type ThreadState<T extends ExtendableGenerics> = {
+export type ThreadState<T extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
 
   createdAt: Date;
@@ -53,10 +53,10 @@ export type ThreadState<T extends ExtendableGenerics> = {
 };
 
 const DEFAULT_PAGE_LIMIT = 50;
-const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
+export const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
 
 /**
  * Request batching?
@@ -202,7 +202,8 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     // check whether this instance has subscriptions and is already listening for changes
     if (this.unsubscribeFunctions.size) return;
 
-    const throttledMarkAsRead = throttle(this.markAsRead, DEFAULT_MARK_AS_READ_THROTTLE_DURATION, {
+    // TODO: figure out why markAsRead needs to be wrapped like this (for tests to pass)
+    const throttledMarkAsRead = throttle(() => this.markAsRead(), DEFAULT_MARK_AS_READ_THROTTLE_DURATION, {
       leading: true,
       trailing: true,
     });
@@ -300,10 +301,12 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         this.upsertReplyLocally({
           message: event.message,
           // deal with timestampChanged only related to local user (optimistic updates)
-          timestampChanged: event.message.user?.id === this.client.user?.id,
+          timestampChanged: event.message.user?.id === currentUserId,
         });
 
-        if (event.user && event.user.id !== currentUserId) this.incrementOwnUnreadCount();
+        if (event.message.user?.id !== currentUserId) this.incrementOwnUnreadCount();
+        // TODO: figure out if event.user is better when it comes to event messages?
+        // if (event.user && event.user.id !== currentUserId) this.incrementOwnUnreadCount();
       }).unsubscribe,
     );
 
@@ -381,7 +384,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     });
 
     const actualIndex =
-      latestReplies[index].id === message.id ? index : latestReplies[index - 1].id === message.id ? index - 1 : null;
+      latestReplies[index]?.id === message.id ? index : latestReplies[index - 1]?.id === message.id ? index - 1 : null;
 
     if (actualIndex === null) return;
 

@@ -10,7 +10,17 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThread } from './test-utils/generateThread';
 
-import { Channel, MessageResponse, StreamChat, Thread, ThreadManager, formatMessage } from '../../src';
+import {
+  Channel,
+  ChannelResponse,
+  DEFAULT_MARK_AS_READ_THROTTLE_DURATION,
+  MessageResponse,
+  StreamChat,
+  Thread,
+  ThreadManager,
+  ThreadResponse,
+  formatMessage,
+} from '../../src';
 import sinon from 'sinon';
 
 const TEST_USER_ID = 'observer';
@@ -47,7 +57,7 @@ describe('Threads 2.0', () => {
     });
 
     describe('Methods', () => {
-      describe('Thread.upsertReply', () => {
+      describe('Thread.upsertReplyLocally', () => {
         // does not test whether the message has been inserted at the correct position
         // that should be unit-tested separately (addToMessageList utility function)
 
@@ -93,6 +103,76 @@ describe('Threads 2.0', () => {
         });
 
         // TODO: timestampChanged (check that duplicates get removed)
+      });
+
+      describe('Thread.updateParentMessageLocally', () => {
+        it('prevents updating a parent message if the ids do not match', () => {
+          const newMessage = generateMsg();
+
+          const fn = () => {
+            thread.updateParentMessageLocally(newMessage as MessageResponse);
+          };
+
+          expect(fn).to.throw(Error);
+        });
+
+        it('updates parent message and related top-level properties (deletedAt & replyCount)', () => {
+          const newMessage = generateMsg({
+            id: parentMessageResponse.id,
+            text: 'aaa',
+            reply_count: 10,
+            deleted_at: new Date().toISOString(),
+          });
+
+          const { deletedAt, replyCount, parentMessage } = thread.state.getLatestValue();
+
+          // baseline
+          expect(parentMessage!.id).to.equal(thread.id);
+          expect(deletedAt).to.be.null;
+          expect(replyCount).to.equal(0);
+          expect(parentMessage!.text).to.equal(parentMessageResponse.text);
+
+          thread.updateParentMessageLocally(newMessage as MessageResponse);
+
+          expect(thread.state.getLatestValue().deletedAt).to.be.a('date');
+          expect(thread.state.getLatestValue().deletedAt!.toISOString()).to.equal(
+            (newMessage as MessageResponse).deleted_at,
+          );
+          expect(thread.state.getLatestValue().replyCount).to.equal(newMessage.reply_count);
+          expect(thread.state.getLatestValue().parentMessage!.text).to.equal(newMessage.text);
+        });
+      });
+
+      describe('Thread.updateParentMessageOrReplyLocally', () => {
+        it('calls upsertReplyLocally if the message has parent_id and it equals to the thread.id', () => {
+          const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally').returns();
+          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally').returns();
+
+          thread.updateParentMessageOrReplyLocally(generateMsg({ parent_id: thread.id }) as MessageResponse);
+
+          expect(upsertReplyLocallyStub.called).to.be.true;
+          expect(updateParentMessageLocallyStub.called).to.be.false;
+        });
+
+        it('calls updateParentMessageLocally if message does not have parent_id and its id equals to the id of the thread', () => {
+          const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally').returns();
+          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally').returns();
+
+          thread.updateParentMessageOrReplyLocally(generateMsg({ id: thread.id }) as MessageResponse);
+
+          expect(upsertReplyLocallyStub.called).to.be.false;
+          expect(updateParentMessageLocallyStub.called).to.be.true;
+        });
+
+        it('does not call either updateParentMessageLocally or upsertReplyLocally', () => {
+          const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally').returns();
+          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally').returns();
+
+          thread.updateParentMessageOrReplyLocally(generateMsg() as MessageResponse);
+
+          expect(upsertReplyLocallyStub.called).to.be.false;
+          expect(updateParentMessageLocallyStub.called).to.be.false;
+        });
       });
 
       describe('Thread.partiallyReplaceState', () => {
@@ -206,7 +286,37 @@ describe('Threads 2.0', () => {
       });
 
       describe('Thread.deleteReplyLocally', () => {
-        // it('');
+        it('deletes appropriate message from the latestReplies array', () => {
+          const TARGET_MESSAGE_INDEX = 2;
+
+          const createdAt = new Date().getTime();
+          // five messages "created" second apart
+          thread.state.patchedNext(
+            'latestReplies',
+            Array.from({ length: 5 }, (_, i) =>
+              formatMessage(
+                generateMsg({ created_at: new Date(createdAt + 1000 * i).toISOString() }) as MessageResponse,
+              ),
+            ),
+          );
+
+          const { latestReplies } = thread.state.getLatestValue();
+
+          expect(latestReplies).to.have.lengthOf(5);
+
+          const messageToDelete = generateMsg({
+            created_at: latestReplies[TARGET_MESSAGE_INDEX].created_at.toISOString(),
+            id: latestReplies[TARGET_MESSAGE_INDEX].id,
+          });
+
+          expect(latestReplies[TARGET_MESSAGE_INDEX].id).to.equal(messageToDelete.id);
+          expect(latestReplies[TARGET_MESSAGE_INDEX].created_at.toISOString()).to.equal(messageToDelete.created_at);
+
+          thread.deleteReplyLocally({ message: messageToDelete as MessageResponse });
+
+          expect(thread.state.getLatestValue().latestReplies).to.have.lengthOf(4);
+          expect(thread.state.getLatestValue().latestReplies[TARGET_MESSAGE_INDEX].id).to.not.equal(messageToDelete.id);
+        });
       });
 
       describe('Thread.markAsRead', () => {
@@ -245,19 +355,227 @@ describe('Threads 2.0', () => {
     });
 
     describe('Subscription Handlers', () => {
+      // let timers: sinon.SinonFakeTimers;
+
       beforeEach(() => {
         thread.registerSubscriptions();
       });
 
-      it('calls markAsRead whenever it becomes active or own reply count increases', () => {});
+      it('calls markAsRead whenever thread becomes active or own reply count increases', () => {
+        const timers = sinon.useFakeTimers({ toFake: ['setTimeout'] });
 
-      it('it recovers from stale state whenever it becomes active (or is active and becomes stale)', () => {});
+        const stubbedMarkAsRead = sinon.stub(thread, 'markAsRead').resolves();
 
-      it('marks own state as stale whenever current user stops watching associated channel', () => {});
+        thread.incrementOwnUnreadCount();
 
-      it('properly handles new messages', () => {});
+        expect(thread.state.getLatestValue().active).to.be.false;
+        expect(thread.state.getLatestValue().read[TEST_USER_ID].unread_messages).to.equal(1);
+        expect(stubbedMarkAsRead.called).to.be.false;
 
-      it('properly handles message updates (both reply and parent)', () => {});
+        thread.activate();
+
+        expect(thread.state.getLatestValue().active).to.be.true;
+        expect(stubbedMarkAsRead.calledOnce, 'Called once').to.be.true;
+
+        thread.incrementOwnUnreadCount();
+
+        timers.tick(DEFAULT_MARK_AS_READ_THROTTLE_DURATION + 1);
+
+        expect(stubbedMarkAsRead.calledTwice, 'Called twice').to.be.true;
+
+        timers.restore();
+      });
+
+      it('recovers from stale state whenever the thread becomes active (or is active and its state becomes stale)', async () => {
+        // prepare
+        const newThread = new Thread({
+          client,
+          threadData: generateThread(channelResponse, generateMsg({ id: parentMessageResponse.id })),
+        });
+        const stubbedGetThread = sinon.stub(client, 'getThread').resolves(newThread);
+        const partiallyReplaceStateSpy = sinon.spy(thread, 'partiallyReplaceState');
+
+        thread.state.patchedNext('isStateStale', true);
+
+        expect(thread.state.getLatestValue().isStateStale).to.be.true;
+        expect(stubbedGetThread.called).to.be.false;
+        expect(partiallyReplaceStateSpy.called).to.be.false;
+
+        thread.activate();
+
+        expect(stubbedGetThread.calledOnce).to.be.true;
+
+        await stubbedGetThread.firstCall.returnValue;
+
+        expect(partiallyReplaceStateSpy.calledWith({ thread: newThread })).to.be.true;
+      });
+
+      describe('Event user.watching.stop', () => {
+        it('ignores incoming event if the data do not match (channel or user.id)', () => {
+          client.dispatchEvent({
+            type: 'user.watching.stop',
+            channel: channelResponse as ChannelResponse,
+            user: { id: 'bob' },
+          });
+
+          expect(thread.state.getLatestValue().isStateStale).to.be.false;
+
+          client.dispatchEvent({
+            type: 'user.watching.stop',
+            channel: generateChannel().channel as ChannelResponse,
+            user: { id: TEST_USER_ID },
+          });
+
+          expect(thread.state.getLatestValue().isStateStale).to.be.false;
+        });
+
+        it('marks own state as stale whenever current user stops watching associated channel', () => {
+          client.dispatchEvent({
+            type: 'user.watching.stop',
+            channel: channelResponse as ChannelResponse,
+            user: { id: TEST_USER_ID },
+          });
+
+          expect(thread.state.getLatestValue().isStateStale).to.be.true;
+        });
+      });
+
+      describe('Event message.read', () => {
+        it('prevents adjusting unread_messages & last_read if thread.id does not match', () => {
+          // prepare
+          thread.incrementOwnUnreadCount();
+          expect(thread.state.getLatestValue().read[TEST_USER_ID].unread_messages).to.equal(1);
+
+          client.dispatchEvent({
+            type: 'message.read',
+            user: { id: TEST_USER_ID },
+            thread: (generateThread(channelResponse, generateMsg()) as unknown) as ThreadResponse,
+          });
+
+          expect(thread.state.getLatestValue().read[TEST_USER_ID].unread_messages).to.equal(1);
+        });
+
+        [TEST_USER_ID, 'bob'].forEach((userId) => {
+          it(`correctly sets read information for user with id: ${userId}`, () => {
+            // prepare
+            const lastReadAt = new Date();
+            thread.state.patchedNext('read', {
+              [userId]: {
+                lastReadAt: lastReadAt,
+                last_read: lastReadAt.toISOString(),
+                last_read_message_id: '',
+                unread_messages: 1,
+                user: { id: userId },
+              },
+            });
+
+            expect(thread.state.getLatestValue().read[userId].unread_messages).to.equal(1);
+
+            const createdAt = new Date().toISOString();
+
+            client.dispatchEvent({
+              type: 'message.read',
+              user: { id: userId },
+              thread: (generateThread(
+                channelResponse,
+                generateMsg({ id: parentMessageResponse.id }),
+              ) as unknown) as ThreadResponse,
+              created_at: createdAt,
+            });
+
+            expect(thread.state.getLatestValue().read[userId].unread_messages).to.equal(0);
+            expect(thread.state.getLatestValue().read[userId].last_read).to.equal(createdAt);
+          });
+        });
+      });
+
+      describe('Event message.new', () => {
+        it('prevents handling a reply if it does not belong to the associated thread', () => {
+          // prepare
+          const upsertReplyLocallySpy = sinon.spy(thread, 'upsertReplyLocally');
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: generateMsg({ parent_id: uuidv4() }) as MessageResponse,
+          });
+
+          expect(upsertReplyLocallySpy.called).to.be.false;
+        });
+
+        it('prevents handling a reply if the state of the thread is stale', () => {
+          // prepare
+          const upsertReplyLocallySpy = sinon.spy(thread, 'upsertReplyLocally');
+
+          thread.state.patchedNext('isStateStale', true);
+
+          client.dispatchEvent({ type: 'message.new', message: generateMsg({ id: thread.id }) as MessageResponse });
+
+          expect(upsertReplyLocallySpy.called).to.be.false;
+        });
+
+        it('calls upsertLocalReply with proper values and calls incrementOwnUnreadCount if the reply does not belong to current user', () => {
+          // prepare
+          const upsertReplyLocallySpy = sinon.spy(thread, 'upsertReplyLocally');
+          const incrementOwnUnreadCountSpy = sinon.spy(thread, 'incrementOwnUnreadCount');
+
+          const newMessage = generateMsg({ parent_id: thread.id, user: { id: 'bob' } }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: newMessage,
+          });
+
+          expect(upsertReplyLocallySpy.calledWith({ message: newMessage, timestampChanged: false })).to.be.true;
+          expect(incrementOwnUnreadCountSpy.called).to.be.true;
+        });
+
+        it('calls upsertLocalReply with timestampChanged true if the reply belongs to the current user', () => {
+          // prepare
+          const upsertReplyLocallySpy = sinon.spy(thread, 'upsertReplyLocally');
+          const incrementOwnUnreadCountSpy = sinon.spy(thread, 'incrementOwnUnreadCount');
+
+          const newMessage = generateMsg({ parent_id: thread.id, user: { id: TEST_USER_ID } }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: newMessage,
+          });
+
+          expect(upsertReplyLocallySpy.calledWith({ message: newMessage, timestampChanged: true })).to.be.true;
+          expect(incrementOwnUnreadCountSpy.called).to.be.false;
+        });
+
+        // TODO: cover failed replies at some point
+      });
+
+      describe('Events message.updated, message.deleted, reaction.new, reaction.deleted', () => {
+        it('calls deleteReplyLocally if the reply has been hard-deleted', () => {
+          const deleteReplyLocallySpy = sinon.spy(thread, 'deleteReplyLocally');
+          const updateParentMessageOrReplyLocallySpy = sinon.spy(thread, 'updateParentMessageOrReplyLocally');
+
+          client.dispatchEvent({
+            type: 'message.deleted',
+            hard_delete: true,
+            message: generateMsg({ parent_id: thread.id }) as MessageResponse,
+          });
+
+          expect(deleteReplyLocallySpy.calledOnce).to.be.true;
+          expect(updateParentMessageOrReplyLocallySpy.called).to.be.false;
+        });
+
+        (['message.updated', 'message.deleted', 'reaction.new', 'reaction.deleted'] as const).forEach((eventType) => {
+          it(`calls updateParentMessageOrReplyLocally on ${eventType}`, () => {
+            const updateParentMessageOrReplyLocallySpy = sinon.spy(thread, 'updateParentMessageOrReplyLocally');
+
+            client.dispatchEvent({
+              type: eventType,
+              message: generateMsg({ parent_id: thread.id }) as MessageResponse,
+            });
+
+            expect(updateParentMessageOrReplyLocallySpy.calledOnce).to.be.true;
+          });
+        });
+      });
     });
   });
 
@@ -282,7 +600,7 @@ describe('Threads 2.0', () => {
 
           const { unreadThreadsCount } = threadManager.state.getLatestValue();
 
-          expect(unreadThreadsCount).to.eq(unreadCount);
+          expect(unreadThreadsCount).to.equal(unreadCount);
         });
       });
 
