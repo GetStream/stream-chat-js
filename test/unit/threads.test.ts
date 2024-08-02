@@ -352,6 +352,10 @@ describe('Threads 2.0', () => {
           expect(stubbedChannelMarkRead.calledOnceWith({ thread_id: thread.id })).to.be.true;
         });
       });
+
+      describe('Thread.loadNextPage', () => {});
+
+      describe('Thread.loadPreviousPage', () => {});
     });
 
     describe('Subscription Handlers', () => {
@@ -743,7 +747,7 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          expect(stubbedQueryThreads.calledWith({ limit: 2 })).to.be.true;
+          expect(stubbedQueryThreads.calledWithMatch({ limit: 2 })).to.be.true;
         });
 
         it('adds new thread if it does not exist within the threads array', async () => {
@@ -856,6 +860,19 @@ describe('Threads 2.0', () => {
           expect(stubbedQueryThreads.called).to.be.false;
         });
 
+        it('calls queryThreads with proper defaults', async () => {
+          stubbedQueryThreads.resolves({
+            threads: [],
+            next: undefined,
+          });
+
+          await threadManager.loadNextPage();
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({ limit: 25, participant_limit: 10, reply_limit: 10, watch: true }),
+          ).to.be.true;
+        });
+
         it('switches loading state properly', async () => {
           const spy = sinon.spy();
 
@@ -907,6 +924,30 @@ describe('Threads 2.0', () => {
 
           expect(stubbedQueryThreads.calledWithMatch({ next: cursor1 })).to.be.true;
           expect(nextCursor).to.equal(cursor2);
+        });
+
+        // FIXME: skipped as it's not needed until queryThreads supports reply sorting (asc/desc)
+        it.skip('adjusts nextCursor & previousCusor properties of the queried threads according to query options', () => {
+
+          const REPLY_COUNT = 3;
+
+          const newThread = new Thread({
+            client,
+            threadData: generateThread(channelResponse, generateMsg(), {
+              latest_replies: Array.from({ length: REPLY_COUNT }, () => generateMsg()),
+              reply_count: REPLY_COUNT,
+            }),
+          });
+
+          expect(newThread.state.getLatestValue().latestReplies).to.have.lengthOf(REPLY_COUNT);
+          expect(newThread.state.getLatestValue().replyCount).to.equal(REPLY_COUNT);
+
+          stubbedQueryThreads.resolves({
+            threads: [newThread],
+            next: undefined,
+          });
+
+          // ...
         });
       });
     });

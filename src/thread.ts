@@ -15,6 +15,8 @@ import type {
 import { addToMessageList, findInsertionIndex, formatMessage, transformReadArrayToDictionary, throttle } from './utils';
 import { Handler, SimpleStateStore } from './store/SimpleStateStore';
 
+type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
+
 type ThreadReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   [key: string]: {
     last_read: string;
@@ -48,8 +50,9 @@ export type ThreadState<T extends ExtendableGenerics = DefaultGenerics> = {
   channel?: Channel<T>;
   channelData?: ThreadResponse<T>['channel'];
 
-  nextId?: string | null;
-  previousId?: string | null;
+  // messageId as cursor
+  nextCursor?: string | null;
+  previousCursor?: string | null;
 };
 
 const DEFAULT_PAGE_LIMIT = 50;
@@ -119,10 +122,10 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       replyCount,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
 
-      nextId: latestReplies.at(-1)?.id ?? null,
+      nextCursor: latestReplies.length === replyCount ? null : latestReplies.at(-1)?.id ?? null,
       // TODO: check whether the amount of replies is less than replies_limit (thread.queriedWithOptions = {...})
       // otherwise we perform one extra query (not a big deal but preventable)
-      previousId: latestReplies.at(0)?.id ?? null,
+      previousCursor: latestReplies.length === replyCount ? null : latestReplies.at(0)?.id ?? null,
       loadingNextPage: false,
       loadingPreviousPage: false,
       // TODO: implement network status handler (network down, isStateStale: true, reset to false once state has been refreshed)
@@ -167,8 +170,8 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       createdAt,
       deletedAt,
       updatedAt,
-      nextId,
-      previousId,
+      nextCursor,
+      previousCursor,
       channelData,
     } = thread.state.getLatestValue();
 
@@ -186,8 +189,8 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         createdAt,
         deletedAt,
         updatedAt,
-        nextId,
-        previousId,
+        nextCursor,
+        previousCursor,
         channelData,
         isStateStale: false,
       };
@@ -482,13 +485,13 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   }: Pick<QueryRepliesOptions<Scg>, 'sort' | 'limit'> = {}) => {
     this.state.patchedNext('loadingNextPage', true);
 
-    const { loadingNextPage, nextId } = this.state.getLatestValue();
+    const { loadingNextPage, nextCursor } = this.state.getLatestValue();
 
-    if (loadingNextPage || nextId === null) return;
+    if (loadingNextPage || nextCursor === null) return;
 
     try {
       const data = await this.queryReplies({
-        id_gt: nextId,
+        id_gt: nextCursor,
         limit,
         sort,
       });
@@ -501,7 +504,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         latestReplies: data.messages.length
           ? current.latestReplies.concat(data.messages.map(formatMessage))
           : current.latestReplies,
-        nextId: data.messages.length < limit || !lastMessageId ? null : lastMessageId,
+        nextCursor: data.messages.length < limit || !lastMessageId ? null : lastMessageId,
       }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
@@ -514,15 +517,15 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     sort,
     limit = DEFAULT_PAGE_LIMIT,
   }: Pick<QueryRepliesOptions<Scg>, 'sort' | 'limit'> = {}) => {
-    const { loadingPreviousPage, previousId } = this.state.getLatestValue();
+    const { loadingPreviousPage, previousCursor } = this.state.getLatestValue();
 
-    if (loadingPreviousPage || previousId === null) return;
+    if (loadingPreviousPage || previousCursor === null) return;
 
     this.state.patchedNext('loadingPreviousPage', true);
 
     try {
       const data = await this.queryReplies({
-        id_lt: previousId,
+        id_lt: previousCursor,
         limit,
         sort,
       });
@@ -534,7 +537,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         latestReplies: data.messages.length
           ? data.messages.map(formatMessage).concat(current.latestReplies)
           : current.latestReplies,
-        previousId: data.messages.length < limit || !firstMessageId ? null : firstMessageId,
+        previousCursor: data.messages.length < limit || !firstMessageId ? null : firstMessageId,
       }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
@@ -743,7 +746,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
     const combinedLimit = threads.length + unseenThreadIds.length;
 
     try {
-      const data = await this.client.queryThreads({
+      const data = await this.queryThreads({
         limit: combinedLimit <= MAX_QUERY_THREADS_LIMIT ? combinedLimit : MAX_QUERY_THREADS_LIMIT,
       });
 
@@ -788,26 +791,59 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
+  public queryThreads = async ({
+    limit = 25,
+    participant_limit = 10,
+    reply_limit = 10,
+    watch = true,
+    ...restOfTheOptions
+  }: QueryThreadsOptions = {}) => {
+    const optionsWithDefaults: WithRequired<
+      QueryThreadsOptions,
+      'reply_limit' | 'limit' | 'participant_limit' | 'watch'
+    > = {
+      limit,
+      participant_limit,
+      reply_limit,
+      watch,
+      ...restOfTheOptions,
+    };
+
+    const { threads, next } = await this.client.queryThreads(optionsWithDefaults);
+
+    // FIXME: currently this is done within threads based on reply_count property
+    // but that does not take into consideration sorting (only oldest -> newest)
+    // re-enable functionality bellow, and take into consideration sorting
+
+    // re-adjust next/previous cursors based on query options
+    // data.threads.forEach((thread) => {
+    //   thread.state.next((current) => ({
+    //     ...current,
+    //     nextCursor: current.latestReplies.length < optionsWithDefaults.reply_limit ? null : current.nextCursor,
+    //     previousCursor:
+    //       current.latestReplies.length < optionsWithDefaults.reply_limit ? null : current.previousCursor,
+    //   }));
+    // });
+
+    return { threads, next };
+  };
+
   // remove `next` from options as that is handled internally
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
     const { nextCursor, loadingNextPage } = this.state.getLatestValue();
 
     if (nextCursor === null || loadingNextPage) return;
 
-    // FIXME: redo defaults
-    const optionsWithDefaults: QueryThreadsOptions = {
-      limit: 10,
-      participant_limit: 10,
-      reply_limit: 10,
-      watch: true,
-      next: nextCursor,
+    const optionsWithNextCursor: QueryThreadsOptions = {
       ...options,
+      next: nextCursor,
     };
 
     this.state.next((current) => ({ ...current, loadingNextPage: true }));
 
     try {
-      const data = await this.client.queryThreads(optionsWithDefaults);
+      const data = await this.queryThreads(optionsWithNextCursor);
+
       this.state.next((current) => ({
         ...current,
         threads: data.threads.length ? current.threads.concat(data.threads) : current.threads,
