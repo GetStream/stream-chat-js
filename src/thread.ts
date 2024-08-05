@@ -391,7 +391,16 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
     if (actualIndex === null) return;
 
-    this.state.next((current) => ({ ...current, latestReplies: latestReplies.toSpliced(actualIndex, 1) }));
+    this.state.next((current) => {
+      // TODO: replace with "Array.toSpliced" when applicable
+      const latestRepliesCopy = [...latestReplies];
+      latestRepliesCopy.splice(actualIndex, 1);
+
+      return {
+        ...current,
+        latestReplies: latestRepliesCopy,
+      };
+    });
   };
 
   public upsertReplyLocally = ({

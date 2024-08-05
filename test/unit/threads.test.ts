@@ -314,6 +314,8 @@ describe('Threads 2.0', () => {
 
           thread.deleteReplyLocally({ message: messageToDelete as MessageResponse });
 
+          // check whether array signatures changed
+          expect(thread.state.getLatestValue().latestReplies).to.not.equal(latestReplies);
           expect(thread.state.getLatestValue().latestReplies).to.have.lengthOf(4);
           expect(thread.state.getLatestValue().latestReplies[TARGET_MESSAGE_INDEX].id).to.not.equal(messageToDelete.id);
         });
