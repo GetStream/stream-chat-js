@@ -2051,6 +2051,7 @@ export type ChannelConfigFields = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  partition_size?: number;
 };
 
 export type ChannelConfigWithInfo<
