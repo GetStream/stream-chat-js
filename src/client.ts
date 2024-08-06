@@ -21,6 +21,7 @@ import {
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
+  messageSetPagination,
   normalizeQuerySort,
   randomId,
   retryInterval,
@@ -207,6 +208,7 @@ import {
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
+import {DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE} from "./constants";
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -1601,7 +1603,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       },
     });
 
-    return this.hydrateActiveChannels(data.channels, stateOptions);
+    return this.hydrateActiveChannels(data.channels, stateOptions, options);
   }
 
   /**
@@ -1638,26 +1640,33 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   hydrateActiveChannels(
     channelsFromApi: ChannelAPIResponse<StreamChatGenerics>[] = [],
     stateOptions: ChannelStateOptions = {},
+    queryChannelsOptions?: ChannelOptions,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
-
-    for (const channelState of channelsFromApi) {
-      this._addChannelConfig(channelState.channel);
-    }
-
     const channels: Channel<StreamChatGenerics>[] = [];
 
     for (const channelState of channelsFromApi) {
+      this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
 
+      let updatedMessagesSet;
       if (skipInitialization === undefined) {
-        c._initializeState(channelState, 'latest');
+        const { messageSet} = c._initializeState(channelState, 'latest');
+        updatedMessagesSet = messageSet;
       } else if (!skipInitialization.includes(channelState.channel.id)) {
         c.state.clearMessages();
-        c._initializeState(channelState, 'latest');
+        const { messageSet} = c._initializeState(channelState, 'latest');
+        updatedMessagesSet = messageSet;
+      }
+
+      if (updatedMessagesSet) {
+        updatedMessagesSet.pagination = {
+          ...updatedMessagesSet.pagination,
+          ...messageSetPagination({requestedPageSize: queryChannelsOptions?.message_limit || DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE, returnedPageSize: channelState.messages.length})
+        };
       }
 
       channels.push(c);

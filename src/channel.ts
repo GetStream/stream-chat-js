@@ -1,5 +1,5 @@
 import { ChannelState } from './channel_state';
-import { logChatPromiseExecution, normalizeQuerySort } from './utils';
+import {logChatPromiseExecution, messageSetPagination, normalizeQuerySort} from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -58,6 +58,7 @@ import {
   AscDesc,
 } from './types';
 import { Role } from './permissions';
+import {DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE} from "./constants";
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -1044,6 +1045,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
+    messageSet.pagination = {
+      ...messageSet.pagination,
+      ...messageSetPagination({messagePaginationOptions: options.messages, requestedPageSize: options.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE, returnedPageSize: state.messages.length})
+    };
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
