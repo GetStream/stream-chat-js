@@ -609,7 +609,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         tags: ['connection', 'client'],
       });
 
-      return Promise.resolve();
+      return;
     }
 
     this.clientID = `${this.userID}--${randomId()}`;

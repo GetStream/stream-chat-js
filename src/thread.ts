@@ -12,7 +12,13 @@ import type {
   MessagePaginationOptions,
   AscDesc,
 } from './types';
-import { addToMessageList, findInsertionIndex, formatMessage, transformReadArrayToDictionary, throttle } from './utils';
+import {
+  addToMessageList,
+  findIndexInSortedArray,
+  formatMessage,
+  transformReadArrayToDictionary,
+  throttle,
+} from './utils';
 import { Handler, SimpleStateStore } from './store/SimpleStateStore';
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
@@ -381,9 +387,12 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   public deleteReplyLocally = ({ message }: { message: MessageResponse<Scg> }) => {
     const { latestReplies } = this.state.getLatestValue();
 
-    const index = findInsertionIndex({
-      message: formatMessage(message),
-      messages: latestReplies,
+    const index = findIndexInSortedArray({
+      needle: formatMessage(message),
+      sortedArray: latestReplies,
+      // TODO: make following two configurable (sortDirection and created_at)
+      sortDirection: 'ascending',
+      selectValueToCompare: (m) => m['created_at'].getTime(),
     });
 
     const actualIndex =
@@ -796,7 +805,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
       // TODO: loading states
       console.error(error);
     } finally {
-      console.log('...');
+      // ...
     }
   };
 

@@ -305,28 +305,60 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
   };
 }
 
-// TODO: does not respect message lists ordered [newest -> oldest] only [oldest -> newest]
-export const findInsertionIndex = <T extends FormatMessageResponse>({
-  message,
-  messages,
-  sortBy = 'created_at',
+export const findIndexInSortedArray = <T, L>({
+  needle,
+  sortedArray,
+  selectValueToCompare = (e) => e,
+  sortDirection = 'ascending',
 }: {
-  message: T;
-  messages: Array<T>;
-  sortBy?: 'pinned_at' | 'created_at';
+  needle: T;
+  sortedArray: readonly T[];
+  /**
+   * In array of objects (like messages), pick a specific
+   * property to compare needle value to.
+   *
+   * @example
+   * ```ts
+   * selectValueToCompare: (message) => message.created_at.getTime()
+   * ```
+   */
+  selectValueToCompare?: (arrayElement: T) => L | T;
+  /**
+   * @default ascending
+   * @description
+   * ```md
+   * ascending  - [1,2,3,4,5...]
+   * descending - [...5,4,3,2,1]
+   * ```
+   */
+  sortDirection?: 'ascending' | 'descending';
 }) => {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageTime = message[sortBy]!.getTime();
+  if (!sortedArray.length) return 0;
 
   let left = 0;
+  let right = sortedArray.length - 1;
   let middle = 0;
-  let right = messages.length - 1;
+
+  const recalculateMiddle = () => {
+    middle = Math.round((left + right) / 2);
+  };
+
+  const actualNeedle = selectValueToCompare(needle);
+  recalculateMiddle();
 
   while (left <= right) {
-    middle = Math.floor((right + left) / 2);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    if (messages[middle][sortBy]!.getTime() <= messageTime) left = middle + 1;
-    else right = middle - 1;
+    // if (actualNeedle === selectValueToCompare(sortedArray[middle])) return middle;
+
+    if (
+      (sortDirection === 'ascending' && actualNeedle < selectValueToCompare(sortedArray[middle])) ||
+      (sortDirection === 'descending' && actualNeedle > selectValueToCompare(sortedArray[middle]))
+    ) {
+      right = middle - 1;
+    } else {
+      left = middle + 1;
+    }
+
+    recalculateMiddle();
   }
 
   return left;
@@ -364,9 +396,14 @@ export function addToMessageList<T extends FormatMessageResponse>(
   }
 
   // find the closest index to push the new message
-  const insertionIndex = findInsertionIndex({ message: newMessage, messages: newMessages, sortBy });
+  const insertionIndex = findIndexInSortedArray({
+    needle: newMessage,
+    sortedArray: messages,
+    sortDirection: 'ascending',
+    selectValueToCompare: (m) => m[sortBy]!.getTime(),
+  });
 
-  // message already exists and not filtered due to timestampChanged, update and return
+  // message already exists and not filtered with timestampChanged, update and return
   if (!timestampChanged && newMessage.id) {
     if (newMessages[insertionIndex] && newMessage.id === newMessages[insertionIndex].id) {
       newMessages[insertionIndex] = newMessage;
