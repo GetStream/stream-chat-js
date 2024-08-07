@@ -1001,7 +1001,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Promise<QueryChannelAPIResponse<StreamChatGenerics>>} Returns a query response
    */
   async query(
-    options: ChannelQueryOptions<StreamChatGenerics>,
+    options?: ChannelQueryOptions<StreamChatGenerics>,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
     // Make sure we wait for the connect promise if there is a pending one
@@ -1048,8 +1048,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     messageSet.pagination = {
       ...messageSet.pagination,
       ...messageSetPagination({
-        messagePaginationOptions: options.messages,
-        requestedPageSize: options.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+        currentPagination: messageSet.pagination,
+        messagePaginationOptions: options?.messages,
+        requestedPageSize: options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
         returnedPageSize: state.messages.length,
       }),
     };

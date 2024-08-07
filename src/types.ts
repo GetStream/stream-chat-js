@@ -2904,7 +2904,7 @@ export type MessageSet<StreamChatGenerics extends ExtendableGenerics = DefaultGe
   isCurrent: boolean;
   isLatest: boolean;
   messages: FormatMessageResponse<StreamChatGenerics>[];
-  pagination: { hasNext?: boolean; hasPrev?: boolean };
+  pagination: { hasNext: boolean; hasPrev: boolean };
 };
 
 export type PushProviderUpsertResponse = {

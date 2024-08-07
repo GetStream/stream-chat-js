@@ -400,14 +400,18 @@ function maybeGetReactionGroupsFallback(
 }
 
 export const messageSetPagination = ({
+  currentPagination,
+  requestedPageSize,
   returnedPageSize,
   messagePaginationOptions,
-  requestedPageSize,
 }: {
+  currentPagination: MessageSet['pagination'];
   requestedPageSize: number;
   returnedPageSize: number;
   messagePaginationOptions?: MessagePaginationOptions;
 }) => {
+  const newPagination = { ...currentPagination };
+
   const queriedNextMessages =
     messagePaginationOptions &&
     (messagePaginationOptions.created_at_after_or_equal ||
@@ -421,14 +425,14 @@ export const messageSetPagination = ({
     messagePaginationOptions.id_lt ||
     messagePaginationOptions.id_lte;
 
-  const pagination: MessageSet['pagination'] = {};
   const hasMore = returnedPageSize >= requestedPageSize;
 
   if (typeof queriedPrevMessages !== 'undefined') {
-    pagination.hasPrev = hasMore;
+    newPagination.hasPrev = hasMore;
   }
   if (typeof queriedNextMessages !== 'undefined') {
-    pagination.hasNext = hasMore;
+    newPagination.hasNext = hasMore;
   }
-  return pagination;
+
+  return newPagination;
 };

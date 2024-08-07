@@ -718,7 +718,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   initMessages() {
-    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true, pagination: {} }];
+    this.messageSets = [
+      { messages: [], isLatest: true, isCurrent: true, pagination: { hasNext: true, hasPrev: true } },
+    ];
   }
 
   /**
@@ -822,7 +824,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
             targetMessageSetIndex = overlappingMessageSetIndices[0];
             // No new message set is created if newMessages only contains thread replies
           } else if (newMessages.some((m) => !m.parent_id)) {
-            this.messageSets.push({ messages: [], isCurrent: false, isLatest: false, pagination: {} });
+            this.messageSets.push({
+              messages: [],
+              isCurrent: false,
+              isLatest: false,
+              pagination: { hasNext: true, hasPrev: true },
+            });
             targetMessageSetIndex = this.messageSets.length - 1;
           }
           break;
