@@ -208,7 +208,7 @@ import {
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
-import {DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE} from "./constants";
+import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -1654,18 +1654,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
-        const { messageSet} = c._initializeState(channelState, 'latest');
+        const { messageSet } = c._initializeState(channelState, 'latest');
         updatedMessagesSet = messageSet;
       } else if (!skipInitialization.includes(channelState.channel.id)) {
         c.state.clearMessages();
-        const { messageSet} = c._initializeState(channelState, 'latest');
+        const { messageSet } = c._initializeState(channelState, 'latest');
         updatedMessagesSet = messageSet;
       }
 
       if (updatedMessagesSet) {
         updatedMessagesSet.pagination = {
           ...updatedMessagesSet.pagination,
-          ...messageSetPagination({requestedPageSize: queryChannelsOptions?.message_limit || DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE, returnedPageSize: channelState.messages.length})
+          ...messageSetPagination({
+            requestedPageSize: queryChannelsOptions?.message_limit || DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+            returnedPageSize: channelState.messages.length,
+          }),
         };
       }
 

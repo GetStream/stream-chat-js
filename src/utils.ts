@@ -399,9 +399,27 @@ function maybeGetReactionGroupsFallback(
   return null;
 }
 
-export const messageSetPagination = ({returnedPageSize, messagePaginationOptions, requestedPageSize}: {requestedPageSize: number, returnedPageSize: number, messagePaginationOptions?: MessagePaginationOptions;}) => {
-  const queriedNextMessages = messagePaginationOptions && (messagePaginationOptions.created_at_after_or_equal || messagePaginationOptions.created_at_after || messagePaginationOptions.id_gt || messagePaginationOptions.id_gte);
-  const queriedPrevMessages = !messagePaginationOptions || (messagePaginationOptions.created_at_before_or_equal || messagePaginationOptions.created_at_before || messagePaginationOptions.id_lt || messagePaginationOptions.id_lte);
+export const messageSetPagination = ({
+  returnedPageSize,
+  messagePaginationOptions,
+  requestedPageSize,
+}: {
+  requestedPageSize: number;
+  returnedPageSize: number;
+  messagePaginationOptions?: MessagePaginationOptions;
+}) => {
+  const queriedNextMessages =
+    messagePaginationOptions &&
+    (messagePaginationOptions.created_at_after_or_equal ||
+      messagePaginationOptions.created_at_after ||
+      messagePaginationOptions.id_gt ||
+      messagePaginationOptions.id_gte);
+  const queriedPrevMessages =
+    !messagePaginationOptions ||
+    messagePaginationOptions.created_at_before_or_equal ||
+    messagePaginationOptions.created_at_before ||
+    messagePaginationOptions.id_lt ||
+    messagePaginationOptions.id_lte;
 
   const pagination: MessageSet['pagination'] = {};
   const hasMore = returnedPageSize >= requestedPageSize;

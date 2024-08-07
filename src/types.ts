@@ -2900,12 +2900,12 @@ export type ImportTask = {
 };
 
 export type MessageSetType = 'latest' | 'current' | 'new';
-export type MessageSet<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =  {
+export type MessageSet<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   isCurrent: boolean;
   isLatest: boolean;
   messages: FormatMessageResponse<StreamChatGenerics>[];
-  pagination: { hasNext?:boolean; hasPrev?: boolean };
-}
+  pagination: { hasNext?: boolean; hasPrev?: boolean };
+};
 
 export type PushProviderUpsertResponse = {
   push_provider: PushProvider;
