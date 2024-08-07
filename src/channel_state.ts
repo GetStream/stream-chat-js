@@ -15,6 +15,7 @@ import {
   UserResponse,
 } from './types';
 import { addToMessageList } from './utils';
+import {DEFAULT_MESSAGE_SET_PAGINATION} from "./constants";
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
@@ -106,7 +107,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   get messagePagination() {
-    return this.messageSets.find((s) => s.isCurrent)?.pagination || {};
+    return this.messageSets.find((s) => s.isCurrent)?.pagination || DEFAULT_MESSAGE_SET_PAGINATION;
   }
 
   /**
@@ -719,7 +720,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
 
   initMessages() {
     this.messageSets = [
-      { messages: [], isLatest: true, isCurrent: true, pagination: { hasNext: true, hasPrev: true } },
+      { messages: [], isLatest: true, isCurrent: true, pagination: DEFAULT_MESSAGE_SET_PAGINATION },
     ];
   }
 
@@ -828,7 +829,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
               messages: [],
               isCurrent: false,
               isLatest: false,
-              pagination: { hasNext: true, hasPrev: true },
+              pagination: DEFAULT_MESSAGE_SET_PAGINATION,
             });
             targetMessageSetIndex = this.messageSets.length - 1;
           }
