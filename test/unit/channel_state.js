@@ -8,6 +8,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { ChannelState, StreamChat, Channel } from '../../src';
+import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 
 const expect = chai.expect;
 
@@ -821,6 +822,19 @@ describe('latestMessages', () => {
 		expect(state.latestMessages[1].id).to.be.equal(latestMessages[1].id);
 		expect(state.latestMessages[2].id).to.be.equal(latestMessages[2].id);
 		expect(state.latestMessages[3].id).to.be.equal(latestMessage.id);
+	});
+});
+
+describe('messagePagination', () => {
+	it('is initiated with defaults', () => {
+		const state = new ChannelState();
+		expect(state.messageSets[0].pagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
+	});
+	it('is retrieved as default if not set', () => {
+		const state = new ChannelState();
+		state.messageSets[0].pagination = undefined;
+		expect(state.messageSets[0].pagination).to.be.undefined;
+		expect(state.messagePagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
 	});
 });
 

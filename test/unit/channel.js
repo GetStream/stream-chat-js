@@ -11,6 +11,7 @@ import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { ChannelState, StreamChat } from '../../src';
+import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
 const expect = chai.expect;
 
@@ -1241,5 +1242,37 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+});
+
+describe('Channel.query', async () => {
+	it('should not update pagination for queried message set', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		const mockedChannelQueryResponse = {
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+		};
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		await channel.query();
+		expect(channel.state.messageSets.length).to.be.equal(1);
+		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: true });
+		mock.restore();
+	});
+
+	it('should update pagination for queried message set to prevent more pagination', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		const mockedChannelQueryResponse = {
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, generateMsg),
+		};
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		await channel.query();
+		expect(channel.state.messageSets.length).to.be.equal(1);
+		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
+		mock.restore();
 	});
 });

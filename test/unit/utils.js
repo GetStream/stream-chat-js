@@ -1,5 +1,5 @@
 import chai from 'chai';
-import { axiosParamsSerializer, formatMessage, normalizeQuerySort } from '../../src/utils';
+import { axiosParamsSerializer, formatMessage, messageSetPagination, normalizeQuerySort } from '../../src/utils';
 import sinon from 'sinon';
 
 const expect = chai.expect;
@@ -136,6 +136,178 @@ describe('reaction groups fallback', () => {
 				count: 1,
 				sum_scores: 2,
 			},
+		});
+	});
+});
+
+describe('message set pagination indicators', () => {
+	const returnedMoreThanRequested = { requestedPageSize: 1, returnedPageSize: 2 };
+	const returnedCountAsRequested = { requestedPageSize: 2, returnedPageSize: 2 };
+	const returnedLessThanRequested = { requestedPageSize: 2, returnedPageSize: 1 };
+
+	describe('hasPrev is enabled', () => {
+		const currentPagination = { hasNext: false, hasPrev: false };
+		const expectedPagination = { hasNext: false, hasPrev: true };
+		[returnedMoreThanRequested, returnedCountAsRequested].forEach((requestedToReturned) => {
+			describe(
+				requestedToReturned.returnedPageSize > requestedToReturned.requestedPageSize
+					? 'returned more than requested'
+					: 'returned as requested',
+				() => {
+					const params = { currentPagination, ...requestedToReturned };
+
+					it('missing message pagination options', () => {
+						expect(messageSetPagination(params)).to.eql(expectedPagination);
+					});
+					it('message pagination options with id_lt', () => {
+						expect(messageSetPagination({ messagePaginationOptions: { id_lt: 'X' }, ...params })).to.eql(
+							expectedPagination,
+						);
+					});
+					it('message pagination options with id_lte', () => {
+						expect(messageSetPagination({ messagePaginationOptions: { id_lte: 'X' }, ...params })).to.eql(
+							expectedPagination,
+						);
+					});
+					it('message pagination options with created_at_before', () => {
+						expect(
+							messageSetPagination({ messagePaginationOptions: { created_at_before: 'X' }, ...params }),
+						).to.eql(expectedPagination);
+					});
+					it('message pagination options with created_at_before_or_equal', () => {
+						expect(
+							messageSetPagination({
+								messagePaginationOptions: { created_at_before_or_equal: 'X' },
+								...params,
+							}),
+						).to.eql(expectedPagination);
+					});
+				},
+			);
+		});
+	});
+
+	describe('hasPrev is disabled', () => {
+		const currentPagination = { hasNext: false, hasPrev: true };
+		const expectedPagination = { hasNext: false, hasPrev: false };
+		describe('returned less than requested', () => {
+			const params = { currentPagination, ...returnedLessThanRequested };
+
+			it('missing message pagination options', () => {
+				expect(messageSetPagination(params)).to.eql(expectedPagination);
+			});
+			it('message pagination options with id_lt', () => {
+				expect(messageSetPagination({ messagePaginationOptions: { id_lt: 'X' }, ...params })).to.eql(
+					expectedPagination,
+				);
+			});
+			it('message pagination options with id_lte', () => {
+				expect(messageSetPagination({ messagePaginationOptions: { id_lte: 'X' }, ...params })).to.eql(
+					expectedPagination,
+				);
+			});
+			it('message pagination options with created_at_before', () => {
+				expect(
+					messageSetPagination({ messagePaginationOptions: { created_at_before: 'X' }, ...params }),
+				).to.eql(expectedPagination);
+			});
+			it('message pagination options with created_at_before_or_equal', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { created_at_before_or_equal: 'X' },
+						...params,
+					}),
+				).to.eql(expectedPagination);
+			});
+		});
+	});
+	describe('hasNext is enabled', () => {
+		const currentPagination = { hasNext: false, hasPrev: false };
+		const expectedPagination = { hasNext: true, hasPrev: false };
+
+		[returnedMoreThanRequested, returnedCountAsRequested].forEach((requestedToReturned) => {
+			describe(
+				requestedToReturned.returnedPageSize > requestedToReturned.requestedPageSize
+					? 'returned more than requested'
+					: 'returned as requested',
+				() => {
+					const params = { currentPagination, ...requestedToReturned };
+
+					it('message pagination options with id_gt', () => {
+						expect(messageSetPagination({ messagePaginationOptions: { id_gt: 'X' }, ...params })).to.eql(
+							expectedPagination,
+						);
+					});
+					it('message pagination options with id_gte', () => {
+						expect(messageSetPagination({ messagePaginationOptions: { id_gte: 'X' }, ...params })).to.eql(
+							expectedPagination,
+						);
+					});
+					it('message pagination options with created_at_after', () => {
+						expect(
+							messageSetPagination({ messagePaginationOptions: { created_at_after: 'X' }, ...params }),
+						).to.eql(expectedPagination);
+					});
+					it('message pagination options with created_at_after_or_equal', () => {
+						expect(
+							messageSetPagination({
+								messagePaginationOptions: { created_at_after_or_equal: 'X' },
+								...params,
+							}),
+						).to.eql(expectedPagination);
+					});
+				},
+			);
+		});
+	});
+	describe('hasNext is disabled', () => {
+		const currentPagination = { hasNext: true, hasPrev: true };
+		const expectedPagination = { hasNext: false, hasPrev: true };
+		describe('returned less than requested', () => {
+			const params = { currentPagination, ...returnedLessThanRequested };
+			it('message pagination options with id_gt', () => {
+				expect(messageSetPagination({ messagePaginationOptions: { id_gt: 'X' }, ...params })).to.eql(
+					expectedPagination,
+				);
+			});
+			it('message pagination options with id_gte', () => {
+				expect(messageSetPagination({ messagePaginationOptions: { id_gte: 'X' }, ...params })).to.eql(
+					expectedPagination,
+				);
+			});
+			it('message pagination options with created_at_after', () => {
+				expect(messageSetPagination({ messagePaginationOptions: { created_at_after: 'X' }, ...params })).to.eql(
+					expectedPagination,
+				);
+			});
+			it('message pagination options with created_at_after_or_equal', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { created_at_after_or_equal: 'X' },
+						...params,
+					}),
+				).to.eql(expectedPagination);
+			});
+		});
+	});
+
+	describe('does not change', () => {
+		[
+			['returned more than requested', returnedMoreThanRequested],
+			['returned as requested', returnedCountAsRequested],
+			['returned less than requested', returnedLessThanRequested],
+		].forEach(([scenario, requestedToReturned]) => {
+			describe(scenario, () => {
+				const params = { currentPagination: {}, ...requestedToReturned };
+				it('is provided unrecognized pagination options', () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: { XY: 'X' },
+							...params,
+						}),
+					).to.eql({});
+				});
+			});
 		});
 	});
 });

@@ -8,6 +8,8 @@ import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
 import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
+import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
+import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
 const expect = chai.expect;
 chai.use(chaiAsPromised);
@@ -574,5 +576,39 @@ describe('Client WSFallback', () => {
 
 		expect(health).to.be.eql({ connection_id: 'id' });
 		expect(client.wsFallback).to.be.equal(fallback);
+	});
+});
+
+describe('Channel.queryChannels', async () => {
+	it('should not update pagination for queried message set', async () => {
+		const client = await getClientWithUser();
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+		}));
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
+		await client.queryChannels();
+		Object.values(client.activeChannels).forEach((channel) => {
+			expect(channel.state.messageSets.length).to.be.equal(1);
+			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: true });
+		});
+		mock.restore();
+	});
+
+	it('should update pagination for queried message set to prevent more pagination', async () => {
+		const client = await getClientWithUser();
+		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, generateMsg),
+		}));
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		await client.queryChannels();
+		Object.values(client.activeChannels).forEach((channel) => {
+			expect(channel.state.messageSets.length).to.be.equal(1);
+			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
+		});
+		mock.restore();
 	});
 });
