@@ -598,9 +598,6 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
       loadingNextPage: false,
       nextCursor: undefined,
     });
-
-    // TODO: temporary - do not register handlers here but rather make Chat component have control over this
-    this.registerSubscriptions();
   }
 
   public activate = () => {
