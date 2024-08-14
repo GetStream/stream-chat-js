@@ -205,8 +205,9 @@ import {
   QueryMessageHistoryResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
-import { Thread, ThreadManager } from './thread';
+import { Thread } from './thread';
 import { Moderation } from './moderation';
+import { ThreadManager } from './thread_manager';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
