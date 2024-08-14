@@ -429,8 +429,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
       // update channel on channelData change (unlikely but handled anyway)
       if (message.channel) {
-        newData['channelData'] = message.channel;
-        newData['channel'] = this.client.channel(message.channel.type, message.channel.id);
+        newData['channel'] = this.client.channel(message.channel.type, message.channel.id, message.channel);
       }
 
       return newData;
