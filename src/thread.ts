@@ -36,7 +36,7 @@ type QueryRepliesOptions<T extends ExtendableGenerics> = {
 
 export type ThreadState<T extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
-
+  channel: Channel<T>;
   createdAt: Date;
   deletedAt: Date | null;
   isStateStale: boolean;
@@ -47,11 +47,7 @@ export type ThreadState<T extends ExtendableGenerics = DefaultGenerics> = {
   participants: ThreadResponse<T>['thread_participants'];
   read: ThreadReadStatus<T>;
   replyCount: number;
-  staggeredRead: ThreadReadStatus<T>;
   updatedAt: Date | null;
-
-  channel?: Channel<T>;
-  channelData?: ThreadResponse<T>['channel'];
 
   // messageId as cursor
   nextCursor?: string | null;
@@ -92,12 +88,12 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   private unsubscribeFunctions: Set<() => void> = new Set();
   private failedRepliesMap: Map<string, FormatMessageResponse<Scg>> = new Map();
 
-  constructor({ client, threadData = {} }: { client: StreamChat<Scg>; threadData?: Partial<ThreadResponse<Scg>> }) {
+  constructor({ client, threadData }: { client: StreamChat<Scg>; threadData: ThreadResponse<Scg> }) {
     const {
       read: unformattedRead = [],
-      latest_replies: latestReplies = [],
-      thread_participants: threadParticipants = [],
-      reply_count: replyCount = 0,
+      latest_replies: latestReplies,
+      thread_participants: threadParticipants,
+      reply_count: replyCount,
     } = threadData;
 
     const read = transformReadArrayToDictionary(unformattedRead);
@@ -108,8 +104,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       // used as handler helper - actively mark read all of the incoming messages
       // if the thread is active (visibly selected in the UI or main focal point in advanced list)
       active: false,
-      channelData: threadData.channel, // not channel instance
-      channel: threadData.channel && client.channel(threadData.channel.type, threadData.channel.id),
+      channel: client.channel(threadData.channel.type, threadData.channel.id, threadData.channel),
       createdAt: threadData.created_at ? new Date(threadData.created_at) : placeholderDate,
       deletedAt: threadData.parent_message?.deleted_at ? new Date(threadData.parent_message.deleted_at) : null,
       latestReplies: latestReplies.map(formatMessage),
@@ -118,8 +113,6 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       participants: threadParticipants,
       // actual read state in-sync with BE values
       read,
-      // also read state but staggered - used for UI purposes (unread count banner)
-      staggeredRead: read,
       replyCount,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
 
@@ -163,7 +156,6 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
     const {
       read,
-      staggeredRead,
       replyCount,
       latestReplies,
       parentMessage,
@@ -173,7 +165,6 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       updatedAt,
       nextCursor,
       previousCursor,
-      channelData,
     } = thread.state.getLatestValue();
 
     this.state.next((current) => {
@@ -182,7 +173,6 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
       return {
         ...current,
         read,
-        staggeredRead,
         replyCount,
         latestReplies: latestReplies.length ? latestReplies.concat(failedReplies) : latestReplies,
         parentMessage,
@@ -192,7 +182,6 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         updatedAt,
         nextCursor,
         previousCursor,
-        channelData,
         isStateStale: false,
       };
     });
@@ -272,9 +261,9 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
         const currentUserId = this.client.user?.id;
         if (!event.channel || !event.user || !currentUserId || currentUserId !== event.user.id) return;
 
-        const { channelData } = this.state.getLatestValue();
+        const { channel } = this.state.getLatestValue();
 
-        if (!channelData || event.channel.cid !== channelData.cid) return;
+        if (event.channel.cid !== channel.cid) return;
 
         this.state.patchedNext('isStateStale', true);
       }).unsubscribe,
