@@ -1048,10 +1048,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     messageSet.pagination = {
       ...messageSet.pagination,
       ...messageSetPagination({
-        currentPagination: messageSet.pagination,
+        parentSet: messageSet,
         messagePaginationOptions: options?.messages,
         requestedPageSize: options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-        returnedPageSize: state.messages.length,
+        returnedPage: state.messages,
       }),
     };
 

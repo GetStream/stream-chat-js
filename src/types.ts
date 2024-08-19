@@ -1052,7 +1052,7 @@ export type PaginationOptions = {
   id_lt?: string;
   id_lte?: string;
   limit?: number;
-  offset?: number;
+  offset?: number; // should be avoided with channel.query()
 };
 
 export type MessagePaginationOptions = PaginationOptions & {

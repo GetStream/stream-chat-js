@@ -1666,9 +1666,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         updatedMessagesSet.pagination = {
           ...updatedMessagesSet.pagination,
           ...messageSetPagination({
-            currentPagination: updatedMessagesSet.pagination,
+            parentSet: updatedMessagesSet,
             requestedPageSize: queryChannelsOptions?.message_limit || DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
-            returnedPageSize: channelState.messages.length,
+            returnedPage: channelState.messages,
           }),
         };
       }
