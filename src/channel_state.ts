@@ -854,6 +854,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         sources.forEach((messageSet) => {
           target.isLatest = target.isLatest || messageSet.isLatest;
           target.isCurrent = target.isCurrent || messageSet.isCurrent;
+          target.pagination.hasPrev =
+            messageSet.messages[0].created_at < target.messages[0].created_at
+              ? messageSet.pagination.hasPrev
+              : target.pagination.hasPrev;
+          target.pagination.hasNext =
+            target.messages.slice(-1)[0].created_at < messageSet.messages.slice(-1)[0].created_at
+              ? messageSet.pagination.hasNext
+              : target.pagination.hasNext;
           messagesToAdd = [...messagesToAdd, ...messageSet.messages];
         });
         sources.forEach((s) => this.messageSets.splice(this.messageSets.indexOf(s), 1));
