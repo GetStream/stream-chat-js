@@ -486,7 +486,7 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
     ];
     updateHasPrev = firstPageMsgIsFirstInSet;
     updateHasNext = lastPageMsgIsLastInSet;
-    const midPointByCount = Math.round(returnedPage.length / 2) - 1;
+    const midPointByCount = Math.floor(returnedPage.length / 2);
     const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(returnedPage, createdAtAroundDate);
 
     if (midPointByCreationDate !== -1) {
@@ -521,7 +521,7 @@ const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics
   let updateHasPrev = firstPageMsgIsFirstInSet;
   let updateHasNext = lastPageMsgIsLastInSet;
 
-  const midPoint = Math.round(returnedPage.length / 2) - 1;
+  const midPoint = Math.floor(returnedPage.length / 2);
   const noMoreMessages =
     (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
     requestedPageSize > returnedPage.length;

@@ -966,7 +966,7 @@ describe('messageSetPagination', () => {
 				messages: evenSizeReturnPage,
 				messagePaginationOptions: {
 					firstHalf: { created_at_around: createdAtISOString(2, evenSizeReturnPage) },
-					mid: { created_at_around: createdAtISOString(3, evenSizeReturnPage) },
+					mid: { created_at_around: createdAtISOString(4, evenSizeReturnPage) },
 					secondHalf: { created_at_around: createdAtISOString(5, evenSizeReturnPage) },
 				},
 				option: 'created_at_around',
@@ -986,7 +986,7 @@ describe('messageSetPagination', () => {
 				messages: evenSizeReturnPage,
 				messagePaginationOptions: {
 					firstHalf: { id_around: evenSizeReturnPage[2].id },
-					mid: { id_around: evenSizeReturnPage[3].id },
+					mid: { id_around: evenSizeReturnPage[4].id },
 					secondHalf: { id_around: evenSizeReturnPage[5].id },
 				},
 				option: 'id_around',
