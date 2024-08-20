@@ -3541,7 +3541,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     userId?: string
   ): Promise<APIResponse & UpdatePollAPIResponse> {
     return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, {
-      partialPollObject,
+      ...partialPollObject,
       ...(userId ? { user_id: userId } : {})
     });
   }
@@ -3622,7 +3622,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse} The poll option
    */
   async deletePollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`, userId ? { user_id: userId } : {});
   }
 
   /**
@@ -3631,13 +3631,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param pollId string The poll id
    * @param vote PollVoteData The vote that will be casted
    * @param userId string The user id (only serverside)
-   * @param options 
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
-  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, options = {}, userId?: string) {
+  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, userId?: string) {
     return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
-      { vote, ...options },
+      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`, {
+        vote,
+        ...(userId ? { user_id: userId } : {}),
+      },
     );
   }
 
@@ -3651,9 +3652,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
     return this.castPollVote(messageId, pollId, {
       answer_text: answerText,
-    }, {
-      ...(userId ? { user_id: userId } : {}),
-    });
+    }, userId);
   }
 
   async removePollVote(messageId: string, pollId: string, voteId: string, userId?: string) {
@@ -3677,11 +3676,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: QueryPollsOptions = {},
     userId?: string
   ): Promise<APIResponse & QueryPollsResponse> {
-    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + '/polls/query', {
+    const q = userId ? `?user_id=${userId}` : ''; 
+    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
-      ...(userId ? { user_id: userId } : {}),
     });
   }
 
@@ -3701,11 +3700,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: QueryVotesOptions = {},
     userId?: string
   ): Promise<APIResponse & PollVotesAPIResponse> {
-    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+    const q = userId ? `?user_id=${userId}` : ''; 
+    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
-      ...(userId ? { user_id: userId } : {}),
     });
   }
 
