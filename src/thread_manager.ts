@@ -8,12 +8,12 @@ import { throttle } from './utils';
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
 
-export type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
   lastConnectionDownAt: Date | null;
   loadingNextPage: boolean;
   threadIdIndexMap: { [key: string]: number };
-  threads: Thread<Scg>[];
+  threads: Thread<SCG>[];
   unreadThreadsCount: number;
   unseenThreadIds: string[];
   nextCursor?: string | null; // null means no next page available
@@ -24,14 +24,14 @@ export type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics>
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
 
-export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: StateStore<ThreadManagerState<Scg>>;
-  private client: StreamChat<Scg>;
+export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
+  public readonly state: StateStore<ThreadManagerState<SCG>>;
+  private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client }: { client: StreamChat<Scg> }) {
+  constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
-    this.state = new StateStore<ThreadManagerState<Scg>>({
+    this.state = new StateStore<ThreadManagerState<SCG>>({
       active: false,
       threads: [],
       threadIdIndexMap: {},
@@ -57,7 +57,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) return;
 
-    const handleUnreadThreadsCountChange = (event: Event<Scg>) => {
+    const handleUnreadThreadsCountChange = (event: Event<SCG>) => {
       const { unread_threads: unreadThreadsCount } = event.me ?? event;
 
       if (typeof unreadThreadsCount === 'undefined') return;
@@ -139,7 +139,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
       ),
     );
 
-    const handleThreadsChange: Handler<readonly [Thread<Scg>[]]> = ([newThreads], previouslySelectedValue) => {
+    const handleThreadsChange: Handler<readonly [Thread<SCG>[]]> = ([newThreads], previouslySelectedValue) => {
       // create new threadIdIndexMap
       const newThreadIdIndexMap = newThreads.reduce<ThreadManagerState['threadIdIndexMap']>((map, thread, index) => {
         map[thread.id] ??= index;
@@ -170,7 +170,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
 
     // TODO: handle parent message hard-deleted (extend state with \w hardDeletedThreadIds?)
 
-    const handleNewReply = (event: Event<Scg>) => {
+    const handleNewReply = (event: Event<SCG>) => {
       if (!event.message || !event.message.parent_id) return;
       const parentId = event.message.parent_id;
 
@@ -212,11 +212,11 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
 
       const { threads, threadIdIndexMap } = this.state.getLatestValue();
 
-      const newThreads: Thread<Scg>[] = [];
+      const newThreads: Thread<SCG>[] = [];
       // const existingThreadIdsToFilterOut: string[] = [];
 
       for (const thread of data.threads) {
-        const existingThread: Thread<Scg> | undefined = threads[threadIdIndexMap[thread.id]];
+        const existingThread: Thread<SCG> | undefined = threads[threadIdIndexMap[thread.id]];
 
         newThreads.push(existingThread ?? thread);
 

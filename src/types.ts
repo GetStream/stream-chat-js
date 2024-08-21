@@ -499,28 +499,34 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  channel: ChannelResponse<StreamChatGenerics>;
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+  // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
+  channel: ChannelResponse<SCG>;
   channel_cid: string;
   created_at: string;
-  latest_replies: MessageResponse<StreamChatGenerics>[];
+  created_by_user_id: string;
+  latest_replies: Array<MessageResponse<SCG>>;
   parent_message_id: string;
-  reply_count: number;
-  thread_participants: {
-    created_at: string;
-    user: UserResponse<StreamChatGenerics>;
-  }[];
   title: string;
   updated_at: string;
+  created_by?: UserResponse<SCG>;
   deleted_at?: string;
-  parent_message?: MessageResponse<StreamChatGenerics>;
-  read?: {
-    last_read: string;
-    last_read_message_id: string;
-    unread_messages: number;
-    user: UserResponse<StreamChatGenerics>;
-  }[];
-};
+  last_message_at?: string;
+  parent_message?: MessageResponse<SCG>;
+  participant_count?: number;
+  read?: Array<ReadResponse<SCG>>;
+  reply_count?: number;
+  thread_participants?: Array<{
+    channel_cid: string;
+    created_at: string;
+    last_read_at: string;
+    last_thread_message_at?: string;
+    left_thread_at?: string;
+    thread_id?: string;
+    user?: UserResponse<SCG>;
+    user_id?: string;
+  }>;
+}
 
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
