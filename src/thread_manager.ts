@@ -220,7 +220,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         // replace state of threads which report stale state
         // *(state can be considered as stale when channel associated with the thread stops being watched)
         if (existingThread && existingThread.hasStaleState) {
-          existingThread.partiallyReplaceState({ thread });
+          existingThread.hydrateState(thread);
         }
 
         // if (existingThread) existingThreadIdsToFilterOut.push(existingThread.id);

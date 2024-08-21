@@ -449,15 +449,6 @@ function maybeGetReactionGroupsFallback(
   return null;
 }
 
-export const transformReadArrayToDictionary = <T extends { last_read: string; user: { id: string } }>(readArray: T[]) =>
-  readArray.reduce<{ [key: string]: T & { lastReadAt: Date } }>((accumulator, currentValue) => {
-    accumulator[currentValue.user.id as string] ??= {
-      ...currentValue,
-      lastReadAt: new Date(currentValue.last_read),
-    };
-    return accumulator;
-  }, {});
-
 // works exactly the same as lodash.throttle
 export const throttle = <T extends (...args: unknown[]) => unknown>(
   fn: T,

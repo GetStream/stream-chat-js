@@ -506,13 +506,13 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   created_at: string;
   created_by_user_id: string;
   latest_replies: Array<MessageResponse<SCG>>;
+  parent_message: MessageResponse<SCG>;
   parent_message_id: string;
   title: string;
   updated_at: string;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
-  parent_message?: MessageResponse<SCG>;
   participant_count?: number;
   read?: Array<ReadResponse<SCG>>;
   reply_count?: number;
