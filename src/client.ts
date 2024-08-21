@@ -326,11 +326,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
 
-    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_RUN) {
+    if (typeof process !== 'undefined' && 'env' in process && process.env.STREAM_LOCAL_TEST_RUN) {
       this.setBaseURL('http://localhost:3030');
     }
 
-    if (typeof process !== 'undefined' && process.env.STREAM_LOCAL_TEST_HOST) {
+    if (typeof process !== 'undefined' && 'env' in process && process.env.STREAM_LOCAL_TEST_HOST) {
       this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
     }
 
