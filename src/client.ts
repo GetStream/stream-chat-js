@@ -3492,44 +3492,58 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Creates a poll
    * @param params PollData The poll that will be created
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: PollData) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, poll);
-  }
-
-  /**
-   * Retrieves a poll
-   * @param id string The poll id
-   * @returns {APIResponse & GetPollAPIResponse} The poll
-   */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(this.baseURL + `/polls/${id}`, {
+  async createPoll(poll: PollData, userId?: string) {
+    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
+      ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
   }
 
   /**
+   * Retrieves a poll
+   * @param id string The poll id
+   *  @param userId string The user id (only serverside)
+   * @returns {APIResponse & GetPollAPIResponse} The poll
+   */
+  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
+    return await this.get<APIResponse & GetPollAPIResponse>(this.baseURL + `/polls/${id}`, 
+      userId ? { user_id: userId } : {}
+    );
+  }
+
+  /**
    * Updates a poll
    * @param poll PollData The poll that will be updated
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, poll);
+  async updatePoll(poll: PollData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
+      ...poll,
+      ...(userId ? { user_id: userId } : {})
+    });
   }
 
   /**
    * Partially updates a poll
    * @param id string The poll id
    * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * @param userId string The user id (only serverside)
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
   async partialUpdatePoll(
     id: string,
     partialPollObject: PartialPollUpdate,
+    userId?: string
   ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, {
+      ...partialPollObject,
+      ...(userId ? { user_id: userId } : {})
+    });
   }
 
   /**
@@ -3547,13 +3561,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Close a poll
    * @param id string The poll id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async closePoll(id: string): Promise<APIResponse & UpdatePollAPIResponse> {
+  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
     return this.partialUpdatePoll(id, {
       set: {
         is_closed: true,
       },
+      ...(userId ? { user_id: userId } : {})
     });
   }
 
@@ -3561,45 +3577,52 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Creates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be created
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData) {
+  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
     return await this.post<APIResponse & CreatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${pollId}/options`,
-      option,
-    );
+      this.baseURL + `/polls/${pollId}/options`, {
+        ...option,
+        ...(userId ? { user_id: userId } : {})
+    });
   }
 
   /**
    * Retrieves a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async getPollOption(pollId: string, optionId: string) {
+  async getPollOption(pollId: string, optionId: string, userId?: string) {
     return await this.get<APIResponse & GetPollOptionAPIResponse>(
-      this.baseURL + `/polls/${pollId}/options/${optionId}`,
-    );
+      this.baseURL + `/polls/${pollId}/options/${optionId}`, userId ? { user_id: userId } : {});
   }
 
   /**
    * Updates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be updated
+   * @param userId string The user id (only serverside)
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, {
+      ...option,
+      ...(userId ? { user_id: userId } : {}),
+    });
   }
 
   /**
    * Delete a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse} The poll option
    */
-  async deletePollOption(pollId: string, optionId: string) {
-    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  async deletePollOption(pollId: string, optionId: string, userId?: string) {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`, userId ? { user_id: userId } : {});
   }
 
   /**
@@ -3607,12 +3630,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param vote PollVoteData The vote that will be casted
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
-  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, options = {}) {
+  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, userId?: string) {
     return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
-      { vote, ...options },
+      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`, {
+        vote,
+        ...(userId ? { user_id: userId } : {}),
+      },
     );
   }
 
@@ -3621,17 +3647,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param answerText string The answer text
+   * @param userId string The user id (only serverside)
    */
-  async addPollAnswer(messageId: string, pollId: string, answerText: string) {
+  async addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
     return this.castPollVote(messageId, pollId, {
       answer_text: answerText,
-    });
+    }, userId);
   }
 
-  async removePollVote(messageId: string, pollId: string, voteId: string) {
+  async removePollVote(messageId: string, pollId: string, voteId: string, userId?: string) {
     return await this.delete<APIResponse & { vote: PollVote }>(
-      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`,
-    );
+      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`, {
+      ...(userId ? { user_id: userId } : {}),
+    });
   }
 
   /**
@@ -3639,14 +3667,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & QueryPollsResponse} The polls
    */
   async queryPolls(
     filter: QueryPollsFilters = {},
     sort: PollSort = [],
     options: QueryPollsOptions = {},
+    userId?: string
   ): Promise<APIResponse & QueryPollsResponse> {
-    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + '/polls/query', {
+    const q = userId ? `?user_id=${userId}` : ''; 
+    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3659,7 +3690,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
-
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollVotesAPIResponse} The poll votes
    */
   async queryPollVotes(
@@ -3667,8 +3698,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     filter: QueryVotesFilters = {},
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
+    userId?: string
   ): Promise<APIResponse & PollVotesAPIResponse> {
-    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
+    const q = userId ? `?user_id=${userId}` : ''; 
+    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3676,7 +3709,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * Queries message histories
+   * Query message history
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10}
