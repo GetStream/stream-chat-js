@@ -342,7 +342,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error('Deleting a reaction requires specifying both the message and reaction type');
     }
 
-    const url = this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
+    const url =
+      this.getClient().baseURL +
+      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<ReactionAPIResponse<StreamChatGenerics>>(url, { user_id });
@@ -863,7 +865,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     sort: PinnedMessagesSort = [],
   ) {
     return await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
-        this._channelURL() + '/pinned_messages',
+      this._channelURL() + '/pinned_messages',
       {
         payload: {
           ...options,
