@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.38.0](https://github.com/GetStream/stream-chat-js/compare/v8.37.0...v8.38.0) (2024-08-21)
+
+
+### Features
+
+* moderation submit action endpoint ([#1329](https://github.com/GetStream/stream-chat-js/issues/1329)) ([c6a5ab2](https://github.com/GetStream/stream-chat-js/commit/c6a5ab21bb18ce8886512d84c5323592f4de2093))
+* moderation v2 api endpoints ([#1312](https://github.com/GetStream/stream-chat-js/issues/1312)) ([b1f47f0](https://github.com/GetStream/stream-chat-js/commit/b1f47f0a299f3cd18a5f5b2959c0fa46e8b8bed0))
+* moderation v2 endpoints under client.moderation ([#1327](https://github.com/GetStream/stream-chat-js/issues/1327)) ([2276b85](https://github.com/GetStream/stream-chat-js/commit/2276b855fa8d3af02af964074ca35c03164ceb71))
+
+
+### Bug Fixes
+
+* handle issue with process and DOM conflict ([#1331](https://github.com/GetStream/stream-chat-js/issues/1331)) ([51b79ff](https://github.com/GetStream/stream-chat-js/commit/51b79ff27b03344d3c52ab439b40a0942455f5cb))
+
 ## [8.37.0](https://github.com/GetStream/stream-chat-js/compare/v8.36.0...v8.37.0) (2024-06-25)
 
 
