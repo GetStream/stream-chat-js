@@ -31,8 +31,7 @@ describe('Threads 2.0', () => {
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
-
-    channelResponse = generateChannel().channel;
+    channelResponse = generateChannel({ channel: { id: uuidv4() } }).channel;
     channel = client.channel(channelResponse.type, channelResponse.id);
     parentMessageResponse = generateMsg();
     thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });

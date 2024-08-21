@@ -16,6 +16,7 @@ export const generateThread = (channel, parent, opts = {}) => {
 		reply_count: 0,
 		latest_replies: [],
 		thread_participants: [],
+		created_by_user_id: '',
 		...opts,
 	};
 };
