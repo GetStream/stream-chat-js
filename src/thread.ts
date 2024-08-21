@@ -1,6 +1,6 @@
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
-import { SimpleStateStore } from './store/SimpleStateStore';
+import { StateStore } from './store';
 import type {
   AscDesc,
   DefaultGenerics,
@@ -81,7 +81,7 @@ export const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
 // TODO: store users someplace and reference them from state as now replies might contain users with stale information
 
 export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: SimpleStateStore<ThreadState<Scg>>;
+  public readonly state: StateStore<ThreadState<Scg>>;
   public id: string;
 
   private client: StreamChat<Scg>;
@@ -100,7 +100,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
     const placeholderDate = new Date();
 
-    this.state = new SimpleStateStore<ThreadState<Scg>>({
+    this.state = new StateStore<ThreadState<Scg>>({
       // used as handler helper - actively mark read all of the incoming messages
       // if the thread is active (visibly selected in the UI or main focal point in advanced list)
       active: false,
@@ -142,11 +142,11 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public activate = () => {
-    this.state.patchedNext('active', true);
+    this.state.partialNext({ active: true });
   };
 
   public deactivate = () => {
-    this.state.patchedNext('active', false);
+    this.state.partialNext({ active: false });
   };
 
   // take state of one instance and merge it to the current instance
@@ -265,7 +265,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
         if (event.channel.cid !== channel.cid) return;
 
-        this.state.patchedNext('isStateStale', true);
+        this.state.partialNext({ isStateStale: true });
       }).unsubscribe,
     );
 
@@ -476,7 +476,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     sort,
     limit = DEFAULT_PAGE_LIMIT,
   }: Pick<QueryRepliesOptions<Scg>, 'sort' | 'limit'> = {}) => {
-    this.state.patchedNext('loadingNextPage', true);
+    this.state.partialNext({ loadingNextPage: true });
 
     const { loadingNextPage, nextCursor } = this.state.getLatestValue();
 
@@ -502,7 +502,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     } catch (error) {
       this.client.logger('error', (error as Error).message);
     } finally {
-      this.state.patchedNext('loadingNextPage', false);
+      this.state.partialNext({ loadingNextPage: false });
     }
   };
 
@@ -514,7 +514,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
 
     if (loadingPreviousPage || previousCursor === null) return;
 
-    this.state.patchedNext('loadingPreviousPage', true);
+    this.state.partialNext({ loadingPreviousPage: true });
 
     try {
       const data = await this.queryReplies({
@@ -535,7 +535,7 @@ export class Thread<Scg extends ExtendableGenerics = DefaultGenerics> {
     } catch (error) {
       this.client.logger('error', (error as Error).message);
     } finally {
-      this.state.patchedNext('loadingPreviousPage', false);
+      this.state.partialNext({ loadingPreviousPage: false });
     }
   };
 }

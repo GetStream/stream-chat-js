@@ -1,6 +1,6 @@
 import type { StreamChat } from './client';
-import type { Handler } from './store/SimpleStateStore';
-import { SimpleStateStore } from './store/SimpleStateStore';
+import type { Handler } from './store';
+import { StateStore } from './store';
 import type { Thread } from './thread';
 import type { DefaultGenerics, Event, ExtendableGenerics, QueryThreadsOptions } from './types';
 import { throttle } from './utils';
@@ -25,13 +25,13 @@ export type ThreadManagerState<Scg extends ExtendableGenerics = DefaultGenerics>
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
 
 export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: SimpleStateStore<ThreadManagerState<Scg>>;
+  public readonly state: StateStore<ThreadManagerState<Scg>>;
   private client: StreamChat<Scg>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
   constructor({ client }: { client: StreamChat<Scg> }) {
     this.client = client;
-    this.state = new SimpleStateStore<ThreadManagerState<Scg>>({
+    this.state = new StateStore<ThreadManagerState<Scg>>({
       active: false,
       threads: [],
       threadIdIndexMap: {},
@@ -46,11 +46,11 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public activate = () => {
-    this.state.patchedNext('active', true);
+    this.state.partialNext({ active: true });
   };
 
   public deactivate = () => {
-    this.state.patchedNext('active', false);
+    this.state.partialNext({ active: false });
   };
 
   // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -96,7 +96,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
         try {
           // FIXME: syncing does not work for me
           await this.client.sync(Array.from(channelCids), lastConnectionDownAt.toISOString(), { watch: true });
-          this.state.patchedNext('lastConnectionDownAt', null);
+          this.state.partialNext({ lastConnectionDownAt: null });
         } catch (error) {
           // TODO: if error mentions that the amount of events is more than 2k
           // do a reload-type recovery (re-query threads and merge states)
@@ -122,7 +122,7 @@ export class ThreadManager<Scg extends ExtendableGenerics = DefaultGenerics> {
         const { lastConnectionDownAt } = this.state.getLatestValue();
 
         if (!event.online && !lastConnectionDownAt) {
-          this.state.patchedNext('lastConnectionDownAt', new Date());
+          this.state.partialNext({ lastConnectionDownAt: new Date() });
         }
       }).unsubscribe,
     );

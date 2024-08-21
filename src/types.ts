@@ -503,7 +503,6 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
   channel: ChannelResponse<StreamChatGenerics>;
   channel_cid: string;
   created_at: string;
-  deleted_at: string;
   latest_replies: MessageResponse<StreamChatGenerics>[];
   parent_message_id: string;
   reply_count: number;
@@ -513,6 +512,7 @@ export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = Defau
   }[];
   title: string;
   updated_at: string;
+  deleted_at?: string;
   parent_message?: MessageResponse<StreamChatGenerics>;
   read?: {
     last_read: string;

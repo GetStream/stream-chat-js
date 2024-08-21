@@ -2,12 +2,7 @@ import { expect } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
-import { generateMember } from './test-utils/generateMember';
 import { generateMsg } from './test-utils/generateMessage';
-import { generateUser } from './test-utils/generateUser';
-import { getClientWithUser } from './test-utils/getClient';
-import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
-import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThread } from './test-utils/generateThread';
 
 import {
@@ -88,7 +83,7 @@ describe('Threads 2.0', () => {
           const newMessage = formatMessage(generateMsg({ parent_id: thread.id, text: 'aaa' }) as MessageResponse);
           const newMessageCopy = ({ ...newMessage, text: 'bbb' } as unknown) as MessageResponse;
 
-          thread.state.patchedNext('latestReplies', [newMessage]);
+          thread.state.partialNext({ latestReplies: [newMessage] });
 
           const { latestReplies } = thread.state.getLatestValue();
 
@@ -186,14 +181,13 @@ describe('Threads 2.0', () => {
 
           thread.partiallyReplaceState({ thread: newThread });
 
-          const { read, latestReplies, parentMessage, participants, channelData } = thread.state.getLatestValue();
+          const { read, latestReplies, parentMessage, participants } = thread.state.getLatestValue();
 
           // compare non-primitive values only
           expect(read).to.not.equal(newThread.state.getLatestValue().read);
           expect(latestReplies).to.not.equal(newThread.state.getLatestValue().latestReplies);
           expect(parentMessage).to.not.equal(newThread.state.getLatestValue().parentMessage);
           expect(participants).to.not.equal(newThread.state.getLatestValue().participants);
-          expect(channelData).to.not.equal(newThread.state.getLatestValue().channelData);
         });
 
         it('copies state of the instance with the same id', () => {
@@ -210,14 +204,13 @@ describe('Threads 2.0', () => {
 
           thread.partiallyReplaceState({ thread: newThread });
 
-          const { read, latestReplies, parentMessage, participants, channelData } = thread.state.getLatestValue();
+          const { read, latestReplies, parentMessage, participants } = thread.state.getLatestValue();
 
           // compare non-primitive values only
           expect(read).to.equal(newThread.state.getLatestValue().read);
           expect(latestReplies).to.equal(newThread.state.getLatestValue().latestReplies);
           expect(parentMessage).to.equal(newThread.state.getLatestValue().parentMessage);
           expect(participants).to.equal(newThread.state.getLatestValue().participants);
-          expect(channelData).to.equal(newThread.state.getLatestValue().channelData);
         });
 
         it('appends own failed replies from failedRepliesMap during merging', () => {
@@ -264,13 +257,15 @@ describe('Threads 2.0', () => {
 
         it("increments own unread count if read object contains current user's record", () => {
           // prepare
-          thread.state.patchedNext('read', {
-            [TEST_USER_ID]: {
-              lastReadAt: new Date(),
-              last_read: '',
-              last_read_message_id: '',
-              unread_messages: 2,
-              user: { id: TEST_USER_ID },
+          thread.state.partialNext({
+            read: {
+              [TEST_USER_ID]: {
+                lastReadAt: new Date(),
+                last_read: '',
+                last_read_message_id: '',
+                unread_messages: 2,
+                user: { id: TEST_USER_ID },
+              },
             },
           });
 
@@ -291,14 +286,13 @@ describe('Threads 2.0', () => {
 
           const createdAt = new Date().getTime();
           // five messages "created" second apart
-          thread.state.patchedNext(
-            'latestReplies',
-            Array.from({ length: 5 }, (_, i) =>
+          thread.state.partialNext({
+            latestReplies: Array.from({ length: 5 }, (_, i) =>
               formatMessage(
                 generateMsg({ created_at: new Date(createdAt + 1000 * i).toISOString() }) as MessageResponse,
               ),
             ),
-          );
+          });
 
           const { latestReplies } = thread.state.getLatestValue();
 
@@ -401,7 +395,7 @@ describe('Threads 2.0', () => {
         const stubbedGetThread = sinon.stub(client, 'getThread').resolves(newThread);
         const partiallyReplaceStateSpy = sinon.spy(thread, 'partiallyReplaceState');
 
-        thread.state.patchedNext('isStateStale', true);
+        thread.state.partialNext({ isStateStale: true });
 
         expect(thread.state.getLatestValue().isStateStale).to.be.true;
         expect(stubbedGetThread.called).to.be.false;
@@ -465,13 +459,15 @@ describe('Threads 2.0', () => {
           it(`correctly sets read information for user with id: ${userId}`, () => {
             // prepare
             const lastReadAt = new Date();
-            thread.state.patchedNext('read', {
-              [userId]: {
-                lastReadAt: lastReadAt,
-                last_read: lastReadAt.toISOString(),
-                last_read_message_id: '',
-                unread_messages: 1,
-                user: { id: userId },
+            thread.state.partialNext({
+              read: {
+                [userId]: {
+                  lastReadAt: lastReadAt,
+                  last_read: lastReadAt.toISOString(),
+                  last_read_message_id: '',
+                  unread_messages: 1,
+                  user: { id: userId },
+                },
               },
             });
 
@@ -512,7 +508,7 @@ describe('Threads 2.0', () => {
           // prepare
           const upsertReplyLocallySpy = sinon.spy(thread, 'upsertReplyLocally');
 
-          thread.state.patchedNext('isStateStale', true);
+          thread.state.partialNext({ isStateStale: true });
 
           client.dispatchEvent({ type: 'message.new', message: generateMsg({ id: thread.id }) as MessageResponse });
 
@@ -626,7 +622,7 @@ describe('Threads 2.0', () => {
 
         it('adds parentMessageId to the unseenThreadIds array on notification.thread_message_new', () => {
           // artificial first page load
-          threadManager.state.patchedNext('nextCursor', null);
+          threadManager.state.partialNext({ nextCursor: null });
 
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
 
@@ -643,7 +639,7 @@ describe('Threads 2.0', () => {
 
         it('skips duplicate parentMessageIds in unseenThreadIds array', () => {
           // artificial first page load
-          threadManager.state.patchedNext('nextCursor', null);
+          threadManager.state.partialNext({ nextCursor: null });
 
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
 
@@ -666,7 +662,7 @@ describe('Threads 2.0', () => {
 
         it('skips if thread (parentMessageId) is already loaded within threads array', () => {
           // artificial first page load
-          threadManager.state.patchedNext('threads', [thread]);
+          threadManager.state.partialNext({ threads: [thread] });
 
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
 
@@ -681,7 +677,7 @@ describe('Threads 2.0', () => {
       });
 
       it('recovers from connection down', () => {
-        threadManager.state.patchedNext('threads', [thread]);
+        threadManager.state.partialNext({ threads: [thread] });
 
         client.dispatchEvent({
           received_at: new Date().toISOString(),
@@ -717,7 +713,7 @@ describe('Threads 2.0', () => {
       it('should generate a new threadIdIndexMap on threads array change', () => {
         expect(threadManager.state.getLatestValue().threadIdIndexMap).to.deep.equal({});
 
-        threadManager.state.patchedNext('threads', [thread]);
+        threadManager.state.partialNext({ threads: [thread] });
 
         expect(threadManager.state.getLatestValue().threadIdIndexMap).to.deep.equal({ [thread.id]: 0 });
       });
@@ -753,7 +749,7 @@ describe('Threads 2.0', () => {
         });
 
         it('adds new thread if it does not exist within the threads array', async () => {
-          threadManager.state.patchedNext('unseenThreadIds', ['t1']);
+          threadManager.state.partialNext({ unseenThreadIds: ['t1'] });
 
           stubbedQueryThreads.resolves({
             threads: [thread],
@@ -773,7 +769,7 @@ describe('Threads 2.0', () => {
         it('replaces state of the existing thread which reports stale state within the threads array', async () => {
           // prepare
           threadManager.state.next((current) => ({ ...current, threads: [thread], unseenThreadIds: ['t1'] }));
-          thread.state.patchedNext('isStateStale', true);
+          thread.state.partialNext({ isStateStale: true });
 
           const newThread = new Thread({
             client,
@@ -845,7 +841,7 @@ describe('Threads 2.0', () => {
         it("prevents loading next page if there's no next page to load", async () => {
           expect(threadManager.state.getLatestValue().nextCursor).is.undefined;
 
-          threadManager.state.patchedNext('nextCursor', null);
+          threadManager.state.partialNext({ nextCursor: null });
 
           await threadManager.loadNextPage();
 
@@ -855,7 +851,7 @@ describe('Threads 2.0', () => {
         it('prevents loading next page if already loading', async () => {
           expect(threadManager.state.getLatestValue().loadingNextPage).is.false;
 
-          threadManager.state.patchedNext('loadingNextPage', true);
+          threadManager.state.partialNext({ loadingNextPage: true });
 
           await threadManager.loadNextPage();
 
@@ -878,7 +874,8 @@ describe('Threads 2.0', () => {
         it('switches loading state properly', async () => {
           const spy = sinon.spy();
 
-          threadManager.state.subscribeWithSelector((nextValue) => [nextValue.loadingNextPage], spy, false);
+          threadManager.state.subscribeWithSelector((nextValue) => [nextValue.loadingNextPage], spy);
+          spy.resetHistory();
 
           await threadManager.loadNextPage();
 
@@ -888,7 +885,7 @@ describe('Threads 2.0', () => {
         });
 
         it('sets proper nextCursor and threads', async () => {
-          threadManager.state.patchedNext('threads', [thread]);
+          threadManager.state.partialNext({ threads: [thread] });
 
           const newThread = new Thread({
             client,
@@ -913,7 +910,7 @@ describe('Threads 2.0', () => {
           const cursor1 = uuidv4();
           const cursor2 = uuidv4();
 
-          threadManager.state.patchedNext('nextCursor', cursor1);
+          threadManager.state.partialNext({ nextCursor: cursor1 });
 
           stubbedQueryThreads.resolves({
             threads: [],
@@ -930,7 +927,6 @@ describe('Threads 2.0', () => {
 
         // FIXME: skipped as it's not needed until queryThreads supports reply sorting (asc/desc)
         it.skip('adjusts nextCursor & previousCusor properties of the queried threads according to query options', () => {
-
           const REPLY_COUNT = 3;
 
           const newThread = new Thread({
