@@ -1630,7 +1630,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     };
 
     return await this.post<QueryReactionsAPIResponse<StreamChatGenerics>>(
-      this.baseURL + '/messages/' + messageID + '/reactions',
+      this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
       payload,
     );
   }
@@ -2063,7 +2063,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       APIResponse & { user: UserResponse<StreamChatGenerics> } & {
         task_id?: string;
       }
-    >(this.baseURL + `/users/${userID}`, params);
+    >(this.baseURL + `/users/${encodeURIComponent(userID)}`, params);
   }
 
   /**
@@ -2089,7 +2089,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async reactivateUser(userID: string, options?: ReactivateUserOptions) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
-      this.baseURL + `/users/${userID}/reactivate`,
+      this.baseURL + `/users/${encodeURIComponent(userID)}/reactivate`,
       { ...options },
     );
   }
@@ -2116,7 +2116,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
     return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
-      this.baseURL + `/users/${userID}/deactivate`,
+      this.baseURL + `/users/${encodeURIComponent(userID)}/deactivate`,
       { ...options },
     );
   }
@@ -2140,7 +2140,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         reactions: ReactionResponse<StreamChatGenerics>[];
         user: UserResponse<StreamChatGenerics>;
       }
-    >(this.baseURL + `/users/${userID}/export`, { ...options });
+    >(this.baseURL + `/users/${encodeURIComponent(userID)}/export`, { ...options });
   }
 
   /** banUser - bans a user from all channels
@@ -2316,7 +2316,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<GetCallTokenResponse>}
    */
   async getCallToken(callID: string, options: { user_id?: string } = {}) {
-    return await this.post<GetCallTokenResponse>(this.baseURL + `/calls/${callID}`, { ...options });
+    return await this.post<GetCallTokenResponse>(this.baseURL + `/calls/${encodeURIComponent(callID)}`, { ...options });
   }
 
   /**
@@ -2376,10 +2376,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
   async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
-    return await this.patch<ReviewFlagReportResponse<StreamChatGenerics>>(this.baseURL + `/moderation/reports/${id}`, {
-      review_result: reviewResult,
-      ...options,
-    });
+    return await this.patch<ReviewFlagReportResponse<StreamChatGenerics>>(
+      this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
+      {
+        review_result: reviewResult,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -2426,15 +2429,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getCommand(name: string) {
-    return this.get<GetCommandResponse<StreamChatGenerics>>(this.baseURL + `/commands/${name}`);
+    return this.get<GetCommandResponse<StreamChatGenerics>>(this.baseURL + `/commands/${encodeURIComponent(name)}`);
   }
 
   updateCommand(name: string, data: UpdateCommandOptions<StreamChatGenerics>) {
-    return this.put<UpdateCommandResponse<StreamChatGenerics>>(this.baseURL + `/commands/${name}`, data);
+    return this.put<UpdateCommandResponse<StreamChatGenerics>>(
+      this.baseURL + `/commands/${encodeURIComponent(name)}`,
+      data,
+    );
   }
 
   deleteCommand(name: string) {
-    return this.delete<DeleteCommandResponse<StreamChatGenerics>>(this.baseURL + `/commands/${name}`);
+    return this.delete<DeleteCommandResponse<StreamChatGenerics>>(
+      this.baseURL + `/commands/${encodeURIComponent(name)}`,
+    );
   }
 
   listCommands() {
@@ -2447,15 +2455,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getChannelType(channelType: string) {
-    return this.get<GetChannelTypeResponse<StreamChatGenerics>>(this.baseURL + `/channeltypes/${channelType}`);
+    return this.get<GetChannelTypeResponse<StreamChatGenerics>>(
+      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
+    );
   }
 
   updateChannelType(channelType: string, data: UpdateChannelOptions<StreamChatGenerics>) {
-    return this.put<UpdateChannelResponse<StreamChatGenerics>>(this.baseURL + `/channeltypes/${channelType}`, data);
+    return this.put<UpdateChannelResponse<StreamChatGenerics>>(
+      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
+      data,
+    );
   }
 
   deleteChannelType(channelType: string) {
-    return this.delete<APIResponse>(this.baseURL + `/channeltypes/${channelType}`);
+    return this.delete<APIResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`);
   }
 
   listChannelTypes() {
@@ -2472,7 +2485,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async translateMessage(messageId: string, language: string) {
     return await this.post<APIResponse & MessageResponse<StreamChatGenerics>>(
-      this.baseURL + `/messages/${messageId}/translate`,
+      this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
       { language },
     );
   }
@@ -2622,10 +2635,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       clonedMessage.mentioned_users = clonedMessage.mentioned_users.map((mu) => ((mu as unknown) as UserResponse).id);
     }
 
-    return await this.post<UpdateMessageAPIResponse<StreamChatGenerics>>(this.baseURL + `/messages/${message.id}`, {
-      message: clonedMessage,
-      ...options,
-    });
+    return await this.post<UpdateMessageAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
+      {
+        message: clonedMessage,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -2654,11 +2670,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (userId != null && isString(userId)) {
       user = { id: userId };
     }
-    return await this.put<UpdateMessageAPIResponse<StreamChatGenerics>>(this.baseURL + `/messages/${id}`, {
-      ...partialMessageObject,
-      ...options,
-      user,
-    });
+    return await this.put<UpdateMessageAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/messages/${encodeURIComponent(id)}`,
+      {
+        ...partialMessageObject,
+        ...options,
+        user,
+      },
+    );
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
@@ -2667,7 +2686,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       params = { hard: true };
     }
     return await this.delete<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
-      this.baseURL + `/messages/${messageID}`,
+      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
       params,
     );
   }
@@ -2686,7 +2705,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async undeleteMessage(messageID: string, userID: string) {
     return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
-      this.baseURL + `/messages/${messageID}/undelete`,
+      this.baseURL + `/messages/${encodeURIComponent(messageID)}/undelete`,
       { undeleted_by: userID },
     );
   }
@@ -2749,7 +2768,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads/${messageId}`, opts);
+    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/threads/${encodeURIComponent(messageId)}`,
+      opts,
+    );
 
     return new Thread<StreamChatGenerics>(this, res.thread);
   }
@@ -2790,7 +2812,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/threads/${messageId}`,
+      this.baseURL + `/threads/${encodeURIComponent(messageId)}`,
       partialThreadObject,
     );
   }
@@ -2905,7 +2927,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<PermissionAPIResponse>}
    */
   getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(`${this.baseURL}/permissions/${name}`);
+    return this.get<PermissionAPIResponse>(`${this.baseURL}/permissions/${encodeURIComponent(name)}`);
   }
 
   /** createPermission - creates a custom permission
@@ -2926,7 +2948,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.put<APIResponse>(`${this.baseURL}/permissions/${id}`, {
+    return this.put<APIResponse>(`${this.baseURL}/permissions/${encodeURIComponent(id)}`, {
       ...permissionData,
     });
   }
@@ -2937,7 +2959,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   deletePermission(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/permissions/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/permissions/${encodeURIComponent(name)}`);
   }
 
   /** listPermissions - returns the list of all permissions for this application
@@ -2971,7 +2993,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/roles/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/roles/${encodeURIComponent(name)}`);
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
@@ -2998,7 +3020,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<APIResponse>} The Server Response
    */
   async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
-    return await this.post<APIResponse>(`${this.baseURL}/users/${targetUserID}/event`, {
+    return await this.post<APIResponse>(`${this.baseURL}/users/${encodeURIComponent(targetUserID)}/event`, {
       event,
     });
   }
@@ -3012,15 +3034,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getBlockList(name: string) {
-    return this.get<APIResponse & { blocklist: BlockListResponse }>(`${this.baseURL}/blocklists/${name}`);
+    return this.get<APIResponse & { blocklist: BlockListResponse }>(
+      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
+    );
   }
 
   updateBlockList(name: string, data: { words: string[] }) {
-    return this.put<APIResponse>(`${this.baseURL}/blocklists/${name}`, data);
+    return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
   deleteBlockList(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${name}`);
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`);
   }
 
   exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
@@ -3037,7 +3061,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getExportChannelStatus(id: string) {
-    return this.get<APIResponse & ExportChannelStatusResponse>(`${this.baseURL}/export_channels/${id}`);
+    return this.get<APIResponse & ExportChannelStatusResponse>(
+      `${this.baseURL}/export_channels/${encodeURIComponent(id)}`,
+    );
   }
 
   campaign(idOrData: string | CampaignData, data?: CampaignData) {
@@ -3115,7 +3141,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   async getSegment(id: string) {
     this.validateServerSideAuth();
-    return this.get<{ segment: SegmentResponse } & APIResponse>(this.baseURL + `/segments/${id}`);
+    return this.get<{ segment: SegmentResponse } & APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -3128,7 +3154,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async updateSegment(id: string, data: Partial<UpdateSegmentData>) {
     this.validateServerSideAuth();
-    return this.put<{ segment: SegmentResponse }>(this.baseURL + `/segments/${id}`, data);
+    return this.put<{ segment: SegmentResponse }>(this.baseURL + `/segments/${encodeURIComponent(id)}`, data);
   }
 
   /**
@@ -3142,7 +3168,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async addSegmentTargets(id: string, targets: string[]) {
     this.validateServerSideAuth();
     const body = { target_ids: targets };
-    return this.post<APIResponse>(this.baseURL + `/segments/${id}/addtargets`, body);
+    return this.post<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}/addtargets`, body);
   }
 
   async querySegmentTargets(
@@ -3153,7 +3179,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   ) {
     this.validateServerSideAuth();
     return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
-      this.baseURL + `/segments/${id}/targets/query`,
+      this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`,
       {
         filter: filter || {},
         sort: sort || [],
@@ -3172,7 +3198,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async removeSegmentTargets(id: string, targets: string[]) {
     this.validateServerSideAuth();
     const body = { target_ids: targets };
-    return this.post<APIResponse>(this.baseURL + `/segments/${id}/deletetargets`, body);
+    return this.post<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}/deletetargets`, body);
   }
 
   /**
@@ -3207,7 +3233,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async deleteSegment(id: string) {
     this.validateServerSideAuth();
-    return this.delete<APIResponse>(this.baseURL + `/segments/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -3220,7 +3246,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async segmentTargetExists(segmentId: string, targetId: string) {
     this.validateServerSideAuth();
-    return this.get<APIResponse>(this.baseURL + `/segments/${segmentId}/target/${targetId}`);
+    return this.get<APIResponse>(
+      this.baseURL + `/segments/${encodeURIComponent(segmentId)}/target/${encodeURIComponent(targetId)}`,
+    );
   }
 
   /**
@@ -3237,15 +3265,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   async getCampaign(id: string) {
     this.validateServerSideAuth();
-    return this.get<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}`);
+    return this.get<{ campaign: CampaignResponse } & APIResponse>(
+      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
+    );
   }
 
   async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns/${id}/start`, {
-      scheduled_for: options?.scheduledFor,
-      stop_at: options?.stopAt,
-    });
+    return this.post<{ campaign: CampaignResponse } & APIResponse>(
+      this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`,
+      {
+        scheduled_for: options?.scheduledFor,
+        stop_at: options?.stopAt,
+      },
+    );
   }
   /**
    * queryCampaigns - Query Campaigns
@@ -3278,7 +3311,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     this.validateServerSideAuth();
-    return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}`, params);
+    return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
   }
 
   /**
@@ -3290,7 +3323,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async deleteCampaign(id: string) {
     this.validateServerSideAuth();
-    return this.delete<APIResponse>(this.baseURL + `/campaigns/${id}`);
+    return this.delete<APIResponse>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -3302,7 +3335,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async stopCampaign(id: string) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${id}/stop`);
+    return this.post<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}/stop`);
   }
 
   /**
@@ -3323,7 +3356,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {TaskStatus} The task status
    */
   async getTask(id: string) {
-    return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${id}`);
+    return this.get<APIResponse & TaskStatus>(`${this.baseURL}/tasks/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -3414,7 +3447,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse & GetImportResponse} An ImportTask
    */
   async _getImport(id: string) {
-    return await this.get<APIResponse & GetImportResponse>(this.baseURL + `/imports/${id}`);
+    return await this.get<APIResponse & GetImportResponse>(this.baseURL + `/imports/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -3458,7 +3491,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse} An API response
    */
   async deletePushProvider({ type, name }: PushProviderID) {
-    return await this.delete<APIResponse>(this.baseURL + `/push_providers/${type}/${name}`);
+    return await this.delete<APIResponse>(
+      this.baseURL + `/push_providers/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
+    );
   }
 
   /**
@@ -3486,50 +3521,65 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {APIResponse & MessageResponse} The message
    */
   async commitMessage(id: string) {
-    return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${id}/commit`);
+    return await this.post<APIResponse & MessageResponse>(this.baseURL + `/messages/${encodeURIComponent(id)}/commit`);
   }
 
   /**
    * Creates a poll
    * @param params PollData The poll that will be created
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: PollData) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, poll);
-  }
-
-  /**
-   * Retrieves a poll
-   * @param id string The poll id
-   * @returns {APIResponse & GetPollAPIResponse} The poll
-   */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(this.baseURL + `/polls/${id}`, {
+  async createPoll(poll: PollData, userId?: string) {
+    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
+      ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
   }
 
   /**
+   * Retrieves a poll
+   * @param id string The poll id
+   *  @param userId string The user id (only serverside)
+   * @returns {APIResponse & GetPollAPIResponse} The poll
+   */
+  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
+    return await this.get<APIResponse & GetPollAPIResponse>(
+      this.baseURL + `/polls/${encodeURIComponent(id)}`,
+      userId ? { user_id: userId } : {},
+    );
+  }
+
+  /**
    * Updates a poll
    * @param poll PollData The poll that will be updated
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, poll);
+  async updatePoll(poll: PollData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
+      ...poll,
+      ...(userId ? { user_id: userId } : {}),
+    });
   }
 
   /**
    * Partially updates a poll
    * @param id string The poll id
    * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * @param userId string The user id (only serverside)
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
   async partialUpdatePoll(
     id: string,
     partialPollObject: PartialPollUpdate,
+    userId?: string,
   ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${id}`, partialPollObject);
+    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${encodeURIComponent(id)}`, {
+      ...partialPollObject,
+      ...(userId ? { user_id: userId } : {}),
+    });
   }
 
   /**
@@ -3539,7 +3589,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns
    */
   async deletePoll(id: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(this.baseURL + `/polls/${id}`, {
+    return await this.delete<APIResponse>(this.baseURL + `/polls/${encodeURIComponent(id)}`, {
       ...(userId ? { user_id: userId } : {}),
     });
   }
@@ -3547,13 +3597,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Close a poll
    * @param id string The poll id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async closePoll(id: string): Promise<APIResponse & UpdatePollAPIResponse> {
+  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
     return this.partialUpdatePoll(id, {
       set: {
         is_closed: true,
       },
+      ...(userId ? { user_id: userId } : {}),
     });
   }
 
@@ -3561,12 +3613,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Creates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be created
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData) {
+  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
     return await this.post<APIResponse & CreatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${pollId}/options`,
-      option,
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
+      {
+        ...option,
+        ...(userId ? { user_id: userId } : {}),
+      },
     );
   }
 
@@ -3574,11 +3630,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Retrieves a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async getPollOption(pollId: string, optionId: string) {
+  async getPollOption(pollId: string, optionId: string, userId?: string) {
     return await this.get<APIResponse & GetPollOptionAPIResponse>(
-      this.baseURL + `/polls/${pollId}/options/${optionId}`,
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
+      userId ? { user_id: userId } : {},
     );
   }
 
@@ -3586,20 +3644,31 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Updates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be updated
+   * @param userId string The user id (only serverside)
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(this.baseURL + `/polls/${pollId}/options`, option);
+  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
+      {
+        ...option,
+        ...(userId ? { user_id: userId } : {}),
+      },
+    );
   }
 
   /**
    * Delete a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse} The poll option
    */
-  async deletePollOption(pollId: string, optionId: string) {
-    return await this.delete<APIResponse>(this.baseURL + `/polls/${pollId}/options/${optionId}`);
+  async deletePollOption(pollId: string, optionId: string, userId?: string) {
+    return await this.delete<APIResponse>(
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
+      userId ? { user_id: userId } : {},
+    );
   }
 
   /**
@@ -3607,12 +3676,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param vote PollVoteData The vote that will be casted
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
-  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, options = {}) {
+  async castPollVote(messageId: string, pollId: string, vote: PollVoteData, userId?: string) {
     return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote`,
-      { vote, ...options },
+      this.baseURL + `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
+      {
+        vote,
+        ...(userId ? { user_id: userId } : {}),
+      },
     );
   }
 
@@ -3621,16 +3694,28 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param answerText string The answer text
+   * @param userId string The user id (only serverside)
    */
-  async addPollAnswer(messageId: string, pollId: string, answerText: string) {
-    return this.castPollVote(messageId, pollId, {
-      answer_text: answerText,
-    });
+  async addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
+    return this.castPollVote(
+      messageId,
+      pollId,
+      {
+        answer_text: answerText,
+      },
+      userId,
+    );
   }
 
-  async removePollVote(messageId: string, pollId: string, voteId: string) {
+  async removePollVote(messageId: string, pollId: string, voteId: string, userId?: string) {
     return await this.delete<APIResponse & { vote: PollVote }>(
-      this.baseURL + `/messages/${messageId}/polls/${pollId}/vote/${voteId}`,
+      this.baseURL +
+        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote/${encodeURIComponent(
+          voteId,
+        )}`,
+      {
+        ...(userId ? { user_id: userId } : {}),
+      },
     );
   }
 
@@ -3639,14 +3724,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & QueryPollsResponse} The polls
    */
   async queryPolls(
     filter: QueryPollsFilters = {},
     sort: PollSort = [],
     options: QueryPollsOptions = {},
+    userId?: string,
   ): Promise<APIResponse & QueryPollsResponse> {
-    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + '/polls/query', {
+    const q = userId ? `?user_id=${userId}` : '';
+    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3659,7 +3747,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
-
+   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollVotesAPIResponse} The poll votes
    */
   async queryPollVotes(
@@ -3667,16 +3755,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     filter: QueryVotesFilters = {},
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
+    userId?: string,
   ): Promise<APIResponse & PollVotesAPIResponse> {
-    return await this.post<APIResponse & PollVotesAPIResponse>(this.baseURL + `/polls/${pollId}/votes`, {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
+    const q = userId ? `?user_id=${userId}` : '';
+    return await this.post<APIResponse & PollVotesAPIResponse>(
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
+      {
+        filter,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
   }
 
   /**
-   * Queries message histories
+   * Query message history
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10}
