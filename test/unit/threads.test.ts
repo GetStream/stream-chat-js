@@ -729,6 +729,8 @@ describe('Threads 2.0', () => {
           threads: [],
           next: undefined,
         });
+
+        threadManager.registerSubscriptions();
       });
 
       describe('ThreadManager.reload', () => {
@@ -767,7 +769,7 @@ describe('Threads 2.0', () => {
         // TODO: test merge but instance is the same!
         it('replaces state of the existing thread which reports stale state within the threads array', async () => {
           // prepare
-          threadManager.state.next((current) => ({ ...current, threads: [thread], unseenThreadIds: ['t1'] }));
+          threadManager.state.partialNext({ threads: [thread], unseenThreadIds: ['t1'] });
           thread.state.partialNext({ isStateStale: true });
 
           const newThread = new Thread({
@@ -943,8 +945,6 @@ describe('Threads 2.0', () => {
             threads: [newThread],
             next: undefined,
           });
-
-          // ...
         });
       });
     });
