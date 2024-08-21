@@ -1,6 +1,6 @@
 export type Patch<T> = (value: T) => T;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
-export type Unsubscibe = () => void;
+export type Unsubscribe = () => void;
 
 function isPatch<T>(value: T | Patch<T>): value is Patch<T> {
   return typeof value === 'function';
@@ -28,7 +28,7 @@ export class StateStore<T extends Record<string, unknown>> {
 
   public getLatestValue = (): T => this.value;
 
-  public subscribe = (handler: Handler<T>): Unsubscibe => {
+  public subscribe = (handler: Handler<T>): Unsubscribe => {
     handler(this.value, undefined);
     this.handlerSet.add(handler);
     return () => {

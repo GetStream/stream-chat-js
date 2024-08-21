@@ -62,10 +62,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       if (typeof unreadThreadsCount === 'undefined') return;
 
-      this.state.next((current) => ({
-        ...current,
-        unreadThreadsCount,
-      }));
+      this.state.partialNext({ unreadThreadsCount });
     };
 
     [
