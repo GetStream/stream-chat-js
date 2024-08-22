@@ -320,7 +320,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error(`Reaction object is missing`);
     }
     return await this.getClient().post<ReactionAPIResponse<StreamChatGenerics>>(
-      this.getClient().baseURL + `/messages/${messageID}/reaction`,
+      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
       {
         reaction,
         ...options,
@@ -343,7 +343,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error('Deleting a reaction requires specifying both the message and reaction type');
     }
 
-    const url = this.getClient().baseURL + `/messages/${messageID}/reaction/${reactionType}`;
+    const url =
+      this.getClient().baseURL +
+      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<ReactionAPIResponse<StreamChatGenerics>>(url, { user_id });
@@ -640,7 +642,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error(`Message id is missing`);
     }
     return this.getClient().post<SendMessageAPIResponse<StreamChatGenerics>>(
-      this.getClient().baseURL + `/messages/${messageID}/action`,
+      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/action`,
       {
         message_id: messageID,
         form_data: formData,
@@ -836,7 +838,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   ) {
     const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
     const data = await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
-      this.getClient().baseURL + `/messages/${parent_id}/replies`,
+      this.getClient().baseURL + `/messages/${encodeURIComponent(parent_id)}/replies`,
       {
         sort: normalizedSort,
         ...options,
@@ -864,7 +866,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     sort: PinnedMessagesSort = [],
   ) {
     return await this.getClient().get<GetRepliesAPIResponse<StreamChatGenerics>>(
-      this.getClient().baseURL + `/channels/${this.type}/${this.id}/pinned_messages`,
+      this._channelURL() + '/pinned_messages',
       {
         payload: {
           ...options,
@@ -884,7 +886,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    */
   getReactions(message_id: string, options: { limit?: number; offset?: number }) {
     return this.getClient().get<GetReactionsAPIResponse<StreamChatGenerics>>(
-      this.getClient().baseURL + `/messages/${message_id}/reactions`,
+      this.getClient().baseURL + `/messages/${encodeURIComponent(message_id)}/reactions`,
       {
         ...options,
       },
@@ -1007,9 +1009,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    let queryURL = `${this.getClient().baseURL}/channels/${this.type}`;
+    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
     if (this.id) {
-      queryURL += `/${this.id}`;
+      queryURL += `/${encodeURIComponent(this.id)}`;
     }
 
     const state = await this.getClient().post<QueryChannelAPIResponse<StreamChatGenerics>>(queryURL + '/query', {
@@ -1544,7 +1546,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (!this.id) {
       throw new Error('channel id is not defined');
     }
-    return `${this.getClient().baseURL}/channels/${this.type}/${this.id}`;
+    return `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}/${encodeURIComponent(this.id)}`;
   };
 
   _checkInitialized() {
