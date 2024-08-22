@@ -1669,6 +1669,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
             parentSet: updatedMessagesSet,
             requestedPageSize: queryChannelsOptions?.message_limit || DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
             returnedPage: channelState.messages,
+            logger: this.logger,
           }),
         };
       }

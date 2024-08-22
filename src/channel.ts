@@ -1052,6 +1052,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         messagePaginationOptions: options?.messages,
         requestedPageSize: options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
         returnedPage: state.messages,
+        logger: this.getClient().logger,
       }),
     };
 

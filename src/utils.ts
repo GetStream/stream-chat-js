@@ -3,6 +3,7 @@ import {
   AscDesc,
   ExtendableGenerics,
   DefaultGenerics,
+  Logger,
   OwnUserBase,
   OwnUserResponse,
   UserResponse,
@@ -403,6 +404,7 @@ type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGeneric
   parentSet: MessageSet;
   requestedPageSize: number;
   returnedPage: MessageResponse<StreamChatGenerics>[];
+  logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
 
@@ -615,7 +617,7 @@ export const messageSetPagination = <StreamChatGenerics extends ExtendableGeneri
   params: MessagePaginationUpdatedParams<StreamChatGenerics>,
 ) => {
   if (params.parentSet.messages.length < params.returnedPage.length) {
-    console.error('Corrupted message set state: parent set size < returned page size');
+    params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
     return params.parentSet.pagination;
   }
 
