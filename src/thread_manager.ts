@@ -10,6 +10,7 @@ const MAX_QUERY_THREADS_LIMIT = 25;
 
 export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
+  existingReorderedThreadIds: string[];
   lastConnectionDownAt: Date | null;
   loadingNextPage: boolean;
   threadIdIndexMap: { [key: string]: number };
@@ -33,6 +34,8 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
     this.state = new StateStore<ThreadManagerState<SCG>>({
       active: false,
+      // existing threads which have gotten recent activity during the time the manager was inactive
+      existingReorderedThreadIds: [],
       threads: [],
       threadIdIndexMap: {},
       unreadThreadsCount: 0,
@@ -171,7 +174,14 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (!event.message || !event.message.parent_id) return;
       const parentId = event.message.parent_id;
 
-      const { threadIdIndexMap, nextCursor, threads, unseenThreadIds } = this.state.getLatestValue();
+      const {
+        threadIdIndexMap,
+        nextCursor,
+        threads,
+        unseenThreadIds,
+        existingReorderedThreadIds,
+        active,
+      } = this.state.getLatestValue();
 
       // prevents from handling replies until the threads have been loaded
       // (does not fill information for "unread threads" banner to appear)
@@ -179,12 +189,20 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       const existsLocally = typeof threadIdIndexMap[parentId] !== 'undefined';
 
-      if (existsLocally || unseenThreadIds.includes(parentId)) return;
+      // only register these changes during the time the thread manager is inactive
+      if (existsLocally && !existingReorderedThreadIds.includes(parentId) && !active) {
+        return this.state.next((current) => ({
+          ...current,
+          existingReorderedThreadIds: current.existingReorderedThreadIds.concat(parentId),
+        }));
+      }
 
-      return this.state.next((current) => ({
-        ...current,
-        unseenThreadIds: current.unseenThreadIds.concat(parentId),
-      }));
+      if (!existsLocally && !unseenThreadIds.includes(parentId)) {
+        return this.state.next((current) => ({
+          ...current,
+          unseenThreadIds: current.unseenThreadIds.concat(parentId),
+        }));
+      }
     };
 
     this.unsubscribeFunctions.add(this.client.on('notification.thread_message_new', handleNewReply).unsubscribe);
@@ -196,9 +214,9 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public reload = async () => {
-    const { threads, unseenThreadIds } = this.state.getLatestValue();
+    const { threads, unseenThreadIds, existingReorderedThreadIds } = this.state.getLatestValue();
 
-    if (!unseenThreadIds.length) return;
+    if (!unseenThreadIds.length && !existingReorderedThreadIds.length) return;
 
     const combinedLimit = threads.length + unseenThreadIds.length;
 
@@ -236,6 +254,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       this.state.next((current) => ({
         ...current,
         unseenThreadIds: [], // reset
+        existingReorderedThreadIds: [], // reset
         // TODO: extract merging logic and allow loadNextPage to merge as well (in combination with the cache thing)
         threads: newThreads, //.concat(existingFilteredThreads),
         nextCursor: data.next ?? null, // re-adjust next cursor

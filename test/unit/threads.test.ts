@@ -619,7 +619,7 @@ describe('Threads 2.0', () => {
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
         });
 
-        it('adds parentMessageId to the unseenThreadIds array on notification.thread_message_new', () => {
+        it('adds parentMessageId to the unseenThreadIds array', () => {
           // artificial first page load
           threadManager.state.partialNext({ nextCursor: null });
 
@@ -659,11 +659,13 @@ describe('Threads 2.0', () => {
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(1);
         });
 
-        it('skips if thread (parentMessageId) is already loaded within threads array', () => {
+        it('adds parentMessageId to the existingReorderedThreadIds if such thread is already loaded within threads array', () => {
           // artificial first page load
           threadManager.state.partialNext({ threads: [thread] });
 
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds).to.be.empty;
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().active).to.be.false;
 
           client.dispatchEvent({
             received_at: new Date().toISOString(),
@@ -672,6 +674,27 @@ describe('Threads 2.0', () => {
           });
 
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds).to.have.lengthOf(1);
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds[0]).to.equal(thread.id);
+        });
+
+        it('skips parentMessageId addition to the existingReorderedThreadIds if the ThreadManager is inactive', () => {
+          // artificial first page load
+          threadManager.state.partialNext({ threads: [thread] });
+          threadManager.activate();
+
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().active).to.be.true;
+
+          client.dispatchEvent({
+            received_at: new Date().toISOString(),
+            type: 'notification.thread_message_new',
+            message: generateMsg({ parent_id: thread.id }) as MessageResponse,
+          });
+
+          expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds).to.be.empty;
         });
       });
 
@@ -734,15 +757,39 @@ describe('Threads 2.0', () => {
       });
 
       describe('ThreadManager.reload', () => {
-        it('skips reload if unseenThreadIds array is empty', async () => {
+        it('skips reload if both unseenThreadIds and existingReorderedThreadIds arrays are empty', async () => {
+          const { unseenThreadIds, existingReorderedThreadIds } = threadManager.state.getLatestValue();
+
+          expect(unseenThreadIds).to.be.empty;
+          expect(existingReorderedThreadIds).to.be.empty;
+
           await threadManager.reload();
 
           expect(threadManager.state.getLatestValue().unseenThreadIds).to.be.empty;
+          expect(threadManager.state.getLatestValue().existingReorderedThreadIds).to.be.empty;
           expect(stubbedQueryThreads.notCalled).to.be.true;
         });
 
+        (['existingReorderedThreadIds', 'unseenThreadIds'] as const).forEach((bucketName) => {
+          it(`doesn't skip reload if ${bucketName} is not empty`, async () => {
+            threadManager.state.partialNext({ [bucketName]: ['t1'] });
+
+            expect(threadManager.state.getLatestValue()[bucketName]).to.have.lengthOf(1);
+
+            await threadManager.reload();
+
+            expect(threadManager.state.getLatestValue()[bucketName]).to.be.empty;
+            expect(stubbedQueryThreads.calledOnce).to.be.true;
+          });
+        });
+
         it('has been called with proper limits', async () => {
-          threadManager.state.next((current) => ({ ...current, threads: [thread], unseenThreadIds: ['t1'] }));
+          threadManager.state.next((current) => ({
+            ...current,
+            threads: [thread],
+            unseenThreadIds: ['t1'],
+            existingReorderedThreadIds: ['t2'],
+          }));
 
           await threadManager.reload();
 
