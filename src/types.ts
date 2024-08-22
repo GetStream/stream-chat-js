@@ -1052,7 +1052,7 @@ export type PaginationOptions = {
   id_lt?: string;
   id_lte?: string;
   limit?: number;
-  offset?: number;
+  offset?: number; // should be avoided with channel.query()
 };
 
 export type MessagePaginationOptions = PaginationOptions & {
@@ -2900,6 +2900,12 @@ export type ImportTask = {
 };
 
 export type MessageSetType = 'latest' | 'current' | 'new';
+export type MessageSet<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  isCurrent: boolean;
+  isLatest: boolean;
+  messages: FormatMessageResponse<StreamChatGenerics>[];
+  pagination: { hasNext: boolean; hasPrev: boolean };
+};
 
 export type PushProviderUpsertResponse = {
   push_provider: PushProvider;

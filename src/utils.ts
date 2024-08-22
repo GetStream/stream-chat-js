@@ -3,12 +3,15 @@ import {
   AscDesc,
   ExtendableGenerics,
   DefaultGenerics,
+  Logger,
   OwnUserBase,
   OwnUserResponse,
   UserResponse,
   MessageResponse,
   FormatMessageResponse,
   ReactionGroupResponse,
+  MessageSet,
+  MessagePaginationOptions,
 } from './types';
 import { AxiosRequestConfig } from 'axios';
 
@@ -396,3 +399,233 @@ function maybeGetReactionGroupsFallback(
 
   return null;
 }
+
+type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  parentSet: MessageSet;
+  requestedPageSize: number;
+  returnedPage: MessageResponse<StreamChatGenerics>[];
+  logger?: Logger;
+  messagePaginationOptions?: MessagePaginationOptions;
+};
+
+export function binarySearchByDateEqualOrNearestGreater(
+  array: {
+    created_at?: string;
+  }[],
+  targetDate: Date,
+): number {
+  let left = 0;
+  let right = array.length - 1;
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const midCreatedAt = array[mid].created_at;
+    if (!midCreatedAt) {
+      left += 1;
+      continue;
+    }
+    const midDate = new Date(midCreatedAt);
+
+    if (midDate.getTime() === targetDate.getTime()) {
+      return mid;
+    } else if (midDate.getTime() < targetDate.getTime()) {
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  return left;
+}
+
+const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  parentSet,
+  requestedPageSize,
+  returnedPage,
+  messagePaginationOptions,
+}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+  const newPagination = { ...parentSet.pagination };
+  if (!messagePaginationOptions?.created_at_around) return newPagination;
+  let hasPrev;
+  let hasNext;
+  let updateHasPrev;
+  let updateHasNext;
+  const createdAtAroundDate = new Date(messagePaginationOptions.created_at_around);
+  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
+
+  // expect ASC order (from oldest to newest)
+  const wholePageHasNewerMessages =
+    !!firstPageMsg?.created_at && new Date(firstPageMsg.created_at) > createdAtAroundDate;
+  const wholePageHasOlderMessages = !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
+
+  const requestedPageSizeNotMet =
+    requestedPageSize > parentSet.messages.length && requestedPageSize > returnedPage.length;
+  const noMoreMessages =
+    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    requestedPageSize > returnedPage.length;
+
+  if (wholePageHasNewerMessages) {
+    hasPrev = false;
+    updateHasPrev = true;
+    if (requestedPageSizeNotMet) {
+      hasNext = false;
+      updateHasNext = true;
+    }
+  } else if (wholePageHasOlderMessages) {
+    hasNext = false;
+    updateHasNext = true;
+    if (requestedPageSizeNotMet) {
+      hasPrev = false;
+      updateHasPrev = true;
+    }
+  } else if (noMoreMessages) {
+    hasNext = hasPrev = false;
+    updateHasPrev = updateHasNext = true;
+  } else {
+    const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
+      firstPageMsg?.id && firstPageMsg.id === parentSet.messages[0]?.id,
+      lastPageMsg?.id && lastPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
+    ];
+    updateHasPrev = firstPageMsgIsFirstInSet;
+    updateHasNext = lastPageMsgIsLastInSet;
+    const midPointByCount = Math.floor(returnedPage.length / 2);
+    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(returnedPage, createdAtAroundDate);
+
+    if (midPointByCreationDate !== -1) {
+      hasPrev = midPointByCount <= midPointByCreationDate;
+      hasNext = midPointByCount >= midPointByCreationDate;
+    }
+  }
+
+  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
+  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
+
+  return newPagination;
+};
+
+const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  parentSet,
+  requestedPageSize,
+  returnedPage,
+  messagePaginationOptions,
+}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+  const newPagination = { ...parentSet.pagination };
+  const { id_around } = messagePaginationOptions || {};
+  if (!id_around) return newPagination;
+  let hasPrev;
+  let hasNext;
+
+  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
+  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
+    firstPageMsg?.id === parentSet.messages[0]?.id,
+    lastPageMsg?.id === parentSet.messages.slice(-1)[0]?.id,
+  ];
+  let updateHasPrev = firstPageMsgIsFirstInSet;
+  let updateHasNext = lastPageMsgIsLastInSet;
+
+  const midPoint = Math.floor(returnedPage.length / 2);
+  const noMoreMessages =
+    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    requestedPageSize > returnedPage.length;
+
+  if (noMoreMessages) {
+    hasNext = hasPrev = false;
+    updateHasPrev = updateHasNext = true;
+  } else if (!returnedPage[midPoint]) {
+    return newPagination;
+  } else if (returnedPage[midPoint].id === id_around) {
+    hasPrev = hasNext = true;
+  } else {
+    let targetMsg;
+    const halves = [returnedPage.slice(0, midPoint), returnedPage.slice(midPoint)];
+    hasPrev = hasNext = true;
+    for (let i = 0; i < halves.length; i++) {
+      targetMsg = halves[i].find((message) => message.id === id_around);
+      if (targetMsg && i === 0) {
+        hasPrev = false;
+      }
+      if (targetMsg && i === 1) {
+        hasNext = false;
+      }
+    }
+  }
+
+  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
+  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
+
+  return newPagination;
+};
+
+const messagePaginationLinear = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  parentSet,
+  requestedPageSize,
+  returnedPage,
+  messagePaginationOptions,
+}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+  const newPagination = { ...parentSet.pagination };
+
+  let hasPrev;
+  let hasNext;
+
+  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
+  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
+    firstPageMsg?.id && firstPageMsg.id === parentSet.messages[0]?.id,
+    lastPageMsg?.id && lastPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
+  ];
+
+  const queriedNextMessages =
+    messagePaginationOptions &&
+    (messagePaginationOptions.created_at_after_or_equal ||
+      messagePaginationOptions.created_at_after ||
+      messagePaginationOptions.id_gt ||
+      messagePaginationOptions.id_gte);
+
+  const queriedPrevMessages =
+    typeof messagePaginationOptions === 'undefined'
+      ? true
+      : messagePaginationOptions.created_at_before_or_equal ||
+        messagePaginationOptions.created_at_before ||
+        messagePaginationOptions.id_lt ||
+        messagePaginationOptions.id_lte ||
+        messagePaginationOptions.offset;
+
+  const containsUnrecognizedOptionsOnly =
+    !queriedNextMessages &&
+    !queriedPrevMessages &&
+    !messagePaginationOptions?.id_around &&
+    !messagePaginationOptions?.created_at_around;
+
+  const hasMore = returnedPage.length >= requestedPageSize;
+
+  if (typeof queriedPrevMessages !== 'undefined' || containsUnrecognizedOptionsOnly) {
+    hasPrev = hasMore;
+  }
+  if (typeof queriedNextMessages !== 'undefined') {
+    hasNext = hasMore;
+  }
+  const returnedPageIsEmpty = returnedPage.length === 0;
+
+  if ((firstPageMsgIsFirstInSet || returnedPageIsEmpty) && typeof hasPrev !== 'undefined')
+    newPagination.hasPrev = hasPrev;
+  if ((lastPageMsgIsLastInSet || returnedPageIsEmpty) && typeof hasNext !== 'undefined')
+    newPagination.hasNext = hasNext;
+
+  return newPagination;
+};
+
+export const messageSetPagination = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  params: MessagePaginationUpdatedParams<StreamChatGenerics>,
+) => {
+  if (params.parentSet.messages.length < params.returnedPage.length) {
+    params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
+    return params.parentSet.pagination;
+  }
+
+  if (params.messagePaginationOptions?.created_at_around) {
+    return messagePaginationCreatedAtAround(params);
+  } else if (params.messagePaginationOptions?.id_around) {
+    return messagePaginationIdAround(params);
+  } else {
+    return messagePaginationLinear(params);
+  }
+};

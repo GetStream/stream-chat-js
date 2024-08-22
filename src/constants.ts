@@ -1,0 +1,4 @@
+export const DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE = 25;
+export const DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
+
+export const DEFAULT_MESSAGE_SET_PAGINATION = { hasNext: true, hasPrev: true };
