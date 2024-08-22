@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.39.0](https://github.com/GetStream/stream-chat-js/compare/v8.38.0...v8.39.0) (2024-08-22)
+
+
+### Features
+
+* add channel messages pagination indicators ([#1332](https://github.com/GetStream/stream-chat-js/issues/1332)) ([2ce6059](https://github.com/GetStream/stream-chat-js/commit/2ce6059932246623dc89c61afe58d2af94f84b65))
+
+
+### Bug Fixes
+
+* add an extra step after yarn link for the RN setup ([#1341](https://github.com/GetStream/stream-chat-js/issues/1341)) ([47fe71c](https://github.com/GetStream/stream-chat-js/commit/47fe71c9cafdf573534ab1485560d244c2ebad5c))
+* encode all the values interpolated to HTTP request URLs ([#1340](https://github.com/GetStream/stream-chat-js/issues/1340)) ([f7407da](https://github.com/GetStream/stream-chat-js/commit/f7407da7243c558fdd468b6281c96a133b1d89c3))
+
 ## [8.38.0](https://github.com/GetStream/stream-chat-js/compare/v8.37.0...v8.38.0) (2024-08-21)
 
 
