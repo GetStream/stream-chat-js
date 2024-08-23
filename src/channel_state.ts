@@ -138,8 +138,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse<StreamChatGenerics>): FormatMessageResponse<StreamChatGenerics> =>
-    formatMessage<StreamChatGenerics>(message);
+  formatMessage = (message: MessageResponse<StreamChatGenerics>) => formatMessage<StreamChatGenerics>(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
