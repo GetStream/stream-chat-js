@@ -37,6 +37,7 @@ import {
   MuteChannelAPIResponse,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
+  PartialUpdateMember,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   QueryMembersOptions,
@@ -295,6 +296,25 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           ...options,
         },
       },
+    );
+  }
+
+  /**
+   * partialUpdateMember - Partial update a member
+   *
+   * @param {string} user_id member user id
+   * @param {PartialUpdateMember<StreamChatGenerics>}  updates
+   *
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
+   */
+  async partialUpdateMember(user_id: string, updates: PartialUpdateMember<StreamChatGenerics>) {
+    if (!user_id) {
+      throw Error('Please specify the user id');
+    }
+
+    return await this.getClient().put<ChannelMemberResponse<StreamChatGenerics>>(
+      this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
+      updates,
     );
   }
 
