@@ -707,7 +707,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {ReturnType<ChannelState<StreamChatGenerics>['formatMessage']> | undefined} Description
    */
-  lastMessage() {
+  lastMessage(): FormatMessageResponse<StreamChatGenerics> | undefined {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
     let min = this.state.latestMessages.length - 5;
