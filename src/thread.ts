@@ -4,7 +4,6 @@ import { StateStore } from './store';
 import type {
   AscDesc,
   DefaultGenerics,
-  Event,
   ExtendableGenerics,
   FormatMessageResponse,
   MessagePaginationOptions,
@@ -13,19 +12,29 @@ import type {
   ThreadResponse,
   UserResponse,
 } from './types';
-import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
 
 type QueryRepliesOptions<SCG extends ExtendableGenerics> = {
   sort?: { created_at: AscDesc }[];
 } & MessagePaginationOptions & { user?: UserResponse<SCG>; user_id?: string };
 
 export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+  /**
+   * Determines if the thread is currently opened and on-screen. When the thread is active,
+   * all new messages are immediately marked as read.
+   */
   active: boolean;
   channel: Channel<SCG>;
   createdAt: Date;
+  deletedAt: Date | null;
+  isLoading: boolean;
   isStateStale: boolean;
   pagination: ThreadRepliesPagination;
-  parentMessage: FormatMessageResponse<SCG> | undefined;
+  /**
+   * Thread is identified by and has a one-to-one relation with its parent message.
+   * We use parent message id as a thread id.
+   */
+  parentMessage: FormatMessageResponse<SCG>;
   participants: ThreadResponse<SCG>['thread_participants'];
   read: ThreadReadState;
   replies: Array<FormatMessageResponse<SCG>>;
@@ -42,72 +51,45 @@ export type ThreadRepliesPagination = {
 
 export type ThreadUserReadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   lastReadAt: Date;
+  unreadMessageCount: number;
   user: UserResponse<SCG>;
   lastReadMessageId?: string;
-  unreadMessageCount?: number;
 };
 
 export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
-  ThreadUserReadState<SCG>
+  ThreadUserReadState<SCG> | undefined
 >;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 export const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
 
-/**
- * Request batching?
- *
- * When the internet connection drops and during downtime threads receive messages, each thread instance should
- * do a re-fetch with the latest known message in its list (loadNextPage) once connection restores. In case there are 20+
- * thread instances this would cause a creation of 20+requests. Going through a "batching" mechanism instead - these
- * requests would get aggregated and sent only once.
- *
- * batched req: {[threadId]: { id_gt: "lastKnownMessageId" }, ...}
- * batched res: {[threadId]: { messages: [...] }, ...}
- *
- * Obviously this requires BE support and a batching mechanism on the client-side.
- */
-
-/**
- * Targeted events?
- *
- * <message.id>.message.updated | <message.parent_id>.message.updated
- */
-
-// TODO: store users someplace and reference them from state as now replies might contain users with stale information
-
 export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ThreadState<SCG>>;
-  public id: string;
+  public readonly id: string;
 
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private pendingRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
+  private failedRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
 
   constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
     this.state = new StateStore<ThreadState<SCG>>({
-      // used as handler helper - actively mark read all of the incoming messages
-      // if the thread is active (visibly selected in the UI or main focal point in advanced list)
       active: false,
       channel: client.channel(threadData.channel.type, threadData.channel.id, threadData.channel),
       createdAt: new Date(threadData.created_at),
-      replies: threadData.latest_replies.map(formatMessage),
-      // thread is "parentMessage"
+      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+      isLoading: false,
+      isStateStale: false,
+      pagination: repliesPaginationFromInitialThread(threadData),
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
       read: formatReadState(threadData.read ?? []),
+      replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
-      pagination: repliesPaginationFromInitialThread(threadData),
-      // TODO: implement network status handler (network down, isStateStale: true, reset to false once state has been refreshed)
-      // review lazy-reload approach (You're viewing de-synchronized thread, click here to refresh) or refresh on notification.thread_message_new
-      // reset threads approach (the easiest approach but has to be done with ThreadManager - drops all the state and loads anew)
-      isStateStale: false,
     });
 
-    // parent_message_id is being re-used as thread.id
     this.id = threadData.parent_message_id;
     this.client = client;
   }
@@ -120,6 +102,10 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.state.getLatestValue().isStateStale;
   }
 
+  get ownUnreadCount() {
+    return ownUnreadCountSelector(this.client.userID)(this.state.getLatestValue());
+  }
+
   public activate = () => {
     this.state.partialNext({ active: true });
   };
@@ -128,10 +114,30 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.state.partialNext({ active: false });
   };
 
-  // take state of one instance and merge it to the current instance
+  public loadState = async () => {
+    if (this.state.getLatestValue().isLoading) {
+      return;
+    }
+
+    this.state.partialNext({ isLoading: true });
+
+    try {
+      const thread = await this.client.getThread(this.id, { watch: true });
+      this.hydrateState(thread);
+    } finally {
+      this.state.partialNext({ isLoading: false });
+    }
+  };
+
   public hydrateState = (thread: Thread<SCG>) => {
-    if (thread === this) return; // skip if the instances are the same
-    if (thread.id !== this.id) return; // disallow merging of states of instances that do not match ids
+    if (thread === this) {
+      // skip if the instances are the same
+      return;
+    }
+
+    if (thread.id !== this.id) {
+      throw new Error("Cannot hydrate thread state with using thread's state");
+    }
 
     const {
       read,
@@ -140,208 +146,179 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       parentMessage,
       participants,
       createdAt,
+      deletedAt,
       updatedAt,
     } = thread.state.getLatestValue();
 
-    this.state.next((current) => {
-      const pendingReplies = Array.from(this.pendingRepliesMap.values());
+    // Preserve pending replies and append them to the updated list of replies
+    const pendingReplies = Array.from(this.failedRepliesMap.values());
 
-      return {
-        ...current,
-        read,
-        replyCount,
-        replies: replies.length ? replies.concat(pendingReplies) : replies,
-        parentMessage,
-        participants,
-        createdAt,
-        updatedAt,
-        isStateStale: false,
-      };
+    this.state.partialNext({
+      read,
+      replyCount,
+      replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
+      parentMessage,
+      participants,
+      createdAt,
+      deletedAt,
+      updatedAt,
+      isStateStale: false,
     });
   };
 
-  /**
-   * Makes Thread instance listen to events and adjust its state accordingly.
-   */
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   public registerSubscriptions = () => {
-    // check whether this instance has subscriptions and is already listening for changes
-    if (this.unsubscribeFunctions.size) return;
+    if (this.unsubscribeFunctions.size) {
+      // Thread is already listening for events and changes
+      return;
+    }
 
-    // TODO: figure out why markAsRead needs to be wrapped like this (for tests to pass)
-    const throttledMarkAsRead = throttle(() => this.markAsRead(), DEFAULT_MARK_AS_READ_THROTTLE_DURATION, {
-      leading: true,
-      trailing: true,
-    });
+    this.unsubscribeFunctions.add(this.subscribeMarkActiveThreadRead());
+    this.unsubscribeFunctions.add(this.subscribeReloadActiveStaleThread());
+    this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
+    this.unsubscribeFunctions.add(this.subscribeNewReplies());
+    this.unsubscribeFunctions.add(this.subscribeRepliesRead());
+    this.unsubscribeFunctions.add(this.subscribeReplyDeleted());
+    this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
+  };
 
-    this.unsubscribeFunctions.add(
-      this.state.subscribeWithSelector(
-        (nextValue) => [nextValue.active, this.client.userID && nextValue.read[this.client.userID]?.unreadMessageCount],
-        ([active, unreadMessagesCount]) => {
-          if (!active || !unreadMessagesCount) return;
-
-          // mark thread as read whenever thread becomes active or is already active and unread messages count increases
-          throttledMarkAsRead();
-        },
-      ),
+  private subscribeMarkActiveThreadRead = () =>
+    this.state.subscribeWithSelector(
+      (nextValue) => [nextValue.active, ownUnreadCountSelector(this.client.userID)(nextValue)],
+      ([active, unreadMessageCount]) => {
+        if (!active || !unreadMessageCount) return;
+        this.markAsRead();
+      },
     );
 
-    const handleStateRecovery = async () => {
-      // TODO: add online status to prevent recovery attempts during the time the connection is down
-      try {
-        const thread = await this.client.getThread(this.id, { watch: true });
-        this.hydrateState(thread);
-      } catch (error) {
-        // TODO: handle recovery fail
-        console.warn(error);
-      } finally {
-        // this.updateLocalState('recovering', false);
-      }
-    };
-
-    // when the thread becomes active or it becomes stale while active (channel stops being watched or connection drops)
-    // the recovery handler pulls its latest state to replace with the current one
-    // failed messages are preserved and appended to the newly recovered replies
-    this.unsubscribeFunctions.add(
-      this.state.subscribeWithSelector(
-        (nextValue) => [nextValue.active, nextValue.isStateStale],
-        ([active, isStateStale]) => {
-          if (active && isStateStale) handleStateRecovery();
-        },
-      ),
-    );
-
-    this.unsubscribeFunctions.add(
-      // TODO: figure out why the current user is not receiving this event
-      this.client.on('user.watching.stop', (event) => {
-        if (!event.channel || !event.user || !this.client.userID || this.client.userID !== event.user.id) return;
-
-        const { channel } = this.state.getLatestValue();
-
-        if (event.channel.cid !== channel.cid) return;
-
-        this.state.partialNext({ isStateStale: true });
-      }).unsubscribe,
-    );
-
-    this.unsubscribeFunctions.add(
-      this.client.on('message.new', (event) => {
-        if (!event.message || !this.client.userID) return;
-        if (event.message.parent_id !== this.id) return;
-
-        const { isStateStale } = this.state.getLatestValue();
-
-        if (isStateStale) return;
-
-        if (this.pendingRepliesMap.has(event.message.id)) {
-          this.pendingRepliesMap.delete(event.message.id);
+  private subscribeReloadActiveStaleThread = () =>
+    this.state.subscribeWithSelector(
+      (nextValue) => [nextValue.active, nextValue.isStateStale],
+      ([active, isStateStale]) => {
+        if (active && isStateStale) {
+          this.loadState();
         }
-
-        this.upsertReplyLocally({
-          message: event.message,
-          // deal with timestampChanged only related to local user (optimistic updates)
-          timestampChanged: event.message.user?.id === this.client.userID,
-        });
-
-        if (event.message.user?.id !== this.client.userID) this.incrementOwnUnreadCount();
-        // TODO: figure out if event.user is better when it comes to event messages?
-        // if (event.user && event.user.id !== currentUserId) this.incrementOwnUnreadCount();
-      }).unsubscribe,
+      },
     );
 
-    this.unsubscribeFunctions.add(
-      this.client.on('message.read', (event) => {
-        if (!event.user || !event.created_at || !event.thread) return;
-        if (event.thread.parent_message_id !== this.id) return;
+  private subscribeMarkThreadStale = () =>
+    this.client.on('user.watching.stop', (event) => {
+      const { channel } = this.state.getLatestValue();
 
-        const userId = event.user.id;
-        const createdAt = event.created_at;
-        const user = event.user;
-
-        // FIXME: not sure if this is correct at all
-        this.state.next((current) => ({
-          ...current,
-          read: {
-            ...current.read,
-            [userId]: {
-              last_read: createdAt,
-              lastReadAt: new Date(createdAt),
-              user,
-              // TODO: rename all of these since it's formatted (find out where it's being used in the SDK)
-              unread_messages: 0,
-              // TODO: fix this (lastestReplies.at(-1) might include message that is still being sent, which is wrong)
-              last_read_message_id: 'unknown',
-            },
-          },
-        }));
-      }).unsubscribe,
-    );
-
-    const handleMessageUpdate = (event: Event<SCG>) => {
-      if (!event.message) return;
-
-      if (event.hard_delete && event.type === 'message.deleted' && event.message.parent_id === this.id) {
-        return this.deleteReplyLocally({ message: event.message });
+      if (!this.client.userID || this.client.userID !== event.user?.id || event.channel?.cid !== channel.cid) {
+        return;
       }
 
-      this.updateParentMessageOrReplyLocally(event.message);
-    };
+      this.state.partialNext({ isStateStale: true });
+    }).unsubscribe;
 
-    ['message.updated', 'message.deleted', 'reaction.new', 'reaction.deleted'].forEach((eventType) => {
-      this.unsubscribeFunctions.add(this.client.on(eventType, handleMessageUpdate).unsubscribe);
-    });
-  };
+  private subscribeNewReplies = () =>
+    this.client.on('message.new', (event) => {
+      if (!this.client.userID || event.message?.parent_id !== this.id) {
+        return;
+      }
 
-  public deregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-  };
+      const isOwnMessage = event.message.user?.id === this.client.userID;
 
-  public incrementOwnUnreadCount = () => {
-    const currentUserId = this.client.userID;
-    if (!currentUserId) return;
+      this.upsertReplyLocally({
+        message: event.message,
+        // Message from current user could have been added optimistically,
+        // so the actual timestamp might differ in the event
+        timestampChanged: isOwnMessage,
+      });
 
-    const channelOwnCapabilities = this.channel.data?.own_capabilities;
-    if (Array.isArray(channelOwnCapabilities) && !channelOwnCapabilities.includes('read-events')) return;
+      const { read } = this.state.getLatestValue();
+      const readUpdate: ThreadReadState = {};
 
-    this.state.next((current) => {
-      return {
+      for (const userId of Object.keys(read)) {
+        if (read[userId]) {
+          readUpdate[userId] = {
+            ...read[userId],
+            ...(userId === event.user?.id
+              ? {
+                  lastReadAt: event.created_at ? new Date(event.created_at) : new Date(),
+                  user: event.user,
+                  unreadMessageCount: 0,
+                }
+              : {
+                  unreadMessageCount: read[userId].unreadMessageCount + 1,
+                }),
+          };
+        }
+      }
+
+      this.state.partialNext({ read: readUpdate });
+    }).unsubscribe;
+
+  private subscribeRepliesRead = () =>
+    this.client.on('message.read', (event) => {
+      if (!event.user || !event.created_at || !event.thread) return;
+      if (event.thread.parent_message_id !== this.id) return;
+
+      const userId = event.user.id;
+      const createdAt = event.created_at;
+      const user = event.user;
+
+      this.state.next((current) => ({
         ...current,
         read: {
           ...current.read,
-          [currentUserId]: {
-            ...current.read[currentUserId],
-            unreadMessageCount: (current.read[currentUserId]?.unreadMessageCount ?? 0) + 1,
+          [userId]: {
+            lastReadAt: new Date(createdAt),
+            user,
+            lastReadMessageId: event.last_read_message_id,
+            unreadMessageCount: 0,
           },
         },
-      };
-    });
+      }));
+    }).unsubscribe;
+
+  private subscribeReplyDeleted = () =>
+    this.client.on('message.deleted', (event) => {
+      if (event.message?.parent_id === this.id && event.hard_delete) {
+        return this.deleteReplyLocally({ message: event.message });
+      }
+    }).unsubscribe;
+
+  private subscribeMessageUpdated = () => {
+    const unsubscribeFunctions = ['message.updated', 'reaction.new', 'reaction.deleted'].map(
+      (eventType) =>
+        this.client.on(eventType, (event) => {
+          if (event.message) {
+            this.updateParentMessageOrReplyLocally(event.message);
+          }
+        }).unsubscribe,
+    );
+
+    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  public unregisterSubscriptions = () => {
+    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
+    this.unsubscribeFunctions.clear();
   };
 
   public deleteReplyLocally = ({ message }: { message: MessageResponse<SCG> }) => {
-    const { replies: latestReplies } = this.state.getLatestValue();
+    const { replies } = this.state.getLatestValue();
 
     const index = findIndexInSortedArray({
       needle: formatMessage(message),
-      sortedArray: latestReplies,
-      // TODO: make following two configurable (sortDirection and created_at)
+      sortedArray: replies,
       sortDirection: 'ascending',
-      selectValueToCompare: (m) => m['created_at'].getTime(),
+      selectValueToCompare: (reply) => reply.created_at.getTime(),
     });
 
     const actualIndex =
-      latestReplies[index]?.id === message.id ? index : latestReplies[index - 1]?.id === message.id ? index - 1 : null;
+      replies[index]?.id === message.id ? index : replies[index - 1]?.id === message.id ? index - 1 : null;
 
-    if (actualIndex === null) return;
+    if (actualIndex === null) {
+      return;
+    }
 
-    this.state.next((current) => {
-      // TODO: replace with "Array.toSpliced" when applicable
-      const latestRepliesCopy = [...latestReplies];
-      latestRepliesCopy.splice(actualIndex, 1);
+    const updatedReplies = [...replies];
+    updatedReplies.splice(actualIndex, 1);
 
-      return {
-        ...current,
-        replies: latestRepliesCopy,
-      };
+    this.state.partialNext({
+      replies: updatedReplies,
     });
   };
 
@@ -349,17 +326,20 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     message,
     timestampChanged = false,
   }: {
-    message: MessageResponse<SCG> | FormatMessageResponse<SCG>;
+    message: MessageResponse<SCG>;
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
-      throw new Error('Message does not belong to this thread');
+      throw new Error('Reply does not belong to this thread');
     }
+
     const formattedMessage = formatMessage(message);
 
-    // store pending message to reference later in state merging
     if (message.status === 'failed') {
-      this.pendingRepliesMap.set(formattedMessage.id, formattedMessage);
+      // store failed reply so that it's not lost when reloading or hydrating
+      this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
+    } else if (this.failedRepliesMap.has(message.id)) {
+      this.failedRepliesMap.delete(message.id);
     }
 
     this.state.next((current) => ({
@@ -378,6 +358,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       const newData: typeof current = {
         ...current,
+        deletedAt: formattedMessage.deleted_at,
         parentMessage: formattedMessage,
         replyCount: message.reply_count ?? current.replyCount,
       };
@@ -401,33 +382,47 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public markAsRead = () => {
-    const { read } = this.state.getLatestValue();
-    const currentUserId = this.client.user?.id;
-    const { unreadMessageCount } = (currentUserId && read[currentUserId]) || {};
-    if (!unreadMessageCount) return;
-    return this.channel.markRead({ thread_id: this.id });
+  public markAsRead = async () => {
+    const currentUserId = this.client.userID;
+
+    if (currentUserId && this.ownUnreadCount) {
+      const currentUserRead = this.state.getLatestValue().read[currentUserId];
+
+      if (currentUserRead) {
+        this.state.next((current) => ({
+          ...current,
+          read: {
+            ...current.read,
+            [currentUserId]: {
+              ...currentUserRead,
+              unreadMessageCount: 0,
+            },
+          },
+        }));
+      }
+
+      return await this.channel.markRead({ thread_id: this.id });
+    }
+
+    return null;
   };
 
-  // moved from channel to thread directly (skipped getClient thing as this call does not need active WS connection)
   public queryReplies = ({
-    sort = DEFAULT_SORT,
     limit = DEFAULT_PAGE_LIMIT,
+    sort = DEFAULT_SORT,
     ...otherOptions
   }: QueryRepliesOptions<SCG> = {}) => {
-    if (!this.channel) throw new Error('queryReplies: This Thread intance has no channel bound to it');
-
     return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
   };
 
-  public loadPage = async (count: number) => {
+  public loadPage = async (count: number = DEFAULT_PAGE_LIMIT) => {
     const { pagination } = this.state.getLatestValue();
     const [loadingKey, cursorKey] =
       count > 0 ? (['isLoadingNext', 'nextCursor'] as const) : (['isLoadingPrev', 'prevCursor'] as const);
 
     if (pagination[loadingKey] || pagination[cursorKey] === null) return;
 
-    const queryOptions = { [count > 0 ? 'id_gt' : 'id_lt']: Math.abs(count) };
+    const queryOptions = { [count > 0 ? 'id_gt' : 'id_lt']: pagination[cursorKey] };
     const limit = Math.abs(count);
 
     this.state.partialNext({ pagination: { ...pagination, [loadingKey]: true } });
@@ -465,7 +460,7 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
     state[userRead.user.id] = {
       user: userRead.user,
       lastReadMessageId: userRead.last_read_message_id,
-      unreadMessageCount: userRead.unread_messages,
+      unreadMessageCount: userRead.unread_messages ?? 0,
       lastReadAt: new Date(userRead.last_read),
     };
     return state;
@@ -481,3 +476,9 @@ const repliesPaginationFromInitialThread = (thread: ThreadResponse): ThreadRepli
     isLoadingPrev: false,
   };
 };
+
+const ownUnreadCountSelector = (currentUserId: string | undefined) => <
+  SCG extends ExtendableGenerics = DefaultGenerics
+>(
+  state: ThreadState<SCG>,
+) => (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
