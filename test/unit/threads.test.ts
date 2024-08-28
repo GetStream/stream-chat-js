@@ -331,7 +331,7 @@ describe('Threads 2.0', () => {
             duration: '',
           });
 
-          await thread.loadPage(2);
+          await thread.loadNextPage({ limit: 2 });
 
           const state = thread.state.getLatestValue();
           expect(state.pagination.nextCursor).to.be.null;
@@ -348,7 +348,7 @@ describe('Threads 2.0', () => {
             duration: '',
           });
 
-          await thread.loadPage(2);
+          await thread.loadNextPage({ limit: 2 });
 
           const state = thread.state.getLatestValue();
           expect(state.pagination.nextCursor).to.equal(lastMessage.id);
@@ -360,7 +360,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
           const queryRepliesStub = sinon.stub(thread, 'queryReplies').resolves({ messages: [], duration: '' });
 
-          await thread.loadPage(42);
+          await thread.loadNextPage({ limit: 42 });
 
           expect(
             queryRepliesStub.calledOnceWith({
@@ -380,7 +380,7 @@ describe('Threads 2.0', () => {
             duration: '',
           });
 
-          await thread.loadPage(-2);
+          await thread.loadPrevPage({ limit: 2 });
 
           const state = thread.state.getLatestValue();
           expect(state.pagination.prevCursor).to.be.null;
@@ -397,7 +397,7 @@ describe('Threads 2.0', () => {
             duration: '',
           });
 
-          await thread.loadPage(-2);
+          await thread.loadPrevPage({ limit: 2 });
 
           const state = thread.state.getLatestValue();
           expect(state.pagination.prevCursor).to.equal(firstMessage.id);
@@ -409,7 +409,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
           const queryRepliesStub = sinon.stub(thread, 'queryReplies').resolves({ messages: [], duration: '' });
 
-          await thread.loadPage(-42);
+          await thread.loadPrevPage({ limit: 42 });
 
           expect(
             queryRepliesStub.calledOnceWith({
@@ -417,6 +417,34 @@ describe('Threads 2.0', () => {
               limit: 42,
             }),
           ).to.be.true;
+        });
+
+        it('appends messages when loading next page', async () => {
+          const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
+          const nextMessages = [generateMsg(), generateMsg()] as MessageResponse[];
+          const thread = createTestThread({ latest_replies: initialMessages, reply_count: 4 });
+          sinon.stub(thread, 'queryReplies').resolves({ messages: nextMessages, duration: '' });
+
+          await thread.loadNextPage({ limit: 2 });
+
+          const stateAfter = thread.state.getLatestValue();
+          const expectedMessageOrder = [...initialMessages, ...nextMessages].map(({ id }) => id).join(', ');
+          const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
+          expect(actualMessageOrder).to.equal(expectedMessageOrder);
+        });
+
+        it('prepends messages when loading previous page', async () => {
+          const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
+          const prevMessages = [generateMsg(), generateMsg()] as MessageResponse[];
+          const thread = createTestThread({ latest_replies: initialMessages, reply_count: 4 });
+          sinon.stub(thread, 'queryReplies').resolves({ messages: prevMessages, duration: '' });
+
+          await thread.loadPrevPage({ limit: 2 });
+
+          const stateAfter = thread.state.getLatestValue();
+          const expectedMessageOrder = [...prevMessages, ...initialMessages].map(({ id }) => id).join(', ');
+          const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
+          expect(actualMessageOrder).to.equal(expectedMessageOrder);
         });
       });
     });

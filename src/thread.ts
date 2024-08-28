@@ -415,10 +415,20 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
   };
 
-  public loadPage = async (count: number = DEFAULT_PAGE_LIMIT) => {
+  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
+    return this.loadPage(limit);
+  };
+
+  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
+    return this.loadPage(-limit);
+  };
+
+  private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
-    const [loadingKey, cursorKey] =
-      count > 0 ? (['isLoadingNext', 'nextCursor'] as const) : (['isLoadingPrev', 'prevCursor'] as const);
+    const [loadingKey, cursorKey, insertionMethodKey] =
+      count > 0
+        ? (['isLoadingNext', 'nextCursor', 'push'] as const)
+        : (['isLoadingPrev', 'prevCursor', 'unshift'] as const);
 
     if (pagination[loadingKey] || pagination[cursorKey] === null) return;
 
@@ -432,16 +442,25 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       const replies = data.messages.map(formatMessage);
       const maybeNextCursor = replies.at(count > 0 ? -1 : 0)?.id ?? null;
 
-      this.state.next((current) => ({
-        ...current,
+      this.state.next((current) => {
+        let nextReplies = current.replies;
+
         // prevent re-creating array if there's nothing to add to the current one
-        replies: replies.length ? current.replies.concat(replies) : current.replies,
-        pagination: {
-          ...current.pagination,
-          [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
-          [loadingKey]: false,
-        },
-      }));
+        if (replies.length > 0) {
+          nextReplies = [...current.replies];
+          nextReplies[insertionMethodKey](...replies);
+        }
+
+        return {
+          ...current,
+          replies: nextReplies,
+          pagination: {
+            ...current.pagination,
+            [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
+            [loadingKey]: false,
+          },
+        };
+      });
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((current) => ({
