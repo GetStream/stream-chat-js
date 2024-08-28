@@ -153,7 +153,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
           // thread with registered handlers has been removed or its signature changed (new instance)
           // deregister and let gc do its thing
           if (typeof newThreadIdIndexMap[t.id] === 'undefined' || newThreads[newThreadIdIndexMap[t.id]] !== t) {
-            t.deregisterSubscriptions();
+            t.unregisterSubscriptions();
           }
         });
       }
