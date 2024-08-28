@@ -1,5 +1,4 @@
 import type { StreamChat } from './client';
-import type { Handler } from './store';
 import { StateStore } from './store';
 import type { Thread } from './thread';
 import type { DefaultGenerics, Event, ExtendableGenerics, QueryThreadsOptions } from './types';
@@ -10,20 +9,25 @@ const MAX_QUERY_THREADS_LIMIT = 25;
 
 export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
-  existingReorderedThreadIds: string[];
-  lastConnectionDownAt: Date | null;
-  loadingNextPage: boolean;
+  isThreadOrderStale: boolean;
+  lastConnectionDropAt: Date | null;
+  pagination: ThreadManagerPagination;
+  ready: boolean;
   threadIdIndexMap: { [key: string]: number };
   threads: Thread<SCG>[];
   unreadThreadsCount: number;
+  /**
+   * List of threads that haven't been loaded in the list, but have received new messages
+   * since the latest reload. Useful to display a banner prompting to reload the thread list.
+   */
   unseenThreadIds: string[];
-  nextCursor?: string | null; // null means no next page available
-  // TODO?: implement once supported by BE
-  // previousCursor?: string | null;
-  // loadingPreviousPage: boolean;
 };
 
-type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
+export type ThreadManagerPagination = {
+  isLoading: boolean;
+  isLoadingNext: boolean;
+  nextCursor: string | null;
+};
 
 export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ThreadManagerState<SCG>>;
@@ -34,17 +38,18 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
     this.state = new StateStore<ThreadManagerState<SCG>>({
       active: false,
-      // existing threads which have gotten recent activity during the time the manager was inactive
-      existingReorderedThreadIds: [],
+      isThreadOrderStale: false,
       threads: [],
       threadIdIndexMap: {},
       unreadThreadsCount: 0,
-      // new threads or threads which have not been loaded and is not possible to paginate to anymore
-      // as these threads received new replies which moved them up in the list - used for the badge
       unseenThreadIds: [],
-      lastConnectionDownAt: null,
-      loadingNextPage: false,
-      nextCursor: undefined,
+      lastConnectionDropAt: null,
+      pagination: {
+        isLoading: false,
+        isLoadingNext: false,
+        nextCursor: null,
+      },
+      ready: false,
     });
   }
 
@@ -56,279 +61,204 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.state.partialNext({ active: false });
   };
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) return;
 
-    const handleUnreadThreadsCountChange = (event: Event<SCG>) => {
-      const { unread_threads: unreadThreadsCount } = event.me ?? event;
+    this.unsubscribeFunctions.add(this.subscribeUnreadThreadsCountChange());
+    this.unsubscribeFunctions.add(this.subscribeManageThreadSubscriptions());
+    this.unsubscribeFunctions.add(this.subscribeReloadOnActivation());
+    this.unsubscribeFunctions.add(this.subscribeNewReplies());
+    this.unsubscribeFunctions.add(this.subscribeRecoverAfterConnectionDrop());
+  };
 
-      if (typeof unreadThreadsCount === 'undefined') return;
-
-      this.state.partialNext({ unreadThreadsCount });
-    };
-
-    [
+  private subscribeUnreadThreadsCountChange = () => {
+    const unsubscribeFunctions = [
       'health.check',
       'notification.mark_read',
       'notification.thread_message_new',
       'notification.channel_deleted',
-    ].forEach((eventType) =>
-      this.unsubscribeFunctions.add(this.client.on(eventType, handleUnreadThreadsCountChange).unsubscribe),
+    ].map(
+      (eventType) =>
+        this.client.on(eventType, (event) => {
+          const { unread_threads: unreadThreadsCount } = event.me ?? event;
+          if (typeof unreadThreadsCount === 'number') {
+            this.state.partialNext({ unreadThreadsCount });
+          }
+        }).unsubscribe,
     );
 
-    // TODO: return to previous recovery option as state merging is now in place
-    const throttledHandleConnectionRecovery = throttle(
-      async () => {
-        const { lastConnectionDownAt, threads } = this.state.getLatestValue();
+    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
 
-        if (!lastConnectionDownAt) return;
+  private subscribeManageThreadSubscriptions = () =>
+    this.state.subscribeWithSelector(
+      (nextValue) => [nextValue.threads],
+      ([nextThreads], prev = [[]]) => {
+        const [prevThreads] = prev;
+        const removedThreads = prevThreads.filter((thread) => !nextThreads.includes(thread));
 
-        const channelCids = new Set<string>();
-        for (const thread of threads) {
-          if (!thread.channel) continue;
+        nextThreads.forEach((thread) => thread.registerSubscriptions());
+        removedThreads.forEach((thread) => thread.unregisterSubscriptions());
+      },
+    );
 
-          channelCids.add(thread.channel.cid);
-        }
+  private subscribeReloadOnActivation = () =>
+    this.state.subscribeWithSelector(
+      (nextValue) => [nextValue.active],
+      ([active]) => {
+        if (active) this.reload();
+      },
+    );
 
-        if (!channelCids.size) return;
+  private subscribeNewReplies = () =>
+    this.client.on('notification.thread_message_new', (event: Event<SCG>) => {
+      const parentId = event.message?.parent_id;
+      if (!parentId) return;
 
-        try {
-          // FIXME: syncing does not work for me
-          await this.client.sync(Array.from(channelCids), lastConnectionDownAt.toISOString(), { watch: true });
-          this.state.partialNext({ lastConnectionDownAt: null });
-        } catch (error) {
-          // TODO: if error mentions that the amount of events is more than 2k
-          // do a reload-type recovery (re-query threads and merge states)
+      const { threads, unseenThreadIds, ready } = this.state.getLatestValue();
+      if (!ready) return;
 
-          console.warn(error);
-        }
+      const isSeen = threads.findIndex((thread) => thread.id === parentId) !== -1;
+
+      if (isSeen) {
+        this.state.partialNext({ isThreadOrderStale: true });
+      } else if (!unseenThreadIds.includes(parentId)) {
+        this.state.partialNext({ unseenThreadIds: unseenThreadIds.concat(parentId) });
+      }
+    }).unsubscribe;
+
+  private subscribeRecoverAfterConnectionDrop = () => {
+    const unsubscribeConnectionDropped = this.client.on('connection.changed', (event) => {
+      if (event.online === false) {
+        this.state.next((current) => ({
+          ...current,
+          lastConnectionDropAt: current.lastConnectionDropAt ?? new Date(),
+        }));
+      }
+    }).unsubscribe;
+
+    const throttledHandleConnectionRecovered = throttle(
+      () => {
+        const { lastConnectionDropAt } = this.state.getLatestValue();
+        if (!lastConnectionDropAt) return;
+        this.reload({ force: true });
       },
       DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
-      {
-        leading: true,
-        trailing: true,
-      },
+      { trailing: true },
     );
 
-    this.unsubscribeFunctions.add(
-      this.client.on('connection.recovered', throttledHandleConnectionRecovery).unsubscribe,
-    );
+    const unsubscribeConnectionRecovered = this.client.on('connection.recovered', throttledHandleConnectionRecovered)
+      .unsubscribe;
 
-    this.unsubscribeFunctions.add(
-      this.client.on('connection.changed', (event) => {
-        if (typeof event.online === 'undefined') return;
-
-        const { lastConnectionDownAt } = this.state.getLatestValue();
-
-        if (!event.online && !lastConnectionDownAt) {
-          this.state.partialNext({ lastConnectionDownAt: new Date() });
-        }
-      }).unsubscribe,
-    );
-
-    this.unsubscribeFunctions.add(
-      this.state.subscribeWithSelector(
-        (nextValue) => [nextValue.active],
-        ([active]) => {
-          if (!active) return;
-
-          // automatically clear all the changes that happened "behind the scenes"
-          this.reload();
-        },
-      ),
-    );
-
-    const handleThreadsChange: Handler<readonly [Thread<SCG>[]]> = ([newThreads], previouslySelectedValue) => {
-      // create new threadIdIndexMap
-      const newThreadIdIndexMap = newThreads.reduce<ThreadManagerState['threadIdIndexMap']>((map, thread, index) => {
-        map[thread.id] ??= index;
-        return map;
-      }, {});
-
-      //  handle individual thread subscriptions
-      if (previouslySelectedValue) {
-        const [previousThreads] = previouslySelectedValue;
-        previousThreads.forEach((t) => {
-          // thread with registered handlers has been removed or its signature changed (new instance)
-          // deregister and let gc do its thing
-          if (typeof newThreadIdIndexMap[t.id] === 'undefined' || newThreads[newThreadIdIndexMap[t.id]] !== t) {
-            t.unregisterSubscriptions();
-          }
-        });
-      }
-      newThreads.forEach((t) => t.registerSubscriptions());
-
-      // publish new threadIdIndexMap
-      this.state.next((current) => ({ ...current, threadIdIndexMap: newThreadIdIndexMap }));
+    return () => {
+      unsubscribeConnectionDropped();
+      unsubscribeConnectionRecovered();
     };
-
-    this.unsubscribeFunctions.add(
-      // re-generate map each time the threads array changes
-      this.state.subscribeWithSelector((nextValue) => [nextValue.threads] as const, handleThreadsChange),
-    );
-
-    // TODO: handle parent message hard-deleted (extend state with \w hardDeletedThreadIds?)
-
-    const handleNewReply = (event: Event<SCG>) => {
-      if (!event.message || !event.message.parent_id) return;
-      const parentId = event.message.parent_id;
-
-      const {
-        threadIdIndexMap,
-        nextCursor,
-        threads,
-        unseenThreadIds,
-        existingReorderedThreadIds,
-        active,
-      } = this.state.getLatestValue();
-
-      // prevents from handling replies until the threads have been loaded
-      // (does not fill information for "unread threads" banner to appear)
-      if (!threads.length && nextCursor !== null) return;
-
-      const existsLocally = typeof threadIdIndexMap[parentId] !== 'undefined';
-
-      // only register these changes during the time the thread manager is inactive
-      if (existsLocally && !existingReorderedThreadIds.includes(parentId) && !active) {
-        return this.state.next((current) => ({
-          ...current,
-          existingReorderedThreadIds: current.existingReorderedThreadIds.concat(parentId),
-        }));
-      }
-
-      if (!existsLocally && !unseenThreadIds.includes(parentId)) {
-        return this.state.next((current) => ({
-          ...current,
-          unseenThreadIds: current.unseenThreadIds.concat(parentId),
-        }));
-      }
-    };
-
-    this.unsubscribeFunctions.add(this.client.on('notification.thread_message_new', handleNewReply).unsubscribe);
   };
 
-  public deregisterSubscriptions = () => {
-    // TODO: think about state reset or at least invalidation
+  public unregisterSubscriptions = () => {
+    this.state.getLatestValue().threads.forEach((thread) => thread.unregisterSubscriptions());
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
+    this.unsubscribeFunctions.clear();
   };
 
-  public reload = async () => {
-    const { threads, unseenThreadIds, existingReorderedThreadIds } = this.state.getLatestValue();
-
-    if (!unseenThreadIds.length && !existingReorderedThreadIds.length) return;
-
-    const combinedLimit = threads.length + unseenThreadIds.length;
+  public reload = async ({ force = false } = {}) => {
+    const { threads, unseenThreadIds, isThreadOrderStale, pagination, ready } = this.state.getLatestValue();
+    if (pagination.isLoading) return;
+    if (!force && ready && !unseenThreadIds.length && !isThreadOrderStale) return;
+    const limit = threads.length + unseenThreadIds.length;
 
     try {
-      const data = await this.queryThreads({
-        limit: combinedLimit <= MAX_QUERY_THREADS_LIMIT ? combinedLimit : MAX_QUERY_THREADS_LIMIT,
-      });
-
-      const { threads, threadIdIndexMap } = this.state.getLatestValue();
-
-      const newThreads: Thread<SCG>[] = [];
-      // const existingThreadIdsToFilterOut: string[] = [];
-
-      for (const thread of data.threads) {
-        const existingThread: Thread<SCG> | undefined = threads[threadIdIndexMap[thread.id]];
-
-        newThreads.push(existingThread ?? thread);
-
-        // replace state of threads which report stale state
-        // *(state can be considered as stale when channel associated with the thread stops being watched)
-        if (existingThread && existingThread.hasStaleState) {
-          existingThread.hydrateState(thread);
-        }
-
-        // if (existingThread) existingThreadIdsToFilterOut.push(existingThread.id);
-      }
-
-      // TODO: use some form of a "cache" for unused threads
-      // to reach for upon next pagination or re-query
-      // keep them subscribed and "running" behind the scenes but
-      // not in the list for multitude of reasons (clean cache on last pagination which returns empty array - nothing to pair cached threads to)
-      // (this.loadedThreadIdMap)
-      // const existingFilteredThreads = threads.filter(({ id }) => !existingThreadIdsToFilterOut.includes(id));
-
       this.state.next((current) => ({
         ...current,
-        unseenThreadIds: [], // reset
-        existingReorderedThreadIds: [], // reset
-        // TODO: extract merging logic and allow loadNextPage to merge as well (in combination with the cache thing)
-        threads: newThreads, //.concat(existingFilteredThreads),
-        nextCursor: data.next ?? null, // re-adjust next cursor
+        pagination: {
+          ...current.pagination,
+          isLoading: true,
+        },
       }));
+
+      const response = await this.queryThreads({ limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) });
+      const { threads: currentThreads, pagination } = this.state.getLatestValue();
+      const nextThreads: Thread<SCG>[] = [];
+
+      for (const incomingThread of response.threads) {
+        const existingThread = currentThreads.find(({ id }) => id === incomingThread.id);
+
+        if (existingThread) {
+          // Reuse thread instances if possible
+          nextThreads.push(existingThread);
+          if (existingThread.hasStaleState) {
+            existingThread.hydrateState(incomingThread);
+          }
+        } else {
+          nextThreads.push(incomingThread);
+        }
+      }
+
+      this.state.partialNext({
+        unseenThreadIds: [],
+        isThreadOrderStale: false,
+        threads: nextThreads,
+        pagination: {
+          ...pagination,
+          isLoading: false,
+          nextCursor: response.next ?? null,
+        },
+        ready: true,
+      });
     } catch (error) {
-      // TODO: loading states
-      console.error(error);
-    } finally {
-      // ...
+      this.client.logger('error', (error as Error).message);
+      this.state.next((current) => ({
+        ...current,
+        pagination: {
+          ...current.pagination,
+          isLoading: false,
+        },
+      }));
     }
   };
 
-  public queryThreads = async ({
-    limit = 25,
-    participant_limit = 10,
-    reply_limit = 10,
-    watch = true,
-    ...restOfTheOptions
-  }: QueryThreadsOptions = {}) => {
-    const optionsWithDefaults: WithRequired<
-      QueryThreadsOptions,
-      'reply_limit' | 'limit' | 'participant_limit' | 'watch'
-    > = {
-      limit,
-      participant_limit,
-      reply_limit,
-      watch,
-      ...restOfTheOptions,
-    };
-
-    const { threads, next } = await this.client.queryThreads(optionsWithDefaults);
-
-    // FIXME: currently this is done within threads based on reply_count property
-    // but that does not take into consideration sorting (only oldest -> newest)
-    // re-enable functionality bellow, and take into consideration sorting
-
-    // re-adjust next/previous cursors based on query options
-    // data.threads.forEach((thread) => {
-    //   thread.state.next((current) => ({
-    //     ...current,
-    //     nextCursor: current.latestReplies.length < optionsWithDefaults.reply_limit ? null : current.nextCursor,
-    //     previousCursor:
-    //       current.latestReplies.length < optionsWithDefaults.reply_limit ? null : current.previousCursor,
-    //   }));
-    // });
-
-    return { threads, next };
+  public queryThreads = (options: QueryThreadsOptions = {}) => {
+    return this.client.queryThreads({
+      limit: 25,
+      participant_limit: 10,
+      reply_limit: 10,
+      watch: true,
+      ...options,
+    });
   };
 
-  // remove `next` from options as that is handled internally
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
-    const { nextCursor, loadingNextPage } = this.state.getLatestValue();
+    const { pagination } = this.state.getLatestValue();
 
-    if (nextCursor === null || loadingNextPage) return;
-
-    const optionsWithNextCursor: QueryThreadsOptions = {
-      ...options,
-      next: nextCursor,
-    };
-
-    this.state.next((current) => ({ ...current, loadingNextPage: true }));
+    if (pagination.isLoadingNext || !pagination.nextCursor) return;
 
     try {
-      const data = await this.queryThreads(optionsWithNextCursor);
+      this.state.partialNext({ pagination: { ...pagination, isLoadingNext: true } });
+
+      const response = await this.queryThreads({
+        ...options,
+        next: pagination.nextCursor,
+      });
 
       this.state.next((current) => ({
         ...current,
-        threads: data.threads.length ? current.threads.concat(data.threads) : current.threads,
-        nextCursor: data.next ?? null,
+        threads: response.threads.length ? current.threads.concat(response.threads) : current.threads,
+        pagination: {
+          ...current.pagination,
+          nextCursor: response.next ?? null,
+          isLoadingNext: false,
+        },
       }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
-    } finally {
-      this.state.next((current) => ({ ...current, loadingNextPage: false }));
+      this.state.next((current) => ({
+        ...current,
+        pagination: {
+          ...current.pagination,
+          isLoadingNext: false,
+        },
+      }));
     }
   };
 }

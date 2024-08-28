@@ -114,7 +114,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.state.partialNext({ active: false });
   };
 
-  public loadState = async () => {
+  public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
       return;
     }
@@ -196,7 +196,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       (nextValue) => [nextValue.active, nextValue.isStateStale],
       ([active, isStateStale]) => {
         if (active && isStateStale) {
-          this.loadState();
+          this.reload();
         }
       },
     );
