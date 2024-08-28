@@ -959,6 +959,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
 };
 
 export type CreateCommandOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
