@@ -816,11 +816,7 @@ describe('Threads 2.0', () => {
     });
   });
 
-  describe.only('ThreadManager', () => {
-    //   describe('Initial State', () => {
-    //     // check initial state
-    //   });
-
+  describe('ThreadManager', () => {
     it('initializes properly', () => {
       const state = threadManager.state.getLatestValue();
       expect(state.threads).to.be.empty;
