@@ -451,6 +451,8 @@ describe('Threads 2.0', () => {
 
     describe('Subscription and Event Handlers', () => {
       it('marks active channel as read', () => {
+        const clock = sinon.useFakeTimers();
+
         const thread = createTestThread({
           read: [
             {
@@ -469,6 +471,7 @@ describe('Threads 2.0', () => {
         expect(stubbedMarkAsRead.called).to.be.false;
 
         thread.activate();
+        clock.runAll();
 
         const stateAfter = thread.state.getLatestValue();
         expect(stateAfter.active).to.be.true;
@@ -479,10 +482,12 @@ describe('Threads 2.0', () => {
           message: generateMsg({ parent_id: thread.id, user: { id: 'bob' } }) as MessageResponse,
           user: { id: 'bob' },
         });
+        clock.runAll();
 
         expect(stubbedMarkAsRead.calledTwice).to.be.true;
 
         thread.unregisterSubscriptions();
+        clock.restore();
       });
 
       it('reloads stale state when thread is active', async () => {

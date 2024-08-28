@@ -12,7 +12,7 @@ import type {
   ThreadResponse,
   UserResponse,
 } from './types';
-import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
 
 type QueryRepliesOptions<SCG extends ExtendableGenerics> = {
   sort?: { created_at: AscDesc }[];
@@ -63,7 +63,7 @@ export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = 
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
-export const DEFAULT_MARK_AS_READ_THROTTLE_DURATION = 1000;
+const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
 
 export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ThreadState<SCG>>;
@@ -181,14 +181,15 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
   };
 
-  private subscribeMarkActiveThreadRead = () =>
-    this.state.subscribeWithSelector(
+  private subscribeMarkActiveThreadRead = () => {
+    return this.state.subscribeWithSelector(
       (nextValue) => [nextValue.active, ownUnreadCountSelector(this.client.userID)(nextValue)],
       ([active, unreadMessageCount]) => {
         if (!active || !unreadMessageCount) return;
-        this.markAsRead();
+        this.throttledMarkAsRead();
       },
     );
+  };
 
   private subscribeReloadActiveStaleThread = () =>
     this.state.subscribeWithSelector(
@@ -218,6 +219,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       }
 
       const isOwnMessage = event.message.user?.id === this.client.userID;
+      const { active, read } = this.state.getLatestValue();
 
       this.upsertReplyLocally({
         message: event.message,
@@ -226,27 +228,40 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
         timestampChanged: isOwnMessage,
       });
 
-      const { read } = this.state.getLatestValue();
-      const readUpdate: ThreadReadState = {};
+      if (active) {
+        this.throttledMarkAsRead();
+      }
+
+      const nextRead: ThreadReadState = {};
 
       for (const userId of Object.keys(read)) {
         if (read[userId]) {
-          readUpdate[userId] = {
-            ...read[userId],
-            ...(userId === event.user?.id
-              ? {
-                  lastReadAt: event.created_at ? new Date(event.created_at) : new Date(),
-                  user: event.user,
-                  unreadMessageCount: 0,
-                }
-              : {
-                  unreadMessageCount: read[userId].unreadMessageCount + 1,
-                }),
-          };
+          let nextUserRead: ThreadUserReadState = read[userId];
+
+          if (userId === event.user?.id) {
+            // The user who just sent a message to the thread has no unread messages
+            // in that thread
+            nextUserRead = {
+              ...nextUserRead,
+              lastReadAt: event.created_at ? new Date(event.created_at) : new Date(),
+              user: event.user,
+              unreadMessageCount: 0,
+            };
+          } else if (active && userId === this.client.userID) {
+            // Do not increment unread count for the current user in an active thread
+          } else {
+            // Increment unread count for all users except the author of the new message
+            nextUserRead = {
+              ...nextUserRead,
+              unreadMessageCount: read[userId].unreadMessageCount + 1,
+            };
+          }
+
+          nextRead[userId] = nextUserRead;
         }
       }
 
-      this.state.partialNext({ read: readUpdate });
+      this.state.partialNext({ read: nextRead });
     }).unsubscribe;
 
   private subscribeRepliesRead = () =>
@@ -382,30 +397,15 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public markAsRead = async () => {
-    const currentUserId = this.client.userID;
-
-    if (currentUserId && this.ownUnreadCount) {
-      const currentUserRead = this.state.getLatestValue().read[currentUserId];
-
-      if (currentUserRead) {
-        this.state.next((current) => ({
-          ...current,
-          read: {
-            ...current.read,
-            [currentUserId]: {
-              ...currentUserRead,
-              unreadMessageCount: 0,
-            },
-          },
-        }));
-      }
-
-      return await this.channel.markRead({ thread_id: this.id });
+  public markAsRead = async ({ force = false }: { force?: boolean } = {}) => {
+    if (this.ownUnreadCount === 0 && !force) {
+      return null;
     }
 
-    return null;
+    return await this.channel.markRead({ thread_id: this.id });
   };
+
+  private throttledMarkAsRead = throttle(() => this.markAsRead(), MARK_AS_READ_THROTTLE_TIMEOUT, { trailing: true });
 
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,
