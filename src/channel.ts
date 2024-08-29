@@ -823,9 +823,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return response;
   }
 
-  // TODO: move to thread
   /**
-   * getReplies - List the message replies for a parent message
+   * getReplies - List the message replies for a parent message.
+   *
+   * The recommended way of working with threads is to use the Thread class.
    *
    * @param {string} parent_id The message parent id, ie the top of the thread
    * @param {MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}

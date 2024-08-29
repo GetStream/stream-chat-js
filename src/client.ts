@@ -409,8 +409,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
-
-    // reusing the same name the channel has (Channel.threads)
     this.threads = new ThreadManager({ client: this });
   }
 

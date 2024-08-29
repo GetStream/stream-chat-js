@@ -284,16 +284,15 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.pinnedMessages = result;
   }
 
-  // TODO: clean this up
   addReaction(
     reaction: ReactionResponse<StreamChatGenerics>,
     message?: MessageResponse<StreamChatGenerics>,
-    enforceUnique?: boolean,
+    enforce_unique?: boolean,
   ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforceUnique);
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforce_unique);
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;

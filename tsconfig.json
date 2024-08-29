@@ -5,7 +5,7 @@
     "baseUrl": "./src",
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "lib": ["DOM", "ESNext"],
+    "lib": ["DOM", "ES6"],
     "noEmitOnError": false,
     "noImplicitAny": true,
     "preserveConstEnums": true,
@@ -15,8 +15,7 @@
     "declarationMap": true,
     "declarationDir": "./dist/types",
     "module": "commonjs",
-    "target": "ES5",
-    "skipLibCheck": true
+    "target": "ES5"
   },
   "include": ["./src/**/*"]
 }
