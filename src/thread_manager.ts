@@ -279,9 +279,9 @@ function prepareThreadsUpdate<SCG extends ExtendableGenerics = DefaultGenerics>(
 
   return {
     threads,
-    threadsById: threads.reduce<Record<string, Thread<SCG>>>((acc, thread) => {
-      acc[thread.id] = thread;
-      return acc;
+    threadsById: threads.reduce<Record<string, Thread<SCG>>>((newThreadsById, thread) => {
+      newThreadsById[thread.id] = thread;
+      return newThreadsById;
     }, {}),
   };
 }
