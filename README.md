@@ -121,13 +121,26 @@ yarn start
 Open `metro.config.js` file and set value for watchFolders as
 
 ```javascript
+const streamChatRoot = '{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}/stream-chat-js'
+
 module.exports = {
+  // the rest of the metro config goes here
   ...
-  watchFolders: [projectRoot].concat(alternateRoots).concat(['{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}/stream-chat-js'])
+  watchFolders: [projectRoot].concat(alternateRoots).concat([streamChatRoot]),
+  resolver: {
+    // the other resolver configurations go here
+    ...
+    extraNodeModules: {
+      // the other extra node modules go here
+      ...
+      'stream-chat': streamChatRoot
+    }
+  }
 };
 ```
 
-Make sure to replace `{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}` with the correct path for stream-chat-js folder as per your directory structure
+Make sure to replace `{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}` with the correct path for the `stream-chat-js` folder as per your directory structure.
+
 Run in the root of this repo
 
 ```shell

@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "8.37.0",
+  "version": "8.39.0",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
@@ -43,7 +43,7 @@
     "form-data": "^4.0.0",
     "isomorphic-ws": "^4.0.1",
     "jsonwebtoken": "~9.0.0",
-    "ws": "^7.4.4"
+    "ws": "^7.5.10"
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",

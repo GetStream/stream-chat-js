@@ -8,6 +8,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { ChannelState, StreamChat, Channel } from '../../src';
+import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 
 const expect = chai.expect;
 
@@ -532,7 +533,9 @@ describe('ChannelState addMessagesSorted', function () {
 			const currentMessages = [generateMsg({ id: '10', date: '2020-01-01T00:00:03.001Z' }), ...overlap1];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
 			state.messageSets[0].isCurrent = false;
+			state.messageSets[0].pagination = { hasPrev: true, hasNext: false };
 			state.messageSets[1].isCurrent = true;
+			state.messageSets[1].pagination = { hasPrev: false, hasNext: true };
 			const newMessages = [...overlap1, generateMsg({ id: '12', date: '2020-01-01T00:00:14.001Z' }), ...overlap2];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 
@@ -544,6 +547,7 @@ describe('ChannelState addMessagesSorted', function () {
 			expect(state.messages[4].id).to.be.equal('14');
 			expect(state.messages).to.be.equal(state.latestMessages);
 			expect(state.messageSets.length).to.be.equal(1);
+			expect(state.messageSets[0].pagination).to.be.eql({ hasPrev: false, hasNext: false });
 		});
 	});
 });
@@ -821,6 +825,19 @@ describe('latestMessages', () => {
 		expect(state.latestMessages[1].id).to.be.equal(latestMessages[1].id);
 		expect(state.latestMessages[2].id).to.be.equal(latestMessages[2].id);
 		expect(state.latestMessages[3].id).to.be.equal(latestMessage.id);
+	});
+});
+
+describe('messagePagination', () => {
+	it('is initiated with defaults', () => {
+		const state = new ChannelState();
+		expect(state.messageSets[0].pagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
+	});
+	it('is retrieved as default if not set', () => {
+		const state = new ChannelState();
+		state.messageSets[0].pagination = undefined;
+		expect(state.messageSets[0].pagination).to.be.undefined;
+		expect(state.messagePagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
 	});
 });
 

@@ -6,6 +6,7 @@ import {
   ExtendableGenerics,
   FormatMessageResponse,
   MessageResponse,
+  MessageSet,
   MessageSetType,
   PendingMessageResponse,
   PollResponse,
@@ -14,6 +15,7 @@ import {
   UserResponse,
 } from './types';
 import { addToMessageList, formatMessage } from './utils';
+import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,
@@ -56,11 +58,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * The state manages these lists and merges them when lists overlap
    * The messages array contains the currently active set
    */
-  messageSets: {
-    isCurrent: boolean;
-    isLatest: boolean;
-    messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
-  }[] = [];
+  messageSets: MessageSet[] = [];
 
   constructor(channel: Channel<StreamChatGenerics>) {
     this._channel = channel;
@@ -107,6 +105,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   set latestMessages(messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>) {
     const index = this.messageSets.findIndex((s) => s.isLatest);
     this.messageSets[index].messages = messages;
+  }
+
+  get messagePagination() {
+    return this.messageSets.find((s) => s.isCurrent)?.pagination || DEFAULT_MESSAGE_SET_PAGINATION;
   }
 
   /**
@@ -705,7 +707,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   initMessages() {
-    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true }];
+    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true, pagination: DEFAULT_MESSAGE_SET_PAGINATION }];
   }
 
   /**
@@ -713,6 +715,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
+   * @param {number} limit The page size if the message has to be queried from the server
    */
   async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string, limit = 25) {
     let messageSetIndex: number;
@@ -808,7 +811,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
             targetMessageSetIndex = overlappingMessageSetIndices[0];
             // No new message set is created if newMessages only contains thread replies
           } else if (newMessages.some((m) => !m.parent_id)) {
-            this.messageSets.push({ messages: [], isCurrent: false, isLatest: false });
+            this.messageSets.push({
+              messages: [],
+              isCurrent: false,
+              isLatest: false,
+              pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+            });
             targetMessageSetIndex = this.messageSets.length - 1;
           }
           break;
@@ -834,6 +842,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
         sources.forEach((messageSet) => {
           target.isLatest = target.isLatest || messageSet.isLatest;
           target.isCurrent = target.isCurrent || messageSet.isCurrent;
+          target.pagination.hasPrev =
+            messageSet.messages[0].created_at < target.messages[0].created_at
+              ? messageSet.pagination.hasPrev
+              : target.pagination.hasPrev;
+          target.pagination.hasNext =
+            target.messages.slice(-1)[0].created_at < messageSet.messages.slice(-1)[0].created_at
+              ? messageSet.pagination.hasNext
+              : target.pagination.hasNext;
           messagesToAdd = [...messagesToAdd, ...messageSet.messages];
         });
         sources.forEach((s) => this.messageSets.splice(this.messageSets.indexOf(s), 1));
