@@ -14,7 +14,6 @@ export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics>
   pagination: ThreadManagerPagination;
   ready: boolean;
   threads: Thread<SCG>[];
-  threadsById: Record<string, Thread<SCG> | undefined>;
   unreadThreadsCount: number;
   /**
    * List of threads that haven't been loaded in the list, but have received new messages
@@ -33,6 +32,10 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ThreadManagerState<SCG>>;
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
+  private threadsByIdGetterCache: {
+    threads: ThreadManagerState<SCG>['threads'];
+    threadsById: Record<string, Thread<SCG> | undefined>;
+  };
 
   constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
@@ -40,7 +43,6 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       active: false,
       isThreadOrderStale: false,
       threads: [],
-      threadsById: {},
       unreadThreadsCount: 0,
       unseenThreadIds: [],
       lastConnectionDropAt: null,
@@ -51,6 +53,26 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       },
       ready: false,
     });
+
+    this.threadsByIdGetterCache = { threads: [], threadsById: {} };
+  }
+
+  public get threadsById() {
+    const { threads } = this.state.getLatestValue();
+
+    if (threads === this.threadsByIdGetterCache.threads) {
+      return this.threadsByIdGetterCache.threadsById;
+    }
+
+    const threadsById = threads.reduce<Record<string, Thread<SCG>>>((newThreadsById, thread) => {
+      newThreadsById[thread.id] = thread;
+      return newThreadsById;
+    }, {});
+
+    this.threadsByIdGetterCache.threads = threads;
+    this.threadsByIdGetterCache.threadsById = threadsById;
+
+    return threadsById;
   }
 
   public activate = () => {
@@ -92,12 +114,12 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeManageThreadSubscriptions = () =>
     this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.threads, nextValue.threadsById] as const,
-      ([nextThreads, nextThreadsById], prev) => {
+      (nextValue) => [nextValue.threads] as const,
+      ([nextThreads], prev) => {
         const [prevThreads = []] = prev ?? [];
         // Thread instance was removed if there's no thread with the given id at all,
         // or it was replaced with a new instance
-        const removedThreads = prevThreads.filter((thread) => thread !== nextThreadsById[thread.id]);
+        const removedThreads = prevThreads.filter((thread) => thread !== this.threadsById[thread.id]);
 
         nextThreads.forEach((thread) => thread.registerSubscriptions());
         removedThreads.forEach((thread) => thread.unregisterSubscriptions());
@@ -117,10 +139,10 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       const parentId = event.message?.parent_id;
       if (!parentId) return;
 
-      const { threadsById, unseenThreadIds, ready } = this.state.getLatestValue();
+      const { unseenThreadIds, ready } = this.state.getLatestValue();
       if (!ready) return;
 
-      if (threadsById[parentId]) {
+      if (this.threadsById[parentId]) {
         this.state.partialNext({ isThreadOrderStale: true });
       } else if (!unseenThreadIds.includes(parentId)) {
         this.state.partialNext({ unseenThreadIds: unseenThreadIds.concat(parentId) });
@@ -182,7 +204,8 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }));
 
       const response = await this.queryThreads({ limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) });
-      const { threadsById: currentThreads } = this.state.getLatestValue();
+
+      const currentThreads = this.threadsById;
       const nextThreads: Thread<SCG>[] = [];
 
       for (const incomingThread of response.threads) {
@@ -201,7 +224,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       this.state.next((current) => ({
         ...current,
-        ...prepareThreadsUpdate(current, nextThreads),
+        threads: nextThreads,
         unseenThreadIds: [],
         isThreadOrderStale: false,
         pagination: {
@@ -248,10 +271,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       this.state.next((current) => ({
         ...current,
-        ...prepareThreadsUpdate(
-          current,
-          response.threads.length ? current.threads.concat(response.threads) : current.threads,
-        ),
+        threads: response.threads.length ? current.threads.concat(response.threads) : current.threads,
         pagination: {
           ...current.pagination,
           nextCursor: response.next ?? null,
@@ -268,22 +288,5 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         },
       }));
     }
-  };
-}
-
-function prepareThreadsUpdate<SCG extends ExtendableGenerics = DefaultGenerics>(
-  state: ThreadManagerState<SCG>,
-  threads: Thread<SCG>[],
-): Partial<ThreadManagerState<SCG>> {
-  if (threads === state.threads) {
-    return {};
-  }
-
-  return {
-    threads,
-    threadsById: threads.reduce<Record<string, Thread<SCG>>>((newThreadsById, thread) => {
-      newThreadsById[thread.id] = thread;
-      return newThreadsById;
-    }, {}),
   };
 }

@@ -896,7 +896,6 @@ describe('Threads 2.0', () => {
           const thread = createTestThread();
           threadManager.state.partialNext({
             threads: [thread],
-            threadsById: { [thread.id]: thread },
             ready: true,
           });
 
@@ -962,7 +961,6 @@ describe('Threads 2.0', () => {
 
         threadManager.state.partialNext({
           threads: [thread1, thread2],
-          threadsById: { [thread1.id]: thread1, [thread2.id]: thread2 },
         });
 
         expect(registerThread1.calledOnce).to.be.true;
@@ -970,7 +968,6 @@ describe('Threads 2.0', () => {
 
         threadManager.state.partialNext({
           threads: [thread2, thread3],
-          threadsById: { [thread2.id]: thread2, [thread3.id]: thread3 },
         });
 
         expect(unregisterThread1.calledOnce).to.be.true;
@@ -984,7 +981,7 @@ describe('Threads 2.0', () => {
       });
     });
 
-    describe('Methods', () => {
+    describe('Methods & Getters', () => {
       let stubbedQueryThreads: sinon.SinonStub<
         Parameters<StreamChat['queryThreads']>,
         ReturnType<StreamChat['queryThreads']>
@@ -994,6 +991,29 @@ describe('Threads 2.0', () => {
         stubbedQueryThreads = sinon.stub(client, 'queryThreads').resolves({
           threads: [],
           next: undefined,
+        });
+      });
+
+      describe('threadsById', () => {
+        it('lazily generates & re-generates a proper lookup table', () => {
+          const thread1 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const thread2 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const thread3 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+
+          threadManager.state.partialNext({ threads: [thread1, thread2] });
+          const state1 = threadManager.state.getLatestValue();
+
+          expect(state1.threads).to.have.lengthOf(2);
+          expect(Object.keys(threadManager.threadsById)).to.have.lengthOf(2);
+          expect(threadManager.threadsById).to.have.keys(thread1.id, thread2.id);
+
+          threadManager.state.partialNext({ threads: [thread3] });
+          const state2 = threadManager.state.getLatestValue();
+
+          expect(state2.threads).to.have.lengthOf(1);
+          expect(Object.keys(threadManager.threadsById)).to.have.lengthOf(1);
+          expect(threadManager.threadsById).to.have.keys(thread3.id);
+          expect(threadManager.threadsById[thread3.id]).to.equal(thread3);
         });
       });
 
@@ -1074,7 +1094,6 @@ describe('Threads 2.0', () => {
           });
           threadManager.state.partialNext({
             threads: [existingThread],
-            threadsById: { [existingThread.id]: existingThread },
             unseenThreadIds: [newThread.id],
           });
           stubbedQueryThreads.resolves({
