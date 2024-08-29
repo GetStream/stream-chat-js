@@ -894,7 +894,11 @@ describe('Threads 2.0', () => {
 
         it('tracks thread order becoming stale', () => {
           const thread = createTestThread();
-          threadManager.state.partialNext({ threads: [thread], ready: true });
+          threadManager.state.partialNext({
+            threads: [thread],
+            threadsById: { [thread.id]: thread },
+            ready: true,
+          });
 
           const stateBefore = threadManager.state.getLatestValue();
           expect(stateBefore.isThreadOrderStale).to.be.false;
@@ -1062,7 +1066,11 @@ describe('Threads 2.0', () => {
           const newThread = createTestThread({
             thread_participants: [{ user_id: 'u1' }] as ThreadResponse['thread_participants'],
           });
-          threadManager.state.partialNext({ threads: [existingThread], unseenThreadIds: [newThread.id] });
+          threadManager.state.partialNext({
+            threads: [existingThread],
+            threadsById: { [existingThread.id]: existingThread },
+            unseenThreadIds: [newThread.id],
+          });
           stubbedQueryThreads.resolves({
             threads: [newThread],
             next: undefined,
