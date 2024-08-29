@@ -960,12 +960,18 @@ describe('Threads 2.0', () => {
         const [thread2, registerThread2, unregisterThread2] = createTestThreadAndSpySubscriptions();
         const [thread3, registerThread3, unregisterThread3] = createTestThreadAndSpySubscriptions();
 
-        threadManager.state.partialNext({ threads: [thread1, thread2] });
+        threadManager.state.partialNext({
+          threads: [thread1, thread2],
+          threadsById: { [thread1.id]: thread1, [thread2.id]: thread2 },
+        });
 
         expect(registerThread1.calledOnce).to.be.true;
         expect(registerThread2.calledOnce).to.be.true;
 
-        threadManager.state.partialNext({ threads: [thread2, thread3] });
+        threadManager.state.partialNext({
+          threads: [thread2, thread3],
+          threadsById: { [thread2.id]: thread2, [thread3.id]: thread3 },
+        });
 
         expect(unregisterThread1.calledOnce).to.be.true;
         expect(registerThread3.calledOnce).to.be.true;
