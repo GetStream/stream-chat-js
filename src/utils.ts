@@ -403,6 +403,7 @@ export function addToMessageList<T extends FormatMessageResponse>(
     needle: newMessage,
     sortedArray: messages,
     sortDirection: 'ascending',
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     selectValueToCompare: (m) => m[sortBy]!.getTime(),
   });
 

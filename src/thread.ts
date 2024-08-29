@@ -235,8 +235,10 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       const nextRead: ThreadReadState = {};
 
       for (const userId of Object.keys(read)) {
-        if (read[userId]) {
-          let nextUserRead: ThreadUserReadState = read[userId];
+        const userRead = read[userId];
+
+        if (userRead) {
+          let nextUserRead: ThreadUserReadState = userRead;
 
           if (userId === event.user?.id) {
             // The user who just sent a message to the thread has no unread messages
@@ -253,7 +255,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
             // Increment unread count for all users except the author of the new message
             nextUserRead = {
               ...nextUserRead,
-              unreadMessageCount: read[userId].unreadMessageCount + 1,
+              unreadMessageCount: userRead.unreadMessageCount + 1,
             };
           }
 
