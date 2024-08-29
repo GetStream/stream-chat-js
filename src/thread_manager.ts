@@ -130,10 +130,14 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private subscribeRecoverAfterConnectionDrop = () => {
     const unsubscribeConnectionDropped = this.client.on('connection.changed', (event) => {
       if (event.online === false) {
-        this.state.next((current) => ({
-          ...current,
-          lastConnectionDropAt: current.lastConnectionDropAt ?? new Date(),
-        }));
+        this.state.next((current) =>
+          current.lastConnectionDropAt
+            ? current
+            : {
+                ...current,
+                lastConnectionDropAt: new Date(),
+              },
+        );
       }
     }).unsubscribe;
 
