@@ -76,7 +76,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
-      channel: client.channel(threadData.channel.type, threadData.channel.id, threadData.channel),
+      channel: client.channel(threadData.channel.type, threadData.channel.id),
       createdAt: new Date(threadData.created_at),
       deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       isLoading: false,

@@ -55,7 +55,9 @@ describe('Threads 2.0', () => {
   describe('Thread', () => {
     it('initializes properly', () => {
       const thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });
+
       expect(thread.id).to.equal(parentMessageResponse.id);
+      expect(thread.channel.data).to.be.empty;
     });
 
     describe('Methods', () => {
@@ -999,6 +1001,8 @@ describe('Threads 2.0', () => {
           const thread1 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
           const thread2 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
           const thread3 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+
+          expect(threadManager.threadsById).to.be.empty;
 
           threadManager.state.partialNext({ threads: [thread1, thread2] });
           const state1 = threadManager.state.getLatestValue();
