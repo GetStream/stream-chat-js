@@ -312,7 +312,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error('Please specify the user id');
     }
 
-    return await this.getClient().put<ChannelMemberResponse<StreamChatGenerics>>(
+    return await this.getClient().patch<ChannelMemberResponse<StreamChatGenerics>>(
       this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
       updates,
     );
