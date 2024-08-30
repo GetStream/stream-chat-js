@@ -1,8 +1,9 @@
-import type { StreamChat } from './client';
 import { StateStore } from './store';
-import type { Thread } from './thread';
-import type { DefaultGenerics, Event, ExtendableGenerics, QueryThreadsOptions } from './types';
 import { throttle } from './utils';
+
+import type { StreamChat } from './client';
+import type { Thread } from './thread';
+import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, QueryThreadsOptions } from './types';
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -14,7 +15,7 @@ export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics>
   pagination: ThreadManagerPagination;
   ready: boolean;
   threads: Thread<SCG>[];
-  unreadThreadsCount: number;
+  unreadThreadCount: number;
   /**
    * List of threads that haven't been loaded in the list, but have received new messages
    * since the latest reload. Useful to display a banner prompting to reload the thread list.
@@ -43,7 +44,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       active: false,
       isThreadOrderStale: false,
       threads: [],
-      unreadThreadsCount: 0,
+      unreadThreadCount: 0,
       unseenThreadIds: [],
       lastConnectionDropAt: null,
       pagination: {
@@ -94,6 +95,10 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private subscribeUnreadThreadsCountChange = () => {
+    // initiate
+    const { unread_threads: unreadThreadCount = 0 } = (this.client.user as OwnUserResponse<SCG>) ?? {};
+    this.state.partialNext({ unreadThreadCount });
+
     const unsubscribeFunctions = [
       'health.check',
       'notification.mark_read',
@@ -102,9 +107,9 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     ].map(
       (eventType) =>
         this.client.on(eventType, (event) => {
-          const { unread_threads: unreadThreadsCount } = event.me ?? event;
-          if (typeof unreadThreadsCount === 'number') {
-            this.state.partialNext({ unreadThreadsCount });
+          const { unread_threads: unreadThreadCount } = event.me ?? event;
+          if (typeof unreadThreadCount === 'number') {
+            this.state.partialNext({ unreadThreadCount });
           }
         }).unsubscribe,
     );

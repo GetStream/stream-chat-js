@@ -849,8 +849,8 @@ describe('Threads 2.0', () => {
             unread_threads: expectedUnreadCount,
           });
 
-          const { unreadThreadsCount } = threadManager.state.getLatestValue();
-          expect(unreadThreadsCount).to.equal(expectedUnreadCount);
+          const { unreadThreadCount } = threadManager.state.getLatestValue();
+          expect(unreadThreadCount).to.equal(expectedUnreadCount);
         });
       });
 
