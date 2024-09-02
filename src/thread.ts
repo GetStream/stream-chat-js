@@ -491,7 +491,7 @@ const repliesPaginationFromInitialThread = (thread: ThreadResponse): ThreadRepli
   const latestRepliesContainsAllReplies = thread.latest_replies.length === thread.reply_count;
 
   return {
-    nextCursor: latestRepliesContainsAllReplies ? null : thread.latest_replies.at(-1)?.id ?? null,
+    nextCursor: null,
     prevCursor: latestRepliesContainsAllReplies ? null : thread.latest_replies.at(0)?.id ?? null,
     isLoadingNext: false,
     isLoadingPrev: false,
