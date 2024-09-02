@@ -11,11 +11,12 @@ export const generateThread = (channel, parent, opts = {}) => {
 		updated_at: new Date().toISOString(),
 		channel_cid: channel.cid,
 		last_message_at: new Date().toISOString(),
-		deleted_at: '',
+		deleted_at: undefined,
 		read: [],
 		reply_count: 0,
 		latest_replies: [],
 		thread_participants: [],
+		created_by_user_id: '',
 		...opts,
 	};
 };

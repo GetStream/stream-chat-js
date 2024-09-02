@@ -280,14 +280,13 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * formatMessage - Takes the message object. Parses the dates, sets __html
- * and sets the status to received if missing. Returns a message object
+ * Takes the message object, parses the dates, sets `__html`
+ * and sets the status to `received` if missing; returns a new message object.
  *
- * @param {MessageResponse<StreamChatGenerics>} message a message object
- *
+ * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
  */
 export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  message: MessageResponse<StreamChatGenerics>,
+  message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>,
 ): FormatMessageResponse<StreamChatGenerics> {
   return {
     ...message,
@@ -295,10 +294,11 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
      * @deprecated please use `html`
      */
     __html: message.html,
-    // parse the date..
+    // parse the dates
     pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
     updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+    deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
     status: message.status || 'received',
     reaction_groups: maybeGetReactionGroupsFallback(
       message.reaction_groups,
@@ -308,71 +308,124 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
   };
 }
 
-export function addToMessageList<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  messages: Array<FormatMessageResponse<StreamChatGenerics>>,
-  message: FormatMessageResponse<StreamChatGenerics>,
+export const findIndexInSortedArray = <T, L>({
+  needle,
+  sortedArray,
+  selectValueToCompare = (e) => e,
+  sortDirection = 'ascending',
+}: {
+  needle: T;
+  sortedArray: readonly T[];
+  /**
+   * In array of objects (like messages), pick a specific
+   * property to compare needle value to.
+   *
+   * @example
+   * ```ts
+   * selectValueToCompare: (message) => message.created_at.getTime()
+   * ```
+   */
+  selectValueToCompare?: (arrayElement: T) => L | T;
+  /**
+   * @default ascending
+   * @description
+   * ```md
+   * ascending  - [1,2,3,4,5...]
+   * descending - [...5,4,3,2,1]
+   * ```
+   */
+  sortDirection?: 'ascending' | 'descending';
+}) => {
+  if (!sortedArray.length) return 0;
+
+  let left = 0;
+  let right = sortedArray.length - 1;
+  let middle = 0;
+
+  const recalculateMiddle = () => {
+    middle = Math.round((left + right) / 2);
+  };
+
+  const actualNeedle = selectValueToCompare(needle);
+  recalculateMiddle();
+
+  while (left <= right) {
+    // if (actualNeedle === selectValueToCompare(sortedArray[middle])) return middle;
+
+    if (
+      (sortDirection === 'ascending' && actualNeedle < selectValueToCompare(sortedArray[middle])) ||
+      (sortDirection === 'descending' && actualNeedle > selectValueToCompare(sortedArray[middle]))
+    ) {
+      right = middle - 1;
+    } else {
+      left = middle + 1;
+    }
+
+    recalculateMiddle();
+  }
+
+  return left;
+};
+
+export function addToMessageList<T extends FormatMessageResponse>(
+  messages: readonly T[],
+  newMessage: T,
   timestampChanged = false,
   sortBy: 'pinned_at' | 'created_at' = 'created_at',
   addIfDoesNotExist = true,
 ) {
   const addMessageToList = addIfDoesNotExist || timestampChanged;
-  let messageArr = messages;
+  let newMessages = [...messages];
 
   // if created_at has changed, message should be filtered and re-inserted in correct order
   // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
   if (timestampChanged) {
-    messageArr = messageArr.filter((msg) => !(msg.id && message.id === msg.id));
+    newMessages = newMessages.filter((message) => !(message.id && newMessage.id === message.id));
   }
-
-  // Get array length after filtering
-  const messageArrayLength = messageArr.length;
 
   // for empty list just concat and return unless it's an update or deletion
-  if (messageArrayLength === 0 && addMessageToList) {
-    return messageArr.concat(message);
-  } else if (messageArrayLength === 0) {
-    return [...messageArr];
+  if (!newMessages.length && addMessageToList) {
+    return newMessages.concat(newMessage);
   }
 
-  const messageTime = (message[sortBy] as Date).getTime();
-  const messageIsNewest = (messageArr[messageArrayLength - 1][sortBy] as Date).getTime() < messageTime;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const messageTime = newMessage[sortBy]!.getTime();
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
 
   // if message is newer than last item in the list concat and return unless it's an update or deletion
   if (messageIsNewest && addMessageToList) {
-    return messageArr.concat(message);
-  } else if (messageIsNewest) {
-    return [...messageArr];
+    return newMessages.concat(newMessage);
   }
 
   // find the closest index to push the new message
-  let left = 0;
-  let middle = 0;
-  let right = messageArrayLength - 1;
-  while (left <= right) {
-    middle = Math.floor((right + left) / 2);
-    if ((messageArr[middle][sortBy] as Date).getTime() <= messageTime) left = middle + 1;
-    else right = middle - 1;
-  }
+  const insertionIndex = findIndexInSortedArray({
+    needle: newMessage,
+    sortedArray: messages,
+    sortDirection: 'ascending',
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    selectValueToCompare: (m) => m[sortBy]!.getTime(),
+  });
 
-  // message already exists and not filtered due to timestampChanged, update and return
-  if (!timestampChanged && message.id) {
-    if (messageArr[left] && message.id === messageArr[left].id) {
-      messageArr[left] = message;
-      return [...messageArr];
+  // message already exists and not filtered with timestampChanged, update and return
+  if (!timestampChanged && newMessage.id) {
+    if (newMessages[insertionIndex] && newMessage.id === newMessages[insertionIndex].id) {
+      newMessages[insertionIndex] = newMessage;
+      return newMessages;
     }
 
-    if (messageArr[left - 1] && message.id === messageArr[left - 1].id) {
-      messageArr[left - 1] = message;
-      return [...messageArr];
+    if (newMessages[insertionIndex - 1] && newMessage.id === newMessages[insertionIndex - 1].id) {
+      newMessages[insertionIndex - 1] = newMessage;
+      return newMessages;
     }
   }
 
-  // Do not add updated or deleted messages to the list if they do not already exist
-  // or have a timestamp change.
+  // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
   if (addMessageToList) {
-    messageArr.splice(left, 0, message);
+    newMessages.splice(insertionIndex, 0, newMessage);
   }
-  return [...messageArr];
+
+  return newMessages;
 }
 
 function maybeGetReactionGroupsFallback(
@@ -399,6 +452,39 @@ function maybeGetReactionGroupsFallback(
 
   return null;
 }
+
+// works exactly the same as lodash.throttle
+export const throttle = <T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  timeout = 200,
+  { leading = true, trailing = false }: { leading?: boolean; trailing?: boolean } = {},
+) => {
+  let runningTimeout: null | NodeJS.Timeout = null;
+  let storedArgs: Parameters<T> | null = null;
+
+  return (...args: Parameters<T>) => {
+    if (runningTimeout) {
+      if (trailing) storedArgs = args;
+      return;
+    }
+
+    if (leading) fn(...args);
+
+    const timeoutHandler = () => {
+      if (storedArgs) {
+        fn(...storedArgs);
+        storedArgs = null;
+        runningTimeout = setTimeout(timeoutHandler, timeout);
+
+        return;
+      }
+
+      runningTimeout = null;
+    };
+
+    runningTimeout = setTimeout(timeoutHandler, timeout);
+  };
+};
 
 type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   parentSet: MessageSet;
