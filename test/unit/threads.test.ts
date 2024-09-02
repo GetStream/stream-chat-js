@@ -328,6 +328,13 @@ describe('Threads 2.0', () => {
             latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
             reply_count: 3,
           });
+          thread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'cursor',
+            },
+          }));
           sinon.stub(thread, 'queryReplies').resolves({
             messages: [generateMsg()] as MessageResponse[],
             duration: '',
@@ -344,6 +351,13 @@ describe('Threads 2.0', () => {
             latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
             reply_count: 4,
           });
+          thread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'cursor',
+            },
+          }));
           const lastMessage = generateMsg() as MessageResponse;
           sinon.stub(thread, 'queryReplies').resolves({
             messages: [generateMsg(), lastMessage] as MessageResponse[],
@@ -360,6 +374,13 @@ describe('Threads 2.0', () => {
           const firstMessage = generateMsg() as MessageResponse;
           const lastMessage = generateMsg() as MessageResponse;
           const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
+          thread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: lastMessage.id,
+            },
+          }));
           const queryRepliesStub = sinon.stub(thread, 'queryReplies').resolves({ messages: [], duration: '' });
 
           await thread.loadNextPage({ limit: 42 });
@@ -425,6 +446,13 @@ describe('Threads 2.0', () => {
           const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
           const nextMessages = [generateMsg(), generateMsg()] as MessageResponse[];
           const thread = createTestThread({ latest_replies: initialMessages, reply_count: 4 });
+          thread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: initialMessages[1].id,
+            },
+          }));
           sinon.stub(thread, 'queryReplies').resolves({ messages: nextMessages, duration: '' });
 
           await thread.loadNextPage({ limit: 2 });
