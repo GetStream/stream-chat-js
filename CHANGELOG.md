@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.40.0](https://github.com/GetStream/stream-chat-js/compare/v8.39.0...v8.40.0) (2024-09-02)
+
+
+### Features
+
+* threads 2.0 ([#1330](https://github.com/GetStream/stream-chat-js/issues/1330)) ([4b1ffe8](https://github.com/GetStream/stream-chat-js/commit/4b1ffe8931ee4e96200e4f6b454d7043e15ae228))
+
+
+### Bug Fixes
+
+* declare channel.lastMessage return value type as possibly being undefined ([#1346](https://github.com/GetStream/stream-chat-js/issues/1346)) ([8e9bc86](https://github.com/GetStream/stream-chat-js/commit/8e9bc86a0764f10376368d1f829c9ed41aa0034a))
+
 ## [8.39.0](https://github.com/GetStream/stream-chat-js/compare/v8.38.0...v8.39.0) (2024-08-22)
 
 
