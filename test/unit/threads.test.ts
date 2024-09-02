@@ -320,7 +320,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
           const state = thread.state.getLatestValue();
           expect(state.pagination.prevCursor).not.to.be.null;
-          expect(state.pagination.nextCursor).not.to.be.null;
+          expect(state.pagination.nextCursor).to.be.null;
         });
 
         it('updates pagination after loading next page (end reached)', async () => {
@@ -1018,6 +1018,20 @@ describe('Threads 2.0', () => {
           expect(Object.keys(threadManager.threadsById)).to.have.lengthOf(1);
           expect(threadManager.threadsById).to.have.keys(thread3.id);
           expect(threadManager.threadsById[thread3.id]).to.equal(thread3);
+        });
+      });
+
+      describe('registerSubscriptions', () => {
+        it('properly initiates unreadThreadCount on subscribeUnreadThreadsCountChange call', () => {
+          client._setUser({ id: TEST_USER_ID, unread_threads: 4 });
+
+          const stateBefore = threadManager.state.getLatestValue();
+          expect(stateBefore.unreadThreadCount).to.equal(0);
+
+          threadManager.registerSubscriptions();
+
+          const stateAfter = threadManager.state.getLatestValue();
+          expect(stateAfter.unreadThreadCount).to.equal(4);
         });
       });
 
