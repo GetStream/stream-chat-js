@@ -3162,6 +3162,7 @@ export type MessageHistoryEntry<StreamChatGenerics extends ExtendableGenerics = 
   attachments?: Attachment<StreamChatGenerics>[];
   message_updated_by_id?: string;
   text?: string;
+  is_deleted?: boolean;
 };
 
 export type QueryMessageHistoryResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
