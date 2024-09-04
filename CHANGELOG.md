@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.1](https://github.com/GetStream/stream-chat-js/compare/v8.40.0...v8.40.1) (2024-09-04)
+
+
+### Bug Fixes
+
+* include system messages in unread count ([#1350](https://github.com/GetStream/stream-chat-js/issues/1350)) ([9f1d27a](https://github.com/GetStream/stream-chat-js/commit/9f1d27a0c5f652b625fc73bdd26aaf2d1189c317))
+
 ## [8.40.0](https://github.com/GetStream/stream-chat-js/compare/v8.39.0...v8.40.0) (2024-09-02)
 
 
