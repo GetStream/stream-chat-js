@@ -291,8 +291,13 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeReplyDeleted = () =>
     this.client.on('message.deleted', (event) => {
-      if (event.message?.parent_id === this.id && event.hard_delete) {
-        return this.deleteReplyLocally({ message: event.message });
+      if (event.message?.parent_id !== this.id) return;
+
+      if (event.hard_delete) {
+        this.deleteReplyLocally({ message: event.message });
+      } else {
+        // Handle soft delete (updates deleted_at timestamp)
+        this.upsertReplyLocally({ message: event.message });
       }
     }).unsubscribe;
 
