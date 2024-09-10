@@ -14,7 +14,7 @@ import {
   ReactionResponse,
   UserResponse,
 } from './types';
-import { addToMessageList } from './utils';
+import { addToMessageList, formatMessage } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
@@ -59,6 +59,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * The messages array contains the currently active set
    */
   messageSets: MessageSet[] = [];
+
   constructor(channel: Channel<StreamChatGenerics>) {
     this._channel = channel;
     this.watcher_count = 0;
@@ -134,26 +135,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   /**
-   * formatMessage - Takes the message object. Parses the dates, sets __html
-   * and sets the status to received if missing. Returns a message object
+   * Takes the message object, parses the dates, sets `__html`
+   * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse<StreamChatGenerics>} message a message object
-   *
+   * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
    */
-  formatMessage(message: MessageResponse<StreamChatGenerics>): FormatMessageResponse<StreamChatGenerics> {
-    return {
-      ...message,
-      /**
-       * @deprecated please use `html`
-       */
-      __html: message.html,
-      // parse the date..
-      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
-      created_at: message.created_at ? new Date(message.created_at) : new Date(),
-      updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
-      status: message.status || 'received',
-    };
-  }
+  formatMessage = (message: MessageResponse<StreamChatGenerics>) => formatMessage<StreamChatGenerics>(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
@@ -666,7 +653,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
           messages[i] = {
             ...m,
             type: 'deleted',
-            deleted_at: user.deleted_at,
+            deleted_at: user.deleted_at ? new Date(user.deleted_at) : null,
           };
         }
       }

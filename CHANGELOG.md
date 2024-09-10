@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.2](https://github.com/GetStream/stream-chat-js/compare/v8.40.1...v8.40.2) (2024-09-06)
+
+
+### Bug Fixes
+
+* **threads:** restore reply soft-deletion ([#1352](https://github.com/GetStream/stream-chat-js/issues/1352)) ([7204830](https://github.com/GetStream/stream-chat-js/commit/72048305e7e6795d23d4b5fae4a1fa96c4c9cd38))
+
+### [8.40.1](https://github.com/GetStream/stream-chat-js/compare/v8.40.0...v8.40.1) (2024-09-04)
+
+
+### Bug Fixes
+
+* include system messages in unread count ([#1350](https://github.com/GetStream/stream-chat-js/issues/1350)) ([9f1d27a](https://github.com/GetStream/stream-chat-js/commit/9f1d27a0c5f652b625fc73bdd26aaf2d1189c317))
+
+## [8.40.0](https://github.com/GetStream/stream-chat-js/compare/v8.39.0...v8.40.0) (2024-09-02)
+
+
+### Features
+
+* threads 2.0 ([#1330](https://github.com/GetStream/stream-chat-js/issues/1330)) ([4b1ffe8](https://github.com/GetStream/stream-chat-js/commit/4b1ffe8931ee4e96200e4f6b454d7043e15ae228))
+
+
+### Bug Fixes
+
+* declare channel.lastMessage return value type as possibly being undefined ([#1346](https://github.com/GetStream/stream-chat-js/issues/1346)) ([8e9bc86](https://github.com/GetStream/stream-chat-js/commit/8e9bc86a0764f10376368d1f829c9ed41aa0034a))
+
 ## [8.39.0](https://github.com/GetStream/stream-chat-js/compare/v8.38.0...v8.39.0) (2024-08-22)
 
 

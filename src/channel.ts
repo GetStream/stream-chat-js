@@ -727,7 +727,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {ReturnType<ChannelState<StreamChatGenerics>['formatMessage']> | undefined} Description
    */
-  lastMessage() {
+  lastMessage(): FormatMessageResponse<StreamChatGenerics> | undefined {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
     let min = this.state.latestMessages.length - 5;
@@ -844,7 +844,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
-   * getReplies - List the message replies for a parent message
+   * getReplies - List the message replies for a parent message.
+   *
+   * The recommended way of working with threads is to use the Thread class.
    *
    * @param {string} parent_id The message parent id, ie the top of the thread
    * @param {MessagePaginationOptions & { user?: UserResponse<StreamChatGenerics>; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
@@ -943,7 +945,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (message.parent_id && !message.show_in_channel) return false;
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
-    if (message.type === 'system') return false;
 
     // Return false if channel doesn't allow read events.
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
