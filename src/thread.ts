@@ -74,9 +74,17 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   private failedRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
 
   constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
+    const channel = client.channel(threadData.channel.type, threadData.channel.id, {
+      name: threadData.channel.name,
+    });
+
+    if (threadData.channel.members) {
+      channel._hydrateMembers(threadData.channel.members);
+    }
+
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
-      channel: client.channel(threadData.channel.type, threadData.channel.id),
+      channel,
       createdAt: new Date(threadData.created_at),
       deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       isLoading: false,

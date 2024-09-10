@@ -46,7 +46,7 @@ describe('Threads 2.0', () => {
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
-    channelResponse = generateChannel({ channel: { id: uuidv4() } }).channel as ChannelResponse;
+    channelResponse = generateChannel({ channel: { id: uuidv4(), name: 'Test channel' } }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
@@ -57,7 +57,7 @@ describe('Threads 2.0', () => {
       const thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });
 
       expect(thread.id).to.equal(parentMessageResponse.id);
-      expect(thread.channel.data).to.be.empty;
+      expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
 
     describe('Methods', () => {
