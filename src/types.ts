@@ -2472,6 +2472,11 @@ export type PartialUpdateChannel<StreamChatGenerics extends ExtendableGenerics =
   unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
 };
 
+export type PartialUpdateMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  set?: Partial<ChannelMemberResponse<StreamChatGenerics>>;
+  unset?: Array<keyof ChannelMemberResponse<StreamChatGenerics>>;
+};
+
 export type PartialUserUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   id: string;
   set?: Partial<UserResponse<StreamChatGenerics>>;
