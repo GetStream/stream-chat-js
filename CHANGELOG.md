@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.3](https://github.com/GetStream/stream-chat-js/compare/v8.40.2...v8.40.3) (2024-09-10)
+
+
+### Features
+
+* add partialUpdateMember endpoint ([#1344](https://github.com/GetStream/stream-chat-js/issues/1344)) ([b9b0393](https://github.com/GetStream/stream-chat-js/commit/b9b03935baf5e327d47615fade8f52f6046d0bbf))
+
+
+### Bug Fixes
+
+* hydrate channel instance from thread response ([#1354](https://github.com/GetStream/stream-chat-js/issues/1354)) ([35abae1](https://github.com/GetStream/stream-chat-js/commit/35abae1bac45f6abc5ebceb6a47b34abf2c7329e))
+
 ### [8.40.2](https://github.com/GetStream/stream-chat-js/compare/v8.40.1...v8.40.2) (2024-09-06)
 
 
