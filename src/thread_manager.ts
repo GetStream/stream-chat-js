@@ -208,7 +208,9 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         },
       }));
 
-      const response = await this.queryThreads({ limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) });
+      const response = await this.queryThreads({
+        limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
+      });
 
       const currentThreads = this.threadsById;
       const nextThreads: Thread<SCG>[] = [];
