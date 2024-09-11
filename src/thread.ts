@@ -77,10 +77,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
       name: threadData.channel.name,
     });
-
-    if (threadData.channel.members) {
-      channel._hydrateMembers(threadData.channel.members);
-    }
+    channel._hydrateMembers(threadData.channel.members ?? []);
 
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
