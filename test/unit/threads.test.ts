@@ -1099,6 +1099,14 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
+        it('reloads with a default limit if both threads and unseenThreadIds are empty', async () => {
+          threadManager.state.partialNext(({
+            threads: [],
+            unseenThreadIds: [],
+          }));
+          await threadManager.reload();
+          expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
+        })
         it('skips reload if there were no updates since the latest reload', async () => {
           threadManager.state.partialNext({ ready: true });
           await threadManager.reload();
