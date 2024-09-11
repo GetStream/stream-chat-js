@@ -46,7 +46,7 @@ describe('Threads 2.0', () => {
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
-    channelResponse = generateChannel({ channel: { id: uuidv4() } }).channel as ChannelResponse;
+    channelResponse = generateChannel({ channel: { id: uuidv4(), name: 'Test channel' } }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
@@ -57,7 +57,7 @@ describe('Threads 2.0', () => {
       const thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });
 
       expect(thread.id).to.equal(parentMessageResponse.id);
-      expect(thread.channel.data).to.be.empty;
+      expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
 
     describe('Methods', () => {
@@ -795,7 +795,7 @@ describe('Threads 2.0', () => {
       });
 
       describe('Event: message.deleted', () => {
-        it('deletes reply if the message was hard-deleted', () => {
+        it('deletes reply from local store if it was hard-deleted', () => {
           const createdAt = new Date().getTime();
           // five messages "created" second apart
           const messages = Array.from(
@@ -820,6 +820,41 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(4);
           expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to.be.undefined;
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('updates deleted_at property of the reply if it was soft deleted', () => {
+          const createdAt = new Date().getTime();
+          // five messages "created" second apart
+          const messages = Array.from(
+            { length: 5 },
+            (_, i) =>
+              generateMsg({
+                parent_id: parentMessageResponse.id,
+                created_at: new Date(createdAt + 1000 * i).toISOString(),
+              }) as MessageResponse,
+          );
+          const thread = createTestThread({ latest_replies: messages });
+          thread.registerSubscriptions();
+
+          const messageToDelete = messages[2];
+
+          expect(messageToDelete.deleted_at).to.be.undefined;
+
+          const deletedAt = new Date();
+          client.dispatchEvent({
+            type: 'message.deleted',
+            message: { ...messageToDelete, type: 'deleted', deleted_at: deletedAt.toISOString() },
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replies).to.have.lengthOf(5);
+          expect(stateAfter.replies[2].id).to.equal(messageToDelete.id);
+          expect(stateAfter.replies[2]).to.not.equal(messageToDelete);
+          expect(stateAfter.replies[2].deleted_at).to.be.a('date');
+          expect(stateAfter.replies[2].deleted_at!.toISOString()).to.equal(deletedAt.toISOString());
+          expect(stateAfter.replies[2].type).to.equal('deleted');
 
           thread.unregisterSubscriptions();
         });

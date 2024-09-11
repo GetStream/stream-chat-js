@@ -384,8 +384,10 @@ export function addToMessageList<T extends FormatMessageResponse>(
   }
 
   // for empty list just concat and return unless it's an update or deletion
-  if (!newMessages.length && addMessageToList) {
+  if (newMessages.length === 0 && addMessageToList) {
     return newMessages.concat(newMessage);
+  } else if (newMessages.length === 0) {
+    return newMessages;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -396,6 +398,8 @@ export function addToMessageList<T extends FormatMessageResponse>(
   // if message is newer than last item in the list concat and return unless it's an update or deletion
   if (messageIsNewest && addMessageToList) {
     return newMessages.concat(newMessage);
+  } else if (messageIsNewest) {
+    return newMessages;
   }
 
   // find the closest index to push the new message

@@ -37,6 +37,7 @@ import {
   MuteChannelAPIResponse,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
+  PartialUpdateMember,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   QueryMembersOptions,
@@ -296,6 +297,25 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           ...options,
         },
       },
+    );
+  }
+
+  /**
+   * partialUpdateMember - Partial update a member
+   *
+   * @param {string} user_id member user id
+   * @param {PartialUpdateMember<StreamChatGenerics>}  updates
+   *
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
+   */
+  async partialUpdateMember(user_id: string, updates: PartialUpdateMember<StreamChatGenerics>) {
+    if (!user_id) {
+      throw Error('Please specify the user id');
+    }
+
+    return await this.getClient().patch<ChannelMemberResponse<StreamChatGenerics>>(
+      this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
+      updates,
     );
   }
 
@@ -925,7 +945,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (message.parent_id && !message.show_in_channel) return false;
     if (message.user?.id === this.getClient().userID) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
-    if (message.type === 'system') return false;
 
     // Return false if channel doesn't allow read events.
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events'))
@@ -1634,12 +1653,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
 
     if (state.members) {
-      this.state.members = state.members.reduce((acc, member) => {
-        if (member.user) {
-          acc[member.user.id] = member;
-        }
-        return acc;
-      }, {} as ChannelState<StreamChatGenerics>['members']);
+      this._hydrateMembers(state.members);
     }
 
     return {
@@ -1655,6 +1669,15 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }
+  }
+
+  _hydrateMembers(members: ChannelMemberResponse<StreamChatGenerics>[]) {
+    this.state.members = members.reduce((acc, member) => {
+      if (member.user) {
+        acc[member.user.id] = member;
+      }
+      return acc;
+    }, {} as ChannelState<StreamChatGenerics>['members']);
   }
 
   _disconnect() {

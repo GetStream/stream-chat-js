@@ -74,9 +74,14 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   private failedRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
 
   constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
+    const channel = client.channel(threadData.channel.type, threadData.channel.id, {
+      name: threadData.channel.name,
+    });
+    channel._hydrateMembers(threadData.channel.members ?? []);
+
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
-      channel: client.channel(threadData.channel.type, threadData.channel.id),
+      channel,
       createdAt: new Date(threadData.created_at),
       deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       isLoading: false,
@@ -291,8 +296,13 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeReplyDeleted = () =>
     this.client.on('message.deleted', (event) => {
-      if (event.message?.parent_id === this.id && event.hard_delete) {
-        return this.deleteReplyLocally({ message: event.message });
+      if (event.message?.parent_id !== this.id) return;
+
+      if (event.hard_delete) {
+        this.deleteReplyLocally({ message: event.message });
+      } else {
+        // Handle soft delete (updates deleted_at timestamp)
+        this.upsertReplyLocally({ message: event.message });
       }
     }).unsubscribe;
 
