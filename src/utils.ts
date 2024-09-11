@@ -398,7 +398,7 @@ export function addToMessageList<T extends FormatMessageResponse>(
   // if message is newer than last item in the list concat and return unless it's an update or deletion
   if (messageIsNewest && addMessageToList) {
     return newMessages.concat(newMessage);
-  } else if (newMessages.length === 0) {
+  } else if (messageIsNewest) {
     return newMessages;
   }
 
