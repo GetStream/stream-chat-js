@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.5](https://github.com/GetStream/stream-chat-js/compare/v8.40.4...v8.40.5) (2024-09-11)
+
+
+### Bug Fixes
+
+* adding message to an empty message list ([#1358](https://github.com/GetStream/stream-chat-js/issues/1358)) ([599385d](https://github.com/GetStream/stream-chat-js/commit/599385d97b97e992433b04c00f63266f055b3099))
+* allow hydrating thread's channel with an empty members list ([#1359](https://github.com/GetStream/stream-chat-js/issues/1359)) ([0946f45](https://github.com/GetStream/stream-chat-js/commit/0946f450000154e259d9340e0f6a861a432b1764))
+
 ### [8.40.4](https://github.com/GetStream/stream-chat-js/compare/v8.40.3...v8.40.4) (2024-09-11)
 
 
