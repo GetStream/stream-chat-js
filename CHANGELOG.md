@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.4](https://github.com/GetStream/stream-chat-js/compare/v8.40.3...v8.40.4) (2024-09-11)
+
+
+### Bug Fixes
+
+* adding message to an empty message list ([#1356](https://github.com/GetStream/stream-chat-js/issues/1356)) ([acd55ca](https://github.com/GetStream/stream-chat-js/commit/acd55ca812b56dd551d749336386affb7f66732c))
+
 ### [8.40.3](https://github.com/GetStream/stream-chat-js/compare/v8.40.2...v8.40.3) (2024-09-10)
 
 
