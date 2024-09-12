@@ -79,6 +79,11 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
     channel._hydrateMembers(threadData.channel.members ?? []);
 
+    // for when `read` object is undefined and due to that unread count for the current user isn't increasing on new messages
+    const placeholderReadResponse = client.userID
+      ? [{ user: { id: client.userID }, unread_messages: 0, last_read: new Date().toISOString() }]
+      : [];
+
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
       channel,
@@ -89,7 +94,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       pagination: repliesPaginationFromInitialThread(threadData),
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
-      read: formatReadState(threadData.read ?? []),
+      read: formatReadState(threadData.read ?? placeholderReadResponse),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
