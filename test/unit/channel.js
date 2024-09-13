@@ -779,6 +779,17 @@ describe('Channels - Constructor', function () {
 		done();
 	});
 
+	it('custom data merges to the right with current data', function (done) {
+		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
+		expect(channel.cid).to.eql('messaging:brand_new_123');
+		expect(channel.id).to.eql('brand_new_123');
+		expect(channel.data).to.eql({ cool: true });
+		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
+		console.log(channel.data)
+		expect(channel.data).to.eql({ cool: true, custom_cool: true });
+		done();
+	});
+
 	it('default options', function (done) {
 		const channel = client.channel('messaging', '123');
 		expect(channel.cid).to.eql('messaging:123');

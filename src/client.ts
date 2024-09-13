@@ -1971,8 +1971,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
-        channel.data = custom;
-        channel._data = custom;
+        channel.data = { ...channel.data, ...custom };
+        channel._data = { ...channel._data, ...custom };
       }
       return channel;
     }
