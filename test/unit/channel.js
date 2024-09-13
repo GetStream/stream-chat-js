@@ -785,7 +785,7 @@ describe('Channels - Constructor', function () {
 		expect(channel.id).to.eql('brand_new_123');
 		expect(channel.data).to.eql({ cool: true });
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		console.log(channel.data)
+		console.log(channel.data);
 		expect(channel.data).to.eql({ cool: true, custom_cool: true });
 		done();
 	});
