@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.7](https://github.com/GetStream/stream-chat-js/compare/v8.40.6...v8.40.7) (2024-09-13)
+
+
+### Bug Fixes
+
+* merge custom data with current one rather than override ([#1364](https://github.com/GetStream/stream-chat-js/issues/1364)) ([ff59d54](https://github.com/GetStream/stream-chat-js/commit/ff59d5404733f358d87dbed18a9e7e92630d6098))
+
 ### [8.40.6](https://github.com/GetStream/stream-chat-js/compare/v8.40.5...v8.40.6) (2024-09-11)
 
 
