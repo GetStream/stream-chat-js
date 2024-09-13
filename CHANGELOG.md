@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.6](https://github.com/GetStream/stream-chat-js/compare/v8.40.5...v8.40.6) (2024-09-11)
+
+
+### Bug Fixes
+
+* avoid querying threads with 0 limit ([#1361](https://github.com/GetStream/stream-chat-js/issues/1361)) ([1393bac](https://github.com/GetStream/stream-chat-js/commit/1393bac4cac775bf9cbae4874be98b3242d0bea9))
+
 ### [8.40.5](https://github.com/GetStream/stream-chat-js/compare/v8.40.4...v8.40.5) (2024-09-11)
 
 
