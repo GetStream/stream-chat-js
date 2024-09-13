@@ -1423,7 +1423,7 @@ export type ReactionFilters<StreamChatGenerics extends ExtendableGenerics = Defa
 export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
   ContainsOperator<StreamChatGenerics['channelType']> & {
     members?:
-      | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
       | PrimitiveFilter<string[]>;
   } & {
@@ -1649,14 +1649,26 @@ export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends s
       $in?: PrimitiveFilter<ObjectType>[];
       $lt?: PrimitiveFilter<ObjectType>;
       $lte?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated handle the filter explicitly in the code. This is done for performance reasons.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated handle the filter explicitly in the code. This is done for performance reasons.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     }
   : {
       $eq?: PrimitiveFilter<ObjectType>;
       $exists?: boolean;
       $in?: PrimitiveFilter<ObjectType>[];
+      /**
+       * @deprecated handle the filter explicitly in the code. This is done for performance reasons.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated handle the filter explicitly in the code. This is done for performance reasons.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     };
 
