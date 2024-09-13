@@ -1423,7 +1423,7 @@ export type ReactionFilters<StreamChatGenerics extends ExtendableGenerics = Defa
 export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = QueryFilters<
   ContainsOperator<StreamChatGenerics['channelType']> & {
     members?:
-      | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$nin'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
       | PrimitiveFilter<string[]>;
   } & {
