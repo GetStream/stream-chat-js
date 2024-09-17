@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { generateUser } from './generateUser';
 
-export const generateThread = (channel, parent, opts = {}) => {
+export const generateThreadResponse = (channel, parent, opts = {}) => {
 	return {
 		parent_message_id: parent.id,
 		parent_message: parent,

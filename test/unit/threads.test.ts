@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
-import { generateThread } from './test-utils/generateThread';
+import { generateThreadResponse } from './test-utils/generateThreadResponse';
 
 import sinon from 'sinon';
 import {
@@ -35,7 +35,7 @@ describe('Threads 2.0', () => {
   } = {}) {
     return new Thread({
       client,
-      threadData: generateThread(
+      threadData: generateThreadResponse(
         { ...channelResponse, ...channelOverrides },
         { ...parentMessageResponse, ...parentMessageOverrides },
         overrides,
@@ -54,7 +54,12 @@ describe('Threads 2.0', () => {
 
   describe('Thread', () => {
     it('initializes properly', () => {
-      const thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });
+      const threadResponse = generateThreadResponse(channelResponse, parentMessageResponse);
+      const thread = new Thread({ client, threadData: threadResponse });
+      const state = thread.state.getLatestValue();
+
+      expect(threadResponse.read).to.have.lengthOf(0);
+      expect(state.read).to.have.keys([TEST_USER_ID]);
 
       expect(thread.id).to.equal(parentMessageResponse.id);
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
@@ -134,7 +139,7 @@ describe('Threads 2.0', () => {
         it('prevents updating a parent message if the ids do not match', () => {
           const thread = createTestThread();
           const message = generateMsg() as MessageResponse;
-          expect(() => thread.updateParentMessageLocally(message)).to.throw();
+          expect(() => thread.updateParentMessageLocally({ message })).to.throw();
         });
 
         it('updates parent message and related top-level properties', () => {
@@ -152,7 +157,7 @@ describe('Threads 2.0', () => {
             deleted_at: new Date().toISOString(),
           }) as MessageResponse;
 
-          thread.updateParentMessageLocally(updatedMessage);
+          thread.updateParentMessageLocally({ message: updatedMessage });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.deletedAt).to.be.not.null;
@@ -603,7 +608,7 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'message.read',
             user: { id: 'bob' },
-            thread: generateThread(channelResponse, generateMsg()) as ThreadResponse,
+            thread: generateThreadResponse(channelResponse, generateMsg()) as ThreadResponse,
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -631,7 +636,10 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'message.read',
             user: { id: 'bob' },
-            thread: generateThread(channelResponse, generateMsg({ id: parentMessageResponse.id })) as ThreadResponse,
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+            ) as ThreadResponse,
             created_at: createdAt.toISOString(),
           });
 
@@ -858,10 +866,35 @@ describe('Threads 2.0', () => {
 
           thread.unregisterSubscriptions();
         });
+
+        it('handles deletion of the thread (updates deleted_at and parentMessage properties)', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+
+          const parentMessage = generateMsg({
+            id: thread.id,
+            deleted_at: new Date().toISOString(),
+            type: 'deleted',
+          }) as MessageResponse;
+
+          expect(thread.id).to.equal(parentMessage.id);
+          expect(stateBefore.deletedAt).to.be.null;
+
+          client.dispatchEvent({ type: 'message.deleted', message: parentMessage });
+
+          const stateAfter = thread.state.getLatestValue();
+
+          expect(stateAfter.deletedAt).to.be.a('date');
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
+          expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(parentMessage.deleted_at);
+        });
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
-        (['message.updated', 'reaction.new', 'reaction.deleted'] as const).forEach((eventType) => {
+        (['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
           it(`updates reply or parent message on "${eventType}"`, () => {
             const thread = createTestThread();
             const updateParentMessageOrReplyLocallySpy = sinon.spy(thread, 'updateParentMessageOrReplyLocally');
