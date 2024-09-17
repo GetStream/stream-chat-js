@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.40.8](https://github.com/GetStream/stream-chat-js/compare/v8.40.7...v8.40.8) (2024-09-17)
+
+
+### Bug Fixes
+
+* **Thread:** parentMessage delete & initial read object ([#1366](https://github.com/GetStream/stream-chat-js/issues/1366)) ([3f29e32](https://github.com/GetStream/stream-chat-js/commit/3f29e32a28981bed5ad2820b431ba2dfb70be673))
+
 ### [8.40.7](https://github.com/GetStream/stream-chat-js/compare/v8.40.6...v8.40.7) (2024-09-13)
 
 
