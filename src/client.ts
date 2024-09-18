@@ -193,6 +193,7 @@ import {
   PollVote,
   CastVoteAPIResponse,
   QueryPollsFilters,
+  PollAnswersAPIResponse,
   PollSort,
   QueryPollsOptions,
   QueryVotesOptions,
@@ -3780,6 +3781,33 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Queries poll answers
+   * @param pollId
+   * @param filter
+   * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+   * @param userId string The user id (only serverside)
+   * @returns {APIResponse & PollAnswersAPIResponse} The poll votes
+   */
+  async queryPollAnswers(
+    pollId: string,
+    filter: QueryVotesFilters = {},
+    sort: VoteSort = [],
+    options: QueryVotesOptions = {},
+    userId?: string,
+  ): Promise<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>> {
+    const q = userId ? `?user_id=${userId}` : '';
+    return await this.post<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
+      {
+        filter: {...filter, is_answer: true },
         sort: normalizeQuerySort(sort),
         ...options,
       },

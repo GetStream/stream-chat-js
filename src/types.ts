@@ -3139,6 +3139,11 @@ export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics =
   next?: string;
 };
 
+export type PollAnswersAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  votes: PollAnswer<StreamChatGenerics>[];
+  next?: string;
+};
+
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   vote: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>);
 };
