@@ -208,6 +208,7 @@ import {
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
+import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 
 function isString(x: unknown): x is string {
@@ -221,6 +222,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   activeChannels: {
     [key: string]: Channel<StreamChatGenerics>;
   };
+  threads: ThreadManager<StreamChatGenerics>;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -340,6 +342,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
     this.activeChannels = {};
+
     // mapping between channel groups and configs
     this.configs = {};
     this.anonymous = false;
@@ -351,8 +354,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.consecutiveFailures = 0;
     this.insightMetrics = new InsightMetrics();
 
-    this.defaultWSTimeoutWithFallback = 6000;
-    this.defaultWSTimeout = 15000;
+    this.defaultWSTimeoutWithFallback = 6 * 1000;
+    this.defaultWSTimeout = 15 * 1000;
 
     this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
 
@@ -406,6 +409,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+    this.threads = new ThreadManager({ client: this });
   }
 
   /**
@@ -606,7 +610,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         tags: ['connection', 'client'],
       });
 
-      return Promise.resolve();
+      return;
     }
 
     this.clientID = `${this.userID}--${randomId()}`;
@@ -1967,8 +1971,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
-        channel.data = custom;
-        channel._data = custom;
+        channel.data = { ...channel.data, ...custom };
+        channel._data = { ...channel._data, ...custom };
       }
       return channel;
     }
@@ -2754,7 +2758,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
 
     return {
-      threads: res.threads.map((thread) => new Thread(this, thread)),
+      threads: res.threads.map((thread) => new Thread({ client: this, threadData: thread })),
       next: res.next,
     };
   }
@@ -2787,7 +2791,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       opts,
     );
 
-    return new Thread<StreamChatGenerics>(this, res.thread);
+    return new Thread<StreamChatGenerics>({ client: this, threadData: res.thread });
   }
 
   /**

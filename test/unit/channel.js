@@ -66,8 +66,8 @@ describe('Channel count unread', function () {
 		expect(channel._countMessageAsUnread({ user })).not.to.be.ok;
 	});
 
-	it('_countMessageAsUnread should return false for system messages', function () {
-		expect(channel._countMessageAsUnread({ type: 'system' })).not.to.be.ok;
+	it('_countMessageAsUnread should return true for system messages', function () {
+		expect(channel._countMessageAsUnread({ type: 'system' })).to.be.true;
 	});
 
 	it('_countMessageAsUnread should return false for muted user', function () {
@@ -776,6 +776,17 @@ describe('Channels - Constructor', function () {
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 		expect(channel.data).to.eql({ cool: true });
+		done();
+	});
+
+	it('custom data merges to the right with current data', function (done) {
+		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
+		expect(channel.cid).to.eql('messaging:brand_new_123');
+		expect(channel.id).to.eql('brand_new_123');
+		expect(channel.data).to.eql({ cool: true });
+		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
+		console.log(channel.data);
+		expect(channel.data).to.eql({ cool: true, custom_cool: true });
 		done();
 	});
 
