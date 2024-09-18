@@ -1658,14 +1658,26 @@ export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends s
       $in?: PrimitiveFilter<ObjectType>[];
       $lt?: PrimitiveFilter<ObjectType>;
       $lte?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     }
   : {
       $eq?: PrimitiveFilter<ObjectType>;
       $exists?: boolean;
       $in?: PrimitiveFilter<ObjectType>[];
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     };
 
