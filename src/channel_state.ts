@@ -9,6 +9,7 @@ import {
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
+  PollAnswer,
   PollResponse,
   PollVote,
   ReactionResponse,
@@ -495,7 +496,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
 
   // this handles the case when vote on poll is changed
   updatePollVote = (
-    pollVote: PollVote<StreamChatGenerics>,
+    pollVote: PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>,
     poll: PollResponse<StreamChatGenerics>,
     messageId: string,
   ) => {
@@ -511,9 +512,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       if (pollVote.option_id && poll.enforce_unique_vote) {
         // remove all previous votes where option_id is not empty
         ownVotes = ownVotes.filter((vote) => !vote.option_id);
-      } else if (pollVote.answer_text) {
+      } else if ((pollVote as PollAnswer<StreamChatGenerics>)?.answer_text) {
         // remove all previous votes where option_id is empty
-        ownVotes = ownVotes.filter((vote) => vote.answer_text);
+        ownVotes = ownVotes.filter((vote) => (vote as PollAnswer<StreamChatGenerics>)?.answer_text);
       }
 
       ownVotes.push(pollVote);
