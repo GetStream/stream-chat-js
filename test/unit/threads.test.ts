@@ -107,17 +107,21 @@ describe('Threads 2.0', () => {
           const optimisticMessage = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'aaa',
-            date: '2020-01-01T00:00:00Z',
+            created_at: '2020-01-01T00:00:00Z',
           }) as MessageResponse;
 
           const message = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'bbb',
-            date: '2020-01-01T00:00:10Z',
+            created_at: '2020-01-01T00:00:10Z',
           }) as MessageResponse;
 
           const thread = createTestThread({ latest_replies: [optimisticMessage, message] });
-          const udpatedMessage = { ...optimisticMessage, text: 'ccc', date: '2020-01-01T00:00:20Z' };
+          const updatedMessage: MessageResponse = {
+            ...optimisticMessage,
+            text: 'ccc',
+            created_at: '2020-01-01T00:00:20Z',
+          };
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.replies).to.have.lengthOf(2);
@@ -125,7 +129,7 @@ describe('Threads 2.0', () => {
           expect(stateBefore.replies[0].text).to.equal('aaa');
           expect(stateBefore.replies[1].id).to.equal(message.id);
 
-          thread.upsertReplyLocally({ message: udpatedMessage, timestampChanged: true });
+          thread.upsertReplyLocally({ message: updatedMessage, timestampChanged: true });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(2);
