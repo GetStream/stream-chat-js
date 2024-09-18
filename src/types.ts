@@ -1226,7 +1226,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   online?: boolean;
   parent_id?: string;
   poll?: PollResponse<StreamChatGenerics>;
-  poll_vote?: (PollVote<StreamChatGenerics> | PollAnswer);
+  poll_vote?: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>);
   queriedChannels?: {
     channels: ChannelAPIResponse<StreamChatGenerics>[];
     isLatestMessageSet?: boolean;
@@ -3141,12 +3141,12 @@ export type PollAnswer<StreamChatGenerics extends ExtendableGenerics = DefaultGe
 }
 
 export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  votes: (PollVote<StreamChatGenerics> | PollAnswer)[];
+  votes: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>)[];
   next?: string;
 };
 
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  vote: (PollVote<StreamChatGenerics> | PollAnswer);
+  vote: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>);
 };
 
 export type QueryMessageHistoryFilters = QueryFilters<
