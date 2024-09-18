@@ -3750,9 +3750,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: PollSort = [],
     options: QueryPollsOptions = {},
     userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse> {
+  ): Promise<APIResponse & QueryPollsResponse<StreamChatGenerics>> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
+    return await this.post<APIResponse & QueryPollsResponse<StreamChatGenerics>>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3774,9 +3774,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
     userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse> {
+  ): Promise<APIResponse & PollVotesAPIResponse<StreamChatGenerics>> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse>(
+    return await this.post<APIResponse & PollVotesAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter,
@@ -3797,12 +3797,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     filter: QueryMessageHistoryFilters = {},
     sort: QueryMessageHistorySort = [],
     options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/messages/history', {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
+  ): Promise<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>> {
+    return await this.post<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>>(
+      this.baseURL + '/messages/history',
+      {
+        filter,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
   }
 
   /**
