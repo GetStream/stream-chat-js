@@ -353,7 +353,7 @@ export const findIndexInSortedArray = <T, L>({
 
     const comparableMiddle = selectValueToCompare(sortedArray[middle]);
 
-    // if (comparableNeedle === comparableMiddle) return middle;
+    if (comparableNeedle === comparableMiddle) return middle;
 
     if (
       (sortDirection === 'ascending' && comparableNeedle < comparableMiddle) ||
@@ -499,36 +499,6 @@ type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGeneric
   messagePaginationOptions?: MessagePaginationOptions;
 };
 
-export function binarySearchByDateEqualOrNearestGreater(
-  array: {
-    created_at?: string;
-  }[],
-  targetDate: Date,
-): number {
-  let left = 0;
-  let right = array.length - 1;
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    const midCreatedAt = array[mid].created_at;
-    if (!midCreatedAt) {
-      left += 1;
-      continue;
-    }
-    const midDate = new Date(midCreatedAt);
-
-    if (midDate.getTime() === targetDate.getTime()) {
-      return mid;
-    } else if (midDate.getTime() < targetDate.getTime()) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  return left;
-}
-
 const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   parentSet,
   requestedPageSize,
@@ -580,7 +550,12 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
     updateHasPrev = firstPageMsgIsFirstInSet;
     updateHasNext = lastPageMsgIsLastInSet;
     const midPointByCount = Math.floor(returnedPage.length / 2);
-    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(returnedPage, createdAtAroundDate);
+    const midPointByCreationDate = findIndexInSortedArray<{ created_at: Date }, number>({
+      needle: { created_at: createdAtAroundDate },
+      sortedArray: returnedPage.map(formatMessage),
+      sortDirection: 'ascending',
+      selectValueToCompare: (message) => message.created_at.getTime(),
+    });
 
     if (midPointByCreationDate !== -1) {
       hasPrev = midPointByCount <= midPointByCreationDate;
