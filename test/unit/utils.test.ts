@@ -3,12 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { generateMsg } from './test-utils/generateMessage';
 
-import { addToMessageList, formatMessage } from '../../src/utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
 
 import type { FormatMessageResponse, MessageResponse } from '../../src';
 
 describe('addToMessageList', () => {
-  const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
+  const timestamp = new Date('2024-01-01T00:00:00.000Z').getTime();
   // messages with each created_at 10 seconds apart
   let messagesBefore: FormatMessageResponse[];
 
@@ -93,15 +93,91 @@ describe('addToMessageList', () => {
   });
 
   it("updates an existing message that wasn't filtered due to changed timestamp (timestampChanged)", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 30 * 1000, id: messagesBefore[4].id });
+    const newMessage = getNewFormattedMessage({ timeOffset: 30 * 1000, id: messagesBefore[3].id });
 
-    expect(messagesBefore[4].id).to.equal(newMessage.id);
-    expect(messagesBefore[4].text).to.not.equal(newMessage.text);
-    expect(messagesBefore[4]).to.not.equal(newMessage);
+    expect(messagesBefore[3].id).to.equal(newMessage.id);
+    expect(messagesBefore[3].text).to.not.equal(newMessage.text);
+    expect(messagesBefore[3]).to.not.equal(newMessage);
 
-    const messagesAfter = addToMessageList(messagesBefore, newMessage, false, 'created_at', false);
+    const messagesAfter = addToMessageList(messagesBefore, newMessage, false);
 
     expect(messagesAfter).to.have.length(5);
-    expect(messagesAfter[4]).to.equal(newMessage);
+    expect(messagesAfter[3]).to.equal(newMessage);
+  });
+});
+
+describe('findIndexInSortedArray', () => {
+  const timestamp = new Date('2024-01-01T00:00:00.000Z').getTime();
+
+  const generateMessages = ({ count = 10, sort = 'desc' }: { count?: number; sort?: 'asc' | 'desc' } = {}) => {
+    const messages = Array.from({ length: count }, (_, index) =>
+      generateMsg({ created_at: new Date(timestamp + index * 10 * 1000).toISOString() }),
+    );
+
+    if (sort === 'desc') {
+      messages.reverse();
+    }
+
+    return messages as MessageResponse[];
+  };
+
+  describe('ascending order', () => {
+    const messages = generateMessages({ sort: 'asc' }).map(formatMessage);
+
+    it('finds index of the message with closest matching created_at', () => {
+      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse);
+
+      const index = findIndexInSortedArray({
+        needle: newMessage,
+        sortedArray: messages,
+        sortDirection: 'ascending',
+        selectValueToCompare: (v) => v.created_at.getTime(),
+      });
+
+      expect(index).to.equal(3);
+    });
+
+    it('finds exact index', () => {
+      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 20 * 1000) }) as MessageResponse);
+
+      const index = findIndexInSortedArray({
+        needle: newMessage,
+        sortedArray: messages,
+        sortDirection: 'ascending',
+        selectValueToCompare: (v) => v.created_at.getTime(),
+      });
+
+      expect(index).to.equal(2);
+    });
+  });
+
+  describe('descending order', () => {
+    const messages = generateMessages({ sort: 'desc' }).map(formatMessage);
+
+    it('finds index of the message with closest matching created_at', () => {
+      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse);
+
+      const index = findIndexInSortedArray({
+        needle: newMessage,
+        sortedArray: messages,
+        sortDirection: 'descending',
+        selectValueToCompare: (v) => v.created_at.getTime(),
+      });
+
+      expect(index).to.equal(7);
+    });
+
+    it('finds exact index', () => {
+      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 10 * 1000) }) as MessageResponse);
+
+      const index = findIndexInSortedArray({
+        needle: newMessage,
+        sortedArray: messages,
+        sortDirection: 'descending',
+        selectValueToCompare: (v) => v.created_at.getTime(),
+      });
+
+      expect(index).to.equal(8);
+    });
   });
 });
