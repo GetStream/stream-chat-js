@@ -110,8 +110,8 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages).to.have.length(10);
 		state.addMessagesSorted([generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` })]);
 		expect(state.messages).to.have.length(11);
-		expect(state.messages[7].id).to.be.equal('7');
-		expect(state.messages[8].id).to.be.equal('id');
+		expect(state.messages[7].id).to.be.equal('id');
+		expect(state.messages[8].id).to.be.equal('7');
 	});
 
 	it('add lots of messages in order', async function () {
@@ -208,8 +208,22 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should add messages to new message set', () => {
 		const state = new ChannelState();
-		state.addMessagesSorted([generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })]);
-		state.addMessagesSorted([generateMsg({ id: '0' }), generateMsg({ id: '1' })], false, false, true, 'new');
+
+		state.addMessagesSorted([
+			generateMsg({ id: '12', created_at: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '13', created_at: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '14', created_at: '2020-01-01T00:00:00.003Z' }),
+		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '0', created_at: '2020-01-01T00:00:00.004Z' }),
+				generateMsg({ id: '1', created_at: '2020-01-01T00:00:00.005Z' }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
 
 		expect(state.messages.length).to.be.equal(3);
 		expect(state.messages[0].id).to.be.equal('12');
@@ -223,7 +237,11 @@ describe('ChannelState addMessagesSorted', function () {
 	it('should add messages to current message set', () => {
 		const state = new ChannelState();
 		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
+			[
+				generateMsg({ id: '12', created_at: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '13', created_at: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '14', created_at: '2020-01-01T00:00:00.003Z' }),
+			],
 			false,
 			false,
 			true,
@@ -239,7 +257,11 @@ describe('ChannelState addMessagesSorted', function () {
 	it('should add messages to latest message set', () => {
 		const state = new ChannelState();
 		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
+			[
+				generateMsg({ id: '12', created_at: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '13', created_at: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '14', created_at: '2020-01-01T00:00:00.003Z' }),
+			],
 			false,
 			false,
 			true,
@@ -258,17 +280,37 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it(`should add messages to latest message set when it's not currently active`, () => {
 		const state = new ChannelState();
+
 		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
+			[
+				generateMsg({ id: '12', created_at: '2020-01-01T00:00:00.001Z' }),
+				generateMsg({ id: '13', created_at: '2020-01-01T00:00:00.002Z' }),
+				generateMsg({ id: '14', created_at: '2020-01-01T00:00:00.003Z' }),
+			],
 			false,
 			false,
 			true,
 			'latest',
 		);
-		state.addMessagesSorted([generateMsg({ id: '0' }), generateMsg({ id: '1' })], false, false, true, 'new');
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '0', created_at: '2020-01-01T00:00:00.004Z' }),
+				generateMsg({ id: '1', created_at: '2020-01-01T00:00:00.005Z' }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
-		state.addMessagesSorted([generateMsg({ id: '15' })], false, false, true, 'latest');
+		state.addMessagesSorted(
+			[generateMsg({ id: '15', created_at: '2020-01-01T00:00:00.006Z' })],
+			false,
+			false,
+			true,
+			'latest',
+		);
 
 		expect(state.latestMessages.length).to.be.equal(4);
 		expect(state.latestMessages[3].id).to.be.equal('15');
@@ -684,10 +726,10 @@ describe('deleteUserMessages', () => {
 		const user1 = generateUser();
 		const user2 = generateUser();
 
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
+		const m1u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.001Z' });
+		const m2u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.002Z' });
+		const m1u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.003Z' });
+		const m2u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.004Z' });
 
 		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
 
@@ -719,10 +761,10 @@ describe('deleteUserMessages', () => {
 		const user1 = generateUser();
 		const user2 = generateUser();
 
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
+		const m1u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.001Z' });
+		const m2u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.002Z' });
+		const m1u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.003Z' });
+		const m2u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.004Z' });
 
 		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
 		expect(state.messages).to.have.length(4);
@@ -755,10 +797,10 @@ describe('updateUserMessages', () => {
 		let user1 = generateUser();
 		const user2 = generateUser();
 
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
+		const m1u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.001Z' });
+		const m2u1 = generateMsg({ user: user1, created_at: '2020-01-01T00:00:00.002Z' });
+		const m1u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.003Z' });
+		const m2u2 = generateMsg({ user: user2, created_at: '2020-01-01T00:00:00.004Z' });
 
 		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
 
@@ -785,7 +827,11 @@ describe('updateUserMessages', () => {
 describe('latestMessages', () => {
 	it('should return latest messages - if they are the current message set', () => {
 		const state = new ChannelState();
-		const messages = [generateMsg({ id: '1' }), generateMsg({ id: '2' }), generateMsg({ id: '3' })];
+		const messages = [
+			generateMsg({ id: '1', created_at: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '2', created_at: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '3', created_at: '2020-01-01T00:00:00.003Z' }),
+		];
 		state.addMessagesSorted(messages);
 
 		expect(state.latestMessages.length).to.be.equal(messages.length);
@@ -796,7 +842,11 @@ describe('latestMessages', () => {
 
 	it('should return latest messages - if they are not the current message set', () => {
 		const state = new ChannelState();
-		const latestMessages = [generateMsg({ id: '1' }), generateMsg({ id: '2' }), generateMsg({ id: '3' })];
+		const latestMessages = [
+			generateMsg({ id: '1', created_at: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '2', created_at: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '3', created_at: '2020-01-01T00:00:00.003Z' }),
+		];
 		state.addMessagesSorted(latestMessages);
 		const newMessages = [generateMsg({ id: '0' })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');
@@ -811,7 +861,11 @@ describe('latestMessages', () => {
 
 	it('should return latest messages - if they are not the current message set and new messages received', () => {
 		const state = new ChannelState();
-		const latestMessages = [generateMsg({ id: '1' }), generateMsg({ id: '2' }), generateMsg({ id: '3' })];
+		const latestMessages = [
+			generateMsg({ id: '1', created_at: '2020-01-01T00:00:00.001Z' }),
+			generateMsg({ id: '2', created_at: '2020-01-01T00:00:00.002Z' }),
+			generateMsg({ id: '3', created_at: '2020-01-01T00:00:00.003Z' }),
+		];
 		state.addMessagesSorted(latestMessages);
 		const newMessages = [generateMsg({ id: '0' })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');

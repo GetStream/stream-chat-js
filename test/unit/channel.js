@@ -1275,9 +1275,13 @@ describe('Channel.query', async () => {
 	it('should update pagination for queried message set to prevent more pagination', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
+		const timestamp = new Date('2024-01-01T00:00:00.000Z').getTime();
+
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, generateMsg),
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, (_, index) =>
+				generateMsg({ created_at: new Date(timestamp + index * 1000).toISOString() }),
+			),
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
