@@ -3027,8 +3027,6 @@ export type PollResponse<
   vote_counts_by_option: Record<string, number>;
   allow_answers?: boolean;
   allow_user_suggested_options?: boolean;
-  channel?: ChannelAPIResponse<StreamChatGenerics> | null; // not updated with WS events
-  cid?: string;
   description?: string;
   is_closed?: boolean;
   own_votes?: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>)[]; // not updated with WS events
