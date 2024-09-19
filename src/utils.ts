@@ -118,7 +118,7 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(sort: T | T[]) {
+export function normalizeQuerySort<T extends Record<string, AscDesc | undefined | string[]>>(sort: T | T[]) {
   const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
