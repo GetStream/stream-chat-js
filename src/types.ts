@@ -1226,7 +1226,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   online?: boolean;
   parent_id?: string;
   poll?: PollResponse<StreamChatGenerics>;
-  poll_vote?: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>);
+  poll_vote?: PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>;
   queriedChannels?: {
     channels: ChannelAPIResponse<StreamChatGenerics>[];
     isLatestMessageSet?: boolean;
@@ -3051,12 +3051,12 @@ export enum VotingVisibility {
 export type PollData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['pollType'] & {
+  id: string;
   name: string;
   allow_answers?: boolean;
   allow_user_suggested_options?: boolean;
   description?: string;
   enforce_unique_vote?: boolean;
-  id?: string;
   is_closed?: boolean;
   max_votes_allowed?: number;
   options?: PollOptionData<StreamChatGenerics>[];
@@ -3065,9 +3065,8 @@ export type PollData<
 };
 
 export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  // id: string;
-  set?: Partial<PollResponse<StreamChatGenerics>>;
-  unset?: Array<keyof PollResponse<StreamChatGenerics>>;
+  set?: Partial<PollData<StreamChatGenerics>>;
+  unset?: Array<keyof PollData<StreamChatGenerics>>;
 };
 
 export type PollOptionData<
@@ -3127,10 +3126,12 @@ export type PollVote<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   user?: UserResponse<StreamChatGenerics>;
 };
 
-export type PollAnswer<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = PollVote<StreamChatGenerics> & {
+export type PollAnswer<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = Exclude<PollVote<StreamChatGenerics>, 'option_id'> & {
   answer_text: string;
   is_answer: boolean; // this is absolutely redundant prop as answer_text indicates that a vote is an answer
-}
+};
 
 export type PollVotesAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   votes: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>)[];
@@ -3143,7 +3144,7 @@ export type PollAnswersAPIResponse<StreamChatGenerics extends ExtendableGenerics
 };
 
 export type CastVoteAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  vote: (PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>);
+  vote: PollVote<StreamChatGenerics> | PollAnswer<StreamChatGenerics>;
 };
 
 export type QueryMessageHistoryFilters = QueryFilters<
