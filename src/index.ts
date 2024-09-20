@@ -8,7 +8,6 @@ export * from './connection';
 export * from './events';
 export * from './insights';
 export * from './moderation';
-export * from './paginator';
 export * from './permissions';
 export * from './poll';
 export * from './segment';
