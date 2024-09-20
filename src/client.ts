@@ -211,6 +211,7 @@ import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
+import { PollManager } from './poll_manager';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -224,6 +225,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     [key: string]: Channel<StreamChatGenerics>;
   };
   threads: ThreadManager<StreamChatGenerics>;
+  polls: PollManager<StreamChatGenerics>;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -411,6 +413,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
+    this.polls = new PollManager({ client: this });
   }
 
   /**
