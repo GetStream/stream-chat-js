@@ -103,7 +103,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   get data(): PollState<SCG> {
-    return this.data;
+    return this.state.getLatestValue();
   }
 
   public registerSubscriptions = () => {
