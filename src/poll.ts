@@ -11,6 +11,9 @@ import type {
   PollResponse,
   PollVote,
   PollVoteData,
+  QueryVotesFilters,
+  QueryVotesOptions,
+  VoteSort,
 } from './types';
 
 type PollEvent<SCG extends ExtendableGenerics = DefaultGenerics> = {
@@ -66,6 +69,18 @@ const isVoteAnswer = <SCG extends ExtendableGenerics = DefaultGenerics>(
   vote: PollVote<SCG> | PollAnswer<SCG>,
 ): vote is PollAnswer<SCG> => !!(vote as PollAnswer<SCG>)?.answer_text;
 
+
+export type PollAnswersQueryParams = {
+  filter?: QueryVotesFilters;
+  options?: QueryVotesOptions;
+  sort?: VoteSort;
+};
+
+export type PollOptionVotesQueryParams = {
+  filter: { option_id: string } & QueryVotesFilters;
+  options?: QueryVotesOptions;
+  sort?: VoteSort;
+};
 
 export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = PollResponse<SCG> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
@@ -254,5 +269,13 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   async removeAnswer(answerId: string, messageId: string) {
     return await this.client.removePollVote(messageId, this.data.id, answerId);
+  }
+
+  async queryAnswers(params: PollAnswersQueryParams) {
+    return await this.client.queryPollAnswers(this.data.id, params.filter, params.sort, params.options);
+  }
+
+  async queryOptionVotes(params: PollOptionVotesQueryParams) {
+    return await this.client.queryPollVotes(this.data.id, params.filter, params.sort, params.options);
   }
 }
