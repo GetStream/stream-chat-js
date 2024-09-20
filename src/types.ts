@@ -3126,9 +3126,10 @@ export type PollVote<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   user?: UserResponse<StreamChatGenerics>;
 };
 
-export type PollAnswer<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = Exclude<PollVote<StreamChatGenerics>, 'option_id'> & {
+export type PollAnswer<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Exclude<
+  PollVote<StreamChatGenerics>,
+  'option_id'
+> & {
   answer_text: string;
   is_answer: boolean; // this is absolutely redundant prop as answer_text indicates that a vote is an answer
 };
