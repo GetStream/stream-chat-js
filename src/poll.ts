@@ -83,9 +83,10 @@ export type PollOptionVotesQueryParams = {
 type OptionId = string;
 type PollVoteId = string;
 
-export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = PollResponse<SCG> & {
+export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['pollType'] & Omit<PollResponse<SCG>, 'own_votes'> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
+  ownVotes: PollVote<SCG>[];
   ownVotesByOptionId: Record<OptionId, PollVoteId>; // single user can vote only once for the same option
   ownAnswer?: PollAnswer; // each user can have only one answer
 };
@@ -100,14 +101,15 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client, poll }: PollInitOptions<SCG>) {
+  constructor({ client, poll: { own_votes, ...pollResponseForState } }: PollInitOptions<SCG>) {
     this.client = client;
-
+    const ownVotes = own_votes?.filter(filterVotesOnly) || [];
     this.state = new StateStore<PollState<SCG>>({
-      ...poll,
+      ...pollResponseForState,
       lastActivityAt: new Date(),
-      maxVotedOptionIds: getMaxVotedOptionIds(poll.vote_counts_by_option),
-      ownVotesByOptionId: getOwnVotesByOptionId(poll.own_votes),
+      maxVotedOptionIds: getMaxVotedOptionIds(pollResponseForState.vote_counts_by_option as PollResponse<SCG>['vote_counts_by_option']),
+      ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
+      ownVotes,
     });
   }
 
@@ -137,8 +139,9 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.client.on('poll.updated', (event) => {
       if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollUpdatedEvent(event)) return;
+      const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
-      this.state.partialNext({ ...event.poll, lastActivityAt: new Date(event.created_at) });
+      this.state.partialNext({ ...pollResponseForState, lastActivityAt: new Date(event.created_at) });
     }).unsubscribe;
   }
 
@@ -146,8 +149,9 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.client.on('poll.closed', (event) => {
       if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollClosedEventEvent(event)) return;
+      const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
-      this.state.next({ ...event.poll, lastActivityAt: new Date(event.created_at) });
+      this.state.next({ ...pollResponseForState, lastActivityAt: new Date(event.created_at) });
     }).unsubscribe;
   }
 
@@ -157,19 +161,20 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (!isPollVoteCastedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      const ownVotes = [...(currentState?.own_votes || [])];
-      let latestAnswers = [...currentState.latest_answers];
+      const ownVotes = [...(currentState?.ownVotes || [])];
+      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
       let ownAnswer = currentState.ownAnswer;
       const ownVotesByOptionId = currentState.ownVotesByOptionId;
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
 
       if (isOwnVote) {
-        ownVotes.push(event.poll_vote);
-        if (event.poll_vote.option_id) {
-          ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote.id;
-        }
         if (isVoteAnswer(event.poll_vote)) {
           ownAnswer = event.poll_vote;
+        } else {
+          ownVotes.push(event.poll_vote);
+          if (event.poll_vote.option_id) {
+            ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote.id;
+          }
         }
       }
 
@@ -179,12 +184,14 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { own_votes, ...pollResponseForState } = event.poll;
+
       this.state.next({
-        ...event.poll,
+        ...pollResponseForState,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
-        own_votes: ownVotes,
+        ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
       });
@@ -197,8 +204,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (!isPollVoteChangedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      let ownVotes = [...(currentState?.own_votes || [])];
-      let latestAnswers = [...currentState.latest_answers];
+      let ownVotes = [...(currentState?.ownVotes || [])];
+      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
       let ownAnswer = currentState.ownAnswer;
       let ownVotesByOptionId = currentState.ownVotesByOptionId;
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -226,6 +233,9 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
             },
             {},
           );
+          if (ownAnswer?.id === event.poll_vote.id) {
+            ownAnswer = undefined;
+          }
         }
       } else if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = [event.poll_vote, ...latestAnswers];
@@ -233,12 +243,14 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { own_votes, ...pollResponseForState } = event.poll;
+
       this.state.next({
-        ...event.poll,
+        ...pollResponseForState,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
-        own_votes: ownVotes,
+        ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
       });
@@ -251,8 +263,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (!isPollVoteRemovedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      let ownVotes = [...(currentState?.own_votes || [])];
-      let latestAnswers = [...currentState.latest_answers];
+      let ownVotes = [...(currentState?.ownVotes || [])];
+      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
       let ownAnswer = currentState.ownAnswer;
       const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -270,12 +282,13 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { own_votes, ...pollResponseForState } = event.poll;
       this.state.next({
-        ...event.poll,
+        ...pollResponseForState,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
-        own_votes: ownVotes,
+        ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
       });
@@ -294,51 +307,51 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   async partialUpdate(partialPollObject: PartialPollUpdate<SCG>) {
-    return await this.client.partialUpdatePoll(this.data.id, partialPollObject);
+    return await this.client.partialUpdatePoll(this.data.id as string, partialPollObject);
   }
 
   async close() {
-    return await this.client.closePoll(this.data.id);
+    return await this.client.closePoll(this.data.id as string);
   }
 
   async delete() {
-    return await this.client.deletePoll(this.data.id);
+    return await this.client.deletePoll(this.data.id as string);
   }
 
   async createOption(option: PollOptionData) {
-    return await this.client.createPollOption(this.data.id, option);
+    return await this.client.createPollOption(this.data.id as string, option);
   }
 
   async updateOption(option: PollOptionData) {
-    return await this.client.updatePollOption(this.data.id, option);
+    return await this.client.updatePollOption(this.data.id as string, option);
   }
 
   async deleteOption(optionId: string) {
-    return await this.client.deletePollOption(this.data.id, optionId);
+    return await this.client.deletePollOption(this.data.id as string, optionId);
   }
 
   async castVote(optionId: string, messageId: string) {
-    return await this.client.castPollVote(messageId, this.data.id, { option_id: optionId });
+    return await this.client.castPollVote(messageId, this.data.id as string, { option_id: optionId });
   }
 
   async removeVote(voteId: string, messageId: string) {
-    return await this.client.removePollVote(messageId, this.data.id, voteId);
+    return await this.client.removePollVote(messageId, this.data.id as string, voteId);
   }
 
   async addAnswer(answerText: string, messageId: string) {
-    return await this.client.addPollAnswer(messageId, this.data.id, answerText);
+    return await this.client.addPollAnswer(messageId, this.data.id as string, answerText);
   }
 
   async removeAnswer(answerId: string, messageId: string) {
-    return await this.client.removePollVote(messageId, this.data.id, answerId);
+    return await this.client.removePollVote(messageId, this.data.id as string, answerId);
   }
 
   async queryAnswers(params: PollAnswersQueryParams) {
-    return await this.client.queryPollAnswers(this.data.id, params.filter, params.sort, params.options);
+    return await this.client.queryPollAnswers(this.data.id as string, params.filter, params.sort, params.options);
   }
 
   async queryOptionVotes(params: PollOptionVotesQueryParams) {
-    return await this.client.queryPollVotes(this.data.id, params.filter, params.sort, params.options);
+    return await this.client.queryPollVotes(this.data.id as string, params.filter, params.sort, params.options);
   }
 }
 
@@ -356,7 +369,7 @@ function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_o
   return winningOptions;
 }
 
-function getOwnVotesByOptionId(ownVotes: PollResponse['own_votes']) {
+function getOwnVotesByOptionId<SCG extends ExtendableGenerics = DefaultGenerics>(ownVotes: PollVote<SCG>[]) {
   return !ownVotes
     ? ({} as Record<OptionId, PollVoteId>)
     : ownVotes.reduce<Record<OptionId, PollVoteId>>((acc, vote) => {
@@ -365,3 +378,5 @@ function getOwnVotesByOptionId(ownVotes: PollResponse['own_votes']) {
         return acc;
       }, {});
 }
+
+function filterVotesOnly <SCG extends ExtendableGenerics = DefaultGenerics>(v: PollVote<SCG> | PollAnswer): v is PollVote<SCG> { return !isVoteAnswer(v); };
