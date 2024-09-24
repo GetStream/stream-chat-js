@@ -207,7 +207,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         if (isVoteAnswer(event.poll_vote)) {
           latestAnswers = [
             event.poll_vote,
-            ...latestAnswers.filter((answer) => answer.user_id === event.poll_vote.user_id),
+            ...latestAnswers.filter((answer) => answer.user_id !== event.poll_vote.user_id),
           ];
           // remove vote from own votes if it changes to answer
           ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
