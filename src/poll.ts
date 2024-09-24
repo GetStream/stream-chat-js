@@ -221,7 +221,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
           ownAnswer = event.poll_vote;
         } else if (event.poll.enforce_unique_vote) {
           // the same user clicked another option
-          ownVotes.map((vote) => (vote.id === event.poll_vote.id ? event.poll_vote : vote));
+          ownVotes = ownVotes.map((vote) => (vote.id === event.poll_vote.id ? event.poll_vote : vote));
           ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVoteId>>(
             (acc, [optionId, voteId]) => {
               if (optionId === event.poll_vote.option_id) {
