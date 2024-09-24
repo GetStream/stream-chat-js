@@ -1,4 +1,4 @@
-import { Channel } from './channel';
+import {Channel} from './channel';
 import {
   ChannelMemberResponse,
   DefaultGenerics,
@@ -9,14 +9,11 @@ import {
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
-  PollAnswer,
-  PollResponse,
-  PollVote,
   ReactionResponse,
   UserResponse,
 } from './types';
-import { addToMessageList, formatMessage } from './utils';
-import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
+import {addToMessageList, formatMessage} from './utils';
+import {DEFAULT_MESSAGE_SET_PAGINATION} from './constants';
 
 type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
   string,

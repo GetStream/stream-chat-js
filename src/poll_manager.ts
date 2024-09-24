@@ -2,7 +2,10 @@ import type { StreamChat } from './client';
 import type {
   DefaultGenerics,
   ExtendableGenerics,
-  PollData, PollSort, QueryPollsFilters, QueryPollsOptions,
+  PollData,
+  PollSort,
+  QueryPollsFilters,
+  QueryPollsOptions,
 } from './types';
 import { Poll } from './poll';
 
@@ -14,7 +17,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public createPoll = async (poll: PollData) => {
-    const { poll: createdPoll} = await this.client.createPoll(poll);
+    const { poll: createdPoll } = await this.client.createPoll(poll);
 
     return new Poll({ client: this.client, poll: createdPoll });
   };
@@ -23,14 +26,14 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     const { poll } = await this.client.getPoll(id);
 
     return new Poll({ client: this.client, poll });
-  }
+  };
 
-  public queryPolls = async (filter: QueryPollsFilters, sort: PollSort = [],  options: QueryPollsOptions = {})=> {
-    const { polls, next} = await this.client.queryPolls(filter, sort, options);
+  public queryPolls = async (filter: QueryPollsFilters, sort: PollSort = [], options: QueryPollsOptions = {}) => {
+    const { polls, next } = await this.client.queryPolls(filter, sort, options);
 
     return {
-      polls: polls.map(poll => new Poll({ client: this.client, poll })),
+      polls: polls.map((poll) => new Poll({ client: this.client, poll })),
       next,
     };
-  }
+  };
 }
