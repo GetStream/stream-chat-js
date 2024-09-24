@@ -103,11 +103,20 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   constructor({ client, poll: { own_votes, ...pollResponseForState } }: PollInitOptions<SCG>) {
     this.client = client;
-    const ownVotes = own_votes?.filter(filterVotesOnly) || [];
+    const { ownAnswer, ownVotes } = own_votes?.reduce<{ownVotes: PollVote<SCG>[], ownAnswer?: PollAnswer}>((acc, voteOrAnswer) => {
+      if (isVoteAnswer(voteOrAnswer)) {
+        acc.ownAnswer = voteOrAnswer;
+      } else {
+        acc.ownVotes.push(voteOrAnswer);
+      }
+      return acc;
+    }, {ownVotes: []}) ?? {ownVotes: []};
+
     this.state = new StateStore<PollState<SCG>>({
       ...pollResponseForState,
       lastActivityAt: new Date(),
       maxVotedOptionIds: getMaxVotedOptionIds(pollResponseForState.vote_counts_by_option as PollResponse<SCG>['vote_counts_by_option']),
+      ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
       ownVotes,
     });
