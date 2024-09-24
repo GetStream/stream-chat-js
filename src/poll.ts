@@ -135,6 +135,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribePollUpdated() {
     return this.client.on('poll.updated', (event) => {
+      if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollUpdatedEvent(event)) return;
       // @ts-ignore
       this.state.partialNext({ ...event.poll, lastActivityAt: new Date(event.created_at) });
@@ -143,6 +144,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribePollClosed() {
     return this.client.on('poll.closed', (event) => {
+      if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollClosedEventEvent(event)) return;
       // @ts-ignore
       this.state.next({ ...event.poll, lastActivityAt: new Date(event.created_at) });
@@ -151,6 +153,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeVoteCasted() {
     return this.client.on('poll.vote_casted', (event) => {
+      if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollVoteCastedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
@@ -189,7 +192,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   private subscribeVoteChanged() {
-    return this.client.on('poll.vote_casted', (event) => {
+    return this.client.on('poll.vote_changed', (event) => {
+      if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollVoteChangedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
@@ -242,7 +246,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   private subscribeVoteRemoved() {
-    return this.client.on('poll.vote_casted', (event) => {
+    return this.client.on('poll.vote_removed', (event) => {
+      if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollVoteRemovedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
