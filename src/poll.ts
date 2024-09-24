@@ -200,6 +200,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeVoteChanged() {
     return this.client.on('poll.vote_changed', (event) => {
+      // this event is triggered only when event.poll.enforce_unique_vote === true
       if (event.poll?.id && event.poll.id !== this.data.id) return;
       if (!isPollVoteChangedEvent(event)) return;
       const currentState = this.data;
@@ -216,23 +217,12 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
             event.poll_vote,
             ...latestAnswers.filter((answer) => answer.user_id !== event.poll_vote.user_id),
           ];
-          // remove vote from own votes if it changes to answer
           ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
           ownAnswer = event.poll_vote;
-        } else if (event.poll.enforce_unique_vote) {
-          // the same user clicked another option
-          ownVotes = ownVotes.map((vote) => (vote.id === event.poll_vote.id ? event.poll_vote : vote));
-          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVoteId>>(
-            (acc, [optionId, voteId]) => {
-              if (optionId === event.poll_vote.option_id) {
-                acc[optionId] = event.poll_vote.id;
-              } else if (voteId !== event.poll_vote.id) {
-                acc[optionId] = voteId;
-              }
-              return acc;
-            },
-            {},
-          );
+        } else { // event.poll.enforce_unique_vote === true
+          ownVotes = [event.poll_vote];
+          ownVotesByOptionId = {[event.poll_vote.option_id!]: event.poll_vote.id};
+
           if (ownAnswer?.id === event.poll_vote.id) {
             ownAnswer = undefined;
           }
