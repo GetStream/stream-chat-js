@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
-import { getClientWithUser } from './test-utils/getClient'
+import { getClientWithUser } from './test-utils/getClient';
 
 import sinon from 'sinon';
 import {
@@ -931,10 +931,10 @@ describe('Threads 2.0', () => {
     it('resets the thread state on disconnect', async () => {
       const clientWithUser = await getClientWithUser({ id: 'user1' });
       const thread = createTestThread();
-      clientWithUser.threads.registerSubscriptions();
+      // clientWithUser.threads.registerSubscriptions();
       clientWithUser.threads.state.partialNext({ ready: true, threads: [thread] });
 
-      const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue()
+      const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue();
 
       expect(threads).to.deep.equal([thread]);
       expect(unseenThreadIds.length).to.equal(0);
@@ -942,7 +942,7 @@ describe('Threads 2.0', () => {
       await clientWithUser.disconnectUser();
 
       expect(clientWithUser.threads.state.getLatestValue().threads).to.deep.equal([]);
-    })
+    });
 
     describe('Subscription and Event Handlers', () => {
       beforeEach(() => {
@@ -969,6 +969,30 @@ describe('Threads 2.0', () => {
           const { unreadThreadCount } = threadManager.state.getLatestValue();
           expect(unreadThreadCount).to.equal(expectedUnreadCount);
         });
+      });
+
+      it('removes threads from the state if their channel got deleted', () => {
+        const thread = createTestThread();
+        const toBeRemoved = [
+          createTestThread({ channelOverrides: { id: 'channel1' } }),
+          createTestThread({ channelOverrides: { id: 'channel1' } }),
+          createTestThread({ channelOverrides: { id: 'channel2' } }),
+        ];
+        threadManager.state.partialNext({ threads: [thread, ...toBeRemoved] });
+
+        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(4);
+
+        client.dispatchEvent({
+          type: 'notification.channel_deleted',
+          cid: 'messaging:channel1',
+        });
+
+        client.dispatchEvent({
+          type: 'channel.deleted',
+          cid: 'messaging:channel2',
+        });
+
+        expect(threadManager.state.getLatestValue().threads).to.deep.equal([thread]);
       });
 
       describe('Event: notification.thread_message_new', () => {

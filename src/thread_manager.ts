@@ -92,6 +92,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeReloadOnActivation());
     this.unsubscribeFunctions.add(this.subscribeNewReplies());
     this.unsubscribeFunctions.add(this.subscribeRecoverAfterConnectionDrop());
+    this.unsubscribeFunctions.add(this.subscribeChannelDeleted());
   };
 
   private subscribeUnreadThreadsCountChange = () => {
@@ -114,6 +115,19 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         }).unsubscribe,
     );
 
+    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  private subscribeChannelDeleted = () => {
+    const unsubscribeFunctions = ['notification.channel_deleted', 'channel.deleted'].map((e) => {
+      return this.client.on(e, (event) => {
+        const { cid } = event;
+        const { threads } = this.state.getLatestValue();
+
+        const newThreads = threads.filter((t) => t.channel.cid !== cid);
+        this.state.partialNext({ threads: newThreads });
+      }).unsubscribe;
+    });
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
