@@ -10,6 +10,7 @@ export * from './insights';
 export * from './moderation';
 export * from './permissions';
 export * from './poll';
+export * from './poll_manager';
 export * from './segment';
 export * from './signing';
 export * from './store';

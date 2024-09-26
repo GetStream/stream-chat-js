@@ -69,6 +69,7 @@ import {
   CreateImportResponse,
   CreateImportURLResponse,
   CreatePollAPIResponse,
+  CreatePollData,
   CreatePollOptionAPIResponse,
   CustomPermissionOptions,
   DeactivateUsersOptions,
@@ -3552,7 +3553,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: PollData<StreamChatGenerics>, userId?: string) {
+  async createPoll(poll: CreatePollData<StreamChatGenerics>, userId?: string) {
     return await this.post<APIResponse & CreatePollAPIResponse<StreamChatGenerics>>(this.baseURL + `/polls`, {
       ...poll,
       ...(userId ? { user_id: userId } : {}),

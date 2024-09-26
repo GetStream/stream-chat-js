@@ -3064,6 +3064,8 @@ export type PollData<
   voting_visibility?: VotingVisibility;
 };
 
+export type CreatePollData<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Partial<PollData<StreamChatGenerics>> & Pick<PollData<StreamChatGenerics>, 'name'>
+
 export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<PollData<StreamChatGenerics>>;
   unset?: Array<keyof PollData<StreamChatGenerics>>;
@@ -3071,7 +3073,7 @@ export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = De
 
 export type PollOptionData<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = StreamChatGenerics['pollType'] & {
+> = StreamChatGenerics['pollOptionType'] & {
   text: string;
   id?: string;
   position?: number;
