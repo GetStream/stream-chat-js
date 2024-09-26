@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
+import { getClientWithUser } from './test-utils/getClient'
 
 import sinon from 'sinon';
 import {
@@ -926,6 +927,22 @@ describe('Threads 2.0', () => {
       expect(state.pagination.isLoading).to.be.false;
       expect(state.pagination.nextCursor).to.be.null;
     });
+
+    it('resets the thread state on disconnect', async () => {
+      const clientWithUser = await getClientWithUser({ id: 'user1' });
+      const thread = createTestThread();
+      clientWithUser.threads.registerSubscriptions();
+      clientWithUser.threads.state.partialNext({ ready: true, threads: [thread] });
+
+      const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue()
+
+      expect(threads).to.deep.equal([thread]);
+      expect(unseenThreadIds.length).to.equal(0);
+
+      await clientWithUser.disconnectUser();
+
+      expect(clientWithUser.threads.state.getLatestValue().threads).to.deep.equal([]);
+    })
 
     describe('Subscription and Event Handlers', () => {
       beforeEach(() => {
