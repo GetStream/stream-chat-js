@@ -148,7 +148,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribePollUpdated = () => {
     return this.client.on('poll.updated', (event) => {
-      if (event.poll?.id && event.poll.id !== this.data.id) return;
+      if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollUpdatedEvent(event)) return;
       const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
@@ -158,7 +158,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribePollClosed = () => {
     return this.client.on('poll.closed', (event) => {
-      if (event.poll?.id && event.poll.id !== this.data.id) return;
+      if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollClosedEventEvent(event)) return;
       const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
@@ -168,7 +168,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeVoteCasted = () => {
     return this.client.on('poll.vote_casted', (event) => {
-      if (event.poll?.id && event.poll.id !== this.data.id) return;
+      if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollVoteCastedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
@@ -210,7 +210,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   private subscribeVoteChanged = () => {
     return this.client.on('poll.vote_changed', (event) => {
       // this event is triggered only when event.poll.enforce_unique_vote === true
-      if (event.poll?.id && event.poll.id !== this.data.id) return;
+      if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollVoteChangedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
@@ -256,7 +256,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeVoteRemoved = () => {
     return this.client.on('poll.vote_removed', (event) => {
-      if (event.poll?.id && event.poll.id !== this.data.id) return;
+      if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollVoteRemovedEvent(event)) return;
       const currentState = this.data;
       const isOwnVote = event.poll_vote.user_id === this.client.userID;
@@ -299,55 +299,55 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   update = async (data: Exclude<PollData<SCG>, 'id'>) => {
-    return await this.client.updatePoll({ ...data, id: this.data.id });
+    return await this.client.updatePoll({ ...data, id: this.id });
   }
 
   partialUpdate = async (partialPollObject: PartialPollUpdate<SCG>) => {
-    return await this.client.partialUpdatePoll(this.data.id as string, partialPollObject);
+    return await this.client.partialUpdatePoll(this.id as string, partialPollObject);
   }
 
   close = async () => {
-    return await this.client.closePoll(this.data.id as string);
+    return await this.client.closePoll(this.id as string);
   }
 
   delete = async () => {
-    return await this.client.deletePoll(this.data.id as string);
+    return await this.client.deletePoll(this.id as string);
   }
 
   createOption = async (option: PollOptionData) => {
-    return await this.client.createPollOption(this.data.id as string, option);
+    return await this.client.createPollOption(this.id as string, option);
   }
 
   updateOption = async (option: PollOptionData) => {
-    return await this.client.updatePollOption(this.data.id as string, option);
+    return await this.client.updatePollOption(this.id as string, option);
   }
 
   deleteOption = async (optionId: string) => {
-    return await this.client.deletePollOption(this.data.id as string, optionId);
+    return await this.client.deletePollOption(this.id as string, optionId);
   }
 
   castVote = async (optionId: string, messageId: string) => {
-    return await this.client.castPollVote(messageId, this.data.id as string, { option_id: optionId });
+    return await this.client.castPollVote(messageId, this.id as string, { option_id: optionId });
   }
 
   removeVote = async (voteId: string, messageId: string) => {
-    return await this.client.removePollVote(messageId, this.data.id as string, voteId);
+    return await this.client.removePollVote(messageId, this.id as string, voteId);
   }
 
   addAnswer = async (answerText: string, messageId: string) => {
-    return await this.client.addPollAnswer(messageId, this.data.id as string, answerText);
+    return await this.client.addPollAnswer(messageId, this.id as string, answerText);
   }
 
   removeAnswer = async (answerId: string, messageId: string) => {
-    return await this.client.removePollVote(messageId, this.data.id as string, answerId);
+    return await this.client.removePollVote(messageId, this.id as string, answerId);
   }
 
   queryAnswers = async (params: PollAnswersQueryParams) => {
-    return await this.client.queryPollAnswers(this.data.id as string, params.filter, params.sort, params.options);
+    return await this.client.queryPollAnswers(this.id as string, params.filter, params.sort, params.options);
   }
 
   queryOptionVotes = async (params: PollOptionVotesQueryParams) => {
-    return await this.client.queryPollVotes(this.data.id as string, params.filter, params.sort, params.options);
+    return await this.client.queryPollVotes(this.id as string, params.filter, params.sort, params.options);
   }
 }
 
