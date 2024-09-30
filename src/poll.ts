@@ -7,6 +7,7 @@ import type {
   PartialPollUpdate,
   PollAnswer,
   PollData,
+  PollEnrichData,
   PollOptionData,
   PollResponse,
   PollVote,
@@ -150,9 +151,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.client.on('poll.updated', (event) => {
       if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollUpdatedEvent(event)) return;
-      const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
-      this.state.partialNext({ ...pollResponseForState, lastActivityAt: new Date(event.created_at) });
+      this.state.partialNext({ ...extractPollData(event.poll), lastActivityAt: new Date(event.created_at) });
     }).unsubscribe;
   }
 
@@ -160,9 +160,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.client.on('poll.closed', (event) => {
       if (event.poll?.id && event.poll.id !== this.id) return;
       if (!isPollClosedEventEvent(event)) return;
-      const { own_votes, ...pollResponseForState } = event.poll;
       // @ts-ignore
-      this.state.next({ ...pollResponseForState, lastActivityAt: new Date(event.created_at) });
+      this.state.partialNext({ is_closed: true, lastActivityAt: new Date(event.created_at) });
     }).unsubscribe;
   }
 
@@ -195,8 +194,10 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
       // @ts-ignore
       this.state.partialNext( {
+        ...pollEnrichData,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -242,8 +243,10 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
       // @ts-ignore
       this.state.partialNext({
+        ...pollEnrichData,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -279,8 +282,10 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
+      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
       // @ts-ignore
       this.state.partialNext({
+        ...pollEnrichData,
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -375,4 +380,28 @@ function getOwnVotesByOptionId<SCG extends ExtendableGenerics = DefaultGenerics>
       }, {});
 }
 
-function filterVotesOnly <SCG extends ExtendableGenerics = DefaultGenerics>(v: PollVote<SCG> | PollAnswer): v is PollVote<SCG> { return !isVoteAnswer(v); };
+function extractPollData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollData<SCG> {
+  return {
+    allow_answers: pollResponse.allow_answers,
+    allow_user_suggested_options: pollResponse.allow_user_suggested_options,
+    description: pollResponse.description,
+    enforce_unique_vote: pollResponse.enforce_unique_vote,
+    id: pollResponse.id,
+    is_closed: pollResponse.is_closed,
+    max_votes_allowed: pollResponse.max_votes_allowed,
+    name: pollResponse.name,
+    options: pollResponse.options,
+    voting_visibility: pollResponse.voting_visibility
+  };
+}
+
+function extractPollEnrichedData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollEnrichData<SCG> {
+  return {
+    answers_count: pollResponse.answers_count,
+    latest_answers: pollResponse.latest_answers,
+    latest_votes_by_option: pollResponse.latest_votes_by_option,
+    vote_count: pollResponse.vote_count,
+    vote_counts_by_option: pollResponse.vote_counts_by_option,
+    own_votes: pollResponse.own_votes,
+  };
+}
