@@ -1,8 +1,8 @@
 import type { StreamChat } from './client';
 import type {
+  CreatePollData,
   DefaultGenerics,
   ExtendableGenerics,
-  PollData,
   PollSort,
   QueryPollsFilters,
   QueryPollsOptions,
@@ -16,7 +16,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
   }
 
-  public createPoll = async (poll: PollData) => {
+  public createPoll = async (poll: CreatePollData<SCG>) => {
     const { poll: createdPoll } = await this.client.createPoll(poll);
 
     return new Poll({ client: this.client, poll: createdPoll });

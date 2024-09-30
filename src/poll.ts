@@ -83,7 +83,7 @@ export type PollOptionVotesQueryParams = {
 type OptionId = string;
 type PollVoteId = string;
 
-export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['pollType'] & Omit<PollResponse<SCG>, 'own_votes'> & {
+export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['pollType'] & Omit<PollResponse<SCG>, 'own_votes' | 'id'> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
   ownVotes: PollVote<SCG>[];
@@ -98,11 +98,13 @@ type PollInitOptions<SCG extends ExtendableGenerics = DefaultGenerics> = {
 
 export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<PollState<SCG>>;
+  public id: string;
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client, poll: { own_votes, ...pollResponseForState } }: PollInitOptions<SCG>) {
+  constructor({ client, poll: { own_votes, id, ...pollResponseForState } }: PollInitOptions<SCG>) {
     this.client = client;
+    this.id = id;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{ownVotes: PollVote<SCG>[], ownAnswer?: PollAnswer}>((acc, voteOrAnswer) => {
       if (isVoteAnswer(voteOrAnswer)) {
         acc.ownAnswer = voteOrAnswer;
@@ -193,10 +195,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
-      const { own_votes, ...pollResponseForState } = event.poll;
-
-      this.state.next({
-        ...pollResponseForState,
+      // @ts-ignore
+      this.state.partialNext( {
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -242,10 +242,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
-      const { own_votes, ...pollResponseForState } = event.poll;
-
-      this.state.next({
-        ...pollResponseForState,
+      // @ts-ignore
+      this.state.partialNext({
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -281,9 +279,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
 
-      const { own_votes, ...pollResponseForState } = event.poll;
-      this.state.next({
-        ...pollResponseForState,
+      // @ts-ignore
+      this.state.partialNext({
         latest_answers: latestAnswers,
         lastActivityAt: new Date(event.created_at),
         ownAnswer,
@@ -357,7 +354,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_option']) {
   let maxVotes = 0;
   let winningOptions: string[] = [];
-  for (const [id, count] of Object.entries(voteCountsByOption)) {
+  for (const [id, count] of Object.entries(voteCountsByOption ?? {})) {
     if (count > maxVotes) {
       winningOptions = [id];
       maxVotes = count;
