@@ -7,6 +7,20 @@ import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, Query
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
+const INITIAL_STATE = {
+  active: false,
+  isThreadOrderStale: false,
+  threads: [],
+  unreadThreadCount: 0,
+  unseenThreadIds: [],
+  lastConnectionDropAt: null,
+  pagination: {
+    isLoading: false,
+    isLoadingNext: false,
+    nextCursor: null,
+  },
+  ready: false,
+};
 
 export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
@@ -40,20 +54,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
-    this.state = new StateStore<ThreadManagerState<SCG>>({
-      active: false,
-      isThreadOrderStale: false,
-      threads: [],
-      unreadThreadCount: 0,
-      unseenThreadIds: [],
-      lastConnectionDropAt: null,
-      pagination: {
-        isLoading: false,
-        isLoadingNext: false,
-        nextCursor: null,
-      },
-      ready: false,
-    });
+    this.state = new StateStore<ThreadManagerState<SCG>>(INITIAL_STATE);
 
     this.threadsByIdGetterCache = { threads: [], threadsById: {} };
   }
@@ -74,6 +75,11 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.threadsByIdGetterCache.threadsById = threadsById;
 
     return threadsById;
+  }
+
+  public resetState = () => {
+    this.unregisterSubscriptions();
+    this.state.next(INITIAL_STATE);
   }
 
   public activate = () => {
@@ -118,18 +124,13 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
-  private subscribeChannelDeleted = () => {
-    const unsubscribeFunctions = ['notification.channel_deleted', 'channel.deleted'].map((e) => {
-      return this.client.on(e, (event) => {
-        const { cid } = event;
-        const { threads } = this.state.getLatestValue();
+  private subscribeChannelDeleted = () => this.client.on('notification.channel_deleted', (event) => {
+    const { cid } = event;
+    const { threads } = this.state.getLatestValue();
 
-        const newThreads = threads.filter((t) => t.channel.cid !== cid);
-        this.state.partialNext({ threads: newThreads });
-      }).unsubscribe;
-    });
-    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
-  };
+    const newThreads = threads.filter((thread) => thread.channel.cid !== cid);
+    this.state.partialNext({ threads: newThreads });
+  }).unsubscribe;
 
   private subscribeManageThreadSubscriptions = () =>
     this.state.subscribeWithSelector(

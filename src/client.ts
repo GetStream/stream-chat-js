@@ -809,7 +809,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // reset client state
     this.state = new ClientState();
     // reset thread manager
-    this.threads = new ThreadManager({ client: this });
+    this.threads.resetState();
     // reset token manager
     setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
 

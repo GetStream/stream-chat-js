@@ -931,17 +931,20 @@ describe('Threads 2.0', () => {
     it('resets the thread state on disconnect', async () => {
       const clientWithUser = await getClientWithUser({ id: 'user1' });
       const thread = createTestThread();
-      // clientWithUser.threads.registerSubscriptions();
       clientWithUser.threads.state.partialNext({ ready: true, threads: [thread] });
+      clientWithUser.threads.registerSubscriptions();
 
       const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue();
 
       expect(threads).to.deep.equal([thread]);
       expect(unseenThreadIds.length).to.equal(0);
+      expect(clientWithUser.threads.unsubscribeFunctions.size).to.be.greaterThan(0);
 
       await clientWithUser.disconnectUser();
 
-      expect(clientWithUser.threads.state.getLatestValue().threads).to.deep.equal([]);
+      expect(clientWithUser.threads.state.getLatestValue().threads).to.have.lengthOf(0);
+      expect(clientWithUser.threads.state.getLatestValue().unseenThreadIds).to.have.lengthOf(0);
+      expect(clientWithUser.threads.unsubscribeFunctions.size).to.be.equal(0);
     });
 
     describe('Subscription and Event Handlers', () => {
@@ -988,7 +991,7 @@ describe('Threads 2.0', () => {
         });
 
         client.dispatchEvent({
-          type: 'channel.deleted',
+          type: 'notification.channel_deleted',
           cid: 'messaging:channel2',
         });
 
