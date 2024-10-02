@@ -59,13 +59,13 @@ describe('connection', function () {
 		const device = { id: 'device_id', push_provider: 'firebase' };
 		const client = newStreamChat();
 		client.options.device = device;
-		client.wsBaseURL = 'https://url.com';
+		client.wsBaseURL = 'https://stream-dummy-test.com';
 		const ws = new StableWSConnection({ client });
 
 		it('should create the correct url', function () {
 			const { host, pathname, query } = url.parse(ws._buildUrl(), true);
 
-			expect(host).to.be.eq('url.com');
+			expect(host).to.be.eq('stream-dummy-test.com');
 			expect(pathname).to.be.eq('/connect');
 			expect(query['api_key']).to.be.eq('key');
 			expect(query['stream-auth-type']).to.be.eq('jwt');
@@ -145,7 +145,7 @@ describe('connection', function () {
 
 		it('should set and unset the flag correctly without opening WS', async () => {
 			const client = newStreamChat();
-			client.wsBaseURL = 'https://url.com';
+			client.wsBaseURL = 'https://stream-dummy-test.com';
 			const c = new StableWSConnection({ client });
 
 			expect(c.isConnecting).to.be.false;
