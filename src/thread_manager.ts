@@ -7,7 +7,7 @@ import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, Query
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
-const INITIAL_STATE = {
+export const INITIAL_STATE = {
   active: false,
   isThreadOrderStale: false,
   threads: [],

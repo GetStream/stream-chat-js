@@ -15,6 +15,7 @@ import {
   Thread,
   ThreadManager,
   ThreadResponse,
+  INITIAL_STATE as THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
 
 const TEST_USER_ID = 'observer';
@@ -927,6 +928,17 @@ describe('Threads 2.0', () => {
       expect(state.pagination.isLoading).to.be.false;
       expect(state.pagination.nextCursor).to.be.null;
     });
+
+    describe('resetState', () => {
+      it('resets the state properly', async () => {
+        threadManager.state.partialNext({ threads: [createTestThread(), createTestThread()], unseenThreadIds: ['1', '2'] })
+        threadManager.registerSubscriptions();
+        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(2);
+        expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(2);
+        threadManager.resetState();
+        expect(threadManager.state.getLatestValue()).to.be.deep.equal(THREAD_MANAGER_INITIAL_STATE);
+      })
+    })
 
     it('resets the thread state on disconnect', async () => {
       const clientWithUser = await getClientWithUser({ id: 'user1' });
