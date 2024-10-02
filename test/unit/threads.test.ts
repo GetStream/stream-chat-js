@@ -931,14 +931,17 @@ describe('Threads 2.0', () => {
 
     describe('resetState', () => {
       it('resets the state properly', async () => {
-        threadManager.state.partialNext({ threads: [createTestThread(), createTestThread()], unseenThreadIds: ['1', '2'] })
+        threadManager.state.partialNext({
+          threads: [createTestThread(), createTestThread()],
+          unseenThreadIds: ['1', '2'],
+        });
         threadManager.registerSubscriptions();
         expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(2);
         expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(2);
         threadManager.resetState();
         expect(threadManager.state.getLatestValue()).to.be.deep.equal(THREAD_MANAGER_INITIAL_STATE);
-      })
-    })
+      });
+    });
 
     it('resets the thread state on disconnect', async () => {
       const clientWithUser = await getClientWithUser({ id: 'user1' });

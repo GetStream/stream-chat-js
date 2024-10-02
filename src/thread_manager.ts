@@ -80,7 +80,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public resetState = () => {
     this.unregisterSubscriptions();
     this.state.next(INITIAL_STATE);
-  }
+  };
 
   public activate = () => {
     this.state.partialNext({ active: true });
@@ -124,13 +124,14 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
-  private subscribeChannelDeleted = () => this.client.on('notification.channel_deleted', (event) => {
-    const { cid } = event;
-    const { threads } = this.state.getLatestValue();
+  private subscribeChannelDeleted = () =>
+    this.client.on('notification.channel_deleted', (event) => {
+      const { cid } = event;
+      const { threads } = this.state.getLatestValue();
 
-    const newThreads = threads.filter((thread) => thread.channel.cid !== cid);
-    this.state.partialNext({ threads: newThreads });
-  }).unsubscribe;
+      const newThreads = threads.filter((thread) => thread.channel.cid !== cid);
+      this.state.partialNext({ threads: newThreads });
+    }).unsubscribe;
 
   private subscribeManageThreadSubscriptions = () =>
     this.state.subscribeWithSelector(
