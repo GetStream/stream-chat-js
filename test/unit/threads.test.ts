@@ -15,7 +15,7 @@ import {
   Thread,
   ThreadManager,
   ThreadResponse,
-  INITIAL_STATE as THREAD_MANAGER_INITIAL_STATE,
+  THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
 
 const TEST_USER_ID = 'observer';
@@ -953,13 +953,11 @@ describe('Threads 2.0', () => {
 
       expect(threads).to.deep.equal([thread]);
       expect(unseenThreadIds.length).to.equal(0);
-      expect(clientWithUser.threads.unsubscribeFunctions.size).to.be.greaterThan(0);
 
       await clientWithUser.disconnectUser();
 
       expect(clientWithUser.threads.state.getLatestValue().threads).to.have.lengthOf(0);
       expect(clientWithUser.threads.state.getLatestValue().unseenThreadIds).to.have.lengthOf(0);
-      expect(clientWithUser.threads.unsubscribeFunctions.size).to.be.equal(0);
     });
 
     describe('Subscription and Event Handlers', () => {

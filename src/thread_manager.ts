@@ -7,7 +7,7 @@ import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, Query
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
-export const INITIAL_STATE = {
+export const THREAD_MANAGER_INITIAL_STATE = {
   active: false,
   isThreadOrderStale: false,
   threads: [],
@@ -54,7 +54,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
-    this.state = new StateStore<ThreadManagerState<SCG>>(INITIAL_STATE);
+    this.state = new StateStore<ThreadManagerState<SCG>>(THREAD_MANAGER_INITIAL_STATE);
 
     this.threadsByIdGetterCache = { threads: [], threadsById: {} };
   }
@@ -78,8 +78,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public resetState = () => {
-    this.unregisterSubscriptions();
-    this.state.next(INITIAL_STATE);
+    this.state.next(THREAD_MANAGER_INITIAL_STATE);
   };
 
   public activate = () => {
