@@ -236,9 +236,9 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
           if (ownAnswer?.id === event.poll_vote.id) {
             ownAnswer = undefined;
           }
+          maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
         }
-      }
-      if (isVoteAnswer(event.poll_vote)) {
+      } else if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = [event.poll_vote, ...latestAnswers];
       } else {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
