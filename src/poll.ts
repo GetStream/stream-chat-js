@@ -89,6 +89,8 @@ export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['p
   maxVotedOptionIds: OptionId[];
   ownVotes: PollVote<SCG>[];
   ownVotesByOptionId: Record<OptionId, PollVoteId>; // single user can vote only once for the same option
+  latestCastOrUpdatedAnswer?: PollVote<SCG> | null;
+  latestRemovedAnswer?: PollVote<SCG> | null;
   ownAnswer?: PollAnswer; // each user can have only one answer
 };
 
@@ -122,6 +124,8 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
       ownVotes,
+      latestCastOrUpdatedAnswer: null,
+      latestRemovedAnswer: null,
     });
   }
 
@@ -176,6 +180,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       let ownAnswer = currentState.ownAnswer;
       const ownVotesByOptionId = currentState.ownVotesByOptionId;
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
+      let latestCastOrUpdatedAnswer = currentState.latestCastOrUpdatedAnswer;
 
       if (isOwnVote) {
         if (isVoteAnswer(event.poll_vote)) {
@@ -190,6 +195,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
       if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = [event.poll_vote, ...latestAnswers];
+        latestCastOrUpdatedAnswer = event.poll_vote;
       } else {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
@@ -204,6 +210,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
+        latestCastOrUpdatedAnswer,
       });
     }).unsubscribe;
   }
@@ -220,6 +227,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       let ownAnswer = currentState.ownAnswer;
       let ownVotesByOptionId = currentState.ownVotesByOptionId;
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
+      let latestCastOrUpdatedAnswer = currentState.latestCastOrUpdatedAnswer;
 
       if (isOwnVote) {
         if (isVoteAnswer(event.poll_vote)) {
@@ -229,6 +237,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
           ];
           ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
           ownAnswer = event.poll_vote;
+          latestCastOrUpdatedAnswer = event.poll_vote;
         } else { // event.poll.enforce_unique_vote === true
           ownVotes = [event.poll_vote];
           ownVotesByOptionId = {[event.poll_vote.option_id!]: event.poll_vote.id};
@@ -240,6 +249,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         }
       } else if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = [event.poll_vote, ...latestAnswers];
+        latestCastOrUpdatedAnswer = event.poll_vote;
       } else {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
@@ -254,6 +264,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
+        latestCastOrUpdatedAnswer,
       });
     }).unsubscribe;
   }
@@ -269,6 +280,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       let ownAnswer = currentState.ownAnswer;
       const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
       let maxVotedOptionIds = currentState.maxVotedOptionIds;
+      let latestRemovedAnswer = currentState.latestRemovedAnswer;
 
       if (isOwnVote) {
         ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
@@ -279,6 +291,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = latestAnswers.filter((answer) => answer.id !== event.poll_vote.id);
         ownAnswer = undefined;
+        latestRemovedAnswer = event.poll_vote;
       } else {
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
@@ -293,6 +306,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         ownVotes,
         ownVotesByOptionId,
         maxVotedOptionIds,
+        latestRemovedAnswer,
       });
     }).unsubscribe;
   }
