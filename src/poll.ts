@@ -147,154 +147,164 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.clear();
   };
 
+  public handlePollUpdated = (event: Event<SCG>) => {
+    if (event.poll?.id && event.poll.id !== this.id) return;
+    if (!isPollUpdatedEvent(event)) return;
+    // @ts-ignore
+    this.state.partialNext({ ...extractPollData(event.poll), lastActivityAt: new Date(event.created_at) });
+  }
+
   private subscribePollUpdated = () => {
-    return this.client.on('poll.updated', (event) => {
-      if (event.poll?.id && event.poll.id !== this.id) return;
-      if (!isPollUpdatedEvent(event)) return;
-      // @ts-ignore
-      this.state.partialNext({ ...extractPollData(event.poll), lastActivityAt: new Date(event.created_at) });
-    }).unsubscribe;
+    return this.client.on('poll.updated', this.handlePollUpdated).unsubscribe;
   }
 
   private subscribePollClosed = () => {
-    return this.client.on('poll.closed', (event) => {
-      if (event.poll?.id && event.poll.id !== this.id) return;
-      if (!isPollClosedEventEvent(event)) return;
-      // @ts-ignore
-      this.state.partialNext({ is_closed: true, lastActivityAt: new Date(event.created_at) });
-    }).unsubscribe;
+    return this.client.on('poll.closed', this.handlePollClosed).unsubscribe;
   }
 
   private subscribeVoteCasted = () => {
-    return this.client.on('poll.vote_casted', (event) => {
-      if (event.poll?.id && event.poll.id !== this.id) return;
-      if (!isPollVoteCastedEvent(event)) return;
-      const currentState = this.data;
-      const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      const ownVotes = [...(currentState?.ownVotes || [])];
-      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
-      let ownAnswer = currentState.ownAnswer;
-      const ownVotesByOptionId = currentState.ownVotesByOptionId;
-      let maxVotedOptionIds = currentState.maxVotedOptionIds;
-
-      if (isOwnVote) {
-        if (isVoteAnswer(event.poll_vote)) {
-          ownAnswer = event.poll_vote;
-        } else {
-          ownVotes.push(event.poll_vote);
-          if (event.poll_vote.option_id) {
-            ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote.id;
-          }
-        }
-      }
-
-      if (isVoteAnswer(event.poll_vote)) {
-        latestAnswers = [event.poll_vote, ...latestAnswers];
-      } else {
-        maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
-      }
-
-      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
-      // @ts-ignore
-      this.state.partialNext( {
-        ...pollEnrichData,
-        latest_answers: latestAnswers,
-        lastActivityAt: new Date(event.created_at),
-        ownAnswer,
-        ownVotes,
-        ownVotesByOptionId,
-        maxVotedOptionIds,
-      });
-    }).unsubscribe;
+    return this.client.on('poll.vote_casted', this.handleVoteCasted).unsubscribe;
   }
 
   private subscribeVoteChanged = () => {
-    return this.client.on('poll.vote_changed', (event) => {
-      // this event is triggered only when event.poll.enforce_unique_vote === true
-      if (event.poll?.id && event.poll.id !== this.id) return;
-      if (!isPollVoteChangedEvent(event)) return;
-      const currentState = this.data;
-      const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      let ownVotes = [...(currentState?.ownVotes || [])];
-      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
-      let ownAnswer = currentState.ownAnswer;
-      let ownVotesByOptionId = currentState.ownVotesByOptionId;
-      let maxVotedOptionIds = currentState.maxVotedOptionIds;
-
-      if (isOwnVote) {
-        if (isVoteAnswer(event.poll_vote)) {
-          latestAnswers = [
-            event.poll_vote,
-            ...latestAnswers.filter((answer) => answer.user_id !== event.poll_vote.user_id),
-          ];
-          ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
-          ownAnswer = event.poll_vote;
-        } else { // event.poll.enforce_unique_vote === true
-          ownVotes = [event.poll_vote];
-          ownVotesByOptionId = {[event.poll_vote.option_id!]: event.poll_vote.id};
-
-          if (ownAnswer?.id === event.poll_vote.id) {
-            ownAnswer = undefined;
-          }
-          maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
-        }
-      } else if (isVoteAnswer(event.poll_vote)) {
-        latestAnswers = [event.poll_vote, ...latestAnswers];
-      } else {
-        maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
-      }
-
-      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
-      // @ts-ignore
-      this.state.partialNext({
-        ...pollEnrichData,
-        latest_answers: latestAnswers,
-        lastActivityAt: new Date(event.created_at),
-        ownAnswer,
-        ownVotes,
-        ownVotesByOptionId,
-        maxVotedOptionIds,
-      });
-    }).unsubscribe;
+    return this.client.on('poll.vote_changed', this.handleVoteChanged).unsubscribe;
   }
 
   private subscribeVoteRemoved = () => {
-    return this.client.on('poll.vote_removed', (event) => {
-      if (event.poll?.id && event.poll.id !== this.id) return;
-      if (!isPollVoteRemovedEvent(event)) return;
-      const currentState = this.data;
-      const isOwnVote = event.poll_vote.user_id === this.client.userID;
-      let ownVotes = [...(currentState?.ownVotes || [])];
-      let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
-      let ownAnswer = currentState.ownAnswer;
-      const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
-      let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    return this.client.on('poll.vote_removed', this.handleVoteRemoved).unsubscribe;
+  }
 
-      if (isOwnVote) {
-        ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
+  public handlePollClosed = (event: Event<SCG>) => {
+    if (event.poll?.id && event.poll.id !== this.id) return;
+    if (!isPollClosedEventEvent(event)) return;
+    // @ts-ignore
+    this.state.partialNext({ is_closed: true, lastActivityAt: new Date(event.created_at) });
+  }
+
+  public handleVoteCasted = (event: Event<SCG>) => {
+    if (event.poll?.id && event.poll.id !== this.id) return;
+    if (!isPollVoteCastedEvent(event)) return;
+    const currentState = this.data;
+    const isOwnVote = event.poll_vote.user_id === this.client.userID;
+    const ownVotes = [...(currentState?.ownVotes || [])];
+    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    let ownAnswer = currentState.ownAnswer;
+    const ownVotesByOptionId = currentState.ownVotesByOptionId;
+    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+
+    if (isOwnVote) {
+      if (isVoteAnswer(event.poll_vote)) {
+        ownAnswer = event.poll_vote;
+      } else {
+        ownVotes.push(event.poll_vote);
         if (event.poll_vote.option_id) {
-          delete ownVotesByOptionId[event.poll_vote.option_id];
+          ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote.id;
         }
       }
+    }
+
+    if (isVoteAnswer(event.poll_vote)) {
+      latestAnswers = [event.poll_vote, ...latestAnswers];
+    } else {
+      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
+    }
+
+    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    // @ts-ignore
+    this.state.partialNext( {
+      ...pollEnrichData,
+      latest_answers: latestAnswers,
+      lastActivityAt: new Date(event.created_at),
+      ownAnswer,
+      ownVotes,
+      ownVotesByOptionId,
+      maxVotedOptionIds,
+    });
+  }
+
+  public handleVoteChanged = (event: Event<SCG>) => {
+    // this event is triggered only when event.poll.enforce_unique_vote === true
+    if (event.poll?.id && event.poll.id !== this.id) return;
+    if (!isPollVoteChangedEvent(event)) return;
+    const currentState = this.data;
+    const isOwnVote = event.poll_vote.user_id === this.client.userID;
+    let ownVotes = [...(currentState?.ownVotes || [])];
+    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    let ownAnswer = currentState.ownAnswer;
+    let ownVotesByOptionId = currentState.ownVotesByOptionId;
+    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+
+    if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
-        latestAnswers = latestAnswers.filter((answer) => answer.id !== event.poll_vote.id);
-        ownAnswer = undefined;
-      } else {
+        latestAnswers = [
+          event.poll_vote,
+          ...latestAnswers.filter((answer) => answer.user_id !== event.poll_vote.user_id),
+        ];
+        ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
+        ownAnswer = event.poll_vote;
+      } else { // event.poll.enforce_unique_vote === true
+        ownVotes = [event.poll_vote];
+        ownVotesByOptionId = {[event.poll_vote.option_id!]: event.poll_vote.id};
+
+        if (ownAnswer?.id === event.poll_vote.id) {
+          ownAnswer = undefined;
+        }
         maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
+    } else if (isVoteAnswer(event.poll_vote)) {
+      latestAnswers = [event.poll_vote, ...latestAnswers];
+    } else {
+      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
+    }
 
-      const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
-      // @ts-ignore
-      this.state.partialNext({
-        ...pollEnrichData,
-        latest_answers: latestAnswers,
-        lastActivityAt: new Date(event.created_at),
-        ownAnswer,
-        ownVotes,
-        ownVotesByOptionId,
-        maxVotedOptionIds,
-      });
-    }).unsubscribe;
+    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    // @ts-ignore
+    this.state.partialNext({
+      ...pollEnrichData,
+      latest_answers: latestAnswers,
+      lastActivityAt: new Date(event.created_at),
+      ownAnswer,
+      ownVotes,
+      ownVotesByOptionId,
+      maxVotedOptionIds,
+    });
+  }
+
+  public handleVoteRemoved = (event: Event<SCG>) => {
+    if (event.poll?.id && event.poll.id !== this.id) return;
+    if (!isPollVoteRemovedEvent(event)) return;
+    const currentState = this.data;
+    const isOwnVote = event.poll_vote.user_id === this.client.userID;
+    let ownVotes = [...(currentState?.ownVotes || [])];
+    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    let ownAnswer = currentState.ownAnswer;
+    const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
+    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+
+    if (isOwnVote) {
+      ownVotes = ownVotes.filter((vote) => vote.id !== event.poll_vote.id);
+      if (event.poll_vote.option_id) {
+        delete ownVotesByOptionId[event.poll_vote.option_id];
+      }
+    }
+    if (isVoteAnswer(event.poll_vote)) {
+      latestAnswers = latestAnswers.filter((answer) => answer.id !== event.poll_vote.id);
+      ownAnswer = undefined;
+    } else {
+      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
+    }
+
+    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    // @ts-ignore
+    this.state.partialNext({
+      ...pollEnrichData,
+      latest_answers: latestAnswers,
+      lastActivityAt: new Date(event.created_at),
+      ownAnswer,
+      ownVotes,
+      ownVotesByOptionId,
+      maxVotedOptionIds,
+    });
   }
 
   query = async (id: string)=> {
