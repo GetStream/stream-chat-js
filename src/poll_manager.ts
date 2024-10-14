@@ -13,11 +13,15 @@ import { formatMessage } from './utils';
 
 export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private client: StreamChat<SCG>;
-  public pollMap = new Map<string, Poll<SCG>>();
+  private pollCache = new Map<string, Poll<SCG>>();
   private unsubscribeFunctions: Set<() => void> = new Set();
 
   constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
+  }
+
+  public fromState = (id: string) => {
+    if (this.pollCache.has(id)) return this.pollCache.get(id);
   }
 
   public registerSubscriptions = () => {
@@ -62,49 +66,49 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   public hydratePollCache = (messages: FormatMessageResponse<SCG>[]) => {
     for (const message of messages) {
-      if (message.poll_id && message.poll && !this.pollMap.has(message.poll_id)) {
-        const poll = new Poll({ client: this.client, poll: message.poll})
-        this.pollMap.set(poll.id, poll);
+      if (message.poll_id && message.poll && !this.pollCache.has(message.poll_id)) {
+        const poll = new Poll({ client: this.client, poll: message.poll});
+        this.pollCache.set(poll.id, poll);
       }
     }
   }
 
   private subscribePollUpdated = () => {
     return this.client.on('poll.updated', (event) => {
-      if (event.poll?.id && this.pollMap.has(event.poll.id)) {
-        this.pollMap.get(event.poll.id)?.handlePollUpdated(event);
+      if (event.poll?.id) {
+        this.fromState(event.poll.id)?.handlePollUpdated(event);
       }
     }).unsubscribe;
   }
 
   private subscribePollClosed = () => {
     return this.client.on('poll.closed', (event) => {
-      if (event.poll?.id && this.pollMap.has(event.poll.id)) {
-        this.pollMap.get(event.poll.id)?.handlePollClosed(event);
+      if (event.poll?.id) {
+        this.fromState(event.poll.id)?.handlePollClosed(event);
       }
     }).unsubscribe;
   }
 
   private subscribeVoteCasted = () => {
     return this.client.on('poll.vote_casted', (event) => {
-      if (event.poll?.id && this.pollMap.has(event.poll.id)) {
-        this.pollMap.get(event.poll.id)?.handleVoteCasted(event);
+      if (event.poll?.id) {
+        this.fromState(event.poll.id)?.handleVoteCasted(event);
       }
     }).unsubscribe;
   }
 
   private subscribeVoteChanged = () => {
     return this.client.on('poll.vote_changed', (event) => {
-      if (event.poll?.id && this.pollMap.has(event.poll.id)) {
-        this.pollMap.get(event.poll.id)?.handleVoteChanged(event);
+      if (event.poll?.id) {
+        this.fromState(event.poll.id)?.handleVoteChanged(event);
       }
     }).unsubscribe;
   }
 
   private subscribeVoteRemoved = () => {
     return this.client.on('poll.vote_removed', (event) => {
-      if (event.poll?.id && this.pollMap.has(event.poll.id)) {
-        this.pollMap.get(event.poll.id)?.handleVoteRemoved(event);
+      if (event.poll?.id) {
+        this.fromState(event.poll.id)?.handleVoteRemoved(event);
       }
     }).unsubscribe;
   }
