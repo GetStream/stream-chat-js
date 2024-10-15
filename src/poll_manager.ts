@@ -3,6 +3,7 @@ import type {
   CreatePollData,
   DefaultGenerics,
   ExtendableGenerics,
+  PollResponse,
   PollSort,
   QueryPollsFilters,
   QueryPollsOptions,
@@ -22,7 +23,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   public fromState = (id: string) => {
     if (this.pollCache.has(id)) return this.pollCache.get(id);
-  }
+  };
 
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
@@ -67,11 +68,11 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public hydratePollCache = (messages: FormatMessageResponse<SCG>[]) => {
     for (const message of messages) {
       if (message.poll_id && message.poll && !this.pollCache.has(message.poll_id)) {
-        const poll = new Poll({ client: this.client, poll: message.poll});
+        const poll = new Poll<SCG>({ client: this.client, poll: message.poll as PollResponse<SCG> });
         this.pollCache.set(poll.id, poll);
       }
     }
-  }
+  };
 
   private subscribePollUpdated = () => {
     return this.client.on('poll.updated', (event) => {
@@ -79,7 +80,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.fromState(event.poll.id)?.handlePollUpdated(event);
       }
     }).unsubscribe;
-  }
+  };
 
   private subscribePollClosed = () => {
     return this.client.on('poll.closed', (event) => {
@@ -87,7 +88,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.fromState(event.poll.id)?.handlePollClosed(event);
       }
     }).unsubscribe;
-  }
+  };
 
   private subscribeVoteCasted = () => {
     return this.client.on('poll.vote_casted', (event) => {
@@ -95,7 +96,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.fromState(event.poll.id)?.handleVoteCasted(event);
       }
     }).unsubscribe;
-  }
+  };
 
   private subscribeVoteChanged = () => {
     return this.client.on('poll.vote_changed', (event) => {
@@ -103,7 +104,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.fromState(event.poll.id)?.handleVoteChanged(event);
       }
     }).unsubscribe;
-  }
+  };
 
   private subscribeVoteRemoved = () => {
     return this.client.on('poll.vote_removed', (event) => {
@@ -111,7 +112,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.fromState(event.poll.id)?.handleVoteRemoved(event);
       }
     }).unsubscribe;
-  }
+  };
 
   private subscribeMessageNew = () => {
     return this.client.on('message.new', (event) => {
@@ -121,5 +122,5 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.hydratePollCache([formattedMessage]);
       }
     }).unsubscribe;
-  }
+  };
 }
