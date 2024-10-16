@@ -1682,7 +1682,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
             logger: this.logger,
           }),
         };
-        this.polls.hydratePollCache(updatedMessagesSet.messages);
+        this.polls.hydratePollCache(updatedMessagesSet.messages, true);
       }
 
       channels.push(c);

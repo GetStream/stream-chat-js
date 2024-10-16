@@ -103,9 +103,15 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client, poll: { own_votes, id, ...pollResponseForState } }: PollInitOptions<SCG>) {
+  constructor({ client, poll }: PollInitOptions<SCG>) {
     this.client = client;
-    this.id = id;
+    this.id = poll.id;
+
+    this.state = new StateStore<PollState<SCG>>(this.getInitialStateFromPollResponse(poll));
+  }
+
+  private getInitialStateFromPollResponse = (poll: PollInitOptions<SCG>['poll']) => {
+    const { own_votes, id, ...pollResponseForState } = poll;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{ownVotes: PollVote<SCG>[], ownAnswer?: PollAnswer}>((acc, voteOrAnswer) => {
       if (isVoteAnswer(voteOrAnswer)) {
         acc.ownAnswer = voteOrAnswer;
@@ -115,63 +121,29 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       return acc;
     }, {ownVotes: []}) ?? {ownVotes: []};
 
-    this.state = new StateStore<PollState<SCG>>({
+    return {
       ...pollResponseForState,
       lastActivityAt: new Date(),
       maxVotedOptionIds: getMaxVotedOptionIds(pollResponseForState.vote_counts_by_option as PollResponse<SCG>['vote_counts_by_option']),
       ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
       ownVotes,
-    });
+    };
+  };
+
+  public reinitializeState = (poll: PollInitOptions<SCG>['poll']) => {
+    this.state.partialNext(this.getInitialStateFromPollResponse(poll));
   }
 
   get data(): PollState<SCG> {
     return this.state.getLatestValue();
   }
 
-  public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
-      // Already listening for events and changes
-      return;
-    }
-
-    this.unsubscribeFunctions.add(this.subscribePollUpdated());
-    this.unsubscribeFunctions.add(this.subscribePollClosed());
-    this.unsubscribeFunctions.add(this.subscribeVoteCasted());
-    this.unsubscribeFunctions.add(this.subscribeVoteChanged());
-    this.unsubscribeFunctions.add(this.subscribeVoteRemoved());
-  };
-
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
-  };
-
   public handlePollUpdated = (event: Event<SCG>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollUpdatedEvent(event)) return;
     // @ts-ignore
     this.state.partialNext({ ...extractPollData(event.poll), lastActivityAt: new Date(event.created_at) });
-  }
-
-  private subscribePollUpdated = () => {
-    return this.client.on('poll.updated', this.handlePollUpdated).unsubscribe;
-  }
-
-  private subscribePollClosed = () => {
-    return this.client.on('poll.closed', this.handlePollClosed).unsubscribe;
-  }
-
-  private subscribeVoteCasted = () => {
-    return this.client.on('poll.vote_casted', this.handleVoteCasted).unsubscribe;
-  }
-
-  private subscribeVoteChanged = () => {
-    return this.client.on('poll.vote_changed', this.handleVoteChanged).unsubscribe;
-  }
-
-  private subscribeVoteRemoved = () => {
-    return this.client.on('poll.vote_removed', this.handleVoteRemoved).unsubscribe;
   }
 
   public handlePollClosed = (event: Event<SCG>) => {
@@ -391,7 +363,7 @@ function getOwnVotesByOptionId<SCG extends ExtendableGenerics = DefaultGenerics>
       }, {});
 }
 
-function extractPollData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollData<SCG> {
+export function extractPollData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollData<SCG> {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
@@ -406,7 +378,7 @@ function extractPollData <SCG extends ExtendableGenerics = DefaultGenerics>(poll
   };
 }
 
-function extractPollEnrichedData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollEnrichData<SCG> {
+export function extractPollEnrichedData <SCG extends ExtendableGenerics = DefaultGenerics>(pollResponse: PollResponse<SCG>): PollEnrichData<SCG> {
   return {
     answers_count: pollResponse.answers_count,
     latest_answers: pollResponse.latest_answers,

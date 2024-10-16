@@ -1080,7 +1080,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }),
     };
 
-    this.getClient().polls.hydratePollCache(messageSet.messages);
+    this.getClient().polls.hydratePollCache(messageSet.messages, true);
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==

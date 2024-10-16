@@ -22,7 +22,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public fromState = (id: string) => {
-    if (this.pollCache.has(id)) return this.pollCache.get(id);
+    return this.pollCache.get(id);
   };
 
   public registerSubscriptions = () => {
@@ -65,11 +65,19 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     };
   };
 
-  public hydratePollCache = (messages: FormatMessageResponse<SCG>[]) => {
+  // TODO: invoke this during queryPolls and getPoll as well for brevity
+  public hydratePollCache = (messages: FormatMessageResponse<SCG>[], overwriteState?: boolean) => {
     for (const message of messages) {
-      if (message.poll_id && message.poll && !this.pollCache.has(message.poll_id)) {
-        const poll = new Poll<SCG>({ client: this.client, poll: message.poll as PollResponse<SCG> });
+      if (!message.poll) {
+        continue;
+      }
+      const pollResponse = message.poll as PollResponse<SCG>;
+      const pollFromCache = this.fromState(pollResponse.id);
+      if (!pollFromCache) {
+        const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
         this.pollCache.set(poll.id, poll);
+      } else if (overwriteState) {
+        pollFromCache.reinitializeState(pollResponse);
       }
     }
   };
