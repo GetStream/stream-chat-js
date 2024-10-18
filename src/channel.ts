@@ -57,6 +57,7 @@ import {
   PollVoteData,
   SendMessageOptions,
   AscDesc,
+  PartialUpdateMemberAPIResponse,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -313,7 +314,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       throw Error('Please specify the user id');
     }
 
-    return await this.getClient().patch<ChannelMemberResponse<StreamChatGenerics>>(
+    return await this.getClient().patch<PartialUpdateMemberAPIResponse<StreamChatGenerics>>(
       this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
       updates,
     );
