@@ -332,10 +332,13 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
 };
 
 export type ChannelMemberUpdates = {
+  archived?: boolean;
   channel_role?: Role;
+  pinned?: boolean;
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  archived_at?: string;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -345,6 +348,7 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
+  pinned_at?: string;
   role?: string;
   shadow_banned?: boolean;
   status?: string;
