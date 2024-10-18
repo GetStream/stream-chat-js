@@ -357,6 +357,12 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   user_id?: string;
 };
 
+export type PartialUpdateMemberAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = APIResponse & {
+  channel_member: ChannelMemberResponse<StreamChatGenerics>;
+};
+
 export type CheckPushResponse = APIResponse & {
   device_errors?: {
     [deviceID: string]: {
