@@ -283,7 +283,7 @@ export type ChannelResponse<
   joined?: boolean;
   last_message_at?: string;
   member_count?: number;
-  members?: ChannelMemberResponse<StreamChatGenerics>[];
+  members?: ChannelMember<StreamChatGenerics>[];
   muted?: boolean;
   name?: string;
   own_capabilities?: string[];
@@ -310,11 +310,11 @@ export type QueryChannelAPIResponse<StreamChatGenerics extends ExtendableGeneric
 
 export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel: ChannelResponse<StreamChatGenerics>;
-  members: ChannelMemberResponse<StreamChatGenerics>[];
+  members: ChannelMember<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
-  membership?: ChannelMemberResponse<StreamChatGenerics> | null;
+  membership?: ChannelMember<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
@@ -328,7 +328,7 @@ export type ChannelUpdateOptions = {
 };
 
 export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
-  members: ChannelMemberResponse<StreamChatGenerics>[];
+  members: ChannelMember<StreamChatGenerics>[];
 };
 
 export type ChannelMemberUpdates = {
@@ -336,7 +336,7 @@ export type ChannelMemberUpdates = {
   pinned?: boolean;
 };
 
-export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type ChannelMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -353,6 +353,10 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   pinned_at?: string;
+};
+
+export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  channel_member: ChannelMember<StreamChatGenerics>;
 };
 
 export type CheckPushResponse = APIResponse & {
@@ -750,7 +754,7 @@ export type PartialUpdateChannelAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = APIResponse & {
   channel: ChannelResponse<StreamChatGenerics>;
-  members: ChannelMemberResponse<StreamChatGenerics>[];
+  members: ChannelMember<StreamChatGenerics>[];
 };
 
 export type PermissionAPIResponse = APIResponse & {
@@ -819,7 +823,7 @@ export type TruncateChannelAPIResponse<
 
 export type UpdateChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   channel: ChannelResponse<StreamChatGenerics>;
-  members: ChannelMemberResponse<StreamChatGenerics>[];
+  members: ChannelMember<StreamChatGenerics>[];
   message?: MessageResponse<StreamChatGenerics>;
 };
 
@@ -1226,7 +1230,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   last_read_message_id?: string;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
-  member?: ChannelMemberResponse<StreamChatGenerics>;
+  member?: ChannelMember<StreamChatGenerics>;
   message?: MessageResponse<StreamChatGenerics>;
   mode?: string;
   online?: boolean;
@@ -2096,11 +2100,11 @@ export type ChannelData<
 };
 
 /**
- * @deprecated Use ChannelMemberResponse instead
+ * @deprecated Use ChannelMember instead
  */
 export type ChannelMembership<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = ChannelMemberResponse<StreamChatGenerics>;
+> = ChannelMember<StreamChatGenerics>;
 
 export type ChannelMute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   user: UserResponse<StreamChatGenerics>;
