@@ -308,7 +308,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
    */
-  async partialUpdateMember(user_id: string, updates: PartialUpdateMember<StreamChatGenerics>) {
+  async partialUpdateMember(user_id: string, updates: PartialUpdateMember) {
     if (!user_id) {
       throw Error('Please specify the user id');
     }

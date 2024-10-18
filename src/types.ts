@@ -331,6 +331,10 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
   members: ChannelMemberResponse<StreamChatGenerics>[];
 };
 
+export type ChannelMemberUpdates = {
+  channel_role?: Role;
+};
+
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   ban_expires?: string;
   banned?: boolean;
@@ -2484,9 +2488,9 @@ export type PartialUpdateChannel<StreamChatGenerics extends ExtendableGenerics =
   unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
 };
 
-export type PartialUpdateMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  set?: Partial<ChannelMemberResponse<StreamChatGenerics>>;
-  unset?: Array<keyof ChannelMemberResponse<StreamChatGenerics>>;
+export type PartialUpdateMember = {
+  set?: ChannelMemberUpdates;
+  unset?: Array<keyof ChannelMemberUpdates>;
 };
 
 export type PartialUserUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
