@@ -333,6 +333,7 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
 
 export type ChannelMemberUpdates = {
   channel_role?: Role;
+  pinned?: boolean;
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -351,6 +352,7 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
+  pinned_at?: string;
 };
 
 export type CheckPushResponse = APIResponse & {
