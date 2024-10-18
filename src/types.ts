@@ -332,11 +332,13 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
 };
 
 export type ChannelMemberUpdates = {
+  archived?: boolean;
   channel_role?: Role;
   pinned?: boolean;
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  archived_at?: string;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
