@@ -645,6 +645,50 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * archive - archive the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.archive();
+   *
+   * example server side:
+   * await channel.archive({user_id: userId});
+   *
+   */
+  async archive(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for archiving a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { archived: true } });
+    return resp.channel_member;
+  }
+
+  /**
+   * unarchive - unarchives the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.unarchive();
+   *
+   * example server side:
+   * await channel.unarchive({user_id: userId});
+   *
+   */
+  async unarchive(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for unarchiving a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { archived: false } });
+    return resp.channel_member;
+  }
+
+  /**
    * muteStatus - returns the mute status for the current channel
    * @return {{ muted: boolean; createdAt: Date | null; expiresAt: Date | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
    */
