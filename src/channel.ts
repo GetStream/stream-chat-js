@@ -645,6 +645,50 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * pin - pins the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.pin();
+   *
+   * example server side:
+   * await channel.pin({user_id: userId});
+   *
+   */
+  async pin(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for pinning a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
+    return resp.channel_member;
+  }
+
+  /**
+   * unpin - unpins the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.unpin();
+   *
+   * example server side:
+   * await channel.unpin({user_id: userId});
+   *
+   */
+  async unpin(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for unpinning a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
+    return resp.channel_member;
+  }
+
+  /**
    * muteStatus - returns the mute status for the current channel
    * @return {{ muted: boolean; createdAt: Date | null; expiresAt: Date | null }} { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
    */
