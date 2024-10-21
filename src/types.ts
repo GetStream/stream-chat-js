@@ -3129,9 +3129,9 @@ export type PollVote<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   id: string;
   poll_id: string;
   updated_at: string;
-  user_id: string;
   option_id?: string;
   user?: UserResponse<StreamChatGenerics>;
+  user_id?: string;
 };
 
 export type PollAnswer<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Exclude<
