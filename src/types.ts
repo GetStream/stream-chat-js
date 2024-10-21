@@ -346,13 +346,13 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
+  pinned_at?: string;
   role?: string;
   shadow_banned?: boolean;
   status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
-  pinned_at?: string;
 };
 
 export type PartialUpdateMemberAPIResponse<
