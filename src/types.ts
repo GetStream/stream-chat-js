@@ -337,6 +337,7 @@ export type ChannelMemberUpdates = {
 };
 
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  archived_at?: string;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -352,7 +353,6 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
-  archived_at?: string;
 };
 
 export type PartialUpdateMemberAPIResponse<
