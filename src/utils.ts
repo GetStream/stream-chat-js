@@ -310,12 +310,18 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
 
 export const findIndexInSortedArray = <T, L>({
   needle,
+  returnOnMidMatch,
   sortedArray,
   selectValueToCompare = (e) => e,
   sortDirection = 'ascending',
 }: {
   needle: T;
   sortedArray: readonly T[];
+  /**
+   * Returns the index of the midpoint if it matches the target value.
+   * Should be enabled only if the searched array cannot contain duplicates.
+   */
+  returnOnMidMatch?: boolean;
   /**
    * In array of objects (like messages), pick a specific
    * property to compare needle value to.
@@ -353,7 +359,7 @@ export const findIndexInSortedArray = <T, L>({
 
     const comparableMiddle = selectValueToCompare(sortedArray[middle]);
 
-    if (comparableNeedle === comparableMiddle) return middle;
+    if (returnOnMidMatch && comparableNeedle === comparableMiddle) return middle;
 
     if (
       (sortDirection === 'ascending' && comparableNeedle < comparableMiddle) ||

@@ -97,21 +97,39 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('add a message with same created_at', async function () {
 		const state = new ChannelState();
+		const pairCount = 10;
+		const msgCount = pairCount * 2;
 
-		for (let i = 0; i < 10; i++) {
-			state.addMessagesSorted([generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` })]);
+		for (let i = 0; i < msgCount; i += 2) {
+			state.addMessagesSorted([
+				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.0${i.toString().padStart(2, '0')}Z` }),
+				generateMsg({ id: `${i + 1}`, date: `2020-01-01T00:00:00.0${i.toString().padStart(2, '0')}Z` }),
+			]);
 		}
 
-		for (let i = 10; i < state.messages.length - 1; i++) {
-			for (let j = i + 1; i < state.messages.length - 1; j++)
-				expect(state.messages[i].created_at.getTime()).to.be.lessThan(state.messages[j].created_at.getTime());
+		for (let i = 0; i < msgCount; i += 2) {
+			expect(state.messages[i].created_at.getTime()).to.be.eq(state.messages[i + 1].created_at.getTime());
+			if (i + 2 < msgCount) {
+				expect(state.messages[i].created_at.getTime()).to.be.lessThan(
+					state.messages[i + 2].created_at.getTime(),
+				);
+			}
 		}
 
-		expect(state.messages).to.have.length(10);
-		state.addMessagesSorted([generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` })]);
-		expect(state.messages).to.have.length(11);
-		expect(state.messages[7].id).to.be.equal('id');
-		expect(state.messages[8].id).to.be.equal('7');
+		expect(state.messages).to.have.length(msgCount);
+		state.addMessagesSorted([generateMsg({ id: '1stAdded', date: `2020-01-01T00:00:00.014Z` })]);
+
+		expect(state.messages).to.have.length(msgCount + 1);
+		expect(state.messages[14].id).to.be.equal('14');
+		expect(state.messages[15].id).to.be.equal('15');
+		expect(state.messages[16].id).to.be.equal('1stAdded');
+		state.addMessagesSorted([generateMsg({ id: '2ndAdded', date: `2020-01-01T00:00:00.014Z` })]);
+
+		expect(state.messages).to.have.length(msgCount + 2);
+		expect(state.messages[14].id).to.be.equal('14');
+		expect(state.messages[15].id).to.be.equal('15');
+		expect(state.messages[16].id).to.be.equal('1stAdded');
+		expect(state.messages[17].id).to.be.equal('2ndAdded');
 	});
 
 	it('add lots of messages in order', async function () {

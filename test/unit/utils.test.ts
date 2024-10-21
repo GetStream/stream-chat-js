@@ -125,29 +125,53 @@ describe('findIndexInSortedArray', () => {
     const messages = generateMessages({ sort: 'asc' }).map(formatMessage);
 
     it('finds index of the message with closest matching created_at', () => {
-      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse);
+      [
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse),
+          returnOnMidMatch: true,
+        },
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse),
+          returnOnMidMatch: false,
+        },
+      ].forEach(({ newMessage, returnOnMidMatch }) => {
+        const index = findIndexInSortedArray({
+          needle: newMessage,
+          returnOnMidMatch,
+          sortedArray: messages,
+          sortDirection: 'ascending',
+          selectValueToCompare: (v) => v.created_at.getTime(),
+        });
 
-      const index = findIndexInSortedArray({
-        needle: newMessage,
-        sortedArray: messages,
-        sortDirection: 'ascending',
-        selectValueToCompare: (v) => v.created_at.getTime(),
+        expect(index).to.equal(3);
       });
-
-      expect(index).to.equal(3);
     });
 
     it('finds exact index', () => {
-      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 20 * 1000) }) as MessageResponse);
+      [
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 20 * 1000) }) as MessageResponse),
+          returnOnMidMatch: true,
+        },
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 20 * 1000) }) as MessageResponse),
+          returnOnMidMatch: false,
+        },
+      ].forEach(({ newMessage, returnOnMidMatch }) => {
+        const index = findIndexInSortedArray({
+          needle: newMessage,
+          returnOnMidMatch,
+          sortedArray: messages,
+          sortDirection: 'ascending',
+          selectValueToCompare: (v) => v.created_at.getTime(),
+        });
 
-      const index = findIndexInSortedArray({
-        needle: newMessage,
-        sortedArray: messages,
-        sortDirection: 'ascending',
-        selectValueToCompare: (v) => v.created_at.getTime(),
+        if (returnOnMidMatch) {
+          expect(index).to.equal(2);
+        } else {
+          expect(index).to.equal(3);
+        }
       });
-
-      expect(index).to.equal(2);
     });
   });
 
@@ -155,29 +179,52 @@ describe('findIndexInSortedArray', () => {
     const messages = generateMessages({ sort: 'desc' }).map(formatMessage);
 
     it('finds index of the message with closest matching created_at', () => {
-      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse);
+      [
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse),
+          returnOnMidMatch: true,
+        },
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 22 * 1000) }) as MessageResponse),
+          returnOnMidMatch: false,
+        },
+      ].forEach(({ newMessage, returnOnMidMatch }) => {
+        const index = findIndexInSortedArray({
+          needle: newMessage,
+          returnOnMidMatch,
+          sortedArray: messages,
+          sortDirection: 'descending',
+          selectValueToCompare: (v) => v.created_at.getTime(),
+        });
 
-      const index = findIndexInSortedArray({
-        needle: newMessage,
-        sortedArray: messages,
-        sortDirection: 'descending',
-        selectValueToCompare: (v) => v.created_at.getTime(),
+        expect(index).to.equal(7);
       });
-
-      expect(index).to.equal(7);
     });
 
     it('finds exact index', () => {
-      const newMessage = formatMessage(generateMsg({ created_at: new Date(timestamp + 10 * 1000) }) as MessageResponse);
-
-      const index = findIndexInSortedArray({
-        needle: newMessage,
-        sortedArray: messages,
-        sortDirection: 'descending',
-        selectValueToCompare: (v) => v.created_at.getTime(),
+      [
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 10 * 1000) }) as MessageResponse),
+          returnOnMidMatch: true,
+        },
+        {
+          newMessage: formatMessage(generateMsg({ created_at: new Date(timestamp + 10 * 1000) }) as MessageResponse),
+          returnOnMidMatch: false,
+        },
+      ].forEach(({ newMessage, returnOnMidMatch }) => {
+        const index = findIndexInSortedArray({
+          needle: newMessage,
+          returnOnMidMatch,
+          sortedArray: messages,
+          sortDirection: 'descending',
+          selectValueToCompare: (v) => v.created_at.getTime(),
+        });
+        if (returnOnMidMatch) {
+          expect(index).to.equal(8);
+        } else {
+          expect(index).to.equal(9);
+        }
       });
-
-      expect(index).to.equal(8);
     });
   });
 });
