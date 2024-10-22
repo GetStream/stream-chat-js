@@ -3010,22 +3010,23 @@ export type UpdatePollAPIResponse<StreamChatGenerics extends ExtendableGenerics 
 
 export type PollResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = StreamChatGenerics['pollType'] & PollEnrichData<StreamChatGenerics> & {
-  created_at: string;
-  created_by: UserResponse<StreamChatGenerics> | null;
-  created_by_id: string;
-  enforce_unique_vote: boolean;
-  id: string;
-  max_votes_allowed: number;
-  name: string;
-  options: PollOption<StreamChatGenerics>[];
-  updated_at: string;
-  allow_answers?: boolean;
-  allow_user_suggested_options?: boolean;
-  description?: string;
-  is_closed?: boolean;
-  voting_visibility?: VotingVisibility;
-};
+> = StreamChatGenerics['pollType'] &
+  PollEnrichData<StreamChatGenerics> & {
+    created_at: string;
+    created_by: UserResponse<StreamChatGenerics> | null;
+    created_by_id: string;
+    enforce_unique_vote: boolean;
+    id: string;
+    max_votes_allowed: number;
+    name: string;
+    options: PollOption<StreamChatGenerics>[];
+    updated_at: string;
+    allow_answers?: boolean;
+    allow_user_suggested_options?: boolean;
+    description?: string;
+    is_closed?: boolean;
+    voting_visibility?: VotingVisibility;
+  };
 
 export type PollOption<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   created_at: string;
@@ -3042,9 +3043,7 @@ export enum VotingVisibility {
   public = 'public',
 }
 
-export type PollEnrichData<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = {
+export type PollEnrichData<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   answers_count: number;
   latest_answers: PollAnswer<StreamChatGenerics>[]; // not updated with WS events, ordered DESC by created_at, seems like updated_at cannot be different from created_at
   latest_votes_by_option: Record<string, PollVote<StreamChatGenerics>[]>; // not updated with WS events; always null in anonymous polls
@@ -3069,7 +3068,10 @@ export type PollData<
   voting_visibility?: VotingVisibility;
 };
 
-export type CreatePollData<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Partial<PollData<StreamChatGenerics>> & Pick<PollData<StreamChatGenerics>, 'name'>
+export type CreatePollData<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Partial<
+  PollData<StreamChatGenerics>
+> &
+  Pick<PollData<StreamChatGenerics>, 'name'>;
 
 export type PartialPollUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<PollData<StreamChatGenerics>>;
