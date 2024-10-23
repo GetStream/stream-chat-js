@@ -82,14 +82,13 @@ export type PollOptionVotesQueryParams = {
 };
 
 type OptionId = string;
-type PollVoteId = string;
 
 export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['pollType'] &
   Omit<PollResponse<SCG>, 'own_votes' | 'id'> & {
     lastActivityAt: Date; // todo: would be ideal to get this from the BE
     maxVotedOptionIds: OptionId[];
     ownVotes: PollVote<SCG>[];
-    ownVotesByOptionId: Record<OptionId, PollVoteId>; // single user can vote only once for the same option
+    ownVotesByOptionId: Record<OptionId, PollVote<SCG>>; // single user can vote only once for the same option
     ownAnswer?: PollAnswer; // each user can have only one answer
   };
 
@@ -176,7 +175,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       } else {
         ownVotes.push(event.poll_vote);
         if (event.poll_vote.option_id) {
-          ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote.id;
+          ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote;
         }
       }
     }
@@ -223,7 +222,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       } else {
         // event.poll.enforce_unique_vote === true
         ownVotes = [event.poll_vote];
-        ownVotesByOptionId = { [event.poll_vote.option_id!]: event.poll_vote.id };
+        ownVotesByOptionId = { [event.poll_vote.option_id!]: event.poll_vote };
 
         if (ownAnswer?.id === event.poll_vote.id) {
           ownAnswer = undefined;
@@ -362,10 +361,10 @@ function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_o
 
 function getOwnVotesByOptionId<SCG extends ExtendableGenerics = DefaultGenerics>(ownVotes: PollVote<SCG>[]) {
   return !ownVotes
-    ? ({} as Record<OptionId, PollVoteId>)
-    : ownVotes.reduce<Record<OptionId, PollVoteId>>((acc, vote) => {
+    ? ({} as Record<OptionId, PollVote<SCG>>)
+    : ownVotes.reduce<Record<OptionId, PollVote<SCG>>>((acc, vote) => {
         if (isVoteAnswer(vote) || !vote.option_id) return acc;
-        acc[vote.option_id] = vote.id;
+        acc[vote.option_id] = vote;
         return acc;
       }, {});
 }
