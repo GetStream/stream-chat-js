@@ -473,10 +473,11 @@ export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics 
     reactionType: StreamChatGenerics['reactionType'];
     userType: StreamChatGenerics['userType'];
   }>,
-  'created_at' | 'pinned_at' | 'updated_at' | 'status'
+  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
 > &
   StreamChatGenerics['messageType'] & {
     created_at: Date;
+    deleted_at: Date | null;
     pinned_at: Date | null;
     status: string;
     updated_at: Date;
@@ -498,28 +499,34 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export type ThreadResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  channel: ChannelResponse<StreamChatGenerics>;
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+  // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
+  channel: ChannelResponse<SCG>;
   channel_cid: string;
   created_at: string;
-  deleted_at: string;
-  latest_replies: MessageResponse<StreamChatGenerics>[];
-  parent_message: MessageResponse<StreamChatGenerics>;
+  created_by_user_id: string;
+  latest_replies: Array<MessageResponse<SCG>>;
+  parent_message: MessageResponse<SCG>;
   parent_message_id: string;
-  read: {
-    last_read: string;
-    last_read_message_id: string;
-    unread_messages: number;
-    user: UserResponse<StreamChatGenerics>;
-  }[];
-  reply_count: number;
-  thread_participants: {
-    created_at: string;
-    user: UserResponse<StreamChatGenerics>;
-  }[];
   title: string;
   updated_at: string;
-};
+  created_by?: UserResponse<SCG>;
+  deleted_at?: string;
+  last_message_at?: string;
+  participant_count?: number;
+  read?: Array<ReadResponse<SCG>>;
+  reply_count?: number;
+  thread_participants?: Array<{
+    channel_cid: string;
+    created_at: string;
+    last_read_at: string;
+    last_thread_message_at?: string;
+    left_thread_at?: string;
+    thread_id?: string;
+    user?: UserResponse<SCG>;
+    user_id?: string;
+  }>;
+}
 
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
@@ -1237,6 +1244,8 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   unread_count?: number;
   // number of unread messages in the channel from this event (notification.mark_unread)
   unread_messages?: number;
+  unread_thread_messages?: number;
+  unread_threads?: number;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
   watcher_count?: number;
@@ -1650,14 +1659,26 @@ export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends s
       $in?: PrimitiveFilter<ObjectType>[];
       $lt?: PrimitiveFilter<ObjectType>;
       $lte?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     }
   : {
       $eq?: PrimitiveFilter<ObjectType>;
       $exists?: boolean;
       $in?: PrimitiveFilter<ObjectType>[];
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     };
 
@@ -2462,6 +2483,11 @@ export type Mute<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 export type PartialUpdateChannel<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   set?: Partial<ChannelResponse<StreamChatGenerics>>;
   unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
+};
+
+export type PartialUpdateMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  set?: Partial<ChannelMemberResponse<StreamChatGenerics>>;
+  unset?: Array<keyof ChannelMemberResponse<StreamChatGenerics>>;
 };
 
 export type PartialUserUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
