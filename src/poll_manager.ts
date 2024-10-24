@@ -95,7 +95,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     } else if (overwriteState) {
       pollFromCache.reinitializeState(pollResponse);
     }
-  }
+  };
 
   private subscribePollUpdated = () => {
     return this.client.on('poll.updated', (event) => {
