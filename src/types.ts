@@ -331,7 +331,14 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
   members: ChannelMemberResponse<StreamChatGenerics>[];
 };
 
+export type ChannelMemberUpdates = {
+  archived?: boolean;
+  channel_role?: Role;
+  pinned?: boolean;
+};
+
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  archived_at?: string;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -341,12 +348,19 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
+  pinned_at?: string;
   role?: string;
   shadow_banned?: boolean;
   status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
+};
+
+export type PartialUpdateMemberAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = APIResponse & {
+  channel_member: ChannelMemberResponse<StreamChatGenerics>;
 };
 
 export type CheckPushResponse = APIResponse & {
@@ -963,10 +977,10 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   reminders?: boolean;
   replies?: boolean;
   search?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
-  skip_last_msg_update_for_system_msgs?: boolean;
 };
 
 export type CreateCommandOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -1487,6 +1501,9 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               userType: StreamChatGenerics['userType'];
             }>[Key]
           >;
+    } & {
+      archived?: boolean;
+      pinned?: boolean;
     }
 >;
 
@@ -1794,7 +1811,8 @@ export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
-  | Array<ChannelSortBase<StreamChatGenerics>>;
+  | Array<ChannelSortBase<StreamChatGenerics>>
+  | { pinned_at: AscDesc };
 
 export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['channelType']
@@ -2485,9 +2503,9 @@ export type PartialUpdateChannel<StreamChatGenerics extends ExtendableGenerics =
   unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
 };
 
-export type PartialUpdateMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  set?: Partial<ChannelMemberResponse<StreamChatGenerics>>;
-  unset?: Array<keyof ChannelMemberResponse<StreamChatGenerics>>;
+export type PartialUpdateMember = {
+  set?: ChannelMemberUpdates;
+  unset?: Array<keyof ChannelMemberUpdates>;
 };
 
 export type PartialUserUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
