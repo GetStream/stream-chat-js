@@ -317,7 +317,7 @@ describe('PollManager', () => {
       expect(spy2.calledOnce).to.be.false;
     })
 
-    const eventHandlerPairs = [['poll.vote_casted', 'handleVoteCasted'], ['poll.vote_changed', 'handleVoteChanged'], ['poll.vote_removed', 'handleVoteRemoved']];
+    const eventHandlerPairs = [['poll.closed', 'handlePollClosed'], ['poll.vote_casted', 'handleVoteCasted'], ['poll.vote_changed', 'handleVoteChanged'], ['poll.vote_removed', 'handleVoteRemoved']];
 
     eventHandlerPairs.map(([eventType, handlerName]) => {
       it(`should invoke poll.${handlerName} within the cache on ${eventType}`, () => {
@@ -329,7 +329,6 @@ describe('PollManager', () => {
         client.dispatchEvent({
           type: eventType as EventTypes,
           poll: updatedPoll,
-          user: { id: 'bob' },
         });
 
         expect(stub1.calledOnce).to.be.true;
