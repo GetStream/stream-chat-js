@@ -230,7 +230,7 @@ describe('PollManager', () => {
       // do not duplicate if it's been sent again, for example in a different channel;
       // the state should be shared.
       expect(pollManager.data.size).to.equal(1);
-    }, 'populates pollCache when the message.new event is fired')
+    })
 
     it('correctly hydrates the poll cache', () => {
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5);
@@ -297,6 +297,41 @@ describe('PollManager', () => {
       pollMessage1 = generatePollMessage(pollId1);
       pollMessage2 = generatePollMessage(pollId2);
       pollManager.hydratePollCache([pollMessage1, pollMessage2]);
+    })
+
+    it('should not register subscription handlers twice', () => {
+      pollManager.registerSubscriptions();
+
+      const pollClosedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handlePollClosed');
+
+      client.dispatchEvent({
+        type: 'poll.closed',
+        poll: pollMessage1.poll as PollResponse
+      });
+
+      expect(pollClosedStub.calledOnce).to.be.true;
+    })
+
+    it('should not call subscription handlers if unregisterSubscriptions has been called', () => {
+      pollManager.unregisterSubscriptions();
+
+      const voteCastedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handleVoteCasted');
+      const pollClosedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handlePollClosed');
+
+      const poll = pollMessage1.poll as PollResponse;
+
+      client.dispatchEvent({
+        type: 'poll.vote_casted',
+        poll,
+      });
+
+      client.dispatchEvent({
+        type: 'poll.closed',
+        poll,
+      });
+
+      expect(voteCastedStub.calledOnce).to.be.false;
+      expect(pollClosedStub.calledOnce).to.be.false;
     })
 
     it('should update the correct poll within the cache on poll.updated', () => {
