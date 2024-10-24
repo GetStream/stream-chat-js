@@ -9,8 +9,6 @@ import {
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
-  PollResponse,
-  PollVote,
   ReactionResponse,
   UserResponse,
 } from './types';
@@ -491,96 +489,6 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     const result = msgArray.filter((message) => !(!!message.id && !!msg.id && message.id === msg.id));
 
     return { removed: result.length < msgArray.length, result };
-  };
-
-  // this handles the case when vote on poll is changed
-  updatePollVote = (
-    pollVote: PollVote<StreamChatGenerics>,
-    poll: PollResponse<StreamChatGenerics>,
-    messageId: string,
-  ) => {
-    const message = this.findMessage(messageId);
-    if (!message) return;
-
-    if (message.poll_id !== pollVote.poll_id) return;
-
-    const updatedPoll = { ...poll };
-    let ownVotes = [...(message.poll?.own_votes || [])];
-
-    if (pollVote.user_id === this._channel.getClient().userID) {
-      if (pollVote.option_id && poll.enforce_unique_vote) {
-        // remove all previous votes where option_id is not empty
-        ownVotes = ownVotes.filter((vote) => !vote.option_id);
-      } else if (pollVote.answer_text) {
-        // remove all previous votes where option_id is empty
-        ownVotes = ownVotes.filter((vote) => vote.answer_text);
-      }
-
-      ownVotes.push(pollVote);
-    }
-
-    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
-    const newMessage = { ...message, poll: updatedPoll };
-
-    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
-  };
-
-  addPollVote = (pollVote: PollVote<StreamChatGenerics>, poll: PollResponse<StreamChatGenerics>, messageId: string) => {
-    const message = this.findMessage(messageId);
-    if (!message) return;
-
-    if (message.poll_id !== pollVote.poll_id) return;
-
-    const updatedPoll = { ...poll };
-    const ownVotes = [...(message.poll?.own_votes || [])];
-
-    if (pollVote.user_id === this._channel.getClient().userID) {
-      ownVotes.push(pollVote);
-    }
-
-    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
-    const newMessage = { ...message, poll: updatedPoll };
-
-    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
-  };
-
-  removePollVote = (
-    pollVote: PollVote<StreamChatGenerics>,
-    poll: PollResponse<StreamChatGenerics>,
-    messageId: string,
-  ) => {
-    const message = this.findMessage(messageId);
-    if (!message) return;
-
-    if (message.poll_id !== pollVote.poll_id) return;
-
-    const updatedPoll = { ...poll };
-    const ownVotes = [...(message.poll?.own_votes || [])];
-    if (pollVote.user_id === this._channel.getClient().userID) {
-      const index = ownVotes.findIndex((vote) => vote.option_id === pollVote.option_id);
-      if (index > -1) {
-        ownVotes.splice(index, 1);
-      }
-    }
-
-    updatedPoll.own_votes = ownVotes as PollVote<StreamChatGenerics>[];
-
-    const newMessage = { ...message, poll: updatedPoll };
-    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
-  };
-
-  updatePoll = (poll: PollResponse<StreamChatGenerics>, messageId: string) => {
-    const message = this.findMessage(messageId);
-    if (!message) return;
-
-    const updatedPoll = {
-      ...poll,
-      own_votes: [...(message.poll?.own_votes || [])],
-    };
-
-    const newMessage = { ...message, poll: updatedPoll };
-
-    this.addMessageSorted((newMessage as unknown) as MessageResponse<StreamChatGenerics>, false, false);
   };
 
   /**
