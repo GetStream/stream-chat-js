@@ -5,7 +5,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import sinon from 'sinon';
 import {
-  DefaultGenerics, EventTypes,
+  EventTypes,
   FormatMessageResponse,
   MessageResponse, Poll,
   PollManager, PollResponse,
@@ -371,6 +371,87 @@ describe('PollManager', () => {
         expect(stub1.getCall(0).args[0].poll).to.equal(updatedPoll);
         expect(stub2.calledOnce).to.be.false;
       })
+    })
+  })
+  describe('API', () => {
+    const pollId1 = 'poll_1';
+    const pollId2 = 'poll_2';
+    let stubbedQueryPolls: sinon.SinonStub<Parameters<StreamChat['queryPolls']>, ReturnType<StreamChat['queryPolls']>>;
+    let stubbedGetPoll: sinon.SinonStub<Parameters<StreamChat['getPoll']>, ReturnType<StreamChat['getPoll']>>;
+    const pollMessage1: PollResponse = generatePollMessage(pollId1);
+    const pollMessage2: PollResponse = generatePollMessage(pollId2);
+    beforeEach(() => {
+      stubbedQueryPolls = sinon.stub(client, 'queryPolls').resolves({ polls: [pollMessage1.poll as PollResponse, pollMessage2.poll as PollResponse], duration: '10' });
+      stubbedGetPoll = sinon.stub(client, 'getPoll').resolves({ poll: pollMessage1.poll as PollResponse, duration: '10' });
+    });
+    it('should return a Poll instance on queryPolls', async () => {
+      const { polls } = await pollManager.queryPolls({}, {}, {})
+
+      expect(polls).to.have.lengthOf(2)
+      polls.forEach((poll) => {
+        expect(poll).to.be.instanceof(Poll);
+      })
+      expect(stubbedQueryPolls.calledOnce).to.be.true;
+    })
+    it('should properly populate the pollCache on queryPolls', async () => {
+      const { polls } = await pollManager.queryPolls({}, {}, {})
+
+      expect(pollManager.data.size).to.equal(2);
+      expect(pollManager.fromState(pollId1)).to.not.be.undefined;
+      expect(pollManager.fromState(pollId2)).to.not.be.undefined;
+      // each poll should keep the same reference
+      polls.forEach((poll) => {
+        if (poll?.id) {
+          expect(pollManager.fromState(poll?.id)).to.equal(poll);
+        }
+      })
+    })
+    it('should overwrite the state if polls from queryPolls are already present in the cache', async () => {
+      const duplicatePollMessage = generatePollMessage(pollId1, { title: 'SHOULD CHANGE' });
+      pollManager.hydratePollCache([duplicatePollMessage]);
+
+      const previousPollFromCache = pollManager.fromState(pollId1);
+
+      const { polls } = await pollManager.queryPolls({}, {}, {});
+
+      const pollFromQuery = polls[0];
+
+      expect(pollManager.data.size).to.equal(2);
+      expect(pollManager.fromState(pollId1)).to.not.be.undefined;
+      expect(pollManager.fromState(pollId1)?.data.name).to.equal('XY');
+      expect(pollManager.fromState(pollId2)).to.not.be.undefined;
+      // maintain referential integrity
+      expect(pollManager.fromState(pollId1)).to.equal(previousPollFromCache);
+      expect(pollManager.fromState(pollId1)).to.equal(pollFromQuery);
+    })
+    it('should return a Poll instance on getPoll', async () => {
+      const poll = await pollManager.getPoll(pollId1);
+
+      expect(poll).to.be.instanceof(Poll);
+      expect(stubbedGetPoll.calledOnce).to.be.true;
+    })
+    it('should properly populate the pollCache on getPoll', async () => {
+      const poll = await pollManager.getPoll(pollId1);
+
+      expect(pollManager.data.size).to.equal(1);
+      expect(pollManager.fromState(pollId1)).to.not.be.undefined;
+      // should have the same reference
+      expect(pollManager.fromState(pollId1)).to.equal(poll);
+    })
+    it('should overwrite the state if the poll returned from getPoll is present in the cache', async () => {
+      const duplicatePollMessage = generatePollMessage(pollId1, { title: 'SHOULD CHANGE' });
+      pollManager.hydratePollCache([duplicatePollMessage]);
+
+      const previousPollFromCache = pollManager.fromState(pollId1);
+
+      const poll = await pollManager.getPoll(pollId1);
+
+      expect(pollManager.data.size).to.equal(1);
+      expect(pollManager.fromState(pollId1)).to.not.be.undefined;
+      expect(pollManager.fromState(pollId1)?.data.name).to.equal('XY');
+      // maintain referential integrity
+      expect(pollManager.fromState(pollId1)).to.equal(previousPollFromCache);
+      expect(pollManager.fromState(pollId1)).to.equal(poll);
     })
   })
 })
