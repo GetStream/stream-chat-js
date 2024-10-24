@@ -21,6 +21,10 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
   }
 
+  get data(): Map<string, Poll<SCG>> {
+    return this.pollCache;
+  }
+
   public fromState = (id: string) => {
     return this.pollCache.get(id);
   };
