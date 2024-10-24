@@ -1501,6 +1501,9 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               userType: StreamChatGenerics['userType'];
             }>[Key]
           >;
+    } & {
+      archived?: boolean;
+      pinned?: boolean;
     }
 >;
 
@@ -1808,7 +1811,8 @@ export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
-  | Array<ChannelSortBase<StreamChatGenerics>>;
+  | Array<ChannelSortBase<StreamChatGenerics>>
+  | { pinned_at: AscDesc };
 
 export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['channelType']
