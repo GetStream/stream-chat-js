@@ -5,7 +5,9 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import sinon from 'sinon';
 import {
-  MessageResponse,
+  DefaultGenerics, EventTypes,
+  FormatMessageResponse,
+  MessageResponse, Poll,
   PollManager, PollResponse,
   StreamChat,
 } from '../../src';
@@ -174,31 +176,32 @@ describe('PollManager', () => {
     sinon.restore();
   });
 
-  it('initializes properly', () => {
-    expect(pollManager.data).to.be.empty;
-    expect(client.polls.data).to.be.empty;
-    expect(client.polls.data).not.to.be.null;
-  });
+  describe('Initialization and pollCache hydration', () => {
+    it('initializes properly', () => {
+      expect(pollManager.data).to.be.empty;
+      expect(client.polls.data).to.be.empty;
+      expect(client.polls.data).not.to.be.null;
+    });
 
-  it('populates pollCache on client.hydrateActiveChannels', async () => {
-    const mockedChannelsQueryResponse = []
+    it('populates pollCache on client.hydrateActiveChannels', async () => {
+      const mockedChannelsQueryResponse = []
 
-    let pollMessages: MessageResponse[] = [];
-    for (let ci = 0; ci < 2; ci++) {
-      const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
-      pollMessages = pollMessages.concat(onlyPollMessages);
-      mockedChannelsQueryResponse.push({
-        ...mockChannelQueryResponse,
-        messages,
-      });
-    }
+      let pollMessages: MessageResponse[] = [];
+      for (let ci = 0; ci < 2; ci++) {
+        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        pollMessages = pollMessages.concat(onlyPollMessages);
+        mockedChannelsQueryResponse.push({
+          ...mockChannelQueryResponse,
+          messages,
+        });
+      }
 
-    client.hydrateActiveChannels(mockedChannelsQueryResponse);
+      client.hydrateActiveChannels(mockedChannelsQueryResponse);
 
-    expect(client.polls.data.size).to.equal(pollMessages.length);
-    // Map.prototype.keys() preserves the insertion order so we can do this
-    expect(Array.from(client.polls.data.keys())).to.deep.equal(pollMessages.map(m => m.poll_id));
-  })
+      expect(client.polls.data.size).to.equal(pollMessages.length);
+      // Map.prototype.keys() preserves the insertion order so we can do this
+      expect(Array.from(client.polls.data.keys())).to.deep.equal(pollMessages.map(m => m.poll_id));
+    })
 
   it('populates pollCache when the message.new event is fired', () => {
     client.dispatchEvent({
@@ -207,80 +210,133 @@ describe('PollManager', () => {
       user: { id: 'bob' },
     });
 
-    const pollMessage = generatePollMessage('poll_from_event', {}, { user: { id: 'bob' } })
+      const pollMessage = generatePollMessage('poll_from_event', {}, { user: { id: 'bob' } })
 
-    client.dispatchEvent({
-      type: 'message.new',
-      message: pollMessage,
-      user: { id: 'bob' },
-    });
+      client.dispatchEvent({
+        type: 'message.new',
+        message: pollMessage,
+        user: { id: 'bob' },
+      });
 
-    expect(pollManager.data.size).to.equal(1);
-    expect(pollManager.fromState('poll_from_event')?.id).to.equal('poll_from_event');
+      expect(pollManager.data.size).to.equal(1);
+      expect(pollManager.fromState('poll_from_event')?.id).to.equal('poll_from_event');
 
-    client.dispatchEvent({
-      type: 'message.new',
-      message: pollMessage,
-      user: { id: 'bob' },
-    });
+      client.dispatchEvent({
+        type: 'message.new',
+        message: pollMessage,
+        user: { id: 'bob' },
+      });
 
-    // do not duplicate if it's been sent again, for example in a different channel;
-    // the state should be shared.
-    expect(pollManager.data.size).to.equal(1);
+      // do not duplicate if it's been sent again, for example in a different channel;
+      // the state should be shared.
+      expect(pollManager.data.size).to.equal(1);
+    }, 'populates pollCache when the message.new event is fired')
+
+    it('correctly hydrates the poll cache', () => {
+      const { messages, pollMessages } = generateRandomMessagesWithPolls(5);
+
+      pollManager.hydratePollCache(messages);
+
+      expect(pollManager.data.size).to.equal(pollMessages.length);
+      expect(Array.from(pollManager.data.keys())).to.deep.equal(pollMessages.map(m => m.poll_id));
+    })
+
+    it('correctly upserts duplicate polls within the cache', () => {
+      const { messages, pollMessages } = generateRandomMessagesWithPolls(5);
+      const duplicateId = 'poll_duplicate'
+      let duplicatePollMessage = generatePollMessage(duplicateId)
+
+      pollManager.hydratePollCache([...messages, duplicatePollMessage])
+
+      const finalLength = pollMessages.length + 1;
+
+      // normal initialization
+      expect(pollManager.data.size).to.equal(finalLength);
+      expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
+      expect(pollManager.fromState(duplicateId)?.data.name).to.equal(duplicatePollMessage.poll.name);
+
+      // many duplicate messages
+      const duplicates = [];
+      for (let di = 0; di < 5; di++) {
+        const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d1_${di}` });
+        duplicates.push(newDuplicateMessage);
+      }
+
+      // without overwriteState
+      pollManager.hydratePollCache(duplicates);
+
+      expect(pollManager.data.size).to.equal(finalLength);
+      expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
+      expect(pollManager.fromState(duplicateId)?.data.name).to.equal('XY');
+
+      // with overwriteState
+      pollManager.hydratePollCache(duplicates, true);
+
+      expect(pollManager.data.size).to.equal(finalLength);
+      expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
+      expect(pollManager.fromState(duplicateId)?.data.name).to.equal('d1_4');
+
+      // many hydrate invocations
+      for (let di = 0; di < 5; di++) {
+        const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d2_${di}` });
+        pollManager.hydratePollCache([newDuplicateMessage], true);
+      }
+
+      expect(pollManager.data.size).to.equal(finalLength);
+      expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
+      expect(pollManager.fromState(duplicateId)?.data.name).to.equal('d2_4');
+    })
   })
+  describe('Event handling', () => {
+    const pollId1 = 'poll_1';
+    const pollId2 = 'poll_2';
+    let pollMessage1: FormatMessageResponse;
+    let pollMessage2: FormatMessageResponse;
 
-  it('correctly hydrates the poll cache', () => {
-    const { messages, pollMessages } = generateRandomMessagesWithPolls(5);
+    beforeEach(() => {
+      pollMessage1 = generatePollMessage(pollId1);
+      pollMessage2 = generatePollMessage(pollId2);
+      pollManager.hydratePollCache([pollMessage1, pollMessage2]);
+    })
 
-    pollManager.hydratePollCache(messages);
+    it('should update the correct poll within the cache on poll.updated', () => {
+      const updatedTitle = 'Updated title';
+      const spy1 = sinon.spy(pollManager.fromState(pollId1) as Poll, 'handlePollUpdated')
+      const spy2 = sinon.spy(pollManager.fromState(pollId2) as Poll, 'handlePollUpdated')
 
-    expect(pollManager.data.size).to.equal(pollMessages.length);
-    expect(Array.from(pollManager.data.keys())).to.deep.equal(pollMessages.map(m => m.poll_id));
-  })
+      const updatedPoll = { ...pollMessage1.poll, name: updatedTitle } as PollResponse
 
-  it('correctly upserts duplicate polls within the cache', () => {
-    const { messages, pollMessages } = generateRandomMessagesWithPolls(5);
-    const duplicateId = 'poll_duplicate'
-    let duplicatePollMessage = generatePollMessage(duplicateId)
+      client.dispatchEvent({
+        type: 'poll.updated',
+        poll: updatedPoll,
+      });
 
-    pollManager.hydratePollCache([...messages, duplicatePollMessage])
+      expect(spy1.calledOnce).to.be.true;
+      expect(spy1.getCall(0).args[0].type).to.equal('poll.updated');
+      expect(spy1.getCall(0).args[0].poll).to.equal(updatedPoll);
+      expect(spy2.calledOnce).to.be.false;
+    })
 
-    const finalLength = pollMessages.length + 1;
+    const eventHandlerPairs = [['poll.vote_casted', 'handleVoteCasted'], ['poll.vote_changed', 'handleVoteChanged'], ['poll.vote_removed', 'handleVoteRemoved']];
 
-    // normal initialization
-    expect(pollManager.data.size).to.equal(finalLength);
-    expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
-    expect(pollManager.fromState(duplicateId)?.data.name).to.equal(duplicatePollMessage.poll.name);
+    eventHandlerPairs.map(([eventType, handlerName]) => {
+      it(`should invoke poll.${handlerName} within the cache on ${eventType}`, () => {
+        const stub1 = sinon.stub(pollManager.fromState(pollId1) as Poll, handlerName as keyof Poll)
+        const stub2 = sinon.stub(pollManager.fromState(pollId2) as Poll, handlerName as keyof Poll)
 
-    // many duplicate messages
-    const duplicates = [];
-    for (let di = 0; di < 5; di++) {
-      const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d1_${di}` });
-      duplicates.push(newDuplicateMessage);
-    }
+        const updatedPoll = pollMessage1.poll as PollResponse
 
-    // without overwriteState
-    pollManager.hydratePollCache(duplicates);
+        client.dispatchEvent({
+          type: eventType as EventTypes,
+          poll: updatedPoll,
+          user: { id: 'bob' },
+        });
 
-    expect(pollManager.data.size).to.equal(finalLength);
-    expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
-    expect(pollManager.fromState(duplicateId)?.data.name).to.equal('XY');
-
-    // with overwriteState
-    pollManager.hydratePollCache(duplicates, true);
-
-    expect(pollManager.data.size).to.equal(finalLength);
-    expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
-    expect(pollManager.fromState(duplicateId)?.data.name).to.equal('d1_4');
-
-    // many hydrate invocations
-    for (let di = 0; di < 5; di++) {
-      const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d2_${di}` });
-      pollManager.hydratePollCache([newDuplicateMessage], true);
-    }
-
-    expect(pollManager.data.size).to.equal(finalLength);
-    expect(Array.from(pollManager.data.keys())).to.deep.equal([...pollMessages, duplicatePollMessage].map(m => m.poll_id));
-    expect(pollManager.fromState(duplicateId)?.data.name).to.equal('d2_4');
+        expect(stub1.calledOnce).to.be.true;
+        expect(stub1.getCall(0).args[0].type).to.equal(eventType);
+        expect(stub1.getCall(0).args[0].poll).to.equal(updatedPoll);
+        expect(stub2.calledOnce).to.be.false;
+      })
+    })
   })
 })
