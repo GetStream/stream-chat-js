@@ -57,6 +57,7 @@ import {
   PollVoteData,
   SendMessageOptions,
   AscDesc,
+  PartialUpdateMemberAPIResponse,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -308,12 +309,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
    */
-  async partialUpdateMember(user_id: string, updates: PartialUpdateMember<StreamChatGenerics>) {
+  async partialUpdateMember(user_id: string, updates: PartialUpdateMember) {
     if (!user_id) {
       throw Error('Please specify the user id');
     }
 
-    return await this.getClient().patch<ChannelMemberResponse<StreamChatGenerics>>(
+    return await this.getClient().patch<PartialUpdateMemberAPIResponse<StreamChatGenerics>>(
       this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
       updates,
     );
@@ -641,6 +642,50 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       channel_cid: this.cid,
       ...opts,
     });
+  }
+
+  /**
+   * pin - pins the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.pin();
+   *
+   * example server side:
+   * await channel.pin({user_id: userId});
+   *
+   */
+  async pin(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for pinning a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
+    return resp.channel_member;
+  }
+
+  /**
+   * unpin - unpins the current channel
+   * @param {{ user_id?: string }} opts user_id if called server side
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} The server response
+   *
+   * example:
+   * await channel.unpin();
+   *
+   * example server side:
+   * await channel.unpin({user_id: userId});
+   *
+   */
+  async unpin(opts: { user_id?: string } = {}) {
+    const cli = this.getClient();
+    const uid = opts.user_id || cli.userID;
+    if (!uid) {
+      throw Error('A user_id is required for unpinning a channel');
+    }
+    const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
+    return resp.channel_member;
   }
 
   /**
