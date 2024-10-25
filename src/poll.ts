@@ -211,7 +211,18 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         ];
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
-        ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
+        if (event.poll.enforce_unique_votes) {
+          ownVotesByOptionId = {[event.poll_vote.option_id]: event.poll_vote};
+        } else {
+          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVote<SCG>>>((acc, [optionId, vote]) => {
+            if (optionId !== event.poll_vote.option_id && vote.id === event.poll_vote.id) {
+              return acc;
+            }
+            acc[optionId] = vote;
+            return acc;
+          }, {});
+          ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote;
+        }
 
         if (ownAnswer?.id === event.poll_vote.id) {
           ownAnswer = undefined;
