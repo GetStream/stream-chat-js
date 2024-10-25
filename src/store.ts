@@ -36,7 +36,7 @@ export class StateStore<T extends Record<string, unknown>> {
     };
   };
 
-  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>> & { length?: never }>(
+  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>>>(
     selector: (nextValue: T) => O,
     handler: Handler<O>,
   ) => {
@@ -48,7 +48,7 @@ export class StateStore<T extends Record<string, unknown>> {
 
       let hasUpdatedValues = !selectedValues;
 
-      if (Array.isArray(selectedValues)) {
+      if (selectedValues && Array.isArray(selectedValues)) {
         console.warn(
           'The API of our state store has changed. Instead of returning an array in the selector, please return a named object of properties.',
         );
