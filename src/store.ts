@@ -48,9 +48,9 @@ export class StateStore<T extends Record<string, unknown>> {
 
       let hasUpdatedValues = !selectedValues;
 
-      if (selectedValues && Array.isArray(selectedValues)) {
+      if (Array.isArray(newlySelectedValues)) {
         console.warn(
-          'The API of our state store has changed. Instead of returning an array in the selector, please return a named object of properties.',
+          '[StreamChat]: The API of our StateStore has changed. Instead of returning an array in the selector, please return a named object of properties.',
         );
       }
 
