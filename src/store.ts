@@ -36,13 +36,23 @@ export class StateStore<T extends Record<string, unknown>> {
     };
   };
 
-  public subscribeWithSelector = <O extends readonly unknown[]>(selector: (nextValue: T) => O, handler: Handler<O>) => {
+  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>> & { length?: never }>(
+    selector: (nextValue: T) => O,
+    handler: Handler<O>,
+  ) => {
     // begin with undefined to reduce amount of selector calls
     let selectedValues: O | undefined;
 
     const wrappedHandler: Handler<T> = (nextValue) => {
       const newlySelectedValues = selector(nextValue);
-      const hasUpdatedValues = selectedValues?.some((value, index) => value !== newlySelectedValues[index]) ?? true;
+
+      let hasUpdatedValues = !selectedValues;
+
+      for (const key in selectedValues) {
+        if (selectedValues[key] === newlySelectedValues[key]) continue;
+        hasUpdatedValues = true;
+        break;
+      }
 
       if (!hasUpdatedValues) return;
 
