@@ -21,6 +21,10 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
   }
 
+  get data(): Map<string, Poll<SCG>> {
+    return this.pollCache;
+  }
+
   public fromState = (id: string) => {
     return this.pollCache.get(id);
   };
@@ -53,32 +57,43 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public getPoll = async (id: string) => {
     const { poll } = await this.client.getPoll(id);
 
-    return new Poll({ client: this.client, poll });
+    this.setOrOverwriteInCache(poll, true);
+
+    return this.fromState(id);
   };
 
   public queryPolls = async (filter: QueryPollsFilters, sort: PollSort = [], options: QueryPollsOptions = {}) => {
     const { polls, next } = await this.client.queryPolls(filter, sort, options);
 
+    const pollInstances = polls.map((poll) => {
+      this.setOrOverwriteInCache(poll, true);
+
+      return this.fromState(poll.id);
+    });
+
     return {
-      polls: polls.map((poll) => new Poll({ client: this.client, poll })),
+      polls: pollInstances,
       next,
     };
   };
 
-  // TODO: invoke this during queryPolls and getPoll as well for brevity
   public hydratePollCache = (messages: FormatMessageResponse<SCG>[], overwriteState?: boolean) => {
     for (const message of messages) {
       if (!message.poll) {
         continue;
       }
       const pollResponse = message.poll as PollResponse<SCG>;
-      const pollFromCache = this.fromState(pollResponse.id);
-      if (!pollFromCache) {
-        const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
-        this.pollCache.set(poll.id, poll);
-      } else if (overwriteState) {
-        pollFromCache.reinitializeState(pollResponse);
-      }
+      this.setOrOverwriteInCache(pollResponse, overwriteState);
+    }
+  };
+
+  private setOrOverwriteInCache = (pollResponse: PollResponse<SCG>, overwriteState?: boolean) => {
+    const pollFromCache = this.fromState(pollResponse.id);
+    if (!pollFromCache) {
+      const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
+      this.pollCache.set(poll.id, poll);
+    } else if (overwriteState) {
+      pollFromCache.reinitializeState(pollResponse);
     }
   };
 
