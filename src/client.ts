@@ -213,7 +213,6 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
-import { Poll } from './poll';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;

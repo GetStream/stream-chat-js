@@ -212,15 +212,18 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
         if (event.poll.enforce_unique_votes) {
-          ownVotesByOptionId = {[event.poll_vote.option_id]: event.poll_vote};
+          ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
-          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVote<SCG>>>((acc, [optionId, vote]) => {
-            if (optionId !== event.poll_vote.option_id && vote.id === event.poll_vote.id) {
+          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVote<SCG>>>(
+            (acc, [optionId, vote]) => {
+              if (optionId !== event.poll_vote.option_id && vote.id === event.poll_vote.id) {
+                return acc;
+              }
+              acc[optionId] = vote;
               return acc;
-            }
-            acc[optionId] = vote;
-            return acc;
-          }, {});
+            },
+            {},
+          );
           ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote;
         }
 
@@ -317,21 +320,19 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   castVote = async (optionId: string, messageId: string) => {
-    const {max_votes_allowed, ownVotesByOptionId } = this.data;
+    const { max_votes_allowed, ownVotesByOptionId } = this.data;
 
-    const reachedVoteLimit =
-      max_votes_allowed && max_votes_allowed === Object.keys(ownVotesByOptionId).length;
+    const reachedVoteLimit = max_votes_allowed && max_votes_allowed === Object.keys(ownVotesByOptionId).length;
 
     if (reachedVoteLimit) {
       let oldestVote = Object.values(ownVotesByOptionId)[0];
-      Object.values(ownVotesByOptionId).slice(1).forEach((vote) => {
-        if (
-          !oldestVote?.created_at ||
-          new Date(vote.created_at) < new Date(oldestVote.created_at)
-        ) {
-          oldestVote = vote;
-        }
-      });
+      Object.values(ownVotesByOptionId)
+        .slice(1)
+        .forEach((vote) => {
+          if (!oldestVote?.created_at || new Date(vote.created_at) < new Date(oldestVote.created_at)) {
+            oldestVote = vote;
+          }
+        });
       if (oldestVote?.id) {
         await this.removeVote(oldestVote.id, messageId);
       }
