@@ -48,6 +48,12 @@ export class StateStore<T extends Record<string, unknown>> {
 
       let hasUpdatedValues = !selectedValues;
 
+      if (Array.isArray(selectedValues)) {
+        console.warn(
+          'The API of our state store has changed. Instead of returning an array in the selector, please return a named object of properties.',
+        );
+      }
+
       for (const key in selectedValues) {
         if (selectedValues[key] === newlySelectedValues[key]) continue;
         hasUpdatedValues = true;
