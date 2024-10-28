@@ -14,6 +14,11 @@ import { formatMessage } from './utils';
 
 export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private client: StreamChat<SCG>;
+  // The pollCache contains only polls that have been created and sent as messages
+  // (i.e only polls that are coupled with a message, can be voted on and require a
+  // reactive state). It shall work as a basic look-up table for our SDK to be able
+  // to quickly consume poll state that will be reactive even without the polls being
+  // rendered within the UI.
   private pollCache = new Map<string, Poll<SCG>>();
   private unsubscribeFunctions: Set<() => void> = new Set();
 
@@ -55,9 +60,17 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public getPoll = async (id: string) => {
+    const cachedPoll = this.fromState(id);
+
+    // optimistically return the cached poll if it exists and update in the background
+    if (cachedPoll) {
+      this.client.getPoll(id).then(({ poll }) => this.setOrOverwriteInCache(poll, true));
+      return cachedPoll;
+    }
+    // fetch it, write to the cache and return otherwise
     const { poll } = await this.client.getPoll(id);
 
-    this.setOrOverwriteInCache(poll, true);
+    this.setOrOverwriteInCache(poll);
 
     return this.fromState(id);
   };

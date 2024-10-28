@@ -60,7 +60,6 @@ import {
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
-import { Poll } from './poll';
 
 /**
  * Channel - The Channel class manages it's own state.
