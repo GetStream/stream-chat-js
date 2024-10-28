@@ -36,7 +36,7 @@ export class StateStore<T extends Record<string, unknown>> {
     };
   };
 
-  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>>>(
+  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>> | Readonly<unknown[]>>(
     selector: (nextValue: T) => O,
     handler: Handler<O>,
   ) => {
