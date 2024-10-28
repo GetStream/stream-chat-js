@@ -346,22 +346,23 @@ export const findIndexInSortedArray = <T, L>({
     middle = Math.round((left + right) / 2);
   };
 
-  const actualNeedle = selectValueToCompare(needle);
-  recalculateMiddle();
+  const comparableNeedle = selectValueToCompare(needle);
 
   while (left <= right) {
-    // if (actualNeedle === selectValueToCompare(sortedArray[middle])) return middle;
+    recalculateMiddle();
+
+    const comparableMiddle = selectValueToCompare(sortedArray[middle]);
+
+    // if (comparableNeedle === comparableMiddle) return middle;
 
     if (
-      (sortDirection === 'ascending' && actualNeedle < selectValueToCompare(sortedArray[middle])) ||
-      (sortDirection === 'descending' && actualNeedle > selectValueToCompare(sortedArray[middle]))
+      (sortDirection === 'ascending' && comparableNeedle < comparableMiddle) ||
+      (sortDirection === 'descending' && comparableNeedle > comparableMiddle)
     ) {
       right = middle - 1;
     } else {
       left = middle + 1;
     }
-
-    recalculateMiddle();
   }
 
   return left;
@@ -405,7 +406,7 @@ export function addToMessageList<T extends FormatMessageResponse>(
   // find the closest index to push the new message
   const insertionIndex = findIndexInSortedArray({
     needle: newMessage,
-    sortedArray: messages,
+    sortedArray: newMessages,
     sortDirection: 'ascending',
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     selectValueToCompare: (m) => m[sortBy]!.getTime(),

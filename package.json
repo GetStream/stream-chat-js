@@ -1,6 +1,6 @@
 {
   "name": "stream-chat",
-  "version": "8.40.8",
+  "version": "8.41.1",
   "description": "JS SDK for the Stream Chat API",
   "author": "GetStream",
   "homepage": "https://getstream.io/chat/",

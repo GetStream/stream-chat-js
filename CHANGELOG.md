@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.41.1](https://github.com/GetStream/stream-chat-js/compare/v8.41.0...v8.41.1) (2024-10-28)
+
+
+### Bug Fixes
+
+* change subscribeWithSelector API declaration ([#1382](https://github.com/GetStream/stream-chat-js/issues/1382)) ([5b1c7e5](https://github.com/GetStream/stream-chat-js/commit/5b1c7e5b6372259db64c36719c53883be1e1f409))
+
+## [8.41.0](https://github.com/GetStream/stream-chat-js/compare/v8.40.9...v8.41.0) (2024-10-24)
+
+### [8.40.9](https://github.com/GetStream/stream-chat-js/compare/v8.40.8...v8.40.9) (2024-09-19)
+
+
+### Bug Fixes
+
+* **addToMessageList:** prevent messages shifting when adding reactions ([#1368](https://github.com/GetStream/stream-chat-js/issues/1368)) ([40e06bd](https://github.com/GetStream/stream-chat-js/commit/40e06bd6a8583da2d0df9b8fa67b6c21366447e9))
+* deprecate ne and nin operators for query filters ([#1363](https://github.com/GetStream/stream-chat-js/issues/1363)) ([696d3a6](https://github.com/GetStream/stream-chat-js/commit/696d3a6a597ccdc1ae84b38db34a496bab0f0819))
+
 ### [8.40.8](https://github.com/GetStream/stream-chat-js/compare/v8.40.7...v8.40.8) (2024-09-17)
 
 

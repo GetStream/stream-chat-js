@@ -963,6 +963,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   reminders?: boolean;
   replies?: boolean;
   search?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
@@ -1664,14 +1665,26 @@ export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends s
       $in?: PrimitiveFilter<ObjectType>[];
       $lt?: PrimitiveFilter<ObjectType>;
       $lte?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     }
   : {
       $eq?: PrimitiveFilter<ObjectType>;
       $exists?: boolean;
       $in?: PrimitiveFilter<ObjectType>[];
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $ne?: PrimitiveFilter<ObjectType>;
+      /**
+       * @deprecated and will be removed in a future release. Filtering shall be applied client-side.
+       */
       $nin?: PrimitiveFilter<ObjectType>[];
     };
 
