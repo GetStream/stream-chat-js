@@ -1322,14 +1322,17 @@ describe('Threads 2.0', () => {
             },
           }));
           const spy = sinon.spy();
-          threadManager.state.subscribeWithSelector((nextValue) => [nextValue.pagination.isLoadingNext], spy);
+          threadManager.state.subscribeWithSelector(
+            (nextValue) => ({ isLoadingNext: nextValue.pagination.isLoadingNext }),
+            spy,
+          );
           spy.resetHistory();
 
           await threadManager.loadNextPage();
 
           expect(spy.callCount).to.equal(2);
-          expect(spy.firstCall.calledWith([true])).to.be.true;
-          expect(spy.lastCall.calledWith([false])).to.be.true;
+          expect(spy.firstCall.calledWith({ isLoadingNext: true })).to.be.true;
+          expect(spy.lastCall.calledWith({ isLoadingNext: false })).to.be.true;
         });
 
         it('updates thread list and pagination', async () => {
