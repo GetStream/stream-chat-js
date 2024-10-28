@@ -55,6 +55,7 @@ export class StateStore<T extends Record<string, unknown>> {
       }
 
       for (const key in selectedValues) {
+        // @ts-ignore TODO: remove array support (Readonly<unknown[]>)
         if (selectedValues[key] === newlySelectedValues[key]) continue;
         hasUpdatedValues = true;
         break;
