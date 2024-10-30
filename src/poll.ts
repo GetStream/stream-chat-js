@@ -110,6 +110,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions<SCG>['poll']) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { own_votes, id, ...pollResponseForState } = poll;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{ ownVotes: PollVote<SCG>[]; ownAnswer?: PollAnswer }>(
       (acc, voteOrAnswer) => {
@@ -145,8 +146,10 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
   public handlePollUpdated = (event: Event<SCG>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollUpdatedEvent(event)) return;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, ...pollData } = extractPollData(event.poll);
     // @ts-ignore
-    this.state.partialNext({ ...extractPollData(event.poll), lastActivityAt: new Date(event.created_at) });
+    this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
   };
 
   public handlePollClosed = (event: Event<SCG>) => {
@@ -180,7 +183,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    const pollEnrichData = extractPollEnrichedData(event.poll);
     // @ts-ignore
     this.state.partialNext({
       ...pollEnrichData,
@@ -238,7 +241,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    const pollEnrichData = extractPollEnrichedData(event.poll);
     // @ts-ignore
     this.state.partialNext({
       ...pollEnrichData,
@@ -272,7 +275,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       }
     }
 
-    const { latest_answers, own_votes, ...pollEnrichData } = extractPollEnrichedData(event.poll);
+    const pollEnrichData = extractPollEnrichedData(event.poll);
     // @ts-ignore
     this.state.partialNext({
       ...pollEnrichData,
@@ -404,13 +407,11 @@ export function extractPollData<SCG extends ExtendableGenerics = DefaultGenerics
 
 export function extractPollEnrichedData<SCG extends ExtendableGenerics = DefaultGenerics>(
   pollResponse: PollResponse<SCG>,
-): PollEnrichData<SCG> {
+): Omit<PollEnrichData<SCG>, 'own_votes' | 'latest_answers'> {
   return {
     answers_count: pollResponse.answers_count,
-    latest_answers: pollResponse.latest_answers,
     latest_votes_by_option: pollResponse.latest_votes_by_option,
     vote_count: pollResponse.vote_count,
     vote_counts_by_option: pollResponse.vote_counts_by_option,
-    own_votes: pollResponse.own_votes,
   };
 }
