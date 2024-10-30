@@ -208,10 +208,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
-        latestAnswers = [
-          event.poll_vote,
-          ...latestAnswers.filter((answer) => answer.id !== event.poll_vote.id),
-        ];
+        latestAnswers = [event.poll_vote, ...latestAnswers.filter((answer) => answer.id !== event.poll_vote.id)];
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
         if (event.poll.enforce_unique_votes) {
