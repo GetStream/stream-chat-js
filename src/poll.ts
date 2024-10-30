@@ -210,7 +210,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (isVoteAnswer(event.poll_vote)) {
         latestAnswers = [
           event.poll_vote,
-          ...latestAnswers.filter((answer) => answer.user_id !== event.poll_vote.user_id),
+          ...latestAnswers.filter((answer) => answer.id !== event.poll_vote.id),
         ];
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
