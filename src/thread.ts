@@ -63,9 +63,11 @@ export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = 
 >;
 
 // TODO: figure out generics here
+// @ts-expect-error
 const messageNewFactory: TargetFactory<DefaultGenerics, 'message.new'> = (event) => {
   return event.parent_id ? `message.new-${event.parent_id}` : null;
 };
+// @ts-expect-error
 const threadMessageReadFactory: TargetFactory<DefaultGenerics, 'message.read'> = (event) => {
   return event.thread ? `message.read-${event.thread.parent_message_id}` : null;
 };

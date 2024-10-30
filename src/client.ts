@@ -932,8 +932,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     set.add(factory);
 
     return () => {
+      // @ts-expect-error
       set.delete(factory);
-
+      // @ts-expect-error
       if (!set.size) {
         this.targetFactoriesByType.delete(eventType);
       }
