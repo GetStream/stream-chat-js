@@ -42,10 +42,12 @@ import {
   BlockList,
   BlockListResponse,
   BlockUserAPIResponse,
-  CampaignResponse,
   CampaignData,
   CampaignFilters,
   CampaignQueryOptions,
+  CampaignResponse,
+  CampaignSort,
+  CastVoteAPIResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -66,6 +68,9 @@ import {
   CreateImportOptions,
   CreateImportResponse,
   CreateImportURLResponse,
+  CreatePollAPIResponse,
+  CreatePollData,
+  CreatePollOptionAPIResponse,
   CustomPermissionOptions,
   DeactivateUsersOptions,
   DefaultGenerics,
@@ -92,13 +97,18 @@ import {
   FlagsPaginationOptions,
   FlagsResponse,
   FlagUserResponse,
+  GetBlockedUsersAPIResponse,
   GetCallTokenResponse,
   GetChannelTypeResponse,
   GetCommandResponse,
   GetImportResponse,
   GetMessageAPIResponse,
+  GetMessageOptions,
+  GetPollAPIResponse,
+  GetPollOptionAPIResponse,
   GetRateLimitsResponse,
-  QueryThreadsAPIResponse,
+  GetThreadAPIResponse,
+  GetThreadOptions,
   GetUnreadCountAPIResponse,
   GetUnreadCountBatchAPIResponse,
   ListChannelResponse,
@@ -120,11 +130,15 @@ import {
   OwnUserResponse,
   PartialMessageUpdate,
   PartialPollUpdate,
+  PartialThreadUpdate,
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  PollAnswersAPIResponse,
   PollData,
   PollOptionData,
+  PollSort,
+  PollVote,
   PollVoteData,
   PollVotesAPIResponse,
   PushProvider,
@@ -133,9 +147,24 @@ import {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
-  QuerySegmentsOptions,
+  QueryMessageHistoryFilters,
+  QueryMessageHistoryOptions,
+  QueryMessageHistoryResponse,
+  QueryMessageHistorySort,
+  QueryPollsFilters,
+  QueryPollsOptions,
   QueryPollsResponse,
+  QueryReactionsAPIResponse,
+  QueryReactionsOptions,
+  QuerySegmentsOptions,
+  QuerySegmentTargetsFilter,
+  QueryThreadsAPIResponse,
+  QueryThreadsOptions,
+  QueryVotesFilters,
+  QueryVotesOptions,
+  ReactionFilters,
   ReactionResponse,
+  ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
   ReservedMessageFields,
@@ -145,10 +174,12 @@ import {
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  SegmentResponse,
   SegmentData,
+  SegmentResponse,
+  SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
+  SortParam,
   StreamChatOptions,
   SyncOptions,
   SyncResponse,
@@ -166,50 +197,22 @@ import {
   UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
+  UpdatePollAPIResponse,
+  UpdatePollOptionAPIResponse,
   UpdateSegmentData,
   UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
   UserSort,
-  GetThreadAPIResponse,
-  PartialThreadUpdate,
-  QueryThreadsOptions,
-  GetThreadOptions,
-  CampaignSort,
-  SegmentTargetsResponse,
-  QuerySegmentTargetsFilter,
-  SortParam,
-  GetMessageOptions,
-  GetBlockedUsersAPIResponse,
-  QueryVotesFilters,
   VoteSort,
-  CreatePollAPIResponse,
-  GetPollAPIResponse,
-  UpdatePollAPIResponse,
-  CreatePollOptionAPIResponse,
-  GetPollOptionAPIResponse,
-  UpdatePollOptionAPIResponse,
-  PollVote,
-  CastVoteAPIResponse,
-  QueryPollsFilters,
-  PollSort,
-  QueryPollsOptions,
-  QueryVotesOptions,
-  ReactionFilters,
-  ReactionSort,
-  QueryReactionsAPIResponse,
-  QueryReactionsOptions,
-  QueryMessageHistoryFilters,
-  QueryMessageHistorySort,
-  QueryMessageHistoryOptions,
-  QueryMessageHistoryResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
+import { PollManager } from './poll_manager';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -223,6 +226,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     [key: string]: Channel<StreamChatGenerics>;
   };
   threads: ThreadManager<StreamChatGenerics>;
+  polls: PollManager<StreamChatGenerics>;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -410,6 +414,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
+    this.polls = new PollManager({ client: this });
   }
 
   /**
@@ -1676,6 +1681,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
             logger: this.logger,
           }),
         };
+        this.polls.hydratePollCache(updatedMessagesSet.messages, true);
       }
 
       channels.push(c);
@@ -3544,12 +3550,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
   /**
    * Creates a poll
-   * @param params PollData The poll that will be created
+   * @param poll PollData The poll that will be created
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: PollData, userId?: string) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
+  async createPoll(poll: CreatePollData<StreamChatGenerics>, userId?: string) {
+    return await this.post<APIResponse & CreatePollAPIResponse<StreamChatGenerics>>(this.baseURL + `/polls`, {
       ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
@@ -3561,8 +3567,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *  @param userId string The user id (only serverside)
    * @returns {APIResponse & GetPollAPIResponse} The poll
    */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(
+  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse<StreamChatGenerics>> {
+    return await this.get<APIResponse & GetPollAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(id)}`,
       userId ? { user_id: userId } : {},
     );
@@ -3574,8 +3580,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
+  async updatePoll(poll: PollData<StreamChatGenerics>, userId?: string) {
+    return await this.put<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>>(this.baseURL + `/polls`, {
       ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
@@ -3591,13 +3597,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async partialUpdatePoll(
     id: string,
-    partialPollObject: PartialPollUpdate,
+    partialPollObject: PartialPollUpdate<StreamChatGenerics>,
     userId?: string,
-  ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${encodeURIComponent(id)}`, {
-      ...partialPollObject,
-      ...(userId ? { user_id: userId } : {}),
-    });
+  ): Promise<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>> {
+    return await this.patch<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/polls/${encodeURIComponent(id)}`,
+      {
+        ...partialPollObject,
+        ...(userId ? { user_id: userId } : {}),
+      },
+    );
   }
 
   /**
@@ -3618,13 +3627,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
-    return this.partialUpdatePoll(id, {
-      set: {
-        is_closed: true,
+  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>> {
+    return this.partialUpdatePoll(
+      id,
+      {
+        set: {
+          is_closed: true,
+        } as PartialPollUpdate<StreamChatGenerics>['set'],
       },
-      ...(userId ? { user_id: userId } : {}),
-    });
+      userId,
+    );
   }
 
   /**
@@ -3634,8 +3646,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.post<APIResponse & CreatePollOptionAPIResponse>(
+  async createPollOption(pollId: string, option: PollOptionData<StreamChatGenerics>, userId?: string) {
+    return await this.post<APIResponse & CreatePollOptionAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
       {
         ...option,
@@ -3652,7 +3664,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
   async getPollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.get<APIResponse & GetPollOptionAPIResponse>(
+    return await this.get<APIResponse & GetPollOptionAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
       userId ? { user_id: userId } : {},
     );
@@ -3665,8 +3677,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
+  async updatePollOption(pollId: string, option: PollOptionData<StreamChatGenerics>, userId?: string) {
+    return await this.put<APIResponse & UpdatePollOptionAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
       {
         ...option,
@@ -3698,7 +3710,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
   async castPollVote(messageId: string, pollId: string, vote: PollVoteData, userId?: string) {
-    return await this.post<APIResponse & CastVoteAPIResponse>(
+    return await this.post<APIResponse & CastVoteAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
       {
         vote,
@@ -3750,9 +3762,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: PollSort = [],
     options: QueryPollsOptions = {},
     userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse> {
+  ): Promise<APIResponse & QueryPollsResponse<StreamChatGenerics>> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
+    return await this.post<APIResponse & QueryPollsResponse<StreamChatGenerics>>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3774,12 +3786,39 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
     userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse> {
+  ): Promise<APIResponse & PollVotesAPIResponse<StreamChatGenerics>> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse>(
+    return await this.post<APIResponse & PollVotesAPIResponse<StreamChatGenerics>>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Queries poll answers
+   * @param pollId
+   * @param filter
+   * @param sort
+   * @param options Option object, {limit: 10, offset:0}
+   * @param userId string The user id (only serverside)
+   * @returns {APIResponse & PollAnswersAPIResponse} The poll votes
+   */
+  async queryPollAnswers(
+    pollId: string,
+    filter: QueryVotesFilters = {},
+    sort: VoteSort = [],
+    options: QueryVotesOptions = {},
+    userId?: string,
+  ): Promise<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>> {
+    const q = userId ? `?user_id=${userId}` : '';
+    return await this.post<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>>(
+      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
+      {
+        filter: { ...filter, is_answer: true },
         sort: normalizeQuerySort(sort),
         ...options,
       },
@@ -3797,12 +3836,15 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     filter: QueryMessageHistoryFilters = {},
     sort: QueryMessageHistorySort = [],
     options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/messages/history', {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
+  ): Promise<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>> {
+    return await this.post<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>>(
+      this.baseURL + '/messages/history',
+      {
+        filter,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
   }
 
   /**
