@@ -82,6 +82,7 @@ import {
   ErrorFromResponse,
   Event,
   EventHandler,
+  EventTypes,
   ExportChannelOptions,
   ExportChannelRequest,
   ExportChannelResponse,
@@ -218,6 +219,11 @@ function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
+export type TargetFactory<
+  SCG extends ExtendableGenerics = DefaultGenerics,
+  T extends Exclude<EventTypes, 'all'> = Exclude<EventTypes, 'all'>
+> = (event: Event<SCG>) => `${T}${string}` | `${string}${T}` | `${string}${T}${string}` | null;
+
 export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
@@ -269,6 +275,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   private nextRequestAbortController: AbortController | null = null;
+  private targetFactoriesByType = new Map<Exclude<EventTypes, 'all'>, Set<TargetFactory<StreamChatGenerics>>>();
 
   /**
    * Initialize a client
@@ -911,6 +918,28 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return JWTUserToken(this.secret, userID, extra, {});
   }
 
+  public registerTargetFactory = <T extends Exclude<EventTypes, 'all'>>(
+    eventType: T,
+    factory: TargetFactory<StreamChatGenerics, T>,
+  ) => {
+    let set = this.targetFactoriesByType.get(eventType);
+
+    if (!set) {
+      set = new Set();
+      this.targetFactoriesByType.set(eventType, set);
+    }
+
+    set.add(factory);
+
+    return () => {
+      set.delete(factory);
+
+      if (!set.size) {
+        this.targetFactoriesByType.delete(eventType);
+      }
+    };
+  };
+
   /**
    * on - Listen to events on all channels and users your watching
    *
@@ -938,6 +967,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       tags: ['event', 'client'],
     });
     this.listeners[key].push(callback);
+
     return {
       unsubscribe: () => {
         this.logger('info', `Removing listener for ${key} event`, {
@@ -1366,8 +1396,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
-    if (client.listeners[event.type]) {
-      listeners.push(...client.listeners[event.type]);
+
+    const eventTypes: string[] = [event.type];
+
+    // factories
+    const factorySet = client.targetFactoriesByType.get(event.type as Exclude<EventTypes, 'all'>);
+    factorySet?.forEach((factory) => {
+      // a specific value could be missing from the event payload so factory can return "null" to be skipped
+      const targetedEventType = factory(event);
+      if (targetedEventType) eventTypes.push(targetedEventType);
+    });
+
+    for (const eventType of eventTypes) {
+      if (client.listeners[eventType]) {
+        listeners.push(...client.listeners[eventType]);
+      }
     }
 
     // call the event and send it to the listeners
