@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.42.0](https://github.com/GetStream/stream-chat-js/compare/v8.41.1...v8.42.0) (2024-10-30)
+
+
+### Features
+
+* polls rewrite ([#1373](https://github.com/GetStream/stream-chat-js/issues/1373)) ([7c56d21](https://github.com/GetStream/stream-chat-js/commit/7c56d219141aabe1ca0fc45af30b59db91ab4a82))
+
+### [8.41.1](https://github.com/GetStream/stream-chat-js/compare/v8.41.0...v8.41.1) (2024-10-28)
+
+
+### Bug Fixes
+
+* change subscribeWithSelector API declaration ([#1382](https://github.com/GetStream/stream-chat-js/issues/1382)) ([5b1c7e5](https://github.com/GetStream/stream-chat-js/commit/5b1c7e5b6372259db64c36719c53883be1e1f409))
+
+## [8.41.0](https://github.com/GetStream/stream-chat-js/compare/v8.40.9...v8.41.0) (2024-10-24)
+
 ### [8.40.9](https://github.com/GetStream/stream-chat-js/compare/v8.40.8...v8.40.9) (2024-09-19)
 
 

@@ -119,9 +119,9 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeManageThreadSubscriptions = () =>
     this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.threads] as const,
-      ([nextThreads], prev) => {
-        const [prevThreads = []] = prev ?? [];
+      (nextValue) => ({ threads: nextValue.threads }),
+      ({ threads: nextThreads }, prev) => {
+        const { threads: prevThreads = [] } = prev ?? {};
         // Thread instance was removed if there's no thread with the given id at all,
         // or it was replaced with a new instance
         const removedThreads = prevThreads.filter((thread) => thread !== this.threadsById[thread.id]);
@@ -133,8 +133,8 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeReloadOnActivation = () =>
     this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.active],
-      ([active]) => {
+      (nextValue) => ({ active: nextValue.active }),
+      ({ active }) => {
         if (active) this.reload();
       },
     );
