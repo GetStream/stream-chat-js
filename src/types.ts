@@ -331,6 +331,11 @@ export type ChannelMemberAPIResponse<StreamChatGenerics extends ExtendableGeneri
   members: ChannelMemberResponse<StreamChatGenerics>[];
 };
 
+export type ChannelMemberUpdates = {
+  channel_role?: Role;
+  pinned?: boolean;
+};
+
 export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   ban_expires?: string;
   banned?: boolean;
@@ -341,12 +346,19 @@ export type ChannelMemberResponse<StreamChatGenerics extends ExtendableGenerics 
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
+  pinned_at?: string;
   role?: string;
   shadow_banned?: boolean;
   status?: string;
   updated_at?: string;
   user?: UserResponse<StreamChatGenerics>;
   user_id?: string;
+};
+
+export type PartialUpdateMemberAPIResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = APIResponse & {
+  channel_member: ChannelMemberResponse<StreamChatGenerics>;
 };
 
 export type CheckPushResponse = APIResponse & {
@@ -2491,9 +2503,9 @@ export type PartialUpdateChannel<StreamChatGenerics extends ExtendableGenerics =
   unset?: Array<keyof ChannelResponse<StreamChatGenerics>>;
 };
 
-export type PartialUpdateMember<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  set?: Partial<ChannelMemberResponse<StreamChatGenerics>>;
-  unset?: Array<keyof ChannelMemberResponse<StreamChatGenerics>>;
+export type PartialUpdateMember = {
+  set?: ChannelMemberUpdates;
+  unset?: Array<keyof ChannelMemberUpdates>;
 };
 
 export type PartialUserUpdate<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
