@@ -253,4 +253,4 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       options,
     });
   }
-
+}
