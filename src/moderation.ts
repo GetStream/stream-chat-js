@@ -15,6 +15,8 @@ import {
   ModerationMuteOptions,
   GetUserModerationReportOptions,
   SubmitActionOptions,
+  QueryModerationConfigsFilters,
+  QueryModerationConfigsSort,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -181,6 +183,24 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.client.get<GetConfigResponse>(this.client.baseURL + '/api/v2/moderation/config/' + key);
   }
 
+  async deleteConfig(key: string) {
+    return await this.client.delete(this.client.baseURL + '/api/v2/moderation/config/' + key);
+  }
+
+  /**
+   * Query moderation configs
+   * @param {Object} filterConditions Filter conditions for querying moderation configs
+   * @param {Object} sort Sort conditions for querying moderation configs
+   * @param {Object} options Additional options for querying moderation configs
+   */
+  async queryConfigs(filterConditions: QueryModerationConfigsFilters, sort: QueryModerationConfigsSort, options: Record<string, any>) {
+    return await this.client.post(this.client.baseURL + '/api/v2/moderation/configs', {
+      filter: filterConditions,
+      sort,
+      ...options,
+    });
+  }
+
   async submitAction(actionType: string, itemID: string, options: SubmitActionOptions = {}) {
     return await this.client.post<{ item_id: string } & APIResponse>(
       this.client.baseURL + '/api/v2/moderation/submit_action',
@@ -191,4 +211,43 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       },
     );
   }
+
+  /**
+   * 
+   * @param {string} entityType string Type of entity to be checked E.g., stream:user, stream:chat:v1:message, or any custom string
+   * @param {string} entityID string ID of the entity to be checked. This is mainly for tracking purposes
+   * @param {string} entityCreatorID string ID of the entity creator
+   * @param {object} moderationPayload object Content to be checked for moderation. E.g., { texts: ['text1', 'text2'], images: ['image1', 'image2']}
+   * @param {Array} moderationPayload.texts array Array of texts to be checked for moderation
+   * @param {Array} moderationPayload.images array Array of images to be checked for moderation
+   * @param {Array} moderationPayload.videos array Array of videos to be checked for moderation
+   * @param configKey 
+   * @param options 
+   * @returns 
+   */
+  async check(
+    entityType: string,
+    entityID: string,
+    entityCreatorID: string,
+    moderationPayload: {
+      texts?: string[];
+      images?: string[];
+      videos?: string[];
+      custom?: Record<string, any>;
+    },
+    configKey: string,
+    options?: {
+      force_sync?: boolean;
+    }
+  ) {
+    return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
+      entity_type: entityType,
+      entity_id: entityID,
+      entity_creator_id: entityCreatorID,
+      moderation_payload: moderationPayload,
+      config_key: configKey,
+      options,
+    });
+  }
 }
+

@@ -138,6 +138,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
+    moderation_enabled?: boolean;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
@@ -155,7 +156,6 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
-    sns_key?: string;
     sns_secret?: string;
     sns_topic_arn?: string;
     sqs_key?: string;
@@ -166,6 +166,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     user_search_disallowed_roles?: string[] | null;
     video_provider?: string;
     webhook_events?: Array<string>;
+    sns_key?: string;
     webhook_url?: string;
   };
 };
@@ -1986,6 +1987,7 @@ export type AppSettings = {
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   migrate_permissions_to_v2?: boolean;
+  moderation_enabled?: boolean;
   multi_tenant_enabled?: boolean;
   permission_version?: 'v1' | 'v2';
   push_config?: {
@@ -1998,10 +2000,10 @@ export type AppSettings = {
   sns_secret?: string;
   sns_topic_arn?: string;
   sqs_key?: string;
-  sqs_secret?: string;
   sqs_url?: string;
   video_provider?: string;
   webhook_events?: Array<string> | null;
+  sqs_secret?: string;
   webhook_url?: string;
   xiaomi_config?: {
     package_name: string;
@@ -3321,6 +3323,16 @@ export type GetUserModerationReportResponse<StreamChatGenerics extends Extendabl
   user_mutes?: Mute<StreamChatGenerics>[];
 };
 
+export type QueryModerationConfigsFilters = QueryFilters<
+  {
+    key?: string;
+  } & {
+    created_at?: PrimitiveFilter<string>;
+  } & {
+    updated_at?: PrimitiveFilter<string>;
+  }
+>;
+
 export type ReviewQueueFilters = QueryFilters<
   {
     assigned_to?:
@@ -3376,6 +3388,8 @@ export type ReviewQueueFilters = QueryFilters<
 export type ReviewQueueSort =
   | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
   | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'updated_at'>>;
 
 export type ReviewQueuePaginationOptions = Pager;
 
