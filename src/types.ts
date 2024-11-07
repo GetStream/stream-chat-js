@@ -156,6 +156,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     };
     revoke_tokens_issued_before?: string | null;
     search_backend?: 'disabled' | 'elasticsearch' | 'postgres';
+    sns_key?: string;
     sns_secret?: string;
     sns_topic_arn?: string;
     sqs_key?: string;
@@ -166,7 +167,6 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     user_search_disallowed_roles?: string[] | null;
     video_provider?: string;
     webhook_events?: Array<string>;
-    sns_key?: string;
     webhook_url?: string;
   };
 };
@@ -2000,10 +2000,10 @@ export type AppSettings = {
   sns_secret?: string;
   sns_topic_arn?: string;
   sqs_key?: string;
+  sqs_secret?: string;
   sqs_url?: string;
   video_provider?: string;
   webhook_events?: Array<string> | null;
-  sqs_secret?: string;
   webhook_url?: string;
   xiaomi_config?: {
     package_name: string;
