@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.43.0](https://github.com/GetStream/stream-chat-js/compare/v8.42.0...v8.43.0) (2024-11-07)
+
+
+### Features
+
+* add support for archiving channels ([#1386](https://github.com/GetStream/stream-chat-js/issues/1386)) ([2e74619](https://github.com/GetStream/stream-chat-js/commit/2e74619afda85afdec6c6a588adf09ca9e6d4790))
+* add support for pinning channels ([#1378](https://github.com/GetStream/stream-chat-js/issues/1378)) ([7e39944](https://github.com/GetStream/stream-chat-js/commit/7e399443d2dd41987879dcd42c700f64c73a4967))
+* moderation endpoints for query and delete config and check api ([#1387](https://github.com/GetStream/stream-chat-js/issues/1387)) ([1316fd2](https://github.com/GetStream/stream-chat-js/commit/1316fd27c51b9fce4d3257c9790d4d35c7decff9))
+
 ## [8.42.0](https://github.com/GetStream/stream-chat-js/compare/v8.41.1...v8.42.0) (2024-10-30)
 
 
