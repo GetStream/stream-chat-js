@@ -138,7 +138,6 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
     hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
-    moderation_enabled?: boolean;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
@@ -1987,7 +1986,6 @@ export type AppSettings = {
   image_moderation_enabled?: boolean;
   image_upload_config?: FileUploadConfig;
   migrate_permissions_to_v2?: boolean;
-  moderation_enabled?: boolean;
   multi_tenant_enabled?: boolean;
   permission_version?: 'v1' | 'v2';
   push_config?: {
