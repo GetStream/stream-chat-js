@@ -193,7 +193,11 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Object} sort Sort conditions for querying moderation configs
    * @param {Object} options Additional options for querying moderation configs
    */
-  async queryConfigs(filterConditions: QueryModerationConfigsFilters, sort: QueryModerationConfigsSort, options: Record<string, any>) {
+  async queryConfigs(
+    filterConditions: QueryModerationConfigsFilters,
+    sort: QueryModerationConfigsSort,
+    options: Record<string, any>,
+  ) {
     return await this.client.post(this.client.baseURL + '/api/v2/moderation/configs', {
       filter: filterConditions,
       sort,
@@ -213,7 +217,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
-   * 
+   *
    * @param {string} entityType string Type of entity to be checked E.g., stream:user, stream:chat:v1:message, or any custom string
    * @param {string} entityID string ID of the entity to be checked. This is mainly for tracking purposes
    * @param {string} entityCreatorID string ID of the entity creator
@@ -221,24 +225,24 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Array} moderationPayload.texts array Array of texts to be checked for moderation
    * @param {Array} moderationPayload.images array Array of images to be checked for moderation
    * @param {Array} moderationPayload.videos array Array of videos to be checked for moderation
-   * @param configKey 
-   * @param options 
-   * @returns 
+   * @param configKey
+   * @param options
+   * @returns
    */
   async check(
     entityType: string,
     entityID: string,
     entityCreatorID: string,
     moderationPayload: {
-      texts?: string[];
-      images?: string[];
-      videos?: string[];
       custom?: Record<string, any>;
+      images?: string[];
+      texts?: string[];
+      videos?: string[];
     },
     configKey: string,
     options?: {
       force_sync?: boolean;
-    }
+    },
   ) {
     return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
       entity_type: entityType,
@@ -249,5 +253,4 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       options,
     });
   }
-}
 
