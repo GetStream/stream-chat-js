@@ -17,6 +17,7 @@ import {
   SubmitActionOptions,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
+  Pager,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -196,7 +197,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async queryConfigs(
     filterConditions: QueryModerationConfigsFilters,
     sort: QueryModerationConfigsSort,
-    options: Record<string, any>,
+    options: Pager = {},
   ) {
     return await this.client.post(this.client.baseURL + '/api/v2/moderation/configs', {
       filter: filterConditions,
@@ -234,6 +235,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     entityID: string,
     entityCreatorID: string,
     moderationPayload: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       custom?: Record<string, any>;
       images?: string[];
       texts?: string[];
