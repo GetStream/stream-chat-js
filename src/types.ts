@@ -3321,6 +3321,16 @@ export type GetUserModerationReportResponse<StreamChatGenerics extends Extendabl
   user_mutes?: Mute<StreamChatGenerics>[];
 };
 
+export type QueryModerationConfigsFilters = QueryFilters<
+  {
+    key?: string;
+  } & {
+    created_at?: PrimitiveFilter<string>;
+  } & {
+    updated_at?: PrimitiveFilter<string>;
+  }
+>;
+
 export type ReviewQueueFilters = QueryFilters<
   {
     assigned_to?:
@@ -3376,6 +3386,8 @@ export type ReviewQueueFilters = QueryFilters<
 export type ReviewQueueSort =
   | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
   | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'updated_at'>>;
 
 export type ReviewQueuePaginationOptions = Pager;
 
