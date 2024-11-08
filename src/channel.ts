@@ -704,7 +704,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const cli = this.getClient();
     const uid = opts.user_id || cli.userID;
     if (!uid) {
-      throw Error('A user_id is required for pinning a channel');
+      throw new Error('A user_id is required for pinning a channel');
     }
     const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
     return resp.channel_member;
@@ -726,7 +726,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const cli = this.getClient();
     const uid = opts.user_id || cli.userID;
     if (!uid) {
-      throw Error('A user_id is required for unpinning a channel');
+      throw new Error('A user_id is required for unpinning a channel');
     }
     const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
     return resp.channel_member;
@@ -1515,12 +1515,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       case 'member.added':
       case 'member.updated':
         if (event.member?.user_id) {
-          channelState.members[event.member.user_id] = event.member;
+          channelState.members = {
+            ...channelState.members,
+            [event.member.user_id]: event.member,
+          };
         }
         break;
       case 'member.removed':
         if (event.user?.id) {
-          delete channelState.members[event.user.id];
+          const newMembers = {
+            ...channelState.members,
+          };
+
+          delete newMembers[event.user.id];
+
+          channelState.members = newMembers;
         }
         break;
       case 'notification.mark_unread': {
