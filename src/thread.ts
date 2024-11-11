@@ -197,8 +197,11 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeMarkActiveThreadRead = () => {
     return this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.active, ownUnreadCountSelector(this.client.userID)(nextValue)],
-      ([active, unreadMessageCount]) => {
+      (nextValue) => ({
+        active: nextValue.active,
+        unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
+      }),
+      ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
         this.throttledMarkAsRead();
       },
@@ -207,8 +210,8 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeReloadActiveStaleThread = () =>
     this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.active, nextValue.isStateStale],
-      ([active, isStateStale]) => {
+      (nextValue) => ({ active: nextValue.active, isStateStale: nextValue.isStateStale }),
+      ({ active, isStateStale }) => {
         if (active && isStateStale) {
           this.reload();
         }

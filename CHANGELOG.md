@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.43.0](https://github.com/GetStream/stream-chat-js/compare/v8.42.0...v8.43.0) (2024-11-07)
+
+
+### Features
+
+* add support for archiving channels ([#1386](https://github.com/GetStream/stream-chat-js/issues/1386)) ([2e74619](https://github.com/GetStream/stream-chat-js/commit/2e74619afda85afdec6c6a588adf09ca9e6d4790))
+* add support for pinning channels ([#1378](https://github.com/GetStream/stream-chat-js/issues/1378)) ([7e39944](https://github.com/GetStream/stream-chat-js/commit/7e399443d2dd41987879dcd42c700f64c73a4967))
+* moderation endpoints for query and delete config and check api ([#1387](https://github.com/GetStream/stream-chat-js/issues/1387)) ([1316fd2](https://github.com/GetStream/stream-chat-js/commit/1316fd27c51b9fce4d3257c9790d4d35c7decff9))
+
+## [8.42.0](https://github.com/GetStream/stream-chat-js/compare/v8.41.1...v8.42.0) (2024-10-30)
+
+
+### Features
+
+* polls rewrite ([#1373](https://github.com/GetStream/stream-chat-js/issues/1373)) ([7c56d21](https://github.com/GetStream/stream-chat-js/commit/7c56d219141aabe1ca0fc45af30b59db91ab4a82))
+
+### [8.41.1](https://github.com/GetStream/stream-chat-js/compare/v8.41.0...v8.41.1) (2024-10-28)
+
+
+### Bug Fixes
+
+* change subscribeWithSelector API declaration ([#1382](https://github.com/GetStream/stream-chat-js/issues/1382)) ([5b1c7e5](https://github.com/GetStream/stream-chat-js/commit/5b1c7e5b6372259db64c36719c53883be1e1f409))
+
+## [8.41.0](https://github.com/GetStream/stream-chat-js/compare/v8.40.9...v8.41.0) (2024-10-24)
+
 ### [8.40.9](https://github.com/GetStream/stream-chat-js/compare/v8.40.8...v8.40.9) (2024-09-19)
 
 
