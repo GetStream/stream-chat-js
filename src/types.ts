@@ -1839,13 +1839,17 @@ export type Sort<T> = {
   [P in keyof T]?: AscDesc;
 };
 
+export type SortMember<T> = {
+  [P in keyof T]?: AscDesc | string[];
+};
+
 export type UserSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | Sort<UserResponse<StreamChatGenerics>>
   | Array<Sort<UserResponse<StreamChatGenerics>>>;
 
 export type MemberSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
-  | Sort<Pick<UserResponse<StreamChatGenerics>, 'id' | 'created_at' | 'name'>>
-  | Array<Sort<Pick<UserResponse<StreamChatGenerics>, 'id' | 'created_at' | 'name'>>>;
+  | SortMember<Pick<UserResponse<StreamChatGenerics>, 'id' | 'created_at' | 'name' | 'channel_role'>>
+  | Array<SortMember<Pick<UserResponse<StreamChatGenerics>, 'id' | 'created_at' | 'name' | 'channel_role'>>>;
 
 export type SearchMessageSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['messageType']
