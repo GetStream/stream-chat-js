@@ -7,6 +7,20 @@ import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, Query
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
+export const THREAD_MANAGER_INITIAL_STATE = {
+  active: false,
+  isThreadOrderStale: false,
+  threads: [],
+  unreadThreadCount: 0,
+  unseenThreadIds: [],
+  lastConnectionDropAt: null,
+  pagination: {
+    isLoading: false,
+    isLoadingNext: false,
+    nextCursor: null,
+  },
+  ready: false,
+};
 
 export type ThreadManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
@@ -40,20 +54,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   constructor({ client }: { client: StreamChat<SCG> }) {
     this.client = client;
-    this.state = new StateStore<ThreadManagerState<SCG>>({
-      active: false,
-      isThreadOrderStale: false,
-      threads: [],
-      unreadThreadCount: 0,
-      unseenThreadIds: [],
-      lastConnectionDropAt: null,
-      pagination: {
-        isLoading: false,
-        isLoadingNext: false,
-        nextCursor: null,
-      },
-      ready: false,
-    });
+    this.state = new StateStore<ThreadManagerState<SCG>>(THREAD_MANAGER_INITIAL_STATE);
 
     this.threadsByIdGetterCache = { threads: [], threadsById: {} };
   }
@@ -76,6 +77,10 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     return threadsById;
   }
 
+  public resetState = () => {
+    this.state.next(THREAD_MANAGER_INITIAL_STATE);
+  };
+
   public activate = () => {
     this.state.partialNext({ active: true });
   };
@@ -92,6 +97,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeReloadOnActivation());
     this.unsubscribeFunctions.add(this.subscribeNewReplies());
     this.unsubscribeFunctions.add(this.subscribeRecoverAfterConnectionDrop());
+    this.unsubscribeFunctions.add(this.subscribeChannelDeleted());
   };
 
   private subscribeUnreadThreadsCountChange = () => {
@@ -116,6 +122,15 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
+
+  private subscribeChannelDeleted = () =>
+    this.client.on('notification.channel_deleted', (event) => {
+      const { cid } = event;
+      const { threads } = this.state.getLatestValue();
+
+      const newThreads = threads.filter((thread) => thread.channel.cid !== cid);
+      this.state.partialNext({ threads: newThreads });
+    }).unsubscribe;
 
   private subscribeManageThreadSubscriptions = () =>
     this.state.subscribeWithSelector(
