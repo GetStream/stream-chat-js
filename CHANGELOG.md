@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.44.0](https://github.com/GetStream/stream-chat-js/compare/v8.43.0...v8.44.0) (2024-11-13)
+
+
+### Features
+
+* add typescript support for custom channel member fields ([#1389](https://github.com/GetStream/stream-chat-js/issues/1389)) ([f2268df](https://github.com/GetStream/stream-chat-js/commit/f2268df3c3fe68ff73654d5752f0d41f371bbff9))
+
+
+### Bug Fixes
+
+* thread manager bugs ([#1372](https://github.com/GetStream/stream-chat-js/issues/1372)) ([7435a58](https://github.com/GetStream/stream-chat-js/commit/7435a580628a5dc368f0eb8a87bc5fe4cafbf60c))
+
 ## [8.43.0](https://github.com/GetStream/stream-chat-js/compare/v8.42.0...v8.43.0) (2024-11-07)
 
 
