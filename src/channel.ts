@@ -28,6 +28,7 @@ import {
   InviteOptions,
   MarkReadOptions,
   MarkUnreadOptions,
+  MemberFilters,
   MemberSort,
   Message,
   MessageFilters,
@@ -35,6 +36,7 @@ import {
   MessageResponse,
   MessageSetType,
   MuteChannelAPIResponse,
+  NewMemberPayload,
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
   PartialUpdateMember,
@@ -51,7 +53,6 @@ import {
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
-  UserFilters,
   UserResponse,
   QueryChannelAPIResponse,
   PollVoteData,
@@ -265,7 +266,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * queryMembers - Query Members
    *
-   * @param {UserFilters<StreamChatGenerics>}  filterConditions object MongoDB style filters
+   * @param {MemberFilters<StreamChatGenerics>}  filterConditions object MongoDB style filters
    * @param {MemberSort<StreamChatGenerics>} [sort] Sort options, for instance [{created_at: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{name: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
@@ -273,7 +274,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Promise<ChannelMemberAPIResponse<StreamChatGenerics>>} Query Members response
    */
   async queryMembers(
-    filterConditions: UserFilters<StreamChatGenerics>,
+    filterConditions: MemberFilters<StreamChatGenerics>,
     sort: MemberSort<StreamChatGenerics> = [],
     options: QueryMembersOptions = {},
   ) {
@@ -309,7 +310,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
    */
-  async partialUpdateMember(user_id: string, updates: PartialUpdateMember) {
+  async partialUpdateMember(user_id: string, updates: PartialUpdateMember<StreamChatGenerics>) {
     if (!user_id) {
       throw Error('Please specify the user id');
     }
@@ -517,13 +518,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * addMembers - add members to the channel
    *
-   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to add to the channel
+   * @param {string[] | Array<NewMemberPayload<StreamChatGenerics>>} members An array of members to add to the channel
    * @param {Message<StreamChatGenerics>} [message] Optional message object for channel members notification
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<StreamChatGenerics>>} The server response
    */
   async addMembers(
-    members: string[] | { user_id: string; channel_role?: Role }[],
+    members: string[] | Array<NewMemberPayload<StreamChatGenerics>>,
     message?: Message<StreamChatGenerics>,
     options: ChannelUpdateOptions = {},
   ) {
@@ -561,13 +562,13 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {{user_id: string, channel_role?: Role}[]} members An array of members to invite to the channel
+   * @param {string[] | Array<NewMemberPayload<StreamChatGenerics>>} members An array of members to invite to the channel
    * @param {Message<StreamChatGenerics>} [message] Optional message object for channel members notification
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse<StreamChatGenerics>>} The server response
    */
   async inviteMembers(
-    members: { user_id: string; channel_role?: Role }[] | string[],
+    members: string[] | Array<NewMemberPayload<StreamChatGenerics>>,
     message?: Message<StreamChatGenerics>,
     options: ChannelUpdateOptions = {},
   ) {
@@ -704,7 +705,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const cli = this.getClient();
     const uid = opts.user_id || cli.userID;
     if (!uid) {
-      throw Error('A user_id is required for pinning a channel');
+      throw new Error('A user_id is required for pinning a channel');
     }
     const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
     return resp.channel_member;
@@ -726,7 +727,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     const cli = this.getClient();
     const uid = opts.user_id || cli.userID;
     if (!uid) {
-      throw Error('A user_id is required for unpinning a channel');
+      throw new Error('A user_id is required for unpinning a channel');
     }
     const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
     return resp.channel_member;
@@ -1515,12 +1516,21 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       case 'member.added':
       case 'member.updated':
         if (event.member?.user_id) {
-          channelState.members[event.member.user_id] = event.member;
+          channelState.members = {
+            ...channelState.members,
+            [event.member.user_id]: event.member,
+          };
         }
         break;
       case 'member.removed':
         if (event.user?.id) {
-          delete channelState.members[event.user.id];
+          const newMembers = {
+            ...channelState.members,
+          };
+
+          delete newMembers[event.user.id];
+
+          channelState.members = newMembers;
         }
         break;
       case 'notification.mark_unread': {
