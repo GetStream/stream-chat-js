@@ -68,6 +68,8 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
    */
   reset = () => {
     this.token = undefined;
+    this.tokenProvider = undefined;
+    this.type = 'static';
     this.user = undefined;
     this.loadTokenPromise = null;
   };
