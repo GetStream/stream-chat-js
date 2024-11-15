@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.45.0](https://github.com/GetStream/stream-chat-js/compare/v8.44.0...v8.45.0) (2024-11-15)
+
+
+### Features
+
+* add typescript support for moderation V2 payload in message response ([#1392](https://github.com/GetStream/stream-chat-js/issues/1392)) ([79fa5ce](https://github.com/GetStream/stream-chat-js/commit/79fa5cee7fac594589fee98f75d9d1109c8ee45d))
+
+
+### Bug Fixes
+
+* fully reset token manager on user disconnect ([#1391](https://github.com/GetStream/stream-chat-js/issues/1391)) ([0a68e25](https://github.com/GetStream/stream-chat-js/commit/0a68e252b15e29007e31751ed5cca9ece5e84f87))
+
 ## [8.44.0](https://github.com/GetStream/stream-chat-js/compare/v8.43.0...v8.44.0) (2024-11-13)
 
 
