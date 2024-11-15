@@ -678,7 +678,8 @@ export type MessageResponseBase<
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   mentioned_users?: UserResponse<StreamChatGenerics>[];
   message_text_updated_at?: string;
-  moderation_details?: ModerationDetailsResponse;
+  moderation?: ModerationResponse; // present only with Moderation v2
+  moderation_details?: ModerationDetailsResponse; // present only with Moderation v1
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
@@ -711,6 +712,18 @@ export type ModerationDetailsResponse = {
 export type ModerationHarmResponse = {
   name: string;
   phrase_list_ids: number[];
+};
+
+export type ModerationAction = 'bounce' | 'flag' | 'remove' | 'shadow';
+
+export type ModerationResponse = {
+  action: ModerationAction;
+  original_text: string;
+  blocklist_matched?: string;
+  image_harms?: string[];
+  platform_circumvented?: boolean;
+  semantic_filter_matched?: string;
+  text_harms?: string[];
 };
 
 export type MuteResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
