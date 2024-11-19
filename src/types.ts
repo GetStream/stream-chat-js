@@ -719,11 +719,6 @@ export type ModerationAction = 'bounce' | 'flag' | 'remove' | 'shadow';
 export type ModerationResponse = {
   action: ModerationAction;
   original_text: string;
-  blocklist_matched?: string;
-  image_harms?: string[];
-  platform_circumvented?: boolean;
-  semantic_filter_matched?: string;
-  text_harms?: string[];
 };
 
 export type MuteResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
