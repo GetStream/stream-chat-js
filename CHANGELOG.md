@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.45.1](https://github.com/GetStream/stream-chat-js/compare/v8.45.0...v8.45.1) (2024-11-19)
+
+
+### Bug Fixes
+
+* remove unstable properties from ModerationResponse type ([#1395](https://github.com/GetStream/stream-chat-js/issues/1395)) ([65c48e3](https://github.com/GetStream/stream-chat-js/commit/65c48e3ed755350adb8e3a9e2b57758168f0dc7c))
+
 ## [8.45.0](https://github.com/GetStream/stream-chat-js/compare/v8.44.0...v8.45.0) (2024-11-15)
 
 
