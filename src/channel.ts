@@ -1748,12 +1748,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   _hydrateMembers(members: ChannelMemberResponse<StreamChatGenerics>[]) {
-    this.state.members = members.reduce((acc, member) => {
+    if (!members.length) return;
+
+    const newMembersById = members.reduce<ChannelState<StreamChatGenerics>['members']>((membersById, member) => {
       if (member.user) {
-        acc[member.user.id] = member;
+        membersById[member.user.id] = member;
       }
-      return acc;
-    }, {} as ChannelState<StreamChatGenerics>['members']);
+      return membersById;
+    }, {});
+
+    this.state.members = {
+      ...this.state.members,
+      ...newMembersById,
+    };
   }
 
   _disconnect() {
