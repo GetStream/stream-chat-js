@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
-import { generateThread } from './test-utils/generateThread';
+import { generateThreadResponse } from './test-utils/generateThreadResponse';
+import { getClientWithUser } from './test-utils/getClient';
 
 import sinon from 'sinon';
 import {
@@ -14,6 +15,7 @@ import {
   Thread,
   ThreadManager,
   ThreadResponse,
+  THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
 
 const TEST_USER_ID = 'observer';
@@ -35,7 +37,7 @@ describe('Threads 2.0', () => {
   } = {}) {
     return new Thread({
       client,
-      threadData: generateThread(
+      threadData: generateThreadResponse(
         { ...channelResponse, ...channelOverrides },
         { ...parentMessageResponse, ...parentMessageOverrides },
         overrides,
@@ -54,7 +56,12 @@ describe('Threads 2.0', () => {
 
   describe('Thread', () => {
     it('initializes properly', () => {
-      const thread = new Thread({ client, threadData: generateThread(channelResponse, parentMessageResponse) });
+      const threadResponse = generateThreadResponse(channelResponse, parentMessageResponse);
+      const thread = new Thread({ client, threadData: threadResponse });
+      const state = thread.state.getLatestValue();
+
+      expect(threadResponse.read).to.have.lengthOf(0);
+      expect(state.read).to.have.keys([TEST_USER_ID]);
 
       expect(thread.id).to.equal(parentMessageResponse.id);
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
@@ -102,17 +109,21 @@ describe('Threads 2.0', () => {
           const optimisticMessage = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'aaa',
-            date: '2020-01-01T00:00:00Z',
+            created_at: '2020-01-01T00:00:00Z',
           }) as MessageResponse;
 
           const message = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'bbb',
-            date: '2020-01-01T00:00:10Z',
+            created_at: '2020-01-01T00:00:10Z',
           }) as MessageResponse;
 
           const thread = createTestThread({ latest_replies: [optimisticMessage, message] });
-          const udpatedMessage = { ...optimisticMessage, text: 'ccc', date: '2020-01-01T00:00:20Z' };
+          const updatedMessage: MessageResponse = {
+            ...optimisticMessage,
+            text: 'ccc',
+            created_at: '2020-01-01T00:00:20Z',
+          };
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.replies).to.have.lengthOf(2);
@@ -120,7 +131,7 @@ describe('Threads 2.0', () => {
           expect(stateBefore.replies[0].text).to.equal('aaa');
           expect(stateBefore.replies[1].id).to.equal(message.id);
 
-          thread.upsertReplyLocally({ message: udpatedMessage, timestampChanged: true });
+          thread.upsertReplyLocally({ message: updatedMessage, timestampChanged: true });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(2);
@@ -134,7 +145,7 @@ describe('Threads 2.0', () => {
         it('prevents updating a parent message if the ids do not match', () => {
           const thread = createTestThread();
           const message = generateMsg() as MessageResponse;
-          expect(() => thread.updateParentMessageLocally(message)).to.throw();
+          expect(() => thread.updateParentMessageLocally({ message })).to.throw();
         });
 
         it('updates parent message and related top-level properties', () => {
@@ -152,7 +163,7 @@ describe('Threads 2.0', () => {
             deleted_at: new Date().toISOString(),
           }) as MessageResponse;
 
-          thread.updateParentMessageLocally(updatedMessage);
+          thread.updateParentMessageLocally({ message: updatedMessage });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.deletedAt).to.be.not.null;
@@ -603,7 +614,7 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'message.read',
             user: { id: 'bob' },
-            thread: generateThread(channelResponse, generateMsg()) as ThreadResponse,
+            thread: generateThreadResponse(channelResponse, generateMsg()) as ThreadResponse,
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -631,7 +642,10 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'message.read',
             user: { id: 'bob' },
-            thread: generateThread(channelResponse, generateMsg({ id: parentMessageResponse.id })) as ThreadResponse,
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+            ) as ThreadResponse,
             created_at: createdAt.toISOString(),
           });
 
@@ -858,10 +872,35 @@ describe('Threads 2.0', () => {
 
           thread.unregisterSubscriptions();
         });
+
+        it('handles deletion of the thread (updates deleted_at and parentMessage properties)', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+
+          const parentMessage = generateMsg({
+            id: thread.id,
+            deleted_at: new Date().toISOString(),
+            type: 'deleted',
+          }) as MessageResponse;
+
+          expect(thread.id).to.equal(parentMessage.id);
+          expect(stateBefore.deletedAt).to.be.null;
+
+          client.dispatchEvent({ type: 'message.deleted', message: parentMessage });
+
+          const stateAfter = thread.state.getLatestValue();
+
+          expect(stateAfter.deletedAt).to.be.a('date');
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
+          expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(parentMessage.deleted_at);
+        });
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
-        (['message.updated', 'reaction.new', 'reaction.deleted'] as const).forEach((eventType) => {
+        (['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
           it(`updates reply or parent message on "${eventType}"`, () => {
             const thread = createTestThread();
             const updateParentMessageOrReplyLocallySpy = sinon.spy(thread, 'updateParentMessageOrReplyLocally');
@@ -890,6 +929,37 @@ describe('Threads 2.0', () => {
       expect(state.pagination.nextCursor).to.be.null;
     });
 
+    describe('resetState', () => {
+      it('resets the state properly', async () => {
+        threadManager.state.partialNext({
+          threads: [createTestThread(), createTestThread()],
+          unseenThreadIds: ['1', '2'],
+        });
+        threadManager.registerSubscriptions();
+        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(2);
+        expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(2);
+        threadManager.resetState();
+        expect(threadManager.state.getLatestValue()).to.be.deep.equal(THREAD_MANAGER_INITIAL_STATE);
+      });
+    });
+
+    it('resets the thread state on disconnect', async () => {
+      const clientWithUser = await getClientWithUser({ id: 'user1' });
+      const thread = createTestThread();
+      clientWithUser.threads.state.partialNext({ ready: true, threads: [thread] });
+      clientWithUser.threads.registerSubscriptions();
+
+      const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue();
+
+      expect(threads).to.deep.equal([thread]);
+      expect(unseenThreadIds.length).to.equal(0);
+
+      await clientWithUser.disconnectUser();
+
+      expect(clientWithUser.threads.state.getLatestValue().threads).to.have.lengthOf(0);
+      expect(clientWithUser.threads.state.getLatestValue().unseenThreadIds).to.have.lengthOf(0);
+    });
+
     describe('Subscription and Event Handlers', () => {
       beforeEach(() => {
         threadManager.registerSubscriptions();
@@ -915,6 +985,30 @@ describe('Threads 2.0', () => {
           const { unreadThreadCount } = threadManager.state.getLatestValue();
           expect(unreadThreadCount).to.equal(expectedUnreadCount);
         });
+      });
+
+      it('removes threads from the state if their channel got deleted', () => {
+        const thread = createTestThread();
+        const toBeRemoved = [
+          createTestThread({ channelOverrides: { id: 'channel1' } }),
+          createTestThread({ channelOverrides: { id: 'channel1' } }),
+          createTestThread({ channelOverrides: { id: 'channel2' } }),
+        ];
+        threadManager.state.partialNext({ threads: [thread, ...toBeRemoved] });
+
+        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(4);
+
+        client.dispatchEvent({
+          type: 'notification.channel_deleted',
+          cid: 'messaging:channel1',
+        });
+
+        client.dispatchEvent({
+          type: 'notification.channel_deleted',
+          cid: 'messaging:channel2',
+        });
+
+        expect(threadManager.state.getLatestValue().threads).to.deep.equal([thread]);
       });
 
       describe('Event: notification.thread_message_new', () => {
@@ -1099,6 +1193,14 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
+        it('reloads with a default limit if both threads and unseenThreadIds are empty', async () => {
+          threadManager.state.partialNext({
+            threads: [],
+            unseenThreadIds: [],
+          });
+          await threadManager.reload();
+          expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
+        });
         it('skips reload if there were no updates since the latest reload', async () => {
           threadManager.state.partialNext({ ready: true });
           await threadManager.reload();
@@ -1277,14 +1379,17 @@ describe('Threads 2.0', () => {
             },
           }));
           const spy = sinon.spy();
-          threadManager.state.subscribeWithSelector((nextValue) => [nextValue.pagination.isLoadingNext], spy);
+          threadManager.state.subscribeWithSelector(
+            (nextValue) => ({ isLoadingNext: nextValue.pagination.isLoadingNext }),
+            spy,
+          );
           spy.resetHistory();
 
           await threadManager.loadNextPage();
 
           expect(spy.callCount).to.equal(2);
-          expect(spy.firstCall.calledWith([true])).to.be.true;
-          expect(spy.lastCall.calledWith([false])).to.be.true;
+          expect(spy.firstCall.calledWith({ isLoadingNext: true })).to.be.true;
+          expect(spy.lastCall.calledWith({ isLoadingNext: false })).to.be.true;
         });
 
         it('updates thread list and pagination', async () => {

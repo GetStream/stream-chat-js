@@ -4,6 +4,7 @@ import { StateStore } from './store';
 import type {
   AscDesc,
   DefaultGenerics,
+  EventTypes,
   ExtendableGenerics,
   FormatMessageResponse,
   MessagePaginationOptions,
@@ -79,6 +80,12 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
     channel._hydrateMembers(threadData.channel.members ?? []);
 
+    // For when read object is undefined and due to that unreadMessageCount for
+    // the current user isn't being incremented on message.new
+    const placeholderReadResponse: ReadResponse[] = client.userID
+      ? [{ user: { id: client.userID }, unread_messages: 0, last_read: new Date().toISOString() }]
+      : [];
+
     this.state = new StateStore<ThreadState<SCG>>({
       active: false,
       channel,
@@ -89,7 +96,9 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       pagination: repliesPaginationFromInitialThread(threadData),
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
-      read: formatReadState(threadData.read ?? []),
+      read: formatReadState(
+        !threadData.read || threadData.read.length === 0 ? placeholderReadResponse : threadData.read,
+      ),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
@@ -182,14 +191,17 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
     this.unsubscribeFunctions.add(this.subscribeNewReplies());
     this.unsubscribeFunctions.add(this.subscribeRepliesRead());
-    this.unsubscribeFunctions.add(this.subscribeReplyDeleted());
+    this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
   };
 
   private subscribeMarkActiveThreadRead = () => {
     return this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.active, ownUnreadCountSelector(this.client.userID)(nextValue)],
-      ([active, unreadMessageCount]) => {
+      (nextValue) => ({
+        active: nextValue.active,
+        unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
+      }),
+      ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
         this.throttledMarkAsRead();
       },
@@ -198,8 +210,8 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeReloadActiveStaleThread = () =>
     this.state.subscribeWithSelector(
-      (nextValue) => [nextValue.active, nextValue.isStateStale],
-      ([active, isStateStale]) => {
+      (nextValue) => ({ active: nextValue.active, isStateStale: nextValue.isStateStale }),
+      ({ active, isStateStale }) => {
         if (active && isStateStale) {
           this.reload();
         }
@@ -294,20 +306,30 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       }));
     }).unsubscribe;
 
-  private subscribeReplyDeleted = () =>
+  private subscribeMessageDeleted = () =>
     this.client.on('message.deleted', (event) => {
-      if (event.message?.parent_id !== this.id) return;
+      if (!event.message) return;
 
-      if (event.hard_delete) {
-        this.deleteReplyLocally({ message: event.message });
-      } else {
-        // Handle soft delete (updates deleted_at timestamp)
-        this.upsertReplyLocally({ message: event.message });
+      // Deleted message is a reply of this thread
+      if (event.message.parent_id === this.id) {
+        if (event.hard_delete) {
+          this.deleteReplyLocally({ message: event.message });
+        } else {
+          // Handle soft delete (updates deleted_at timestamp)
+          this.upsertReplyLocally({ message: event.message });
+        }
+      }
+
+      // Deleted message is parent message of this thread
+      if (event.message.id === this.id) {
+        this.updateParentMessageLocally({ message: event.message });
       }
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const unsubscribeFunctions = ['message.updated', 'reaction.new', 'reaction.deleted'].map(
+    const eventTypes: EventTypes[] = ['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'];
+
+    const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
         this.client.on(eventType, (event) => {
           if (event.message) {
@@ -375,7 +397,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }));
   };
 
-  public updateParentMessageLocally = (message: MessageResponse<SCG>) => {
+  public updateParentMessageLocally = ({ message }: { message: MessageResponse<SCG> }) => {
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
@@ -383,19 +405,12 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.state.next((current) => {
       const formattedMessage = formatMessage(message);
 
-      const newData: typeof current = {
+      return {
         ...current,
         deletedAt: formattedMessage.deleted_at,
         parentMessage: formattedMessage,
         replyCount: message.reply_count ?? current.replyCount,
       };
-
-      // update channel on channelData change (unlikely but handled anyway)
-      if (message.channel) {
-        newData['channel'] = this.client.channel(message.channel.type, message.channel.id, message.channel);
-      }
-
-      return newData;
     });
   };
 
@@ -405,7 +420,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     if (!message.parent_id && message.id === this.id) {
-      this.updateParentMessageLocally(message);
+      this.updateParentMessageLocally({ message });
     }
   };
 

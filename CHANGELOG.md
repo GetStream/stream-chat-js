@@ -2,6 +2,91 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.45.1](https://github.com/GetStream/stream-chat-js/compare/v8.45.0...v8.45.1) (2024-11-19)
+
+
+### Bug Fixes
+
+* remove unstable properties from ModerationResponse type ([#1395](https://github.com/GetStream/stream-chat-js/issues/1395)) ([65c48e3](https://github.com/GetStream/stream-chat-js/commit/65c48e3ed755350adb8e3a9e2b57758168f0dc7c))
+
+## [8.45.0](https://github.com/GetStream/stream-chat-js/compare/v8.44.0...v8.45.0) (2024-11-15)
+
+
+### Features
+
+* add typescript support for moderation V2 payload in message response ([#1392](https://github.com/GetStream/stream-chat-js/issues/1392)) ([79fa5ce](https://github.com/GetStream/stream-chat-js/commit/79fa5cee7fac594589fee98f75d9d1109c8ee45d))
+
+
+### Bug Fixes
+
+* fully reset token manager on user disconnect ([#1391](https://github.com/GetStream/stream-chat-js/issues/1391)) ([0a68e25](https://github.com/GetStream/stream-chat-js/commit/0a68e252b15e29007e31751ed5cca9ece5e84f87))
+
+## [8.44.0](https://github.com/GetStream/stream-chat-js/compare/v8.43.0...v8.44.0) (2024-11-13)
+
+
+### Features
+
+* add typescript support for custom channel member fields ([#1389](https://github.com/GetStream/stream-chat-js/issues/1389)) ([f2268df](https://github.com/GetStream/stream-chat-js/commit/f2268df3c3fe68ff73654d5752f0d41f371bbff9))
+
+
+### Bug Fixes
+
+* thread manager bugs ([#1372](https://github.com/GetStream/stream-chat-js/issues/1372)) ([7435a58](https://github.com/GetStream/stream-chat-js/commit/7435a580628a5dc368f0eb8a87bc5fe4cafbf60c))
+
+## [8.43.0](https://github.com/GetStream/stream-chat-js/compare/v8.42.0...v8.43.0) (2024-11-07)
+
+
+### Features
+
+* add support for archiving channels ([#1386](https://github.com/GetStream/stream-chat-js/issues/1386)) ([2e74619](https://github.com/GetStream/stream-chat-js/commit/2e74619afda85afdec6c6a588adf09ca9e6d4790))
+* add support for pinning channels ([#1378](https://github.com/GetStream/stream-chat-js/issues/1378)) ([7e39944](https://github.com/GetStream/stream-chat-js/commit/7e399443d2dd41987879dcd42c700f64c73a4967))
+* moderation endpoints for query and delete config and check api ([#1387](https://github.com/GetStream/stream-chat-js/issues/1387)) ([1316fd2](https://github.com/GetStream/stream-chat-js/commit/1316fd27c51b9fce4d3257c9790d4d35c7decff9))
+
+## [8.42.0](https://github.com/GetStream/stream-chat-js/compare/v8.41.1...v8.42.0) (2024-10-30)
+
+
+### Features
+
+* polls rewrite ([#1373](https://github.com/GetStream/stream-chat-js/issues/1373)) ([7c56d21](https://github.com/GetStream/stream-chat-js/commit/7c56d219141aabe1ca0fc45af30b59db91ab4a82))
+
+### [8.41.1](https://github.com/GetStream/stream-chat-js/compare/v8.41.0...v8.41.1) (2024-10-28)
+
+
+### Bug Fixes
+
+* change subscribeWithSelector API declaration ([#1382](https://github.com/GetStream/stream-chat-js/issues/1382)) ([5b1c7e5](https://github.com/GetStream/stream-chat-js/commit/5b1c7e5b6372259db64c36719c53883be1e1f409))
+
+## [8.41.0](https://github.com/GetStream/stream-chat-js/compare/v8.40.9...v8.41.0) (2024-10-24)
+
+### [8.40.9](https://github.com/GetStream/stream-chat-js/compare/v8.40.8...v8.40.9) (2024-09-19)
+
+
+### Bug Fixes
+
+* **addToMessageList:** prevent messages shifting when adding reactions ([#1368](https://github.com/GetStream/stream-chat-js/issues/1368)) ([40e06bd](https://github.com/GetStream/stream-chat-js/commit/40e06bd6a8583da2d0df9b8fa67b6c21366447e9))
+* deprecate ne and nin operators for query filters ([#1363](https://github.com/GetStream/stream-chat-js/issues/1363)) ([696d3a6](https://github.com/GetStream/stream-chat-js/commit/696d3a6a597ccdc1ae84b38db34a496bab0f0819))
+
+### [8.40.8](https://github.com/GetStream/stream-chat-js/compare/v8.40.7...v8.40.8) (2024-09-17)
+
+
+### Bug Fixes
+
+* **Thread:** parentMessage delete & initial read object ([#1366](https://github.com/GetStream/stream-chat-js/issues/1366)) ([3f29e32](https://github.com/GetStream/stream-chat-js/commit/3f29e32a28981bed5ad2820b431ba2dfb70be673))
+
+### [8.40.7](https://github.com/GetStream/stream-chat-js/compare/v8.40.6...v8.40.7) (2024-09-13)
+
+
+### Bug Fixes
+
+* merge custom data with current one rather than override ([#1364](https://github.com/GetStream/stream-chat-js/issues/1364)) ([ff59d54](https://github.com/GetStream/stream-chat-js/commit/ff59d5404733f358d87dbed18a9e7e92630d6098))
+
+### [8.40.6](https://github.com/GetStream/stream-chat-js/compare/v8.40.5...v8.40.6) (2024-09-11)
+
+
+### Bug Fixes
+
+* avoid querying threads with 0 limit ([#1361](https://github.com/GetStream/stream-chat-js/issues/1361)) ([1393bac](https://github.com/GetStream/stream-chat-js/commit/1393bac4cac775bf9cbae4874be98b3242d0bea9))
+
 ### [8.40.5](https://github.com/GetStream/stream-chat-js/compare/v8.40.4...v8.40.5) (2024-09-11)
 
 
