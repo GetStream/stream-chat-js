@@ -48,7 +48,9 @@ describe('Threads 2.0', () => {
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
-    channelResponse = generateChannel({ channel: { id: uuidv4(), name: 'Test channel' } }).channel as ChannelResponse;
+    channelResponse = generateChannel({
+      channel: { id: uuidv4(), name: 'Test channel', members: [] },
+    }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
@@ -57,12 +59,16 @@ describe('Threads 2.0', () => {
   describe('Thread', () => {
     it('initializes properly', () => {
       const threadResponse = generateThreadResponse(channelResponse, parentMessageResponse);
+      // mimic pre-cached channel with existing members
+      channel._hydrateMembers({ members: [{ user: { id: TEST_USER_ID } }] });
       const thread = new Thread({ client, threadData: threadResponse });
       const state = thread.state.getLatestValue();
 
+      expect(threadResponse.channel.members).to.have.lengthOf(0);
       expect(threadResponse.read).to.have.lengthOf(0);
       expect(state.read).to.have.keys([TEST_USER_ID]);
 
+      expect(thread.channel.state.members).to.have.keys([TEST_USER_ID]);
       expect(thread.id).to.equal(parentMessageResponse.id);
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
