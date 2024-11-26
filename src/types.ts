@@ -2146,6 +2146,8 @@ export type Attachment<
   giphy?: GiphyData;
   image_url?: string;
   mime_type?: string;
+  latitude?: number;
+  longitude?: number;
   og_scrape_url?: string;
   original_height?: number;
   original_width?: number;
