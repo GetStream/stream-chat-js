@@ -1661,8 +1661,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   ) {
     const { state: clientState, user, userID } = this.getClient();
 
-    // add the Users
+    // add the users
     if (state.members) {
+      this._hydrateMembers({ members: state.members });
+
       for (const member of state.members) {
         if (member.user) {
           clientState.updateUserReference(member.user, this.cid);
@@ -1728,10 +1730,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    if (state.members) {
-      this._hydrateMembers(state.members);
-    }
-
     return {
       messageSet,
     };
@@ -1747,9 +1745,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
-  _hydrateMembers(members: ChannelMemberResponse<StreamChatGenerics>[]) {
-    if (!members.length) return;
-
+  _hydrateMembers({
+    members,
+    overrideCurrentState = true,
+  }: {
+    members: ChannelMemberResponse<StreamChatGenerics>[];
+    /**
+     * If set to `true` then `ChannelState.members` will be overriden with the newly
+     * provided `members`, setting this property to `false` will merge current `ChannelState.members`
+     * object with the newly provided `members`
+     * (new members with the same `userId` will replace the old ones).
+     */
+    overrideCurrentState?: boolean;
+  }) {
     const newMembersById = members.reduce<ChannelState<StreamChatGenerics>['members']>((membersById, member) => {
       if (member.user) {
         membersById[member.user.id] = member;
@@ -1757,10 +1765,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       return membersById;
     }, {});
 
-    this.state.members = {
-      ...this.state.members,
-      ...newMembersById,
-    };
+    if (overrideCurrentState) {
+      this.state.members = newMembersById;
+    } else if (!overrideCurrentState && members.length) {
+      this.state.members = {
+        ...this.state.members,
+        ...newMembersById,
+      };
+    }
   }
 
   _disconnect() {
