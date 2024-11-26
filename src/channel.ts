@@ -1661,7 +1661,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   ) {
     const { state: clientState, user, userID } = this.getClient();
 
-    // add the users
+    // add the members and users
     if (state.members) {
       this._hydrateMembers({ members: state.members });
 
