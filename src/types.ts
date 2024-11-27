@@ -3547,4 +3547,4 @@ export type GetUserModerationReportOptions = {
   include_user_mutes?: boolean;
 };
 
-export type AIState = 'AI_STATE_ERROR|AI_STATE_CHECKING_SOURCES|AI_STATE_THINKING|AI_STATE_GENERATING' | string;
+export type AIState = 'AI_STATE_ERROR' | 'AI_STATE_CHECKING_SOURCES' | 'AI_STATE_THINKING' | 'AI_STATE_GENERATING' | (string & {});
