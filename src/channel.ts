@@ -59,6 +59,7 @@ import {
   SendMessageOptions,
   AscDesc,
   PartialUpdateMemberAPIResponse,
+  AIState,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -785,6 +786,43 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         ...(options || {}),
       } as Event<StreamChatGenerics>);
     }
+  }
+
+  /**
+   * Sends an event to update the AI state for a specific message.
+   * Typically used by the server connected to the AI service to notify clients of state changes.
+   *
+   * @param messageId - The ID of the message associated with the AI state.
+   * @param state - The new state of the AI process (e.g., thinking, generating).
+   * @param options - Optional parameters, such as `ai_message`, to include additional details in the event.
+   */
+  async updateAIState(messageId: string, state: AIState, options?: { ai_message: string }) {
+    await this.sendEvent({
+      type: 'ai_indicator.update',
+      message_id: messageId,
+      ai_state: state,
+      ...(options || {}),
+    } as Event<StreamChatGenerics>);
+  }
+
+  /**
+   * Sends an event to notify watchers to clear the typing/thinking UI when the AI response starts streaming.
+   * Typically used by the server connected to the AI service to inform clients that the AI response has started.
+   */
+  async clearAIIndicator() {
+    await this.sendEvent({
+      type: 'ai_indicator.clear',
+    } as Event<StreamChatGenerics>);
+  }
+
+  /**
+   * Sends an event to stop AI response generation, leaving the message in its current state.
+   * Triggered by the user to halt the AI response process.
+   */
+  async stopAIResponse() {
+    await this.sendEvent({
+      type: 'ai_indicator.stop',
+    } as Event<StreamChatGenerics>);
   }
 
   /**
