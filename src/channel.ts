@@ -796,7 +796,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @param state - The new state of the AI process (e.g., thinking, generating).
    * @param options - Optional parameters, such as `ai_message`, to include additional details in the event.
    */
-  async updateAIState(messageId: string, state: AIState, options: { ai_message: string } = {}) {
+  async updateAIState(messageId: string, state: AIState, options: { ai_message?: string } = {}) {
     await this.sendEvent({
       ...options,
       type: 'ai_indicator.update',
