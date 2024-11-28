@@ -78,7 +78,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
       name: threadData.channel.name,
     });
-    channel._hydrateMembers(threadData.channel.members ?? []);
+    channel._hydrateMembers({ members: threadData.channel.members ?? [], overrideCurrentState: false });
 
     // For when read object is undefined and due to that unreadMessageCount for
     // the current user isn't being incremented on message.new
