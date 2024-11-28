@@ -1252,7 +1252,7 @@ export type ConnectionChangeEvent = {
 
 export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['eventType'] & {
   type: EventTypes;
-  ai_message?: boolean;
+  ai_message?: string;
   ai_state?: AIState;
   channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
