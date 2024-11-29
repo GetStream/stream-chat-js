@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.45.3](https://github.com/GetStream/stream-chat-js/compare/v8.45.2...v8.45.3) (2024-11-28)
+
+
+### Bug Fixes
+
+* make _hydrateMembers merge objects instead of overriding them ([#1397](https://github.com/GetStream/stream-chat-js/issues/1397)) ([6a51159](https://github.com/GetStream/stream-chat-js/commit/6a51159d634ef46a355e30f30448dfa65f0a97fb))
+
 ### [8.45.2](https://github.com/GetStream/stream-chat-js/compare/v8.45.1...v8.45.2) (2024-11-26)
 
 ### [8.45.1](https://github.com/GetStream/stream-chat-js/compare/v8.45.0...v8.45.1) (2024-11-19)
