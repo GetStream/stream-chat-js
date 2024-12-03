@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.46.0](https://github.com/GetStream/stream-chat-js/compare/v8.45.3...v8.46.0) (2024-12-03)
+
+
+### Features
+
+* add AI related user events ([#1400](https://github.com/GetStream/stream-chat-js/issues/1400)) ([b1d4249](https://github.com/GetStream/stream-chat-js/commit/b1d42492e6098ab682d84f348a98a73bdf77485f))
+
 ### [8.45.3](https://github.com/GetStream/stream-chat-js/compare/v8.45.2...v8.45.3) (2024-11-28)
 
 
