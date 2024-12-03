@@ -1252,6 +1252,8 @@ export type ConnectionChangeEvent = {
 
 export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['eventType'] & {
   type: EventTypes;
+  ai_message?: string;
+  ai_state?: AIState;
   channel?: ChannelResponse<StreamChatGenerics>;
   channel_id?: string;
   channel_type?: string;
@@ -1270,6 +1272,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
   message?: MessageResponse<StreamChatGenerics>;
+  message_id?: string;
   mode?: string;
   online?: boolean;
   parent_id?: string;
@@ -3543,3 +3546,10 @@ export type GetUserModerationReportOptions = {
   include_user_blocks?: boolean;
   include_user_mutes?: boolean;
 };
+
+export type AIState =
+  | 'AI_STATE_ERROR'
+  | 'AI_STATE_CHECKING_SOURCES'
+  | 'AI_STATE_THINKING'
+  | 'AI_STATE_GENERATING'
+  | (string & {});

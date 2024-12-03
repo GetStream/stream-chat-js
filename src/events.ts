@@ -48,6 +48,10 @@ export const EVENT_MAP = {
   'user.updated': true,
   'user.watching.start': true,
   'user.watching.stop': true,
+  // AI events
+  'ai_indicator.update': true,
+  'ai_indicator.stop': true,
+  'ai_indicator.clear': true,
 
   // local events
   'channels.queried': true,
