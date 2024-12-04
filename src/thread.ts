@@ -1,5 +1,5 @@
 import type { Channel } from './channel';
-import type { StreamChat } from './client';
+import type { StreamChat, TargetFactory } from './client';
 import { StateStore } from './store';
 import type {
   AscDesc,
@@ -61,6 +61,16 @@ export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = 
   string,
   ThreadUserReadState<SCG> | undefined
 >;
+
+// TODO: figure out generics here
+// @ts-expect-error
+const messageNewFactory: TargetFactory<DefaultGenerics, 'message.new'> = (event) => {
+  return event.parent_id ? `message.new-${event.parent_id}` : null;
+};
+// @ts-expect-error
+const threadMessageReadFactory: TargetFactory<DefaultGenerics, 'message.read'> = (event) => {
+  return event.thread ? `message.read-${event.thread.parent_message_id}` : null;
+};
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
@@ -186,6 +196,9 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
+    this.unsubscribeFunctions.add(this.client.registerTargetFactory('message.new', messageNewFactory));
+    this.unsubscribeFunctions.add(this.client.registerTargetFactory('message.read', threadMessageReadFactory));
+
     this.unsubscribeFunctions.add(this.subscribeMarkActiveThreadRead());
     this.unsubscribeFunctions.add(this.subscribeReloadActiveStaleThread());
     this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
@@ -230,7 +243,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }).unsubscribe;
 
   private subscribeNewReplies = () =>
-    this.client.on('message.new', (event) => {
+    this.client.on(`message.new-${this.id}`, (event) => {
       if (!this.client.userID || event.message?.parent_id !== this.id) {
         return;
       }
@@ -284,7 +297,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }).unsubscribe;
 
   private subscribeRepliesRead = () =>
-    this.client.on('message.read', (event) => {
+    this.client.on(`message.read-${this.id}`, (event) => {
       if (!event.user || !event.created_at || !event.thread) return;
       if (event.thread.parent_message_id !== this.id) return;
 
