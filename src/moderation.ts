@@ -18,6 +18,7 @@ import {
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
   Pager,
+  CustomCheckFlag,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -255,4 +256,38 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       options,
     });
   }
+
+/**
+   *
+   * @param {string} entityType string Type of entity to be checked E.g., stream:user, stream:chat:v1:message, or any custom string
+   * @param {string} entityID string ID of the entity to be checked. This is mainly for tracking purposes
+   * @param {string} entityCreatorID string ID of the entity creator
+   * @param {object} moderationPayload object Content to be checked for moderation. E.g., { texts: ['text1', 'text2'], images: ['image1', 'image2']}
+   * @param {Array} moderationPayload.texts array Array of texts to be checked for moderation
+   * @param {Array} moderationPayload.images array Array of images to be checked for moderation
+   * @param {Array} moderationPayload.videos array Array of videos to be checked for moderation
+   * @param {Array<CustomCheckFlag>} flags Array of CustomCheckFlag to be passed to flag the entity
+   * @returns
+   */
+  async addCustomFlags(
+      entityType: string,
+      entityID: string,
+      entityCreatorID: string,
+      moderationPayload: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        custom?: Record<string, any>;
+        images?: string[];
+        texts?: string[];
+        videos?: string[];
+      },
+      flags: CustomCheckFlag[],
+    ) {
+      return await this.client.post(this.client.baseURL + `/api/v2/moderation/custom_check`, {
+        entity_type: entityType,
+        entity_id: entityID,
+        entity_creator_id: entityCreatorID,
+        moderation_payload: moderationPayload,
+        flags: flags,
+      });
+    }
 }

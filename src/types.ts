@@ -3414,6 +3414,14 @@ export type ReviewQueueItem = {
   updated_at: string;
 };
 
+export type CustomCheckFlag = {
+  type: string;
+  moderation_payload: ModerationPayload;
+  reason: string;
+  custom: Record<string, any>[];
+  labels: string[];
+}
+
 export type SubmitActionOptions = {
   ban?: {
     channel_ban_only?: boolean;
