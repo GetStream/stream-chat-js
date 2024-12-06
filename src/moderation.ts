@@ -19,6 +19,7 @@ import {
   QueryModerationConfigsSort,
   Pager,
   CustomCheckFlag,
+  ReviewQueueItem,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -282,12 +283,15 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     },
     flags: CustomCheckFlag[],
   ) {
-    return await this.client.post(this.client.baseURL + `/api/v2/moderation/custom_check`, {
-      entity_type: entityType,
-      entity_id: entityID,
-      entity_creator_id: entityCreatorID,
-      moderation_payload: moderationPayload,
-      flags,
-    });
+    return await this.client.post<{ id: string; item: ReviewQueueItem; status: string } & APIResponse>(
+      this.client.baseURL + `/api/v2/moderation/custom_check`,
+      {
+        entity_type: entityType,
+        entity_id: entityID,
+        entity_creator_id: entityCreatorID,
+        moderation_payload: moderationPayload,
+        flags,
+      },
+    );
   }
 }

@@ -3418,7 +3418,6 @@ export type CustomCheckFlag = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   custom: Record<string, any>[];
   labels: string[];
-  moderation_payload: ModerationPayload;
   reason: string;
   type: string;
 };
