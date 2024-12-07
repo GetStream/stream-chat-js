@@ -60,6 +60,7 @@ import {
   AscDesc,
   PartialUpdateMemberAPIResponse,
   AIState,
+  MessageOptions,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -237,6 +238,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       client_id?: string;
       connection_id?: string;
       message_filter_conditions?: MessageFilters<StreamChatGenerics>;
+      message_options?: MessageOptions;
       query?: string;
     } = {},
   ) {
