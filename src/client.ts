@@ -189,6 +189,7 @@ import {
   TestSNSDataInput,
   TestSQSDataInput,
   TokenOrProvider,
+  TranslateResponse,
   UnBanUserOptions,
   UpdateChannelOptions,
   UpdateChannelResponse,
@@ -2513,6 +2514,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return await this.post<APIResponse & MessageResponse<StreamChatGenerics>>(
       this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
       { language },
+    );
+  }
+
+  /**
+   * translate - translates the given text to provided language
+   *
+   * @param {string} text
+   * @param {string} destination_language
+   * @param {string} source_language
+   *
+   * @return {TranslateResponse} Response that includes the message
+   */
+  async translate(text: string, destination_language: string,source_language: string) {
+    return await this.post<APIResponse & TranslateResponse>(
+      this.baseURL + `/translate`,
+      { text, source_language, destination_language },
     );
   }
 
