@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.46.1](https://github.com/GetStream/stream-chat-js/compare/v8.46.0...v8.46.1) (2024-12-11)
+
+
+### Bug Fixes
+
+* update membership object on member events ([#1409](https://github.com/GetStream/stream-chat-js/issues/1409)) ([5d1e4c4](https://github.com/GetStream/stream-chat-js/commit/5d1e4c4ffaf68bb372cefb6fde769858498a143e))
+
 ## [8.46.0](https://github.com/GetStream/stream-chat-js/compare/v8.45.3...v8.46.0) (2024-12-03)
 
 
