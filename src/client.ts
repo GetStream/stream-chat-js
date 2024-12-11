@@ -2526,11 +2526,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {TranslateResponse} Response that includes the message
    */
-  async translate(text: string, destination_language: string,source_language: string) {
-    return await this.post<APIResponse & TranslateResponse>(
-      this.baseURL + `/translate`,
-      { text, source_language, destination_language },
-    );
+  async translate(text: string, destination_language: string, source_language: string) {
+    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
+      text,
+      source_language,
+      destination_language,
+    });
   }
 
   /**

@@ -78,9 +78,9 @@ export type APIResponse = {
 };
 
 export type TranslateResponse = {
-  translated_text: string;
   language: string;
-}
+  translated_text: string;
+};
 
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
