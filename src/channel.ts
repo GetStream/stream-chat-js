@@ -1720,10 +1720,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    this.state.membership = {
-      ...this.state.membership,
-      ...state.membership,
-    };
+    this.state.membership = state.membership || {};
 
     const messages = state.messages || [];
     if (!this.state.messages) {
