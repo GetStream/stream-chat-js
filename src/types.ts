@@ -2966,6 +2966,7 @@ export type CampaignFilters = {};
 
 export type CampaignData = {
   channel_template?: {
+    team: string;
     type: string;
     custom?: {};
     id?: string;
