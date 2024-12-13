@@ -2145,6 +2145,10 @@ export type Attachment<
   author_name?: string;
   color?: string;
   duration?: number;
+  /**
+   * Location-related, should be an ISO timestamp if type of the attachment is `live_location`
+   */
+  end_time?: string;
   fallback?: string;
   fields?: Field[];
   file_size?: number | string;
@@ -2159,6 +2163,10 @@ export type Attachment<
   original_height?: number;
   original_width?: number;
   pretext?: string;
+  /**
+   * Location-related, true when user forcibly stops live location sharing
+   */
+  stopped_sharing?: boolean;
   text?: string;
   thumb_url?: string;
   title?: string;
