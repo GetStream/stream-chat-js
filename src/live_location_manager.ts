@@ -15,13 +15,78 @@ import type { Unsubscribe } from './store';
 
 // type Unsubscribe = () => void;
 type WatchLocation = (handler: (value: { latitude: number; longitude: number }) => void) => Unsubscribe;
+type SerializeAndStore = (state: MessageResponse[], userId: string) => void;
+type RetrieveAndDeserialize = (userId: string) => MessageResponse[];
+
 type LiveLocationManagerState = {
   ready: boolean;
   targetMessages: MessageResponse[];
 };
 
-// LLS - live location sharing
-function isAttachmentValidLLSEntity(attachment?: Attachment) {
+// if (message.cid && this.messagesByChannelConfId[message.cid]) {
+//   const [m] = this.messagesByChannelConfId[message.cid];
+//   throw new Error(
+//     `[LocationUpdater.registerMessage]: one live location sharing message per channel limit has been reached, unregister message "${m.id}" first`,
+//   );
+// }
+
+// if (!attachment || attachment.type !== 'geolocation' || !attachment.geolocation_eol) {
+//   throw new Error(
+//     '[LocationUpdater.registerMessage]: Message has either no attachment, the attachment is not of type "geolocation" or the attachment is missing `geolocation_eol` property',
+//   );
+// }
+
+// if (typeof attachment.geolocation_eol !== 'string') {
+//   throw new Error(
+//     '[LocationUpdater.registerMessage]: `geolocation_eol` property is of incorrect type, should be date and time ISO 8601 string',
+//   );
+// }
+
+// const nowTimestamp = Date.now();
+// const eolTimestamp = new Date(attachment.geolocation_eol).getTime();
+
+// if (Number.isNaN(eolTimestamp) || eolTimestamp < nowTimestamp) {
+//   throw new Error(
+//     '[LocationUpdater.registerMessage]: `geolocation_eol` has either improper format or has not been set to some time in the future (is lesser than now)',
+//   );
+// }
+
+// private async getCompleteMessage(messageId: string) {
+//   const [cachedMessage, cachedMessageIndex] = this.messagesById[messageId] ?? [];
+
+//   const [cachedMessageAttachment] = cachedMessage?.attachments ?? [];
+
+//   if (isAttachmentValidLLSEntity(cachedMessageAttachment)) {
+//     return cachedMessage;
+//   }
+
+//   const queriedMessage = (await this.client.getMessage(messageId)).message;
+
+//   const [queriedMessageAttachment] = queriedMessage.attachments ?? [];
+
+//   if (isAttachmentValidLLSEntity(queriedMessageAttachment)) {
+//     this.state.next((currentValue) => {
+//       const newTargetMessages = [...currentValue.targetMessages];
+
+//       if (typeof cachedMessageIndex === 'number') {
+//         newTargetMessages[cachedMessageIndex] = queriedMessage;
+//       } else {
+//         newTargetMessages.push(queriedMessage);
+//       }
+
+//       return {
+//         ...currentValue,
+//         targetMessages: newTargetMessages,
+//       };
+//     });
+
+//     return queriedMessage;
+//   }
+
+//   return null;
+// }
+
+function isValidLiveLocationAttachment(attachment?: Attachment) {
   if (!attachment || typeof attachment.end_time !== 'string' || attachment.stopped_sharing) return false;
 
   const endTimeTimestamp = new Date(attachment.end_time).getTime();
@@ -33,10 +98,10 @@ function isAttachmentValidLLSEntity(attachment?: Attachment) {
   return attachment && attachment.type === 'live_location' && endTimeTimestamp > nowTimestamp;
 }
 
-class LiveLocationManager {
+export class LiveLocationManager {
   private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private serializeAndStore: (state: MessageResponse[]) => void;
+  private serializeAndStore: SerializeAndStore;
   private watchLocation: WatchLocation;
   public state: StateStore<LiveLocationManagerState>;
   private messagesByChannelConfIdGetterCache: {
@@ -52,14 +117,20 @@ class LiveLocationManager {
 
   constructor({
     client,
-    retrieveAndDeserialize,
     watchLocation,
-    serializeAndStore,
+    retrieveAndDeserialize = (userId) => {
+      const targetMessagesString = localStorage.getItem(`${userId}-${LiveLocationManager.name}`);
+      if (!targetMessagesString) return [];
+      return JSON.parse(targetMessagesString);
+    },
+    serializeAndStore = (messages, userId) => {
+      localStorage.setItem(`${userId}-${LiveLocationManager.name}`, JSON.stringify(messages));
+    },
   }: {
     client: StreamChat;
-    retrieveAndDeserialize: (userId: string) => MessageResponse[];
-    serializeAndStore: (state: MessageResponse[]) => void;
     watchLocation: WatchLocation;
+    retrieveAndDeserialize?: RetrieveAndDeserialize;
+    serializeAndStore?: SerializeAndStore;
   }) {
     this.client = client;
     this.state = new StateStore<LiveLocationManagerState>({
@@ -117,53 +188,26 @@ class LiveLocationManager {
     return this.messagesByChannelConfIdGetterCache.calculated;
   }
 
-  // private async getCompleteMessage(messageId: string) {
-  //   const [cachedMessage, cachedMessageIndex] = this.messagesById[messageId] ?? [];
-
-  //   const [cachedMessageAttachment] = cachedMessage?.attachments ?? [];
-
-  //   if (isAttachmentValidLLSEntity(cachedMessageAttachment)) {
-  //     return cachedMessage;
-  //   }
-
-  //   const queriedMessage = (await this.client.getMessage(messageId)).message;
-
-  //   const [queriedMessageAttachment] = queriedMessage.attachments ?? [];
-
-  //   if (isAttachmentValidLLSEntity(queriedMessageAttachment)) {
-  //     this.state.next((currentValue) => {
-  //       const newTargetMessages = [...currentValue.targetMessages];
-
-  //       if (typeof cachedMessageIndex === 'number') {
-  //         newTargetMessages[cachedMessageIndex] = queriedMessage;
-  //       } else {
-  //         newTargetMessages.push(queriedMessage);
-  //       }
-
-  //       return {
-  //         ...currentValue,
-  //         targetMessages: newTargetMessages,
-  //       };
-  //     });
-
-  //     return queriedMessage;
-  //   }
-
-  //   return null;
-  // }
-
   public subscribeWatchLocation() {
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<void>[] = [];
 
-        await this.recoverAndValidateMessages();
+        if (!this.state.getLatestValue().ready) {
+          await this.recoverAndValidateMessages();
+        }
 
         const { targetMessages } = this.state.getLatestValue();
 
         for (const message of targetMessages) {
-          const [attachment] = message.attachments!;
+          const [attachment] = message.attachments ?? [];
 
+          if (!isValidLiveLocationAttachment(attachment)) {
+            this.unregisterMessage(message);
+            continue;
+          }
+
+          // TODO: revisit 
           const promise = this.client
             .partialUpdateMessage(message.id, {
               set: { attachments: [{ ...attachment, latitude, longitude }] },
@@ -175,7 +219,7 @@ class LiveLocationManager {
         }
 
         const values = await Promise.allSettled(promises);
-
+        console.log(values);
         // TODO: handle values (remove failed - based on specific error code), keep re-trying others
       });
     });
@@ -190,15 +234,24 @@ class LiveLocationManager {
 
     if (!this.client.userID) return;
 
-    const messages = await this.client.search(
+    const response = await this.client.search(
       { members: { $in: [this.client.userID] } },
-      { id: { $in: targetMessages.map((m) => m.id) } },
+      { id: { $in: targetMessages.map(({ id }) => id) } },
     );
 
-    this.state.partialNext({ ready: true });
-    console.log(messages);
+    const newTargetMessages = [];
 
-    console.log('to consider...');
+    for (const result of response.results) {
+      const { message } = result;
+
+      const [attachment] = message.attachments ?? [];
+
+      if (isValidLiveLocationAttachment(attachment)) {
+        newTargetMessages.push(message);
+      }
+    }
+
+    this.state.partialNext({ ready: true, targetMessages: newTargetMessages });
   }
 
   private registerMessage(message: MessageResponse) {
@@ -206,38 +259,15 @@ class LiveLocationManager {
 
     const [attachment] = message.attachments ?? [];
 
-    const messagesById = this.messagesById;
-
-    // FIXME: get associatedChannelConfIds.indexOf(message.cid)
-    if (message.cid && this.messagesByChannelConfId[message.cid]) {
-      const [m] = messagesById[message.id];
-      throw new Error(
-        `[LocationUpdater.registerMessage]: one live location sharing message per channel limit has been reached, unregister message "${m.id}" first`,
-      );
-    }
-
-    if (!attachment || attachment.type !== 'geolocation' || !attachment.geolocation_eol) {
-      throw new Error(
-        '[LocationUpdater.registerMessage]: Message has either no attachment, the attachment is not of type "geolocation" or the attachment is missing `geolocation_eol` property',
-      );
-    }
-
-    if (typeof attachment.geolocation_eol !== 'string') {
-      throw new Error(
-        '[LocationUpdater.registerMessage]: `geolocation_eol` property is of incorrect type, should be date and time ISO 8601 string',
-      );
-    }
-
-    const nowTimestamp = Date.now();
-    const eolTimestamp = new Date(attachment.geolocation_eol).getTime();
-
-    if (Number.isNaN(eolTimestamp) || eolTimestamp < nowTimestamp) {
-      throw new Error(
-        '[LocationUpdater.registerMessage]: `geolocation_eol` has either improper format or has not been set to some time in the future (is lesser than now)',
-      );
+    if (!isValidLiveLocationAttachment(attachment)) {
+      return;
     }
 
     this.state.next((currentValue) => ({ ...currentValue, targetMessages: [...currentValue.targetMessages, message] }));
+
+    if (this.client.userID) {
+      this.serializeAndStore(this.state.getLatestValue().targetMessages, this.client.userID);
+    }
   }
 
   private unregisterMessage(message: MessageResponse) {
@@ -255,6 +285,10 @@ class LiveLocationManager {
         targetMessages: newTargetMessages,
       };
     });
+
+    if (this.client.userID) {
+      this.serializeAndStore(this.state.getLatestValue().targetMessages, this.client.userID);
+    }
   }
 
   public unregisterSubscriptions = () => {
@@ -286,6 +320,7 @@ class LiveLocationManager {
     }
 
     this.unsubscribeFunctions.add(this.subscribeNewMessages());
+    this.unsubscribeFunctions.add(this.subscribeWatchLocation());
     // this.unsubscribeFunctions.add()
     // TODO - handle message registration during message updates too, message updated eol added
     // TODO - handle message unregistration during message updates - message updated, eol removed
