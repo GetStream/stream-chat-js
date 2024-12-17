@@ -98,12 +98,22 @@ function isValidLiveLocationAttachment(attachment?: Attachment) {
   return attachment && attachment.type === 'live_location' && endTimeTimestamp > nowTimestamp;
 }
 
+export type LiveLocationManagerConstructorParameters = {
+  client: StreamChat;
+  watchLocation: WatchLocation;
+  retrieveAndDeserialize?: RetrieveAndDeserialize;
+  serializeAndStore?: SerializeAndStore;
+  // watchThrottleTimeout?: number;
+};
+
+const MIN_THROTTLE_TIMEOUT = 1000;
+
 export class LiveLocationManager {
+  public state: StateStore<LiveLocationManagerState>;
   private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private serializeAndStore: SerializeAndStore;
   private watchLocation: WatchLocation;
-  public state: StateStore<LiveLocationManagerState>;
   private messagesByChannelConfIdGetterCache: {
     calculated: { [key: string]: [MessageResponse, number] };
     targetMessages: LiveLocationManagerState['targetMessages'];
@@ -126,27 +136,26 @@ export class LiveLocationManager {
     serializeAndStore = (messages, userId) => {
       localStorage.setItem(`${userId}-${LiveLocationManager.name}`, JSON.stringify(messages));
     },
-  }: {
-    client: StreamChat;
-    watchLocation: WatchLocation;
-    retrieveAndDeserialize?: RetrieveAndDeserialize;
-    serializeAndStore?: SerializeAndStore;
-  }) {
+  }: LiveLocationManagerConstructorParameters) {
     this.client = client;
+
+    const retreivedTargetMessages = retrieveAndDeserialize(client.userID!);
+
     this.state = new StateStore<LiveLocationManagerState>({
-      targetMessages: retrieveAndDeserialize(client.userID!),
-      ready: false,
+      targetMessages: retreivedTargetMessages,
+      // If there are no messages to validate, the manager is considered "ready"
+      ready: retreivedTargetMessages.length === 0,
     });
     this.watchLocation = watchLocation;
     this.serializeAndStore = serializeAndStore;
 
     this.messagesByIdGetterCache = {
-      targetMessages: this.state.getLatestValue().targetMessages,
+      targetMessages: retreivedTargetMessages,
       calculated: {},
     };
 
     this.messagesByChannelConfIdGetterCache = {
-      targetMessages: this.state.getLatestValue().targetMessages,
+      targetMessages: retreivedTargetMessages,
       calculated: {},
     };
   }
@@ -189,7 +198,15 @@ export class LiveLocationManager {
   }
 
   public subscribeWatchLocation() {
+    let nextWatcherCallTimestamp = Date.now();
+
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
+      // Integrators can adjust the update interval by supplying custom watchLocation subscription,
+      // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
+      if (Date.now() < nextWatcherCallTimestamp) return;
+
+      nextWatcherCallTimestamp = Date.now() + MIN_THROTTLE_TIMEOUT;
+
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<void>[] = [];
 
@@ -207,7 +224,7 @@ export class LiveLocationManager {
             continue;
           }
 
-          // TODO: revisit 
+          // TODO: client.updateLiveLocation instead
           const promise = this.client
             .partialUpdateMessage(message.id, {
               set: { attachments: [{ ...attachment, latitude, longitude }] },
@@ -229,10 +246,13 @@ export class LiveLocationManager {
     return unsubscribe;
   }
 
+  /**
+   * Messages stored locally might've been updated while the device which registered message for updates has been offline.
+   */
   private async recoverAndValidateMessages() {
     const { targetMessages } = this.state.getLatestValue();
 
-    if (!this.client.userID) return;
+    if (!this.client.userID || !targetMessages.length) return;
 
     const response = await this.client.search(
       { members: { $in: [this.client.userID] } },
@@ -296,16 +316,20 @@ export class LiveLocationManager {
     this.unsubscribeFunctions.clear();
   };
 
-  private subscribeNewMessages() {
-    const subscriptions = (['notification.message_new', 'message.new'] as EventTypes[]).map((eventType) =>
+  private subscribeLiveLocationSharingUpdates() {
+    const subscriptions = ([
+      'live_location_sharing.started',
+      'live_location_sharing.stopped',
+      'message.deleted',
+    ] as EventTypes[]).map((eventType) =>
       this.client.on(eventType, (event) => {
         // TODO: switch to targeted event based on userId
         if (!event.message) return;
 
-        try {
+        if (event.type === 'live_location_sharing.started') {
           this.registerMessage(event.message);
-        } catch {
-          // do nothing
+        } else {
+          this.unregisterMessage(event.message);
         }
       }),
     );
@@ -319,7 +343,8 @@ export class LiveLocationManager {
       return;
     }
 
-    this.unsubscribeFunctions.add(this.subscribeNewMessages());
+    // FIXME: maybe not do this? (find out whether connection-id check would work)
+    this.unsubscribeFunctions.add(this.subscribeLiveLocationSharingUpdates());
     this.unsubscribeFunctions.add(this.subscribeWatchLocation());
     // this.unsubscribeFunctions.add()
     // TODO - handle message registration during message updates too, message updated eol added
