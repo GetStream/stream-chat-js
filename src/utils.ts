@@ -426,16 +426,14 @@ export function addToMessageList<T extends FormatMessageResponse>(
   });
 
   // message already exists and not filtered with timestampChanged, update and return
-  if (!timestampChanged && newMessage.id) {
-    if (newMessages[insertionIndex] && newMessage.id === newMessages[insertionIndex].id) {
-      newMessages[insertionIndex] = newMessage;
-      return newMessages;
-    }
-
-    if (newMessages[insertionIndex - 1] && newMessage.id === newMessages[insertionIndex - 1].id) {
-      newMessages[insertionIndex - 1] = newMessage;
-      return newMessages;
-    }
+  if (
+    !timestampChanged &&
+    newMessage.id &&
+    newMessages[insertionIndex] &&
+    newMessage.id === newMessages[insertionIndex].id
+  ) {
+    newMessages[insertionIndex] = newMessage;
+    return newMessages;
   }
 
   // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
