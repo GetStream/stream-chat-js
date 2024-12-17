@@ -311,6 +311,7 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
 export const findIndexInSortedArray = <T, L>({
   needle,
   sortedArray,
+  selectKey,
   selectValueToCompare = (e) => e,
   sortDirection = 'ascending',
 }: {
@@ -325,6 +326,7 @@ export const findIndexInSortedArray = <T, L>({
    * selectValueToCompare: (message) => message.created_at.getTime()
    * ```
    */
+  selectKey?: (arrayElement: T) => string;
   selectValueToCompare?: (arrayElement: T) => L | T;
   /**
    * @default ascending
@@ -353,15 +355,25 @@ export const findIndexInSortedArray = <T, L>({
 
     const comparableMiddle = selectValueToCompare(sortedArray[middle]);
 
-    // if (comparableNeedle === comparableMiddle) return middle;
-
     if (
       (sortDirection === 'ascending' && comparableNeedle < comparableMiddle) ||
-      (sortDirection === 'descending' && comparableNeedle > comparableMiddle)
+      (sortDirection === 'descending' && comparableNeedle >= comparableMiddle)
     ) {
       right = middle - 1;
     } else {
       left = middle + 1;
+    }
+  }
+
+  // In case there are several array elements with the same comparable value, search around the insertion
+  // point to possibly find an element with the same key. If found, prefer it.
+  // This, for example, prevents duplication of messages with the same creation date.
+  if (selectKey) {
+    const needleKey = selectKey(needle);
+    for (let i = left; sortedArray[i] === comparableNeedle; i += sortDirection === 'ascending' ? -1 : +1) {
+      if (selectKey(sortedArray[i]) === needleKey) {
+        return i;
+      }
     }
   }
 
@@ -410,6 +422,7 @@ export function addToMessageList<T extends FormatMessageResponse>(
     sortDirection: 'ascending',
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     selectValueToCompare: (m) => m[sortBy]!.getTime(),
+    selectKey: (m) => m.id,
   });
 
   // message already exists and not filtered with timestampChanged, update and return

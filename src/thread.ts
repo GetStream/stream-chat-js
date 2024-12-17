@@ -354,6 +354,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       sortedArray: replies,
       sortDirection: 'ascending',
       selectValueToCompare: (reply) => reply.created_at.getTime(),
+      selectKey: (reply) => reply.id,
     });
 
     const actualIndex =
