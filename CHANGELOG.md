@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.47.0](https://github.com/GetStream/stream-chat-js/compare/v8.46.1...v8.47.0) (2024-12-13)
+
+
+### Features
+
+* add team to channel template ([#1416](https://github.com/GetStream/stream-chat-js/issues/1416)) ([56bc83e](https://github.com/GetStream/stream-chat-js/commit/56bc83ee94d5f9859ebb24edd5f20f9a3b86aaca))
+
+
+### Bug Fixes
+
+* revert membership initialization behavior ([#1417](https://github.com/GetStream/stream-chat-js/issues/1417)) ([12aa4af](https://github.com/GetStream/stream-chat-js/commit/12aa4af73cade951dec21ec9b94b343eb36ec296))
+
 ### [8.46.1](https://github.com/GetStream/stream-chat-js/compare/v8.46.0...v8.46.1) (2024-12-11)
 
 
