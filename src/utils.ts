@@ -370,7 +370,12 @@ export const findIndexInSortedArray = <T, L>({
   // This, for example, prevents duplication of messages with the same creation date.
   if (selectKey) {
     const needleKey = selectKey(needle);
-    for (let i = left; sortedArray[i] === comparableNeedle; i += sortDirection === 'ascending' ? -1 : +1) {
+    const step = sortDirection === 'ascending' ? -1 : +1;
+    for (
+      let i = left + step;
+      0 <= i && i < sortedArray.length && selectValueToCompare(sortedArray[i]) === comparableNeedle;
+      i += step
+    ) {
       if (selectKey(sortedArray[i]) === needleKey) {
         return i;
       }
