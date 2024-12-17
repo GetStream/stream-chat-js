@@ -18,4 +18,5 @@ export * from './thread';
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
+export * from './live_location_manager';
 export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';

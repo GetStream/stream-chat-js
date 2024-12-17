@@ -61,6 +61,7 @@ import {
   PartialUpdateMemberAPIResponse,
   AIState,
   MessageOptions,
+  Attachment,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -469,6 +470,35 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     });
     this.data = data.channel;
     return data;
+  }
+
+  public async startLiveLocationSharing(
+    attachmentMetadata: { end_time: string; latitude: number; longitude: number } & Attachment<StreamChatGenerics>,
+  ) {
+    const { latitude, longitude, end_time } = attachmentMetadata;
+
+    const message: Message = {
+      attachments: [
+        {
+          ...attachmentMetadata,
+          type: 'live_location',
+          latitude,
+          longitude,
+          end_time,
+        },
+      ],
+    };
+
+    // TODO: find existing, cancel and send new one
+    // const existing = this.search({ user_id:  attachments: { type: { $eq: 'live_location' } } });
+
+    const response = await this.sendMessage(message);
+
+    this.getClient().dispatchEvent({ message: response.message, type: 'live_location_sharing.started' });
+  }
+
+  public stopLiveLocationSharing(message: MessageResponse<StreamChatGenerics>) {
+    this.getClient().dispatchEvent({ message, type: 'live_location_sharing.stopped' });
   }
 
   /**
