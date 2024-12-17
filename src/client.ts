@@ -134,6 +134,8 @@ import {
   PartialUserUpdate,
   PermissionAPIResponse,
   PermissionsAPIResponse,
+  PhraseList,
+  PhraseListResponse,
   PollAnswersAPIResponse,
   PollData,
   PollOptionData,
@@ -3055,8 +3057,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
 
-  listBlockLists() {
-    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`);
+  listBlockLists(data?: { team?: string }) {
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`, data);
   }
 
   getBlockList(name: string) {
@@ -3069,8 +3071,57 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
-  deleteBlockList(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`);
+  deleteBlockList(name: string, data: { team?: string }) {
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
+  }
+
+    /**
+   * Creates a new phraselist
+   * @param {PhraseList} phraseList The phraselist data to create
+   * @returns {Promise<APIResponse>} API response
+   */
+  createPhraseList(phraseList: PhraseList) {
+    return this.post<APIResponse>(`${this.baseURL}/phraselists`, phraseList);
+  }
+
+  /**
+   * Lists all phraselists
+   * @param {Object} data Optional parameters like team
+   * @returns {Promise<APIResponse & { phraselists: PhraseListResponse[] }>} List of phraselists
+   */
+  listPhraseLists(data?: { team?: string }) {
+    return this.get<APIResponse & { phraselists: PhraseListResponse[] }>(`${this.baseURL}/phraselists`, data);
+  }
+  
+  /**
+   * Gets a specific phraselist by name
+   * @param {string} name The name of the phraselist to retrieve
+   * @returns {Promise<APIResponse & { phraselist: PhraseListResponse }>} The requested phraselist
+   */
+  getPhraseList(name: string) {
+    return this.get<APIResponse & { phraselist: PhraseListResponse }>(
+      `${this.baseURL}/phraselists/${encodeURIComponent(name)}`,
+    );
+  }
+  
+  /**
+   * Updates an existing phraselist
+   * @param {string} name The name of the phraselist to update
+   * @param {Object} data The update data containing phrases array
+   * @returns {Promise<APIResponse>} API response
+   */
+  updatePhraseList(name: string, data: { phrases: string[] }) {
+    return this.put<APIResponse>(`${this.baseURL}/phraselists/${encodeURIComponent(name)}`, data);
+  }
+
+  /**
+   * Deletes a phraselist
+   * @param {string} name The name of the phraselist to delete
+   * @param {Object} data Optional parameters like team
+   * @returns {Promise<APIResponse>} API response
+   */
+  deletePhraseList(name: string, data: { team?: string }) {
+    return this.delete<APIResponse>(`${this.baseURL}/phraselists/${encodeURIComponent(name)}`, data);
   }
 
   exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
