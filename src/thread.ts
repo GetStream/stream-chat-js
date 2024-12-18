@@ -357,15 +357,12 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       selectKey: (reply) => reply.id,
     });
 
-    const actualIndex =
-      replies[index]?.id === message.id ? index : replies[index - 1]?.id === message.id ? index - 1 : null;
-
-    if (actualIndex === null) {
+    if (replies[index]?.id !== message.id ? index : null) {
       return;
     }
 
     const updatedReplies = [...replies];
-    updatedReplies.splice(actualIndex, 1);
+    updatedReplies.splice(index, 1);
 
     this.state.partialNext({
       replies: updatedReplies,
