@@ -1713,6 +1713,10 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
     }
 >;
 
+export type MessageOptions = {
+  include_thread_participants?: boolean;
+};
+
 export type PrimitiveFilter<ObjectType> = ObjectType | null;
 
 export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends string | number | boolean
@@ -2738,6 +2742,7 @@ export type SearchPayload<StreamChatGenerics extends ExtendableGenerics = Defaul
   connection_id?: string;
   filter_conditions?: ChannelFilters<StreamChatGenerics>;
   message_filter_conditions?: MessageFilters<StreamChatGenerics>;
+  message_options?: MessageOptions;
   query?: string;
   sort?: Array<{
     direction: AscDesc;
