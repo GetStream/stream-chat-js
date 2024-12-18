@@ -318,15 +318,25 @@ export const findIndexInSortedArray = <T, L>({
   needle: T;
   sortedArray: readonly T[];
   /**
-   * In array of objects (like messages), pick a specific
-   * property to compare needle value to.
+   * In an array of objects (like messages), pick a unique property identifying
+   * an element. It will be used to find a direct match for the needle element
+   * in case compare values are not unique.
+   *
+   * @example
+   * ```ts
+   * selectKey: (message) => message.id
+   * ```
+   */
+  selectKey?: (arrayElement: T) => string;
+  /**
+   * In an array of objects (like messages), pick a specific
+   * property to compare the needle value to.
    *
    * @example
    * ```ts
    * selectValueToCompare: (message) => message.created_at.getTime()
    * ```
    */
-  selectKey?: (arrayElement: T) => string;
   selectValueToCompare?: (arrayElement: T) => L | T;
   /**
    * @default ascending
