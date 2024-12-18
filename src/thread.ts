@@ -357,7 +357,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       selectKey: (reply) => reply.id,
     });
 
-    if (replies[index]?.id !== message.id ? index : null) {
+    if (replies[index]?.id !== message.id) {
       return;
     }
 
