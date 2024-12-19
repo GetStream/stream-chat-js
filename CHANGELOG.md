@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.47.1](https://github.com/GetStream/stream-chat-js/compare/v8.47.0...v8.47.1) (2024-12-18)
+
+
+### Bug Fixes
+
+* message duplication when some messages have the same creation timestamp ([#1421](https://github.com/GetStream/stream-chat-js/issues/1421)) ([b7b019a](https://github.com/GetStream/stream-chat-js/commit/b7b019afa9bbe4d25c40ef6874f9219172991b7d))
+* **search:** missing thread_participants in message ([#1412](https://github.com/GetStream/stream-chat-js/issues/1412)) ([af5cb81](https://github.com/GetStream/stream-chat-js/commit/af5cb81051cc7f1964fb17072fd07a2dd9f0b74b))
+
+## [8.47.0](https://github.com/GetStream/stream-chat-js/compare/v8.46.1...v8.47.0) (2024-12-13)
+
+
+### Features
+
+* add team to channel template ([#1416](https://github.com/GetStream/stream-chat-js/issues/1416)) ([56bc83e](https://github.com/GetStream/stream-chat-js/commit/56bc83ee94d5f9859ebb24edd5f20f9a3b86aaca))
+
+
+### Bug Fixes
+
+* revert membership initialization behavior ([#1417](https://github.com/GetStream/stream-chat-js/issues/1417)) ([12aa4af](https://github.com/GetStream/stream-chat-js/commit/12aa4af73cade951dec21ec9b94b343eb36ec296))
+
+### [8.46.1](https://github.com/GetStream/stream-chat-js/compare/v8.46.0...v8.46.1) (2024-12-11)
+
+
+### Bug Fixes
+
+* update membership object on member events ([#1409](https://github.com/GetStream/stream-chat-js/issues/1409)) ([5d1e4c4](https://github.com/GetStream/stream-chat-js/commit/5d1e4c4ffaf68bb372cefb6fde769858498a143e))
+
 ## [8.46.0](https://github.com/GetStream/stream-chat-js/compare/v8.45.3...v8.46.0) (2024-12-03)
 
 

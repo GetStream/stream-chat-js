@@ -60,6 +60,7 @@ import {
   AscDesc,
   PartialUpdateMemberAPIResponse,
   AIState,
+  MessageOptions,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -237,6 +238,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       client_id?: string;
       connection_id?: string;
       message_filter_conditions?: MessageFilters<StreamChatGenerics>;
+      message_options?: MessageOptions;
       query?: string;
     } = {},
   ) {
@@ -1553,11 +1555,19 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         break;
       case 'member.added':
       case 'member.updated':
-        if (event.member?.user_id) {
+        if (event.member?.user) {
           channelState.members = {
             ...channelState.members,
-            [event.member.user_id]: event.member,
+            [event.member.user.id]: event.member,
           };
+        }
+
+        if (
+          typeof channelState.membership.user?.id === 'string' &&
+          typeof event.member?.user?.id === 'string' &&
+          event.member.user.id === channelState.membership.user.id
+        ) {
+          channelState.membership = event.member;
         }
         break;
       case 'member.removed':
@@ -1569,6 +1579,8 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
           delete newMembers[event.user.id];
 
           channelState.members = newMembers;
+
+          // TODO?: unset membership
         }
         break;
       case 'notification.mark_unread': {
