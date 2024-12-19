@@ -275,8 +275,6 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     entityID: string,
     entityCreatorID: string,
     moderationPayload: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      custom?: Record<string, any>;
       images?: string[];
       texts?: string[];
       videos?: string[];
@@ -293,5 +291,15 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
         flags,
       },
     );
+  }
+
+  /**
+   * Add custom flags to a message
+   * @param {string} messageID Message ID to be flagged
+   * @param {Array<CustomCheckFlag>} flags Array of CustomCheckFlag to be passed to flag the message
+   * @returns
+   */
+  async addCustomMessageFlags(messageID: string, flags: CustomCheckFlag[]) {
+    return await this.addCustomFlags(MODERATION_ENTITY_TYPES.message, messageID, '', {}, flags);
   }
 }

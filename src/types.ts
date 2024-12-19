@@ -3415,11 +3415,11 @@ export type ReviewQueueItem = {
 };
 
 export type CustomCheckFlag = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  custom: Record<string, any>[];
-  labels: string[];
-  reason: string;
   type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  custom?: Record<string, any>[];
+  labels?: string[];
+  reason?: string;
 };
 
 export type SubmitActionOptions = {
