@@ -3420,6 +3420,14 @@ export type ReviewQueueItem = {
   updated_at: string;
 };
 
+export type CustomCheckFlag = {
+  type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  custom?: Record<string, any>[];
+  labels?: string[];
+  reason?: string;
+};
+
 export type SubmitActionOptions = {
   ban?: {
     channel_ban_only?: boolean;
