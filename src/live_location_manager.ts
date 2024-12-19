@@ -200,6 +200,7 @@ export class LiveLocationManager {
   public subscribeWatchLocation() {
     let nextWatcherCallTimestamp = Date.now();
 
+    // eslint-disable-next-line sonarjs/prefer-immediate-return
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
       // Integrators can adjust the update interval by supplying custom watchLocation subscription,
       // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
@@ -209,12 +210,15 @@ export class LiveLocationManager {
 
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<void>[] = [];
+        const { ready } = this.state.getLatestValue();
 
-        if (!this.state.getLatestValue().ready) {
+        if (!ready) {
           await this.recoverAndValidateMessages();
         }
 
         const { targetMessages } = this.state.getLatestValue();
+        // if validator removes messages, we need to check
+        if (!targetMessages.length) return;
 
         for (const message of targetMessages) {
           const [attachment] = message.attachments ?? [];
@@ -240,8 +244,6 @@ export class LiveLocationManager {
         // TODO: handle values (remove failed - based on specific error code), keep re-trying others
       });
     });
-
-    console.log(unsubscribe);
 
     return unsubscribe;
   }
@@ -290,9 +292,30 @@ export class LiveLocationManager {
     }
   }
 
+  private updateRegisteredMessage(message: MessageResponse) {
+    if (!this.client.userID || message?.user?.id !== this.client.userID) return;
+
+    const [, targetMessageIndex] = this.messagesById[message.id];
+
+    this.state.next((currentValue) => {
+      const newTargetMessages = [...currentValue.targetMessages];
+
+      newTargetMessages[targetMessageIndex] = message;
+
+      return {
+        ...currentValue,
+        targetMessages: newTargetMessages,
+      };
+    });
+
+    if (this.client.userID) {
+      this.serializeAndStore(this.state.getLatestValue().targetMessages, this.client.userID);
+    }
+  }
+
   private unregisterMessage(message: MessageResponse) {
     this.state.next((currentValue) => {
-      const [, messageIndex] = this.messagesById[message.id];
+      const [, messageIndex] = this.messagesById[message.id] ?? [];
 
       if (typeof messageIndex !== 'number') return currentValue;
 
@@ -321,6 +344,7 @@ export class LiveLocationManager {
       'live_location_sharing.started',
       'live_location_sharing.stopped',
       'message.deleted',
+      'message.updated',
     ] as EventTypes[]).map((eventType) =>
       this.client.on(eventType, (event) => {
         // TODO: switch to targeted event based on userId
@@ -328,6 +352,18 @@ export class LiveLocationManager {
 
         if (event.type === 'live_location_sharing.started') {
           this.registerMessage(event.message);
+        } else if (event.type === 'message.updated') {
+          const localMessage = this.messagesById[event.message.id];
+
+          if (!localMessage) return;
+
+          const [attachment] = event.message.attachments ?? [];
+
+          if (!isValidLiveLocationAttachment(attachment)) {
+            this.unregisterMessage(event.message);
+          } else {
+            this.updateRegisteredMessage(event.message);
+          }
         } else {
           this.unregisterMessage(event.message);
         }
