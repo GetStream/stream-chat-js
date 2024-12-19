@@ -258,6 +258,12 @@ export type BannedUsersResponse<StreamChatGenerics extends ExtendableGenerics = 
   }>;
 };
 
+export type PhraseListResponse = PhraseList & {
+  created_at?: string;
+  type?: string;
+  updated_at?: string;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   type?: string;
@@ -2185,6 +2191,12 @@ export type BlockList = {
   words: string[];
   type?: string;
   validate?: boolean;
+};
+
+export type PhraseList = {
+  name: string;
+  phrases: string[];
+  team: string;
 };
 
 export type ChannelConfig<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = ChannelConfigFields &
