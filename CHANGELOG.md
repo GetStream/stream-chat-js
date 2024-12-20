@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.48.0](https://github.com/GetStream/stream-chat-js/compare/v8.47.1...v8.48.0) (2024-12-20)
+
+
+### Features
+
+* **moderation:** add custom check API ([#1411](https://github.com/GetStream/stream-chat-js/issues/1411)) ([ce204d1](https://github.com/GetStream/stream-chat-js/commit/ce204d169d6f383cfa36853086c891eb6d13a968))
+
 ### [8.47.1](https://github.com/GetStream/stream-chat-js/compare/v8.47.0...v8.47.1) (2024-12-18)
 
 
