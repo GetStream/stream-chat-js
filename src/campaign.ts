@@ -18,6 +18,7 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
       message_template: this.data?.message_template,
       segment_ids: this.data?.segment_ids,
       sender_id: this.data?.sender_id,
+      sender_mode: this.data?.sender_mode,
       channel_template: this.data?.channel_template,
       create_channels: this.data?.create_channels,
       description: this.data?.description,
