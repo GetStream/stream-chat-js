@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.48.0](https://github.com/GetStream/stream-chat-js/compare/v8.47.1...v8.48.0) (2024-12-20)
+
+
+### Features
+
+* **moderation:** add custom check API ([#1411](https://github.com/GetStream/stream-chat-js/issues/1411)) ([ce204d1](https://github.com/GetStream/stream-chat-js/commit/ce204d169d6f383cfa36853086c891eb6d13a968))
+
+### [8.47.1](https://github.com/GetStream/stream-chat-js/compare/v8.47.0...v8.47.1) (2024-12-18)
+
+
+### Bug Fixes
+
+* message duplication when some messages have the same creation timestamp ([#1421](https://github.com/GetStream/stream-chat-js/issues/1421)) ([b7b019a](https://github.com/GetStream/stream-chat-js/commit/b7b019afa9bbe4d25c40ef6874f9219172991b7d))
+* **search:** missing thread_participants in message ([#1412](https://github.com/GetStream/stream-chat-js/issues/1412)) ([af5cb81](https://github.com/GetStream/stream-chat-js/commit/af5cb81051cc7f1964fb17072fd07a2dd9f0b74b))
+
 ## [8.47.0](https://github.com/GetStream/stream-chat-js/compare/v8.46.1...v8.47.0) (2024-12-13)
 
 

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { generateMsg } from './test-utils/generateMessage';
 
-import { addToMessageList, formatMessage } from '../../src/utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
 
 import type { FormatMessageResponse, MessageResponse } from '../../src';
 
@@ -103,5 +103,149 @@ describe('addToMessageList', () => {
 
     expect(messagesAfter).to.have.length(5);
     expect(messagesAfter[4]).to.equal(newMessage);
+  });
+});
+
+describe('findIndexInSortedArray', () => {
+  it('finds index in the middle of haystack (asc)', () => {
+    const needle = 5;
+    const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    expect(index).to.eq(4);
+  });
+
+  it('finds index at the top of haystack (asc)', () => {
+    const needle = 0;
+    const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    expect(index).to.eq(0);
+  });
+
+  it('finds index at the bottom of haystack (asc)', () => {
+    const needle = 10;
+    const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    expect(index).to.eq(8);
+  });
+
+  it('in a haystack with duplicates, prefers index closer to the bottom (asc)', () => {
+    const needle = 5;
+    const haystack = [1, 5, 5, 5, 5, 5, 8, 9];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    expect(index).to.eq(6);
+  });
+
+  it('in a haystack with duplicates, look up an item by key (asc)', () => {
+    const haystack: [key: string, value: number][] = [
+      ['one', 1],
+      ['five-1', 5],
+      ['five-2', 5],
+      ['five-3', 5],
+      ['nine', 9],
+    ];
+
+    const selectKey = (tuple: [key: string, value: number]) => tuple[0];
+    const selectValue = (tuple: [key: string, value: number]) => tuple[1];
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-1', 5],
+        sortedArray: haystack,
+        sortDirection: 'ascending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(1);
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-2', 5],
+        sortedArray: haystack,
+        sortDirection: 'ascending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(2);
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-3', 5],
+        sortedArray: haystack,
+        sortDirection: 'ascending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(3);
+  });
+
+  it('finds index in the middle of haystack (desc)', () => {
+    const needle = 5;
+    const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    expect(index).to.eq(4);
+  });
+
+  it('finds index at the top of haystack (desc)', () => {
+    const needle = 10;
+    const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    expect(index).to.eq(0);
+  });
+
+  it('finds index at the bottom of haystack (desc)', () => {
+    const needle = 0;
+    const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    expect(index).to.eq(8);
+  });
+
+  it('in a haystack with duplicates, prefers index closer to the top (desc)', () => {
+    const needle = 5;
+    const haystack = [9, 8, 5, 5, 5, 5, 5, 1];
+    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    expect(index).to.eq(2);
+  });
+
+  it('in a haystack with duplicates, look up an item by key (desc)', () => {
+    const haystack: [key: string, value: number][] = [
+      ['nine', 9],
+      ['five-1', 5],
+      ['five-2', 5],
+      ['five-3', 5],
+      ['one', 1],
+    ];
+
+    const selectKey = (tuple: [key: string, value: number]) => tuple[0];
+    const selectValue = (tuple: [key: string, value: number]) => tuple[1];
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-1', 5],
+        sortedArray: haystack,
+        sortDirection: 'descending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(1);
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-2', 5],
+        sortedArray: haystack,
+        sortDirection: 'descending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(2);
+
+    expect(
+      findIndexInSortedArray({
+        needle: ['five-3', 5],
+        sortedArray: haystack,
+        sortDirection: 'descending',
+        selectKey,
+        selectValueToCompare: selectValue,
+      }),
+    ).to.eq(3);
   });
 });
