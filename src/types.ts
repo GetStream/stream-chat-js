@@ -3538,9 +3538,7 @@ export type ReviewQueueResponse = {
 };
 
 export type ModerationConfig = {
-  created_at: string;
   key: string;
-  updated_at: string;
   ai_image_config?: AIImageConfig;
   ai_text_config?: AITextConfig;
   ai_video_config?: AIVideoConfig;
@@ -3551,18 +3549,23 @@ export type ModerationConfig = {
   team?: string;
 };
 
+export type ModerationConfigResponse = ModerationConfig & {
+  created_at: string;
+  updated_at: string;
+};
+
 export type GetConfigResponse = {
-  config: ModerationConfig;
+  config: ModerationConfigResponse;
 };
 
 export type QueryConfigsResponse = {
-  configs: ModerationConfig[];
+  configs: ModerationConfigResponse[];
   next?: string;
   prev?: string;
 };
 
 export type UpsertConfigResponse = {
-  config: ModerationConfig;
+  config: ModerationConfigResponse;
 };
 
 export type ModerationFlagOptions = {
