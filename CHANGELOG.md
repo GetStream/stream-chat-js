@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.49.0](https://github.com/GetStream/stream-chat-js/compare/v8.48.0...v8.49.0) (2024-12-23)
+
+
+### Features
+
+* multi tenancy moderation configuration support ([#1426](https://github.com/GetStream/stream-chat-js/issues/1426)) ([ef8736d](https://github.com/GetStream/stream-chat-js/commit/ef8736db680d43f2be48cfaeeb90754b071fa38b))
+
 ## [8.48.0](https://github.com/GetStream/stream-chat-js/compare/v8.47.1...v8.48.0) (2024-12-20)
 
 
