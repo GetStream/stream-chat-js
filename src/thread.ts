@@ -40,6 +40,7 @@ export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   read: ThreadReadState;
   replies: Array<FormatMessageResponse<SCG>>;
   replyCount: number;
+  title: string;
   updatedAt: Date | null;
 };
 
@@ -87,12 +88,15 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       : [];
 
     this.state = new StateStore<ThreadState<SCG>>({
+      // local only
       active: false,
-      channel,
-      createdAt: new Date(threadData.created_at),
-      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       isLoading: false,
       isStateStale: false,
+      // 99.9% should never change
+      channel,
+      createdAt: new Date(threadData.created_at),
+      // rest
+      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       pagination: repliesPaginationFromInitialThread(threadData),
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
@@ -102,6 +106,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
+      title: threadData.title,
     });
 
     this.id = threadData.parent_message_id;
@@ -186,6 +191,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
+    this.unsubscribeFunctions.add(this.subscribeThreadUpdated());
     this.unsubscribeFunctions.add(this.subscribeMarkActiveThreadRead());
     this.unsubscribeFunctions.add(this.subscribeReloadActiveStaleThread());
     this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
@@ -193,6 +199,23 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeRepliesRead());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
+  };
+
+  private subscribeThreadUpdated = () => {
+    return this.client.on('thread.updated', (event) => {
+      if (!event.thread || event.thread.parent_message_id !== this.id) {
+        return;
+      }
+
+      const threadData = event.thread;
+
+      this.state.partialNext({
+        title: threadData.title,
+        updatedAt: new Date(threadData.updated_at),
+        deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+        // TODO: handle custom data - ideally one property (like `custom`)
+      });
+    }).unsubscribe;
   };
 
   private subscribeMarkActiveThreadRead = () => {

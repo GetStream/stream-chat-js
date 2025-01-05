@@ -561,6 +561,44 @@ describe('Threads 2.0', () => {
         thread.unregisterSubscriptions();
       });
 
+      describe('Event: thread.updated', () => {
+        it('ignores incoming event if the data do not match (parent_message_id)', () => {
+          const thread = createTestThread({ title: 'A' });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.title).to.eq('A');
+
+          client.dispatchEvent({
+            // @ts-expect-error
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg(), { title: 'B' }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.title).to.eq('A');
+        });
+
+        it('correctly updates thread-level properties', () => {
+          const thread = createTestThread({ title: 'A' });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.title).to.eq('A');
+
+          client.dispatchEvent({
+            // @ts-expect-error
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
+              title: 'B',
+            }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.title).to.eq('B');
+        });
+      });
+
       describe('Event: user.watching.stop', () => {
         it('ignores incoming event if the data do not match (channel or user.id)', () => {
           const thread = createTestThread();
@@ -1207,6 +1245,7 @@ describe('Threads 2.0', () => {
           await threadManager.reload();
           expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
         });
+
         it('skips reload if there were no updates since the latest reload', async () => {
           threadManager.state.partialNext({ ready: true });
           await threadManager.reload();
