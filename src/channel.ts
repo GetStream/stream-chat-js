@@ -567,8 +567,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
-  public stopLiveLocationSharing(message: MessageResponse<StreamChatGenerics>) {
-    this.getClient().dispatchEvent({ message, type: 'live_location_sharing.stopped' });
+  public async stopLiveLocationSharing(message: MessageResponse<StreamChatGenerics>) {
+    const [attachment] = message.attachments ?? [];
+    const response = await this.getClient().partialUpdateMessage(message.id, {
+      // @ts-expect-error this is a valid update
+      set: { attachments: [{ ...attachment, stopped_sharing: true }] },
+    });
+
+    this.getClient().dispatchEvent({ message: response.message, type: 'live_location_sharing.stopped' });
   }
 
   /**
