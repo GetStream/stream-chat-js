@@ -18,6 +18,9 @@ import {
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
   Pager,
+  CustomCheckFlag,
+  ReviewQueueItem,
+  QueryConfigsResponse,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -172,7 +175,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Upsert moderation config
    * @param {Object} config Moderation config to be upserted
    */
-  async upsertConfig(config: ModerationConfig = {}) {
+  async upsertConfig(config: ModerationConfig) {
     return await this.client.post<UpsertConfigResponse>(this.client.baseURL + '/api/v2/moderation/config', config);
   }
 
@@ -180,12 +183,12 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Get moderation config
    * @param {string} key Key for which moderation config is to be fetched
    */
-  async getConfig(key: string) {
-    return await this.client.get<GetConfigResponse>(this.client.baseURL + '/api/v2/moderation/config/' + key);
+  async getConfig(key: string, data?: { team?: string }) {
+    return await this.client.get<GetConfigResponse>(this.client.baseURL + '/api/v2/moderation/config/' + key, data);
   }
 
-  async deleteConfig(key: string) {
-    return await this.client.delete(this.client.baseURL + '/api/v2/moderation/config/' + key);
+  async deleteConfig(key: string, data?: { team?: string }) {
+    return await this.client.delete(this.client.baseURL + '/api/v2/moderation/config/' + key, data);
   }
 
   /**
@@ -199,7 +202,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: QueryModerationConfigsSort,
     options: Pager = {},
   ) {
-    return await this.client.post(this.client.baseURL + '/api/v2/moderation/configs', {
+    return await this.client.post<QueryConfigsResponse>(this.client.baseURL + '/api/v2/moderation/configs', {
       filter: filterConditions,
       sort,
       ...options,
@@ -254,5 +257,50 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       config_key: configKey,
       options,
     });
+  }
+
+  /**
+   *
+   * @param {string} entityType string Type of entity to be checked E.g., stream:user, stream:chat:v1:message, or any custom string
+   * @param {string} entityID string ID of the entity to be checked. This is mainly for tracking purposes
+   * @param {string} entityCreatorID string ID of the entity creator
+   * @param {object} moderationPayload object Content to be checked for moderation. E.g., { texts: ['text1', 'text2'], images: ['image1', 'image2']}
+   * @param {Array} moderationPayload.texts array Array of texts to be checked for moderation
+   * @param {Array} moderationPayload.images array Array of images to be checked for moderation
+   * @param {Array} moderationPayload.videos array Array of videos to be checked for moderation
+   * @param {Array<CustomCheckFlag>} flags Array of CustomCheckFlag to be passed to flag the entity
+   * @returns
+   */
+  async addCustomFlags(
+    entityType: string,
+    entityID: string,
+    entityCreatorID: string,
+    moderationPayload: {
+      images?: string[];
+      texts?: string[];
+      videos?: string[];
+    },
+    flags: CustomCheckFlag[],
+  ) {
+    return await this.client.post<{ id: string; item: ReviewQueueItem; status: string } & APIResponse>(
+      this.client.baseURL + `/api/v2/moderation/custom_check`,
+      {
+        entity_type: entityType,
+        entity_id: entityID,
+        entity_creator_id: entityCreatorID,
+        moderation_payload: moderationPayload,
+        flags,
+      },
+    );
+  }
+
+  /**
+   * Add custom flags to a message
+   * @param {string} messageID Message ID to be flagged
+   * @param {Array<CustomCheckFlag>} flags Array of CustomCheckFlag to be passed to flag the message
+   * @returns
+   */
+  async addCustomMessageFlags(messageID: string, flags: CustomCheckFlag[]) {
+    return await this.addCustomFlags(MODERATION_ENTITY_TYPES.message, messageID, '', {}, flags);
   }
 }

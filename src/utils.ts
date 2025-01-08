@@ -311,14 +311,26 @@ export function formatMessage<StreamChatGenerics extends ExtendableGenerics = De
 export const findIndexInSortedArray = <T, L>({
   needle,
   sortedArray,
+  selectKey,
   selectValueToCompare = (e) => e,
   sortDirection = 'ascending',
 }: {
   needle: T;
   sortedArray: readonly T[];
   /**
-   * In array of objects (like messages), pick a specific
-   * property to compare needle value to.
+   * In an array of objects (like messages), pick a unique property identifying
+   * an element. It will be used to find a direct match for the needle element
+   * in case compare values are not unique.
+   *
+   * @example
+   * ```ts
+   * selectKey: (message) => message.id
+   * ```
+   */
+  selectKey?: (arrayElement: T) => string;
+  /**
+   * In an array of objects (like messages), pick a specific
+   * property to compare the needle value to.
    *
    * @example
    * ```ts
@@ -353,15 +365,30 @@ export const findIndexInSortedArray = <T, L>({
 
     const comparableMiddle = selectValueToCompare(sortedArray[middle]);
 
-    // if (comparableNeedle === comparableMiddle) return middle;
-
     if (
       (sortDirection === 'ascending' && comparableNeedle < comparableMiddle) ||
-      (sortDirection === 'descending' && comparableNeedle > comparableMiddle)
+      (sortDirection === 'descending' && comparableNeedle >= comparableMiddle)
     ) {
       right = middle - 1;
     } else {
       left = middle + 1;
+    }
+  }
+
+  // In case there are several array elements with the same comparable value, search around the insertion
+  // point to possibly find an element with the same key. If found, prefer it.
+  // This, for example, prevents duplication of messages with the same creation date.
+  if (selectKey) {
+    const needleKey = selectKey(needle);
+    const step = sortDirection === 'ascending' ? -1 : +1;
+    for (
+      let i = left + step;
+      0 <= i && i < sortedArray.length && selectValueToCompare(sortedArray[i]) === comparableNeedle;
+      i += step
+    ) {
+      if (selectKey(sortedArray[i]) === needleKey) {
+        return i;
+      }
     }
   }
 
@@ -410,19 +437,18 @@ export function addToMessageList<T extends FormatMessageResponse>(
     sortDirection: 'ascending',
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     selectValueToCompare: (m) => m[sortBy]!.getTime(),
+    selectKey: (m) => m.id,
   });
 
   // message already exists and not filtered with timestampChanged, update and return
-  if (!timestampChanged && newMessage.id) {
-    if (newMessages[insertionIndex] && newMessage.id === newMessages[insertionIndex].id) {
-      newMessages[insertionIndex] = newMessage;
-      return newMessages;
-    }
-
-    if (newMessages[insertionIndex - 1] && newMessage.id === newMessages[insertionIndex - 1].id) {
-      newMessages[insertionIndex - 1] = newMessage;
-      return newMessages;
-    }
+  if (
+    !timestampChanged &&
+    newMessage.id &&
+    newMessages[insertionIndex] &&
+    newMessage.id === newMessages[insertionIndex].id
+  ) {
+    newMessages[insertionIndex] = newMessage;
+    return newMessages;
   }
 
   // do not add updated or deleted messages to the list if they already exist or come with a timestamp change

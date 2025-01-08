@@ -354,17 +354,15 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       sortedArray: replies,
       sortDirection: 'ascending',
       selectValueToCompare: (reply) => reply.created_at.getTime(),
+      selectKey: (reply) => reply.id,
     });
 
-    const actualIndex =
-      replies[index]?.id === message.id ? index : replies[index - 1]?.id === message.id ? index - 1 : null;
-
-    if (actualIndex === null) {
+    if (replies[index]?.id !== message.id) {
       return;
     }
 
     const updatedReplies = [...replies];
-    updatedReplies.splice(actualIndex, 1);
+    updatedReplies.splice(index, 1);
 
     this.state.partialNext({
       replies: updatedReplies,
