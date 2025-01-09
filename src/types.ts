@@ -2995,6 +2995,7 @@ export type CampaignData = {
   name?: string;
   segment_ids?: string[];
   sender_id?: string;
+  sender_mode?: 'exclude' | 'include' | null;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
