@@ -2552,6 +2552,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return messageId;
   }
 
+  public updateLiveLocation(
+    message: MessageResponse<StreamChatGenerics>,
+    { latitude, longitude }: { latitude: number; longitude: number },
+  ) {
+    const [attachment] = message.attachments ?? [];
+
+    if (!attachment || attachment.type !== 'live_location') {
+      throw new Error(
+        'Supplied message either has no attachments to update or attachment is not of type "live_location"',
+      );
+    }
+
+    return this.partialUpdateMessage(message.id, {
+      // @ts-expect-error valid update
+      set: { attachments: [{ ...attachment, latitude, longitude }] },
+    });
+  }
+
   /**
    * pinMessage - pins the message
    * @param {string | { id: string }} messageOrMessageId message object or message id
