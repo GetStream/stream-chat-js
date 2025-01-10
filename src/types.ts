@@ -520,7 +520,9 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+export interface ThreadResponseCustomData {}
+
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
   channel: ChannelResponse<SCG>;
   channel_cid: string;
@@ -547,6 +549,8 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
     user?: UserResponse<SCG>;
     user_id?: string;
   }>;
+  // TODO: when moving to API v2 we should do this instead
+  // custom: ThreadResponseCustomData;
 }
 
 // TODO: Figure out a way to strongly type set and unset.
@@ -1195,6 +1199,17 @@ export type StreamChatOptions = AxiosRequestConfig & {
   // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
   // not be used in production apps.
   wsConnection?: StableWSConnection;
+  /**
+   * To access your custom data from `StateStore` you'll need to declare your custom property names for each feature.
+   * At the moment this is only needed for the Thread class. To get full type support make sure to merge interface
+   * declarations too.
+   */
+  customPropertyKeys?: {
+    /**
+     * Interface declaration for custom object properties: `ThreadResponseCustomData`
+     */
+    thread: (keyof ThreadResponseCustomData)[];
+  };
 };
 
 export type SyncOptions = {

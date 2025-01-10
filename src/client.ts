@@ -270,6 +270,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   private nextRequestAbortController: AbortController | null = null;
+  public readonly customPropertyKeys: NonNullable<StreamChatOptions['customPropertyKeys']>;
 
   /**
    * Initialize a client
@@ -363,6 +364,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.defaultWSTimeout = 15 * 1000;
 
     this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
+    this.customPropertyKeys = options?.customPropertyKeys ?? { thread: [] };
 
     /**
      * logger function should accept 3 parameters:
