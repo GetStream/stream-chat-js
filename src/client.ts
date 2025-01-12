@@ -141,6 +141,7 @@ import {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  PushPreference,
   PushProvider,
   PushProviderConfig,
   PushProviderID,
@@ -200,6 +201,7 @@ import {
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
   UpdateSegmentData,
+  UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -1800,6 +1802,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async getUnreadCountBatch(userIDs: string[]) {
     return await this.post<GetUnreadCountBatchAPIResponse>(this.baseURL + '/unread_batch', { user_ids: userIDs });
   }
+
+    /**
+   * setPushPreferences - Applies the list of push preferences.
+   *
+   * @param {PushPreference[]} A list of push preferences.
+   *
+   * @return {<GetUnreadCountBatchAPIResponse>}
+   */
+    async setPushPreferences(preferences: PushPreference[]) {
+      return await this.post<UpsertPushPreferencesResponse>(this.baseURL + '/push_preferences', { preferences: preferences });
+    }
 
   /**
    * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices

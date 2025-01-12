@@ -92,6 +92,7 @@ export function isOwnUserBaseProperty(property: string) {
     invisible: true,
     privacy_settings: true,
     roles: true,
+    push_preferences: true
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];

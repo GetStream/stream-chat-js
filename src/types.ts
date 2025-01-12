@@ -317,6 +317,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
+  push_preferences?: PushPreference | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
@@ -622,6 +623,21 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_threads_count: number;
 };
 
+export type PushPreference = {
+  user_id: string;
+  channel_cid?: string;
+  chat_level?: string;
+  disabled_until?: string;
+};
+
+export type UpsertPushPreferencesResponse = APIResponse & {
+  user_id: string;
+  channel_cid?: string;
+  chat_level?: string;
+  disabled_until?: string;
+};
+
+
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
   counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
 };
@@ -762,6 +778,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
+  push_preferences?: PushPreference | null;
   roles?: string[];
 };
 
