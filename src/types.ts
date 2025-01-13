@@ -520,6 +520,7 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface ThreadResponseCustomData {}
 
 export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
@@ -1173,6 +1174,17 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   baseURL?: string;
   browser?: boolean;
+  /**
+   * To access your custom data from `StateStore` you'll need to declare your custom property names for each feature.
+   * At the moment this is only needed for the Thread class. To get full type support make sure to merge interface
+   * declarations too.
+   */
+  customPropertyKeys?: {
+    /**
+     * Interface declaration for custom object properties: `ThreadResponseCustomData`
+     */
+    thread: (keyof ThreadResponseCustomData)[];
+  };
   device?: BaseDeviceFields;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
@@ -1199,17 +1211,6 @@ export type StreamChatOptions = AxiosRequestConfig & {
   // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
   // not be used in production apps.
   wsConnection?: StableWSConnection;
-  /**
-   * To access your custom data from `StateStore` you'll need to declare your custom property names for each feature.
-   * At the moment this is only needed for the Thread class. To get full type support make sure to merge interface
-   * declarations too.
-   */
-  customPropertyKeys?: {
-    /**
-     * Interface declaration for custom object properties: `ThreadResponseCustomData`
-     */
-    thread: (keyof ThreadResponseCustomData)[];
-  };
 };
 
 export type SyncOptions = {

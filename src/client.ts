@@ -188,7 +188,6 @@ import {
   TestPushDataInput,
   TestSNSDataInput,
   TestSQSDataInput,
-  ThreadResponse,
   TokenOrProvider,
   UnBanUserOptions,
   UpdateChannelOptions,
