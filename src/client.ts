@@ -2754,20 +2754,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
-   * @param {boolean} asJSON If set to true, returns JSON response instead of array of Thread instances.
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
-
-  async queryThreads(
-    options: QueryThreadsOptions | undefined,
-    asJSON: true,
-  ): Promise<QueryThreadsAPIResponse<StreamChatGenerics>>;
-  async queryThreads(
-    options?: QueryThreadsOptions,
-    asJSON?: false,
-  ): Promise<{ next: string | undefined; threads: Thread<StreamChatGenerics>[] }>;
-  async queryThreads(options: QueryThreadsOptions = {}, asJSON = false) {
+  async queryThreads(options: QueryThreadsOptions = {}) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -2780,10 +2770,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       `${this.baseURL}/threads`,
       optionsWithDefaults,
     );
-
-    if (asJSON) {
-      return response;
-    }
 
     return {
       threads: response.threads.map(
@@ -2801,17 +2787,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean}           options.watch Subscribes the user to the channel of the thread.
    * @param {number}            options.participant_limit Limits the number of participants returned per threads.
    * @param {number}            options.reply_limit Limits the number of replies returned per threads.
-   * @param {boolean}           asJSON If set to true, returns JSON response instead of Thread instance.
    *
    * @returns {Thread<StreamChatGenerics>} Returns the thread.
    */
-  async getThread(
-    messageId: string,
-    options: GetThreadOptions | undefined,
-    asJSON: true,
-  ): Promise<ThreadResponse<StreamChatGenerics>>;
-  async getThread(messageId: string, options?: GetThreadOptions, asJSON?: false): Promise<Thread<StreamChatGenerics>>;
-  async getThread(messageId: string, options: GetThreadOptions = {}, asJSON = false) {
+  async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
       throw Error('Please specify the messageId when calling getThread');
     }
@@ -2827,10 +2806,6 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
       optionsWithDefaults,
     );
-
-    if (asJSON) {
-      return response.thread;
-    }
 
     return new Thread<StreamChatGenerics>({ client: this, threadData: response.thread });
   }
@@ -2860,6 +2835,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       'reply_count',
       'participants',
       'channel',
+      'custom',
     ];
 
     for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
