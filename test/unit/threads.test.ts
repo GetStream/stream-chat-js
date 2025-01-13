@@ -570,7 +570,6 @@ describe('Threads 2.0', () => {
           expect(stateBefore.title).to.eq('A');
 
           client.dispatchEvent({
-            // @ts-expect-error
             type: 'thread.updated',
             thread: generateThreadResponse(channelResponse, generateMsg(), { title: 'B' }),
           });
@@ -587,7 +586,6 @@ describe('Threads 2.0', () => {
           expect(stateBefore.title).to.eq('A');
 
           client.dispatchEvent({
-            // @ts-expect-error
             type: 'thread.updated',
             thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
               title: 'B',
@@ -596,6 +594,55 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.title).to.eq('B');
+        });
+
+        it('ignores custom data when keys are missing from "StreamChat.customPropertyKeys.thread"', () => {
+          const customKey = uuidv4();
+          const thread = createTestThread({ [customKey]: 1 });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+
+          expect(stateBefore.custom).to.not.have.property(customKey);
+
+          client.dispatchEvent({
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
+              [customKey]: 2,
+            }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+
+          expect(stateAfter.custom).to.not.have.property(customKey);
+        });
+
+        it('properly handles custom data when keys are defined in "StreamChat.customPropertyKeys.thread"', () => {
+          const customKey1 = uuidv4();
+          const customKey2 = uuidv4();
+
+          // @ts-expect-error keys should be declared within `ThreadResponseCustomData` interface through interface merging
+          client.customPropertyKeys.thread = [customKey1, customKey2];
+
+          const thread = createTestThread({ [customKey1]: 1, [customKey2]: { key: 1 } });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+
+          expect(stateBefore.custom).to.have.keys([customKey1, customKey2]);
+          expect(stateBefore.custom[customKey1]).to.equal(1);
+
+          client.dispatchEvent({
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
+              [customKey1]: 2,
+            }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+
+          expect(stateAfter.custom).to.not.have.property(customKey2);
+          expect(stateAfter.custom[customKey1]).to.equal(2);
         });
       });
 
