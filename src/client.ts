@@ -1667,6 +1667,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      // @ts-ignore
+      c.push_preferences = channelState.push_preferences;
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
