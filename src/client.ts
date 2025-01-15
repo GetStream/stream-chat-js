@@ -1810,7 +1810,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {PushPreference[]} A list of push preferences.
    *
-   * @return {<GetUnreadCountBatchAPIResponse>}
+   * @return {<UpsertPushPreferencesResponse>}
    */
     async setPushPreferences(preferences: PushPreference[]) {
       return await this.post<UpsertPushPreferencesResponse>(this.baseURL + '/push_preferences', { preferences: preferences });
