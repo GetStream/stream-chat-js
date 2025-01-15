@@ -980,6 +980,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       config?: AxiosRequestConfig & { maxBodyLength?: number };
     },
   ) {
+    console.log("LOGGGG")
     this.logger('info', `client: ${type} - Request - ${url}`, {
       tags: ['api', 'api_request', 'client'],
       url,
@@ -989,6 +990,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>) {
+    console.log(type, url, response.data);
     this.logger('info', `client:${type} - Response - url: ${url} > status ${response.status}`, {
       tags: ['api', 'api_response', 'client'],
       url,
@@ -1586,6 +1588,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) {
+    console.log("QUERY CHANNELS");
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
