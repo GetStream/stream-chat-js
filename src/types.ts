@@ -623,20 +623,26 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_threads_count: number;
 };
 
-export type PushPreference = {
-  user_id: string;
-  channel_cid?: string;
-  chat_level?: string;
-  disabled_until?: string;
-};
+export type PushPreference =  {
+  chatLevel?: string; // "all", "none", "mentions", or other custom strings
+  callLevel?: string; // "all", "none", or other custom strings
+  disabledUntil?: string; // snooze till this time
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+}
+
+export type ChannelPushPreference = {
+  chatLevel?: string; // "all", "none", "mentions", or other custom strings
+  disabledUntil?: string;
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+}
 
 export type UpsertPushPreferencesResponse = APIResponse & {
-  user_id: string;
-  channel_cid?: string;
-  chat_level?: string;
-  disabled_until?: string;
-};
-
+  userPreferences: Record<string, PushPreference>; // Mapping of user IDs to their push preferences
+  userChannelPreferences: Record<
+      string,
+      Record<string, ChannelPushPreference>
+  >; // Mapping of user -> channel id -> push preferences
+}
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
   counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
