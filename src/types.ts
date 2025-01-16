@@ -317,8 +317,8 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   pinned_messages: MessageResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
-  push_preferences?: PushPreference | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
+  push_preferences?: PushPreference;
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
   watcher_count?: number;
@@ -623,26 +623,26 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_threads_count: number;
 };
 
-export type PushPreference =  {
-  chatLevel?: string; // "all", "none", "mentions", or other custom strings
-  callLevel?: string; // "all", "none", or other custom strings
+export type ChatLevelPushPreference = 'all' | 'none' | 'mentions' | (string & {});
+
+export type PushPreference = {
+  callLevel?: 'all' | 'none' | (string & {});
+  chatLevel?: ChatLevelPushPreference;
   disabledUntil?: string; // snooze till this time
   removeDisable?: boolean; // Temporary flag for resetting disabledUntil
-}
+};
 
 export type ChannelPushPreference = {
-  chatLevel?: string; // "all", "none", "mentions", or other custom strings
+  chatLevel?: ChatLevelPushPreference; // "all", "none", "mentions", or other custom strings
   disabledUntil?: string;
   removeDisable?: boolean; // Temporary flag for resetting disabledUntil
-}
+};
 
 export type UpsertPushPreferencesResponse = APIResponse & {
-  userPreferences: Record<string, PushPreference>; // Mapping of user IDs to their push preferences
-  userChannelPreferences: Record<
-      string,
-      Record<string, ChannelPushPreference>
-  >; // Mapping of user -> channel id -> push preferences
-}
+  // Mapping of user IDs to their push preferences
+  userChannelPreferences: Record<string, Record<string, ChannelPushPreference>>;
+  userPreferences: Record<string, PushPreference>; // Mapping of user -> channel id -> push preferences
+};
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
   counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
@@ -784,7 +784,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
-  push_preferences?: PushPreference | null;
+  push_preferences?: PushPreference;
   roles?: string[];
 };
 
