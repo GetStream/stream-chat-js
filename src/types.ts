@@ -1948,8 +1948,7 @@ export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
-  | Array<ChannelSortBase<StreamChatGenerics>>
-  | { pinned_at: AscDesc };
+  | Array<ChannelSortBase<StreamChatGenerics>>;
 
 export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['channelType']
@@ -1959,6 +1958,7 @@ export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = Defa
   last_message_at?: AscDesc;
   last_updated?: AscDesc;
   member_count?: AscDesc;
+  pinned_at?: AscDesc;
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.50.0](https://github.com/GetStream/stream-chat-js/compare/v8.49.0...v8.50.0) (2025-01-16)
+
+
+### Features
+
+* support CampaignSenderMode ([#1425](https://github.com/GetStream/stream-chat-js/issues/1425)) ([27ca29a](https://github.com/GetStream/stream-chat-js/commit/27ca29aacd043ee25467282ed894a6ef5e9a542f))
+
+
+### Bug Fixes
+
+* move `pinned_at` sort option to `ChannelSortBase` ([#1430](https://github.com/GetStream/stream-chat-js/issues/1430)) ([eb9d518](https://github.com/GetStream/stream-chat-js/commit/eb9d5187cc19c6a9b8b32100daa6efa96f46a69c))
+
 ## [8.49.0](https://github.com/GetStream/stream-chat-js/compare/v8.48.0...v8.49.0) (2024-12-23)
 
 
