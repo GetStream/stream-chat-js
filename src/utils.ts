@@ -484,6 +484,82 @@ function maybeGetReactionGroupsFallback(
   return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface DebouncedFunc<T extends (...args: any[]) => any> {
+  /**
+   * Call the original function, but applying the debounce rules.
+   *
+   * If the debounced function can be run immediately, this calls it and returns its return
+   * value.
+   *
+   * Otherwise, it returns the return value of the last invocation, or undefined if the debounced
+   * function was not invoked yet.
+   */
+  (...args: Parameters<T>): ReturnType<T> | undefined;
+
+  /**
+   * Throw away any pending invocation of the debounced function.
+   */
+  cancel(): void;
+
+  /**
+   * If there is a pending invocation of the debounced function, invoke it immediately and return
+   * its return value.
+   *
+   * Otherwise, return the value from the last invocation, or undefined if the debounced function
+   * was never invoked.
+   */
+  flush(): ReturnType<T> | undefined;
+}
+
+// works exactly the same as lodash.debounce
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const debounce = <T extends (...args: any[]) => any>(
+  fn: T,
+  timeout = 0,
+  { leading = false, trailing = true }: { leading?: boolean; trailing?: boolean } = {},
+): DebouncedFunc<T> => {
+  let runningTimeout: null | NodeJS.Timeout = null;
+  let argsForTrailingExecution: Parameters<T> | null = null;
+  let lastResult: ReturnType<T> | undefined;
+
+  const debouncedFn = (...args: Parameters<T>) => {
+    if (runningTimeout) {
+      clearTimeout(runningTimeout);
+    } else if (leading) {
+      lastResult = fn(...args);
+    }
+    if (trailing) argsForTrailingExecution = args;
+
+    const timeoutHandler = () => {
+      if (argsForTrailingExecution) {
+        lastResult = fn(...argsForTrailingExecution);
+        argsForTrailingExecution = null;
+      }
+      runningTimeout = null;
+    };
+
+    runningTimeout = setTimeout(timeoutHandler, timeout);
+    return lastResult;
+  };
+
+  debouncedFn.cancel = () => {
+    if (runningTimeout) clearTimeout(runningTimeout);
+  };
+
+  debouncedFn.flush = () => {
+    if (runningTimeout) {
+      clearTimeout(runningTimeout);
+      runningTimeout = null;
+      if (argsForTrailingExecution) {
+        lastResult = fn(...argsForTrailingExecution);
+      }
+    }
+    return lastResult;
+  };
+  return debouncedFn;
+};
+
 // works exactly the same as lodash.throttle
 export const throttle = <T extends (...args: unknown[]) => unknown>(
   fn: T,
