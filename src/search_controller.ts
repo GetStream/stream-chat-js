@@ -359,7 +359,6 @@ export type SearchControllerState<
   // FIXME: focusedMessage should live in a MessageListController class that does not exist yet.
   //  This state prop should be then removed
   focusedMessage?: MessageResponse<StreamChatGenerics>;
-  input?: HTMLInputElement;
 };
 
 export type SearchControllerConfig = {
@@ -409,10 +408,6 @@ export class SearchController<
   get searchSourceTypes(): Array<SearchSource['type']> {
     return this.sources.map((s) => s.type);
   }
-
-  setInputElement = (input: HTMLInputElement) => {
-    this.state.partialNext({ input });
-  };
 
   addSource = (source: SearchSource) => {
     this.state.partialNext({
