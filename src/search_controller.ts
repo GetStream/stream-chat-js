@@ -1,23 +1,22 @@
-import {debounce, DebouncedFunc} from "./utils";
-import {StateStore} from "./store";
-import type {Channel} from "./channel";
-import type {StreamChat} from "./client";
+import { debounce, DebouncedFunc } from './utils';
+import { StateStore } from './store';
+import type { Channel } from './channel';
+import type { StreamChat } from './client';
 import type {
-  ChannelFilters, 
-  ChannelOptions, 
+  ChannelFilters,
+  ChannelOptions,
   ChannelSort,
   DefaultGenerics,
-  ExtendableGenerics, 
-  MessageFilters, 
-  MessageResponse, 
-  SearchMessageSort, 
+  ExtendableGenerics,
+  MessageFilters,
+  MessageResponse,
+  SearchMessageSort,
   SearchOptions,
   UserFilters,
   UserOptions,
   UserResponse,
-  UserSort
-} from "./types";
-
+  UserSort,
+} from './types';
 
 export type SearchSourceType = 'channels' | 'users' | 'messages' | (string & {});
 export type QueryReturnValue<T> = { items: T[]; next?: string };
@@ -79,7 +78,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   searchDebounced!: DebouncedExecQueryFunction;
 
   protected constructor(options?: SearchSourceOptions) {
-    const {debounceMs, isActive, pageSize} = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
+    const { debounceMs, isActive, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
     this.pageSize = pageSize;
     this.state = new StateStore<SearchSourceState<T>>({
       hasMore: true,
@@ -89,7 +88,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
       offset: 0,
       searchQuery: '',
     });
-    this.setDebounceOptions({debounceMs});
+    this.setDebounceOptions({ debounceMs });
   }
 
   get lastQueryError() {
@@ -152,8 +151,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   async executeQuery(newSearchString?: string) {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
-    if (!this.isActive || this.isLoading || (!this.hasMore && !hasNewSearchQuery) || !searchString)
-      return;
+    if (!this.isActive || this.isLoading || (!this.hasMore && !hasNewSearchQuery) || !searchString) return;
 
     if (hasNewSearchQuery) {
       this.resetState({ isActive: this.isActive, isLoading: true, searchQuery: newSearchString });
@@ -179,6 +177,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
     } finally {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       this.state.next(({ lastQueryError, ...prev }: SearchSourceState<T>) => ({
         ...prev,
         ...stateUpdate,
@@ -207,9 +206,9 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   }
 }
 
-export class UserSearchSource<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> extends BaseSearchSource<UserResponse<StreamChatGenerics>> {
+export class UserSearchSource<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> extends BaseSearchSource<
+  UserResponse<StreamChatGenerics>
+> {
   readonly type = 'users';
   private client: StreamChat<StreamChatGenerics>;
   filters: UserFilters<StreamChatGenerics> | undefined;
@@ -342,17 +341,13 @@ export class MessageSearchSource<
   }
 }
 
-export type DefaultSearchSources<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = [
+export type DefaultSearchSources<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = [
   UserSearchSource<StreamChatGenerics>,
   ChannelSearchSource<StreamChatGenerics>,
   MessageSearchSource<StreamChatGenerics>,
 ];
 
-export type SearchControllerState<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = {
+export type SearchControllerState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   isActive: boolean;
   searchQuery: string;
   sources: SearchSource[];
@@ -371,9 +366,7 @@ export type SearchControllerOptions = {
   sources?: SearchSource[];
 };
 
-export class SearchController<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> {
+export class SearchController<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   state: StateStore<SearchControllerState<StreamChatGenerics>>;
   config: SearchControllerConfig;
 
@@ -423,10 +416,7 @@ export class SearchController<
     this.state.partialNext({ sources: newSources });
   };
 
-  activateSource = (
-    sourceType: SearchSource['type'],
-    sourceStateOverride?: Partial<SearchSourceState>,
-  ) => {
+  activateSource = (sourceType: SearchSource['type'], sourceStateOverride?: Partial<SearchSourceState>) => {
     const source = this.getSource(sourceType);
     if (!source || source.isActive) return;
     if (this.config.keepSingleActiveSource) {
@@ -451,9 +441,7 @@ export class SearchController<
 
   activate = () => {
     if (!this.activeSources.length) {
-      const sourcesToActivate = this.config.keepSingleActiveSource
-        ? this.sources.slice(0, 1)
-        : this.sources;
+      const sourcesToActivate = this.config.keepSingleActiveSource ? this.sources.slice(0, 1) : this.sources;
       sourcesToActivate.forEach((s) => s.activate());
     }
     if (this.isActive) return;
