@@ -534,6 +534,7 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   parent_message_id: string;
   title: string;
   updated_at: string;
+  active_participant_count?: number;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
@@ -1174,17 +1175,6 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   baseURL?: string;
   browser?: boolean;
-  /**
-   * To access your custom data from `StateStore` you'll need to declare your custom property names for each feature.
-   * At the moment this is only needed for the Thread class. To get full type support make sure to merge interface
-   * declarations too.
-   */
-  customPropertyKeys?: {
-    /**
-     * Interface declaration for custom object properties: `ThreadResponseCustomData`
-     */
-    thread: (keyof ThreadResponseCustomData)[];
-  };
   device?: BaseDeviceFields;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
