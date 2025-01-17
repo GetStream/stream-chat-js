@@ -11,6 +11,7 @@ import type {
   MessageResponse,
   ReadResponse,
   ThreadResponse,
+  ThreadResponseCustomData,
   UserResponse,
 } from './types';
 import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
@@ -27,6 +28,7 @@ export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   active: boolean;
   channel: Channel<SCG>;
   createdAt: Date;
+  custom: ThreadResponseCustomData;
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
@@ -40,6 +42,7 @@ export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   read: ThreadReadState;
   replies: Array<FormatMessageResponse<SCG>>;
   replyCount: number;
+  title: string;
   updatedAt: Date | null;
 };
 
@@ -65,6 +68,42 @@ export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
+const THREAD_RESERVED_KEYS = [
+  'channel',
+  'channel_cid',
+  'created_at',
+  'created_by_user_id',
+  'parent_message_id',
+  'title',
+  'updated_at',
+  'latest_replies',
+  'active_participant_count',
+  'deleted_at',
+  'last_message_at',
+  'participant_count',
+  'reply_count',
+  'read',
+  'thread_participants',
+  'created_by',
+  'parent_message',
+] as const;
+
+// TODO: remove this once we move to API v2
+const constructCustomDataObject = <SCG extends ExtendableGenerics>(threadData: ThreadResponse<SCG>) => {
+  const custom: ThreadResponseCustomData = {};
+
+  for (const key in threadData) {
+    if (THREAD_RESERVED_KEYS.includes(key as keyof ThreadResponse<SCG>)) {
+      continue;
+    }
+
+    const customKey = key as keyof ThreadResponseCustomData;
+
+    custom[customKey] = threadData[customKey];
+  }
+
+  return custom;
+};
 
 export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ThreadState<SCG>>;
@@ -87,12 +126,15 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       : [];
 
     this.state = new StateStore<ThreadState<SCG>>({
+      // local only
       active: false,
-      channel,
-      createdAt: new Date(threadData.created_at),
-      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       isLoading: false,
       isStateStale: false,
+      // 99.9% should never change
+      channel,
+      createdAt: new Date(threadData.created_at),
+      // rest
+      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       pagination: repliesPaginationFromInitialThread(threadData),
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
@@ -102,6 +144,8 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
+      title: threadData.title,
+      custom: constructCustomDataObject<SCG>(threadData),
     });
 
     this.id = threadData.parent_message_id;
@@ -186,6 +230,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
+    this.unsubscribeFunctions.add(this.subscribeThreadUpdated());
     this.unsubscribeFunctions.add(this.subscribeMarkActiveThreadRead());
     this.unsubscribeFunctions.add(this.subscribeReloadActiveStaleThread());
     this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
@@ -193,6 +238,24 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeRepliesRead());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
+  };
+
+  private subscribeThreadUpdated = () => {
+    return this.client.on('thread.updated', (event) => {
+      if (!event.thread || event.thread.parent_message_id !== this.id) {
+        return;
+      }
+
+      const threadData = event.thread;
+
+      this.state.partialNext({
+        title: threadData.title,
+        updatedAt: new Date(threadData.updated_at),
+        deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+        // TODO: use threadData.custom once we move to API v2
+        custom: constructCustomDataObject<SCG>(threadData),
+      });
+    }).unsubscribe;
   };
 
   private subscribeMarkActiveThreadRead = () => {
