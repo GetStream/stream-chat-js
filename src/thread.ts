@@ -68,32 +68,33 @@ export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
-const THREAD_RESERVED_KEYS = [
-  'channel',
-  'channel_cid',
-  'created_at',
-  'created_by_user_id',
-  'parent_message_id',
-  'title',
-  'updated_at',
-  'latest_replies',
-  'active_participant_count',
-  'deleted_at',
-  'last_message_at',
-  'participant_count',
-  'reply_count',
-  'read',
-  'thread_participants',
-  'created_by',
-  'parent_message',
-] as const;
+// TODO: remove this once we move to API v2
+export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
+  channel: true,
+  channel_cid: true,
+  created_at: true,
+  created_by_user_id: true,
+  parent_message_id: true,
+  title: true,
+  updated_at: true,
+  latest_replies: true,
+  active_participant_count: true,
+  deleted_at: true,
+  last_message_at: true,
+  participant_count: true,
+  reply_count: true,
+  read: true,
+  thread_participants: true,
+  created_by: true,
+  parent_message: true,
+};
 
 // TODO: remove this once we move to API v2
-const constructCustomDataObject = <SCG extends ExtendableGenerics>(threadData: ThreadResponse<SCG>) => {
+const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   const custom: ThreadResponseCustomData = {};
 
   for (const key in threadData) {
-    if (THREAD_RESERVED_KEYS.includes(key as keyof ThreadResponse<SCG>)) {
+    if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
       continue;
     }
 
@@ -145,7 +146,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
       title: threadData.title,
-      custom: constructCustomDataObject<SCG>(threadData),
+      custom: constructCustomDataObject(threadData),
     });
 
     this.id = threadData.parent_message_id;
@@ -253,7 +254,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
         updatedAt: new Date(threadData.updated_at),
         deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
         // TODO: use threadData.custom once we move to API v2
-        custom: constructCustomDataObject<SCG>(threadData),
+        custom: constructCustomDataObject(threadData),
       });
     }).unsubscribe;
   };
