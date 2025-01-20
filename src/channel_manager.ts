@@ -1,12 +1,19 @@
 import type { StreamChat } from './client';
-import type { DefaultGenerics, ExtendableGenerics } from './types';
-import { ChannelOptions, ChannelStateOptions, ChannelFilters, ChannelSort } from './types';
+import type {
+  DefaultGenerics,
+  ExtendableGenerics,
+  Event,
+  ChannelOptions,
+  ChannelStateOptions,
+  ChannelFilters,
+  ChannelSort,
+} from './types';
 import { StateStore } from './store';
 import { Channel } from './channel';
-import type { Event } from '../dist/types';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
   filters: ChannelFilters<SCG>;
+  hasNext: boolean;
   isLoading: boolean;
   isLoadingNext: boolean;
   options: ChannelOptions;
@@ -55,7 +62,7 @@ export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics =
 
 export type ChannelManagerOptions = {
   lockChannelOrder?: boolean;
-}
+};
 
 export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ChannelManagerState<SCG>>;
@@ -81,7 +88,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       pagination: {
         isLoading: false,
         isLoadingNext: false,
-        // nextCursor: null,
+        hasNext: false,
         filters: {},
         sort: {},
         options: { limit: 10, offset: 0 },
@@ -131,9 +138,17 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) => {
-    const { offset = 0 } = options;
+    const { offset = 0, limit = 10 } = options;
     this.state.partialNext({
-      pagination: { isLoading: true, isLoadingNext: false, filters, sort, options, stateOptions },
+      pagination: {
+        ...this.state.getLatestValue().pagination,
+        isLoading: true,
+        isLoadingNext: false,
+        filters,
+        sort,
+        options,
+        stateOptions,
+      },
     });
 
     const channels = await this.client.queryChannels(filters, sort, options, stateOptions);
@@ -145,6 +160,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       channels,
       pagination: {
         ...pagination,
+        hasNext: (channels?.length ?? 0) >= limit,
         isLoading: false,
         options: newOptions,
       },
@@ -152,10 +168,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public loadNext = async () => {
-    const { pagination } = this.state.getLatestValue();
+    const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort, options, stateOptions } = pagination;
-    const { offset = 0 } = options;
-    const { channels } = this.state.getLatestValue();
+    const { offset = 0, limit = 10 } = options;
     this.state.partialNext({
       pagination: { ...pagination, isLoading: false, isLoadingNext: true },
     });
@@ -167,6 +182,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       channels: [...channels, ...nextChannels],
       pagination: {
         ...pagination,
+        hasNext: (channels?.length ?? 0) >= limit,
         isLoading: false,
         isLoadingNext: false,
         options: newOptions,
