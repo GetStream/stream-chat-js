@@ -1,5 +1,5 @@
 import type { StreamChat } from './client';
-import type { DefaultGenerics, EventTypes, ExtendableGenerics } from './types';
+import type { DefaultGenerics, ExtendableGenerics } from './types';
 import { ChannelOptions, ChannelStateOptions, ChannelFilters, ChannelSort } from './types';
 import { StateStore } from './store';
 import { Channel } from './channel';
@@ -22,15 +22,23 @@ export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics
 };
 
 export type SetterParameterType<T> = T | ((prevState: T) => T);
-export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = SetterParameterType<ChannelManagerState<SCG>['channels']>;
-export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> = (arg: ChannelSetterParameterType<SCG>) => void
+export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = SetterParameterType<
+  ChannelManagerState<SCG>['channels']
+>;
+export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> = (
+  arg: ChannelSetterParameterType<SCG>,
+) => void;
 
 // TODO: Figure out a better way to infer a generic handler type here
-export type GenericEventHandlerType<T extends unknown[]> = (...args: T) => void | (() => void) | ((...args: T) => Promise<void>);
+export type GenericEventHandlerType<T extends unknown[]> = (
+  ...args: T
+) => void | (() => void) | ((...args: T) => Promise<void>);
 export type EventHandlerType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<[Event<SCG>]>;
-export type EventHandlerOverrideType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<[ChannelSetterType<SCG>, Event<SCG>]>
+export type EventHandlerOverrideType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<
+  [ChannelSetterType<SCG>, Event<SCG>]
+>;
 
-export type ChannelEventHandlerOverrides<SCG extends ExtendableGenerics = DefaultGenerics> = Partial<
+export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics = DefaultGenerics> = Partial<
   Record<
     | 'channelDeletedHandler'
     | 'channelHiddenHandler'
@@ -45,14 +53,27 @@ export type ChannelEventHandlerOverrides<SCG extends ExtendableGenerics = Defaul
   >
 >;
 
+export type ChannelManagerOptions = {
+  lockChannelOrder?: boolean;
+}
+
 export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ChannelManagerState<SCG>>;
   private client: StreamChat<SCG>;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private eventHandlers: Map<string, EventHandlerType<SCG>> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType<SCG>> = new Map();
+  private options: ChannelManagerOptions;
 
-  constructor({ client, eventHandlerOverrides = {} }: { client: StreamChat<SCG>; eventHandlerOverrides?: ChannelEventHandlerOverrides<SCG> }) {
+  constructor({
+    client,
+    eventHandlerOverrides = {},
+    options = {},
+  }: {
+    client: StreamChat<SCG>;
+    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides<SCG>;
+    options?: ChannelManagerOptions;
+  }) {
     this.client = client;
     this.state = new StateStore<ChannelManagerState<SCG>>({
       channels: [],
@@ -67,13 +88,17 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         stateOptions: {},
       },
     });
-    const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<Partial<ChannelEventHandlerOverrides<SCG>>>((acc, [key, value]) => {
+    const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
+      Partial<ChannelManagerEventHandlerOverrides<SCG>>
+    >((acc, [key, value]) => {
       if (value) {
-        acc[key as keyof ChannelEventHandlerOverrides<SCG>] = value;
+        acc[key as keyof ChannelManagerEventHandlerOverrides<SCG>] = value;
       }
       return acc;
     }, {});
-    this.eventHandlerOverrides = new Map(Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][]);
+    this.eventHandlerOverrides = new Map(
+      Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][],
+    );
     this.eventHandlers = new Map(
       Object.entries({
         channelDeletedHandler: this.channelDeletedHandler,
@@ -87,6 +112,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         userPresenceHandler: this.userPresenceHandler,
       }) as [string, EventHandlerType<SCG>][],
     );
+    this.options = options;
   }
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
@@ -96,8 +122,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       newValue = newValue(prevChannels);
     }
 
-    this.state.partialNext({ channels: newValue });
-  }
+    this.state.partialNext({ channels: [...newValue] });
+  };
 
   public queryChannels = async (
     filters: ChannelFilters<SCG>,
@@ -213,10 +239,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
-    // FIXME: Propagate this through overrides
-    const lockChannelOrder = false;
-
-    if (!lockChannelOrder && event.cid) {
+    if (!this.options.lockChannelOrder && event.cid) {
       const channelIndex = channels.findIndex((c) => c.cid === event.cid);
       this.state.partialNext({ channels: [channels[channelIndex], ...channels.filter((c) => c.cid !== event.cid)] });
     }
@@ -254,6 +277,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       'user.presence.changed': 'userPresenceHandler',
       'user.updated': 'userPresenceHandler',
     };
+    // @ts-ignore
     const handlerName = eventToHandlerMapping[event.type];
     const defaultEventHandler = this.eventHandlers.get(handlerName);
     const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
@@ -265,7 +289,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (defaultEventHandler && typeof defaultEventHandler === 'function') {
       defaultEventHandler(event);
     }
-  }
+  };
 
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
@@ -273,8 +297,26 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
-    const notificationAddedToChannelListener = this.client.on('notification.added_to_channel', this.subscriptionOrOverride).unsubscribe;
+    const eventTypes = [
+      'notification.added_to_channel',
+      'notification.message_new',
+      'notification.removed_from_channel',
+      'message.new',
+      'channel.deleted',
+      'channel.hidden',
+      'channel.truncated',
+      'channel.visible',
+      'user.presence.changed',
+      'user.updated',
+    ];
 
-    this.unsubscribeFunctions.add(notificationAddedToChannelListener);
+    for (const eventType of eventTypes) {
+      this.unsubscribeFunctions.add(this.client.on(eventType, this.subscriptionOrOverride).unsubscribe);
+    }
+  };
+
+  public unregisterSubscriptions = () => {
+    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
+    this.unsubscribeFunctions.clear();
   };
 }
