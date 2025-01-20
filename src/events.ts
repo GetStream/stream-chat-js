@@ -38,6 +38,7 @@ export const EVENT_MAP = {
   'reaction.deleted': true,
   'reaction.new': true,
   'reaction.updated': true,
+  'thread.updated': true,
   'typing.start': true,
   'typing.stop': true,
   'user.banned': true,
