@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.52.0](https://github.com/GetStream/stream-chat-js/compare/v8.51.0...v8.52.0) (2025-01-20)
+
+
+### Features
+
+* add translate API support ([#1415](https://github.com/GetStream/stream-chat-js/issues/1415)) ([7c1c58d](https://github.com/GetStream/stream-chat-js/commit/7c1c58df4d0c7cffdadf7062189053d9b7a5fb80))
+
 ## [8.51.0](https://github.com/GetStream/stream-chat-js/compare/v8.50.0...v8.51.0) (2025-01-17)
 
 
