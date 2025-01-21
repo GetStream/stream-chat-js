@@ -1189,12 +1189,14 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (!(this.cid in this.getClient().activeChannels)) {
+      if (!(this.cid in this.getClient().activeChannels) && !this.getClient().options.disableCache) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }
 
-    this.getClient()._addChannelConfig(state.channel);
+    if (!this.getClient().options.disableCache) {
+      this.getClient()._addChannelConfig(state.channel);
+    }
 
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
