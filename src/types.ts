@@ -1173,10 +1173,10 @@ export type StreamChatOptions = AxiosRequestConfig & {
   /**
    * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
    * this.polls.pollCache and this.config.
-   * It is mainly meant to be used for integrations where stream-chat is used as a BE REST API, not
-   * depending on any state and purely serving as a wrapper around HTTP requests. Using this property
-   * on either the client side or a backend implementation that also relies on WS events will break
-   * these functionalities, so please use carefully.
+   * It is mainly meant to be used for integrations where stream-chat is used as a server-side service
+   * interacting with Stream's REST API, not depending on any state and purely serving as a wrapper
+   * around HTTP requests. Using this property on either the client side or a backend implementation
+   * that also relies on WS events will break these functionalities, so please use carefully.
    */
   disableCache?: boolean;
   enableInsights?: boolean;
