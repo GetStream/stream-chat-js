@@ -1271,6 +1271,7 @@ describe('Channel.query', async () => {
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
 		mock.restore();
 	});
+
 	it('should not update pagination for queried message set', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
