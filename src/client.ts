@@ -318,6 +318,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
       recoverStateOnReconnect: true,
+      disableCache: false,
       ...inputOptions,
     };
 
@@ -1840,7 +1841,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
-    this.configs[cid] = config;
+    if (!this.options.disableCache) {
+      this.configs[cid] = config;
+    }
   }
 
   /**
@@ -1985,7 +1988,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return channel;
     }
     const channel = new Channel<StreamChatGenerics>(this, channelType, channelID, custom);
-    this.activeChannels[channel.cid] = channel;
+    if (!this.options.disableCache) {
+      this.activeChannels[channel.cid] = channel;
+    }
 
     return channel;
   };

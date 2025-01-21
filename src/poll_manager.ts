@@ -101,6 +101,9 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private setOrOverwriteInCache = (pollResponse: PollResponse<SCG>, overwriteState?: boolean) => {
+    if (this.client.options.disableCache) {
+      return;
+    }
     const pollFromCache = this.fromState(pollResponse.id);
     if (!pollFromCache) {
       const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
