@@ -1223,10 +1223,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      const state = channel.state;
+      if (channel) {
+        const state = channel.state;
 
-      /** deleted the messages from this user. */
-      state?.deleteUserMessages(user, hardDelete);
+        /** deleted the messages from this user. */
+        state?.deleteUserMessages(user, hardDelete);
+      }
     }
   };
 
@@ -1983,7 +1985,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // only allow 1 channel object per cid
     const cid = `${channelType}:${channelID}`;
-    if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
+    if (cid in this.activeChannels && this.activeChannels[cid] && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = { ...channel.data, ...custom };
