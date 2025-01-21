@@ -1194,9 +1194,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       }
     }
 
-    if (!this.getClient().options.disableCache) {
-      this.getClient()._addChannelConfig(state.channel);
-    }
+    this.getClient()._addChannelConfig(state.channel);
 
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
