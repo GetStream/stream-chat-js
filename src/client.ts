@@ -1952,7 +1952,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[tempCid] = channel;
+    if (!this.options.disableCache) {
+      this.activeChannels[tempCid] = channel;
+    }
+
     return channel;
   };
 
