@@ -1842,7 +1842,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
-    if (!this.options.disableCache) {
+    if (this._cacheEnabled()) {
       this.configs[cid] = config;
     }
   }
@@ -1953,7 +1953,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    if (!this.options.disableCache) {
+    if (this._cacheEnabled()) {
       this.activeChannels[tempCid] = channel;
     }
 
@@ -1992,7 +1992,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return channel;
     }
     const channel = new Channel<StreamChatGenerics>(this, channelType, channelID, custom);
-    if (!this.options.disableCache) {
+    if (this._cacheEnabled()) {
       this.activeChannels[channel.cid] = channel;
     }
 
@@ -2889,6 +2889,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * _isUsingServerAuth - Returns true if we're using server side auth
    */
   _isUsingServerAuth = () => !!this.secret;
+
+  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
 
   _enrichAxiosOptions(
     options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {

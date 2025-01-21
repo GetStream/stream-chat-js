@@ -103,6 +103,21 @@ describe('StreamChat getInstance', () => {
 
 		expect(options.apn_config.p12_cert).to.be.eql(cert);
 	});
+
+	it('should correctly resolve _cacheEnabled', async () => {
+		const client1 = new StreamChat('key', 'secret', {
+			disableCache: true,
+		});
+		expect(client1._cacheEnabled()).to.be.equal(false);
+		const client2 = new StreamChat('key', 'secret', {
+			disableCache: false,
+		});
+		expect(client2._cacheEnabled()).to.be.equal(true);
+		const client3 = new StreamChat('key', {
+			disableCache: true,
+		});
+		expect(client3._cacheEnabled()).to.be.equal(true);
+	});
 });
 
 describe('Client userMuteStatus', function () {
@@ -582,7 +597,7 @@ describe('Client WSFallback', () => {
 describe('Channel.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
-		client.options.disableCache = true;
+		client._cacheEnabled = () => false;
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
 			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
