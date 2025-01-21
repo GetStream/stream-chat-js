@@ -77,6 +77,11 @@ export type APIResponse = {
   duration: string;
 };
 
+export type TranslateResponse = {
+  language: string;
+  translated_text: string;
+};
+
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
     // TODO
@@ -526,7 +531,10 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface ThreadResponseCustomData {}
+
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
   channel: ChannelResponse<SCG>;
   channel_cid: string;
@@ -537,6 +545,7 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   parent_message_id: string;
   title: string;
   updated_at: string;
+  active_participant_count?: number;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
@@ -553,6 +562,8 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
     user?: UserResponse<SCG>;
     user_id?: string;
   }>;
+  // TODO: when moving to API v2 we should do this instead
+  // custom: ThreadResponseCustomData;
 }
 
 // TODO: Figure out a way to strongly type set and unset.
@@ -1949,8 +1960,7 @@ export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
-  | Array<ChannelSortBase<StreamChatGenerics>>
-  | { pinned_at: AscDesc };
+  | Array<ChannelSortBase<StreamChatGenerics>>;
 
 export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['channelType']
@@ -1960,6 +1970,7 @@ export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = Defa
   last_message_at?: AscDesc;
   last_updated?: AscDesc;
   member_count?: AscDesc;
+  pinned_at?: AscDesc;
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };
@@ -3002,6 +3013,7 @@ export type CampaignData = {
   name?: string;
   segment_ids?: string[];
   sender_id?: string;
+  sender_mode?: 'exclude' | 'include' | null;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3478,6 +3490,8 @@ export type QueryModerationConfigsFilters = QueryFilters<
     created_at?: PrimitiveFilter<string>;
   } & {
     updated_at?: PrimitiveFilter<string>;
+  } & {
+    team?: string;
   }
 >;
 
@@ -3547,14 +3561,35 @@ export type ReviewQueueResponse = {
   prev?: string;
 };
 
-export type ModerationConfig = {};
+export type ModerationConfig = {
+  key: string;
+  ai_image_config?: AIImageConfig;
+  ai_text_config?: AITextConfig;
+  ai_video_config?: AIVideoConfig;
+  automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
+  automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
+  automod_toxicity_config?: AutomodToxicityConfig;
+  block_list_config?: BlockListConfig;
+  team?: string;
+};
+
+export type ModerationConfigResponse = ModerationConfig & {
+  created_at: string;
+  updated_at: string;
+};
 
 export type GetConfigResponse = {
-  config: ModerationConfig;
+  config: ModerationConfigResponse;
+};
+
+export type QueryConfigsResponse = {
+  configs: ModerationConfigResponse[];
+  next?: string;
+  prev?: string;
 };
 
 export type UpsertConfigResponse = {
-  config: ModerationConfig;
+  config: ModerationConfigResponse;
 };
 
 export type ModerationFlagOptions = {
@@ -3579,3 +3614,112 @@ export type AIState =
   | 'AI_STATE_THINKING'
   | 'AI_STATE_GENERATING'
   | (string & {});
+
+export type ModerationActionType = 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+
+export type AutomodRule = {
+  action: ModerationActionType;
+  label: string;
+  threshold: number;
+};
+
+export type BlockListRule = {
+  action: ModerationActionType;
+  name?: string;
+};
+
+export type BlockListConfig = {
+  enabled: boolean;
+  rules: BlockListRule[];
+  async?: boolean;
+};
+
+export type AutomodToxicityConfig = {
+  enabled: boolean;
+  rules: AutomodRule[];
+  async?: boolean;
+};
+
+export type AutomodPlatformCircumventionConfig = {
+  enabled: boolean;
+  rules: AutomodRule[];
+  async?: boolean;
+};
+
+export type AutomodSemanticFiltersRule = {
+  action: ModerationActionType;
+  name: string;
+  threshold: number;
+};
+
+export type AutomodSemanticFiltersConfig = {
+  enabled: boolean;
+  rules: AutomodSemanticFiltersRule[];
+  async?: boolean;
+};
+
+export type AITextSeverityRule = {
+  action: ModerationActionType;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+};
+
+export type AITextRule = {
+  label: string;
+  action?: ModerationActionType;
+  severity_rules?: AITextSeverityRule[];
+};
+
+export type AITextConfig = {
+  enabled: boolean;
+  rules: AITextRule[];
+  async?: boolean;
+  profile?: string;
+  severity_rules?: AITextSeverityRule[]; // Deprecated: use rules instead
+};
+
+export type AIImageRule = {
+  action: ModerationActionType;
+  label: string;
+  min_confidence?: number;
+};
+
+export type AIImageConfig = {
+  enabled: boolean;
+  rules: AIImageRule[];
+  async?: boolean;
+};
+
+export type AIVideoRule = {
+  action: ModerationActionType;
+  label: string;
+  min_confidence?: number;
+};
+
+export type AIVideoConfig = {
+  enabled: boolean;
+  rules: AIVideoRule[];
+  async?: boolean;
+};
+
+export type VelocityFilterConfigRule = {
+  action: 'flag' | 'shadow' | 'remove' | 'ban';
+  ban_duration?: number;
+  cascading_action?: 'flag' | 'shadow' | 'remove' | 'ban';
+  cascading_threshold?: number;
+  check_message_context?: boolean;
+  fast_spam_threshold?: number;
+  fast_spam_ttl?: number;
+  ip_ban?: boolean;
+  shadow_ban?: boolean;
+  slow_spam_ban_duration?: number;
+  slow_spam_threshold?: number;
+  slow_spam_ttl?: number;
+};
+
+export type VelocityFilterConfig = {
+  cascading_actions: boolean;
+  enabled: boolean;
+  first_message_only: boolean;
+  rules: VelocityFilterConfigRule[];
+  async?: boolean;
+};

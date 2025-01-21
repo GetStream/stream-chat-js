@@ -20,6 +20,7 @@ import {
   Pager,
   CustomCheckFlag,
   ReviewQueueItem,
+  QueryConfigsResponse,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -174,7 +175,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Upsert moderation config
    * @param {Object} config Moderation config to be upserted
    */
-  async upsertConfig(config: ModerationConfig = {}) {
+  async upsertConfig(config: ModerationConfig) {
     return await this.client.post<UpsertConfigResponse>(this.client.baseURL + '/api/v2/moderation/config', config);
   }
 
@@ -201,7 +202,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: QueryModerationConfigsSort,
     options: Pager = {},
   ) {
-    return await this.client.post(this.client.baseURL + '/api/v2/moderation/configs', {
+    return await this.client.post<QueryConfigsResponse>(this.client.baseURL + '/api/v2/moderation/configs', {
       filter: filterConditions,
       sort,
       ...options,

@@ -191,6 +191,7 @@ import {
   TestSNSDataInput,
   TestSQSDataInput,
   TokenOrProvider,
+  TranslateResponse,
   UnBanUserOptions,
   UpdateChannelOptions,
   UpdateChannelResponse,
@@ -2519,6 +2520,23 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * translate - translates the given text to provided language
+   *
+   * @param {string} text
+   * @param {string} destination_language
+   * @param {string} source_language
+   *
+   * @return {TranslateResponse} Response that includes the message
+   */
+  async translate(text: string, destination_language: string, source_language: string) {
+    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
+      text,
+      source_language,
+      destination_language,
+    });
+  }
+
+  /**
    * _normalizeExpiration - transforms expiration value into ISO string
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
@@ -2756,8 +2774,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
-  async queryThreads(options?: QueryThreadsOptions) {
-    const opts = {
+  async queryThreads(options: QueryThreadsOptions = {}) {
+    const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
       reply_limit: 3,
@@ -2765,11 +2783,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const res = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(this.baseURL + `/threads`, opts);
+    const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(
+      `${this.baseURL}/threads`,
+      optionsWithDefaults,
+    );
 
     return {
-      threads: res.threads.map((thread) => new Thread({ client: this, threadData: thread })),
-      next: res.next,
+      threads: response.threads.map(
+        (thread) => new Thread<StreamChatGenerics>({ client: this, threadData: thread }),
+      ),
+      next: response.next,
     };
   }
 
@@ -2786,22 +2809,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw Error('Please specify the message id when calling partialUpdateThread');
+      throw Error('Please specify the messageId when calling getThread');
     }
 
-    const opts = {
+    const optionsWithDefaults = {
       participant_limit: 100,
       reply_limit: 3,
       watch: true,
       ...options,
     };
 
-    const res = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/threads/${encodeURIComponent(messageId)}`,
-      opts,
+    const response = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(
+      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
+      optionsWithDefaults,
     );
 
-    return new Thread<StreamChatGenerics>({ client: this, threadData: res.thread });
+    return new Thread<StreamChatGenerics>({ client: this, threadData: response.thread });
   }
 
   /**
@@ -2829,6 +2852,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       'reply_count',
       'participants',
       'channel',
+      'custom',
     ];
 
     for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
@@ -2840,7 +2864,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/threads/${encodeURIComponent(messageId)}`,
+      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
       partialThreadObject,
     );
   }

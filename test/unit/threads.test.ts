@@ -17,6 +17,7 @@ import {
   ThreadResponse,
   THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
+import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
 const TEST_USER_ID = 'observer';
 
@@ -559,6 +560,69 @@ describe('Threads 2.0', () => {
         expect(stateAfter.replies).not.to.equal(stateBefore.replies);
 
         thread.unregisterSubscriptions();
+      });
+
+      describe('Event: thread.updated', () => {
+        it('ignores incoming event if the data do not match (parent_message_id)', () => {
+          const thread = createTestThread({ title: 'A' });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.title).to.eq('A');
+
+          client.dispatchEvent({
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg(), { title: 'B' }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.title).to.eq('A');
+        });
+
+        it('correctly updates thread-level properties', () => {
+          const thread = createTestThread({ title: 'A' });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.title).to.eq('A');
+
+          client.dispatchEvent({
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
+              title: 'B',
+            }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.title).to.eq('B');
+        });
+
+        it('properly handles custom data', () => {
+          const customKey1 = uuidv4();
+          const customKey2 = uuidv4();
+
+          const thread = createTestThread({ [customKey1]: 1, [customKey2]: { key: 1 } });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+
+          expect(stateBefore.custom).to.not.have.keys(Object.keys(THREAD_RESPONSE_RESERVED_KEYS));
+          expect(stateBefore.custom).to.have.keys([customKey1, customKey2]);
+          expect(stateBefore.custom[customKey1]).to.equal(1);
+
+          client.dispatchEvent({
+            type: 'thread.updated',
+            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
+              [customKey1]: 2,
+            }),
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+
+          expect(stateAfter.custom).to.not.have.keys(Object.keys(THREAD_RESPONSE_RESERVED_KEYS));
+          expect(stateAfter.custom).to.not.have.property(customKey2);
+          expect(stateAfter.custom[customKey1]).to.equal(2);
+        });
       });
 
       describe('Event: user.watching.stop', () => {
@@ -1207,6 +1271,7 @@ describe('Threads 2.0', () => {
           await threadManager.reload();
           expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
         });
+
         it('skips reload if there were no updates since the latest reload', async () => {
           threadManager.state.partialNext({ ready: true });
           await threadManager.reload();
