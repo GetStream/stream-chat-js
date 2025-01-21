@@ -1189,7 +1189,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (!(this.cid in this.getClient().activeChannels) && !this.getClient().options.disableCache) {
+      if (!(this.cid in this.getClient().activeChannels) && this.getClient()._cacheEnabled()) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }

@@ -1257,6 +1257,20 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
+	it('should not update pagination for queried message set2', async () => {
+		const client = await getClientWithUser();
+		client._cacheEnabled = () => false;
+		const channel = client.channel('messaging', uuidv4());
+		const mockedChannelQueryResponse = {
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+		};
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		await channel.query();
+		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
+		mock.restore();
+	});
 	it('should not update pagination for queried message set', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
