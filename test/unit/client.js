@@ -580,6 +580,20 @@ describe('Client WSFallback', () => {
 });
 
 describe('Channel.queryChannels', async () => {
+	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
+		const client = await getClientWithUser();
+		client.options.disableCache = true;
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+		}));
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
+		await client.queryChannels();
+		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
+		expect(Object.keys(client.configs).length).to.be.equal(0);
+		mock.restore();
+	})
 	it('should not update pagination for queried message set', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
