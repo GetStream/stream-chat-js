@@ -25,7 +25,6 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   channels: Channel<SCG>[];
   pagination: ChannelManagerPagination<SCG>;
-  ready: boolean;
 };
 
 export type SetterParameterType<T> = T | ((prevState: T) => T);
@@ -51,6 +50,7 @@ export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics =
     | 'channelHiddenHandler'
     | 'channelTruncatedHandler'
     | 'channelVisibleHandler'
+    | 'channelUpdatedHandler'
     | 'newMessageHandler'
     | 'notificationAddedToChannelHandler'
     | 'notificationNewMessageHandler'
@@ -84,7 +84,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client = client;
     this.state = new StateStore<ChannelManagerState<SCG>>({
       channels: [],
-      ready: true,
       pagination: {
         isLoading: false,
         isLoadingNext: false,
@@ -112,6 +111,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         channelHiddenHandler: this.channelHiddenHandler,
         channelTruncatedHandler: this.channelTruncatedHandler,
         channelVisibleHandler: this.channelVisibleHandler,
+        channelUpdatedHandler: this.channelUpdatedHandler,
         newMessageHandler: this.newMessageHandler,
         notificationAddedToChannelHandler: this.notificationAddedToChannelHandler,
         notificationNewMessageHandler: this.notificationNewMessageHandler,
@@ -139,55 +139,83 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     stateOptions: ChannelStateOptions = {},
   ) => {
     const { offset = 0, limit = 10 } = options;
-    this.state.partialNext({
-      pagination: {
-        ...this.state.getLatestValue().pagination,
-        isLoading: true,
-        isLoadingNext: false,
-        filters,
-        sort,
-        options,
-        stateOptions,
-      },
-    });
+    const { pagination: { isLoading }} = this.state.getLatestValue();
 
-    const channels = await this.client.queryChannels(filters, sort, options, stateOptions);
-    const newOffset = offset + (channels?.length ?? 0);
-    const newOptions = { ...options, offset: newOffset };
-    const { pagination } = this.state.getLatestValue();
+    if (isLoading) {
+      return;
+    }
 
-    this.state.partialNext({
-      channels,
-      pagination: {
-        ...pagination,
-        hasNext: (channels?.length ?? 0) >= limit,
-        isLoading: false,
-        options: newOptions,
-      },
-    });
+    try {
+      this.state.next(currentState => ({
+        ...currentState,
+        pagination: {
+          ...currentState.pagination,
+          isLoading: true,
+          isLoadingNext: false,
+          filters,
+          sort,
+          options,
+          stateOptions,
+        },
+      }));
+
+      const channels = await this.client.queryChannels(filters, sort, options, stateOptions);
+      const newOffset = offset + (channels?.length ?? 0);
+      const newOptions = { ...options, offset: newOffset };
+      const { pagination } = this.state.getLatestValue();
+
+      this.state.partialNext({
+        channels,
+        pagination: {
+          ...pagination,
+          hasNext: (channels?.length ?? 0) >= limit,
+          isLoading: false,
+          options: newOptions,
+        },
+      });
+    } catch (error) {
+      this.client.logger('error', (error as Error).message);
+      this.state.next((currentState) => ({
+        ...currentState,
+        pagination: { ...currentState.pagination, isLoading: false },
+      }));
+    }
   };
 
   public loadNext = async () => {
     const { pagination, channels } = this.state.getLatestValue();
-    const { filters, sort, options, stateOptions } = pagination;
-    const { offset = 0, limit = 10 } = options;
-    this.state.partialNext({
-      pagination: { ...pagination, isLoading: false, isLoadingNext: true },
-    });
-    const nextChannels = await this.client.queryChannels(filters, sort, options, stateOptions);
-    const newOffset = offset + (nextChannels?.length ?? 0);
-    const newOptions = { ...options, offset: newOffset };
+    const { filters, sort, options, stateOptions, isLoadingNext, hasNext } = pagination;
 
-    this.state.partialNext({
-      channels: [...channels, ...nextChannels],
-      pagination: {
-        ...pagination,
-        hasNext: (channels?.length ?? 0) >= limit,
-        isLoading: false,
-        isLoadingNext: false,
-        options: newOptions,
-      },
-    });
+    if (isLoadingNext || !hasNext) {
+      return;
+    }
+
+    try {
+      const { offset = 0, limit = 10 } = options;
+      this.state.partialNext({
+        pagination: { ...pagination, isLoading: false, isLoadingNext: true },
+      });
+      const nextChannels = await this.client.queryChannels(filters, sort, options, stateOptions);
+      const newOffset = offset + (nextChannels?.length ?? 0);
+      const newOptions = { ...options, offset: newOffset };
+
+      this.state.partialNext({
+        channels: [...channels, ...nextChannels],
+        pagination: {
+          ...pagination,
+          hasNext: (channels?.length ?? 0) >= limit,
+          isLoading: false,
+          isLoadingNext: false,
+          options: newOptions,
+        },
+      });
+    } catch (error) {
+      this.client.logger('error', (error as Error).message);
+      this.state.next(currentState => ({
+        ...currentState,
+        pagination: { ...currentState.pagination, isLoadingNext: false },
+      }));
+    }
   };
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
@@ -286,6 +314,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       'channel.hidden': 'channelHiddenHandler',
       'channel.truncated': 'channelTruncatedHandler',
       'channel.visible': 'channelVisibleHandler',
+      'channel.updated': 'channelUpdatedHandler',
       'message.new': 'newMessageHandler',
       'notification.added_to_channel': 'notificationAddedToChannelHandler',
       'notification.message_new': 'notificationNewMessageHandler',
@@ -322,6 +351,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       'channel.hidden',
       'channel.truncated',
       'channel.visible',
+      'channel.updated',
       'user.presence.changed',
       'user.updated',
     ];
