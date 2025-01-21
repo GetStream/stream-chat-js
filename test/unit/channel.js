@@ -1257,7 +1257,7 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
-	it('should not update pagination for queried message set2', async () => {
+	it('should not populate client.activeChannels if caching is disabled', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
 		const channel = client.channel('messaging', uuidv4());
