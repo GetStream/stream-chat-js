@@ -227,7 +227,7 @@ describe('PollManager', () => {
 
       expect(client.polls.data.size).to.equal(0);
       client.options.disableCache = false;
-    })
+    });
 
     it('populates pollCache when the message.new event is fired', () => {
       client.dispatchEvent({
