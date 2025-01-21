@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.52.0](https://github.com/GetStream/stream-chat-js/compare/v8.51.0...v8.52.0) (2025-01-20)
+
+
+### Features
+
+* add translate API support ([#1415](https://github.com/GetStream/stream-chat-js/issues/1415)) ([7c1c58d](https://github.com/GetStream/stream-chat-js/commit/7c1c58df4d0c7cffdadf7062189053d9b7a5fb80))
+
+## [8.51.0](https://github.com/GetStream/stream-chat-js/compare/v8.50.0...v8.51.0) (2025-01-17)
+
+
+### Features
+
+* **threads:** handle custom data ([#1428](https://github.com/GetStream/stream-chat-js/issues/1428)) ([964f008](https://github.com/GetStream/stream-chat-js/commit/964f008dfca0c7740995d708dec12cdfbeb1b8b8))
+
+## [8.50.0](https://github.com/GetStream/stream-chat-js/compare/v8.49.0...v8.50.0) (2025-01-16)
+
+
+### Features
+
+* support CampaignSenderMode ([#1425](https://github.com/GetStream/stream-chat-js/issues/1425)) ([27ca29a](https://github.com/GetStream/stream-chat-js/commit/27ca29aacd043ee25467282ed894a6ef5e9a542f))
+
+
+### Bug Fixes
+
+* move `pinned_at` sort option to `ChannelSortBase` ([#1430](https://github.com/GetStream/stream-chat-js/issues/1430)) ([eb9d518](https://github.com/GetStream/stream-chat-js/commit/eb9d5187cc19c6a9b8b32100daa6efa96f46a69c))
+
 ## [8.49.0](https://github.com/GetStream/stream-chat-js/compare/v8.48.0...v8.49.0) (2024-12-23)
 
 

@@ -77,6 +77,11 @@ export type APIResponse = {
   duration: string;
 };
 
+export type TranslateResponse = {
+  language: string;
+  translated_text: string;
+};
+
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
     // TODO
@@ -521,7 +526,10 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface ThreadResponseCustomData {}
+
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
   channel: ChannelResponse<SCG>;
   channel_cid: string;
@@ -532,6 +540,7 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   parent_message_id: string;
   title: string;
   updated_at: string;
+  active_participant_count?: number;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
@@ -548,6 +557,8 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
     user?: UserResponse<SCG>;
     user_id?: string;
   }>;
+  // TODO: when moving to API v2 we should do this instead
+  // custom: ThreadResponseCustomData;
 }
 
 // TODO: Figure out a way to strongly type set and unset.
@@ -1966,8 +1977,7 @@ export type ReactionSortBase<StreamChatGenerics extends ExtendableGenerics = Def
 
 export type ChannelSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | ChannelSortBase<StreamChatGenerics>
-  | Array<ChannelSortBase<StreamChatGenerics>>
-  | { pinned_at: AscDesc };
+  | Array<ChannelSortBase<StreamChatGenerics>>;
 
 export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Sort<
   StreamChatGenerics['channelType']
@@ -1977,6 +1987,7 @@ export type ChannelSortBase<StreamChatGenerics extends ExtendableGenerics = Defa
   last_message_at?: AscDesc;
   last_updated?: AscDesc;
   member_count?: AscDesc;
+  pinned_at?: AscDesc;
   unread_count?: AscDesc;
   updated_at?: AscDesc;
 };
