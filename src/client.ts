@@ -296,7 +296,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // set the key
     this.key = key;
     this.listeners = {};
-    this.state = new ClientState<StreamChatGenerics>();
+    this.state = new ClientState<StreamChatGenerics>({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
@@ -319,6 +319,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
       recoverStateOnReconnect: true,
+      disableCache: false,
       ...inputOptions,
     };
 
@@ -813,7 +814,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
-    this.state = new ClientState();
+    this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
     // reset token manager
@@ -1222,10 +1223,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      const state = channel.state;
+      if (channel) {
+        const state = channel.state;
 
-      /** deleted the messages from this user. */
-      state?.deleteUserMessages(user, hardDelete);
+        /** deleted the messages from this user. */
+        state?.deleteUserMessages(user, hardDelete);
+      }
     }
   };
 
@@ -1841,7 +1844,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
-    this.configs[cid] = config;
+    if (this._cacheEnabled()) {
+      this.configs[cid] = config;
+    }
   }
 
   /**
@@ -1950,7 +1955,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[tempCid] = channel;
+    if (this._cacheEnabled()) {
+      this.activeChannels[tempCid] = channel;
+    }
+
     return channel;
   };
 
@@ -1977,7 +1985,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // only allow 1 channel object per cid
     const cid = `${channelType}:${channelID}`;
-    if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
+    if (cid in this.activeChannels && this.activeChannels[cid] && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = { ...channel.data, ...custom };
@@ -1986,7 +1994,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return channel;
     }
     const channel = new Channel<StreamChatGenerics>(this, channelType, channelID, custom);
-    this.activeChannels[channel.cid] = channel;
+    if (this._cacheEnabled()) {
+      this.activeChannels[channel.cid] = channel;
+    }
 
     return channel;
   };
@@ -2881,6 +2891,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * _isUsingServerAuth - Returns true if we're using server side auth
    */
   _isUsingServerAuth = () => !!this.secret;
+
+  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
 
   _enrichAxiosOptions(
     options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {
