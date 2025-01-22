@@ -209,6 +209,25 @@ describe('PollManager', () => {
       expect(Array.from(client.polls.data.keys())).to.deep.equal(pollMessages.map((m) => m.poll_id));
     });
 
+    it('prevents pollCache population if caching is disabled', async () => {
+      client._cacheEnabled = () => false;
+      const mockedChannelsQueryResponse = [];
+
+      let pollMessages: MessageResponse[] = [];
+      for (let ci = 0; ci < 2; ci++) {
+        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        pollMessages = pollMessages.concat(onlyPollMessages);
+        mockedChannelsQueryResponse.push({
+          ...mockChannelQueryResponse,
+          messages,
+        });
+      }
+
+      client.hydrateActiveChannels(mockedChannelsQueryResponse);
+
+      expect(client.polls.data.size).to.equal(0);
+    });
+
     it('populates pollCache when the message.new event is fired', () => {
       client.dispatchEvent({
         type: 'message.new',
