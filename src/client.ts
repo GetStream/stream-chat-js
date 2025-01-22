@@ -296,7 +296,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // set the key
     this.key = key;
     this.listeners = {};
-    this.state = new ClientState<StreamChatGenerics>();
+    this.state = new ClientState<StreamChatGenerics>({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
@@ -814,7 +814,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
-    this.state = new ClientState();
+    this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
     // reset token manager
