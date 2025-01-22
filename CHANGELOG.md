@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.52.1](https://github.com/GetStream/stream-chat-js/compare/v8.52.0...v8.52.1) (2025-01-22)
+
+
+### Bug Fixes
+
+* add cache disabling option ([#1442](https://github.com/GetStream/stream-chat-js/issues/1442)) ([2bfdacd](https://github.com/GetStream/stream-chat-js/commit/2bfdacddd0b1505157652a3637b96291708a3a69))
+
 ## [8.52.0](https://github.com/GetStream/stream-chat-js/compare/v8.51.0...v8.52.0) (2025-01-20)
 
 
