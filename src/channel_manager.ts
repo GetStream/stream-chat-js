@@ -44,21 +44,62 @@ export type EventHandlerOverrideType<SCG extends ExtendableGenerics = DefaultGen
   [ChannelSetterType<SCG>, Event<SCG>]
 >;
 
+export type ChannelManagerEventTypes =
+  | 'notification.added_to_channel'
+  | 'notification.message_new'
+  | 'notification.removed_from_channel'
+  | 'message.new'
+  | 'channel.deleted'
+  | 'channel.hidden'
+  | 'channel.truncated'
+  | 'channel.visible'
+  | 'channel.updated'
+  | 'user.presence.changed'
+  | 'user.updated';
+
+export type ChannelManagerEventHandlerNames =
+  | 'channelDeletedHandler'
+  | 'channelHiddenHandler'
+  | 'channelTruncatedHandler'
+  | 'channelVisibleHandler'
+  | 'channelUpdatedHandler'
+  | 'newMessageHandler'
+  | 'notificationAddedToChannelHandler'
+  | 'notificationNewMessageHandler'
+  | 'notificationRemovedFromChannelHandler'
+  | 'userPresenceHandler';
+
 export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics = DefaultGenerics> = Partial<
-  Record<
-    | 'channelDeletedHandler'
-    | 'channelHiddenHandler'
-    | 'channelTruncatedHandler'
-    | 'channelVisibleHandler'
-    | 'channelUpdatedHandler'
-    | 'newMessageHandler'
-    | 'notificationAddedToChannelHandler'
-    | 'notificationNewMessageHandler'
-    | 'notificationRemovedFromChannelHandler'
-    | 'userPresenceHandler',
-    EventHandlerOverrideType<SCG>
-  >
+  Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType<SCG>>
 >;
+
+const eventTypes = [
+  'notification.added_to_channel',
+  'notification.message_new',
+  'notification.removed_from_channel',
+  'message.new',
+  'channel.deleted',
+  'channel.hidden',
+  'channel.truncated',
+  'channel.visible',
+  'channel.updated',
+  'user.presence.changed',
+  'user.updated',
+];
+
+const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames } = {
+  'channel.deleted': 'channelDeletedHandler',
+  'channel.hidden': 'channelHiddenHandler',
+  'channel.truncated': 'channelTruncatedHandler',
+  'channel.visible': 'channelVisibleHandler',
+  'channel.updated': 'channelUpdatedHandler',
+  'message.new': 'newMessageHandler',
+  'notification.added_to_channel': 'notificationAddedToChannelHandler',
+  'notification.message_new': 'notificationNewMessageHandler',
+  'notification.removed_from_channel': 'notificationRemovedFromChannelHandler',
+  'user.presence.changed': 'userPresenceHandler',
+  'user.updated': 'userPresenceHandler',
+};
 
 export type ChannelManagerOptions = {
   lockChannelOrder?: boolean;
@@ -139,14 +180,16 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     stateOptions: ChannelStateOptions = {},
   ) => {
     const { offset = 0, limit = 10 } = options;
-    const { pagination: { isLoading }} = this.state.getLatestValue();
+    const {
+      pagination: { isLoading },
+    } = this.state.getLatestValue();
 
     if (isLoading) {
       return;
     }
 
     try {
-      this.state.next(currentState => ({
+      this.state.next((currentState) => ({
         ...currentState,
         pagination: {
           ...currentState.pagination,
@@ -211,7 +254,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       });
     } catch (error) {
       this.client.logger('error', (error as Error).message);
-      this.state.next(currentState => ({
+      this.state.next((currentState) => ({
         ...currentState,
         pagination: { ...currentState.pagination, isLoadingNext: false },
       }));
@@ -309,21 +352,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private subscriptionOrOverride = (event: Event<SCG>) => {
-    const eventToHandlerMapping = {
-      'channel.deleted': 'channelDeletedHandler',
-      'channel.hidden': 'channelHiddenHandler',
-      'channel.truncated': 'channelTruncatedHandler',
-      'channel.visible': 'channelVisibleHandler',
-      'channel.updated': 'channelUpdatedHandler',
-      'message.new': 'newMessageHandler',
-      'notification.added_to_channel': 'notificationAddedToChannelHandler',
-      'notification.message_new': 'notificationNewMessageHandler',
-      'notification.removed_from_channel': 'notificationRemovedFromChannelHandler',
-      'user.presence.changed': 'userPresenceHandler',
-      'user.updated': 'userPresenceHandler',
-    };
-    // @ts-ignore
-    const handlerName = eventToHandlerMapping[event.type];
+    const handlerName = eventToHandlerMapping[event.type as ChannelManagerEventTypes];
     const defaultEventHandler = this.eventHandlers.get(handlerName);
     const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
     if (eventHandlerOverride && typeof eventHandlerOverride === 'function') {
@@ -341,20 +370,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       // Already listening for events and changes
       return;
     }
-
-    const eventTypes = [
-      'notification.added_to_channel',
-      'notification.message_new',
-      'notification.removed_from_channel',
-      'message.new',
-      'channel.deleted',
-      'channel.hidden',
-      'channel.truncated',
-      'channel.visible',
-      'channel.updated',
-      'user.presence.changed',
-      'user.updated',
-    ];
 
     for (const eventType of eventTypes) {
       this.unsubscribeFunctions.add(this.client.on(eventType, this.subscriptionOrOverride).unsubscribe);
