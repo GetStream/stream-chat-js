@@ -137,9 +137,6 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
   activate = (sourceStateOverride?: Partial<SearchSourceState>) => {
     if (this.isActive) return;
-    if (this.searchQuery) {
-      this.search();
-    }
     this.state.partialNext({ ...sourceStateOverride, isActive: true });
   };
 
@@ -427,7 +424,6 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
       });
     }
     source.activate(sourceStateOverride);
-    if (this.searchQuery && !source.items?.length) source.search(this.searchQuery);
     this.state.partialNext({ sources: [...this.sources] });
   };
 

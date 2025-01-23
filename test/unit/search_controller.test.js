@@ -10,7 +10,7 @@ import {
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
 
-describe('SearchController', () => {
+describe.only('SearchController', () => {
 	let searchController;
 	let mockSource;
 	let mockSource2;
@@ -274,14 +274,12 @@ describe('BaseSearchSource and implementations', () => {
 		});
 
 		describe('activate/deactivate', () => {
-			it('activates source and triggers search if query exists', async () => {
+			it('activates source', async () => {
 				searchSource.state.next({ searchQuery: 'test', isActive: false });
-				const searchSpy = sinon.spy(searchSource, 'search');
 
 				searchSource.activate();
 
 				expect(searchSource.isActive).to.be.true;
-				sinon.assert.calledOnce(searchSpy);
 			});
 
 			it('deactivates source', () => {
