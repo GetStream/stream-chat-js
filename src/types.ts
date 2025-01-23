@@ -3543,6 +3543,8 @@ export type ReviewQueueFilters = QueryFilters<
     has_text?: boolean;
   } & {
     has_video?: boolean;
+  } & {
+    team?: string;
   }
 >;
 
