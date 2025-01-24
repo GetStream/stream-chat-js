@@ -23,7 +23,7 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 };
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channels: Channel<SCG>[];
+  channels: Channel<SCG>[] | null;
   pagination: ChannelManagerPagination<SCG>;
 };
 
@@ -124,7 +124,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }) {
     this.client = client;
     this.state = new StateStore<ChannelManagerState<SCG>>({
-      channels: [],
+      channels: null,
       pagination: {
         isLoading: false,
         isLoadingNext: false,
@@ -170,7 +170,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       newValue = newValue(prevChannels);
     }
 
-    this.state.partialNext({ channels: [...newValue] });
+    this.state.partialNext({ channels: newValue ? [...newValue] : newValue });
   };
 
   public queryChannels = async (
@@ -243,7 +243,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       const newOptions = { ...options, offset: newOffset };
 
       this.state.partialNext({
-        channels: [...channels, ...nextChannels],
+        channels: [...(channels || []), ...nextChannels],
         pagination: {
           ...pagination,
           hasNext: (channels?.length ?? 0) >= limit,
@@ -277,7 +277,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     const { channels } = this.state.getLatestValue();
     if (!channels) return;
     this.state.partialNext({
-      channels: channels.filter((c) => c.cid === (event.cid || event.channel?.cid)),
+      channels: channels.filter((c) => c.cid !== (event.cid || event.channel?.cid)),
     });
   };
   private channelHiddenHandler = this.channelDeletedHandler;
@@ -320,7 +320,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (!channelInList && event?.channel?.type && event?.channel?.id) {
       // If channel doesn't exist in existing list, check in activeChannels as well.
       // It may happen that channel was hidden using channel.hide(). In that case
-      // We remove it from `channels` state, but its still being watched and exists in client.activeChannels.
+      // We remove it from `channels` state, but it's still being watched and exists in client.activeChannels.
       const channel = this.client.channel(event.channel.type, event?.channel?.id);
       this.state.partialNext({ channels: [channel, ...channels] });
       return;
