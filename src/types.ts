@@ -3544,7 +3544,13 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     has_video?: boolean;
   } & {
-    team?: string;
+    teams?:
+      | RequireOnlyOne<{
+          $contains?: PrimitiveFilter<string>;
+          $eq?: PrimitiveFilter<string>;
+          $in?: PrimitiveFilter<string>;
+        }>
+      | PrimitiveFilter<string>;
   }
 >;
 
