@@ -336,6 +336,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
 
+  // TODO: This doesn't belong here nor does it trigger rerenders properly due to the fact
+  //       that channels are not reactive. Needless to say, it doesn't work properly.
   private userPresenceHandler = (event: Event<SCG>) => {
     const { channels } = this.state.getLatestValue();
     if (!channels) return channels;
@@ -344,8 +346,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (!event.user?.id || !channel.state.members[event.user.id]) {
         return channel;
       }
-      channel.state.members[event.user.id].user = event.user;
-      return channel;
+      const newChannel = channel;
+      newChannel.state.members[event.user.id].user = event.user;
+      return newChannel;
     });
 
     this.state.partialNext({ channels: [...newChannels] });
