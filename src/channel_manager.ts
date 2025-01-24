@@ -23,8 +23,9 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 };
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channels: Channel<SCG>[] | null;
+  channels: Channel<SCG>[];
   pagination: ChannelManagerPagination<SCG>;
+  ready: boolean;
 };
 
 export type SetterParameterType<T> = T | ((prevState: T) => T);
@@ -124,7 +125,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }) {
     this.client = client;
     this.state = new StateStore<ChannelManagerState<SCG>>({
-      channels: null,
+      channels: [],
       pagination: {
         isLoading: false,
         isLoadingNext: false,
@@ -134,6 +135,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         options: { limit: 10, offset: 0 },
         stateOptions: {},
       },
+      ready: false,
     });
     const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
       Partial<ChannelManagerEventHandlerOverrides<SCG>>
@@ -215,6 +217,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
           isLoading: false,
           options: newOptions,
         },
+        ready: true,
       });
     } catch (error) {
       this.client.logger('error', (error as Error).message);
