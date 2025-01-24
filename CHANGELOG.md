@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.52.2](https://github.com/GetStream/stream-chat-js/compare/v8.52.1...v8.52.2) (2025-01-24)
+
+
+### Bug Fixes
+
+* add team to reviewqueue filter types ([#1445](https://github.com/GetStream/stream-chat-js/issues/1445)) ([dd1c6e5](https://github.com/GetStream/stream-chat-js/commit/dd1c6e5fa4a4eaa819c4aa38c649a7275117c7c3))
+
 ### [8.52.1](https://github.com/GetStream/stream-chat-js/compare/v8.52.0...v8.52.1) (2025-01-22)
 
 
