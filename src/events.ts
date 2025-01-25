@@ -60,4 +60,6 @@ export const EVENT_MAP = {
   'connection.recovered': true,
   'transport.changed': true,
   'capabilities.changed': true,
+  'live_location_sharing.started': true,
+  'live_location_sharing.stopped': true,
 };

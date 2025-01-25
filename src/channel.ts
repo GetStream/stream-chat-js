@@ -61,6 +61,7 @@ import {
   PartialUpdateMemberAPIResponse,
   AIState,
   MessageOptions,
+  Attachment,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -469,6 +470,111 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     });
     this.data = data.channel;
     return data;
+  }
+
+  public async sendStaticLocation(
+    attachmentMetadata: { latitude: number; longitude: number } & Attachment<StreamChatGenerics>,
+  ) {
+    const { latitude, longitude } = attachmentMetadata;
+
+    const message: Message = {
+      attachments: [
+        {
+          ...attachmentMetadata,
+          type: 'static_location',
+          latitude,
+          longitude,
+        },
+      ],
+    };
+
+    return await this.sendMessage(message);
+  }
+
+  public async startLiveLocationSharing(
+    attachmentMetadata: { end_time: string; latitude: number; longitude: number } & Attachment<StreamChatGenerics>,
+  ) {
+    const client = this.getClient();
+    if (!client.userID) return;
+
+    const { latitude, longitude, end_time } = attachmentMetadata;
+
+    const message: Message = {
+      attachments: [
+        {
+          ...attachmentMetadata,
+          type: 'live_location',
+          latitude,
+          longitude,
+          end_time,
+        },
+      ],
+    };
+
+    // FIXME: this is wrong and could easily be walked around by integrators
+    const existing = await this.getClient().search(
+      // @ts-ignore
+      {
+        cid: this.cid,
+      },
+      {
+        $and: [
+          { 'attachments.type': { $eq: 'live_location' } },
+          // has not been manually stopped
+          {
+            'attachments.stopped_sharing': {
+              $nin: [true],
+            },
+          },
+          // has not ended
+          {
+            'attachments.end_time': {
+              $gt: new Date().toISOString(),
+            },
+          },
+        ],
+      },
+    );
+
+    const promises: Promise<any>[] = [];
+
+    for (const result of existing.results) {
+      const [attachment] = result.message.attachments ?? [];
+
+      promises.push(
+        client.partialUpdateMessage(result.message.id, {
+          // @ts-expect-error
+          set: {
+            attachments: [
+              {
+                ...attachment,
+                stopped_sharing: true,
+              },
+            ],
+          },
+        }),
+      );
+    }
+
+    // FIXME: sending message if the previous part failed/did not happen
+    // should result in BE error
+    promises.unshift(this.sendMessage(message));
+
+    const [response] = await Promise.allSettled(promises);
+
+    if (response.status === 'fulfilled') {
+      this.getClient().dispatchEvent({ message: response.value.message, type: 'live_location_sharing.started' });
+    }
+  }
+
+  public async stopLiveLocationSharing(message: MessageResponse<StreamChatGenerics>) {
+    const [attachment] = message.attachments ?? [];
+    const response = await this.getClient().partialUpdateMessage(message.id, {
+      // @ts-expect-error this is a valid update
+      set: { attachments: [{ ...attachment, stopped_sharing: true }] },
+    });
+
+    this.getClient().dispatchEvent({ message: response.message, type: 'live_location_sharing.stopped' });
   }
 
   /**
