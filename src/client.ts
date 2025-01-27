@@ -3098,11 +3098,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   getBlockList(name: string, team?: string) {
     return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      { team }
+      { team },
     );
   }
 
-  updateBlockList(name: string, data: { words: string[], team?: string }) {
+  updateBlockList(name: string, data: { words: string[]; team?: string }) {
     return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
