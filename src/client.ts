@@ -141,6 +141,7 @@ import {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  PushPreference,
   PushProvider,
   PushProviderConfig,
   PushProviderID,
@@ -201,6 +202,7 @@ import {
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
   UpdateSegmentData,
+  UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -1666,6 +1668,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      c.push_preferences = channelState.push_preferences;
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
@@ -1803,6 +1806,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async getUnreadCountBatch(userIDs: string[]) {
     return await this.post<GetUnreadCountBatchAPIResponse>(this.baseURL + '/unread_batch', { user_ids: userIDs });
+  }
+
+  /**
+   * setPushPreferences - Applies the list of push preferences.
+   *
+   * @param {PushPreference[]} A list of push preferences.
+   *
+   * @return {<UpsertPushPreferencesResponse>}
+   */
+  async setPushPreferences(preferences: PushPreference[]) {
+    return await this.post<UpsertPushPreferencesResponse>(this.baseURL + '/push_preferences', { preferences });
   }
 
   /**
