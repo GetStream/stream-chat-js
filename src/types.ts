@@ -2643,6 +2643,7 @@ export type MessageBase<
   pinned_at?: string | null;
   poll_id?: string;
   quoted_message_id?: string;
+  restricted_visibility?: string[];
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
