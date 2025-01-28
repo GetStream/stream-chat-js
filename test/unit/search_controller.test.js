@@ -10,7 +10,7 @@ import {
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
 
-describe.only('SearchController', () => {
+describe('SearchController', () => {
 	let searchController;
 	let mockSource;
 	let mockSource2;
@@ -21,7 +21,7 @@ describe.only('SearchController', () => {
 			type: 'test',
 			activate: sinon.stub(),
 			deactivate: sinon.stub(),
-			hasMore: false,
+			hasNext: false,
 			hasResults: false,
 			isActive: false,
 			isLoading: false,
@@ -41,7 +41,7 @@ describe.only('SearchController', () => {
 			type: 'test2',
 			activate: sinon.stub(),
 			deactivate: sinon.stub(),
-			hasMore: false,
+			hasNext: false,
 			hasResults: false,
 			isActive: false,
 			isLoading: false,
@@ -200,9 +200,9 @@ describe.only('SearchController', () => {
 			searchController = new SearchController({ sources: [mockSource] });
 		});
 
-		it('correctly reports hasMore state', () => {
-			mockSource.hasMore = true;
-			expect(searchController.hasMore).to.be.true;
+		it('correctly reports hasNext state', () => {
+			mockSource.hasNext = true;
+			expect(searchController.hasNext).to.be.true;
 		});
 
 		it('correctly filters active sources', () => {
@@ -262,7 +262,7 @@ describe('BaseSearchSource and implementations', () => {
 			expect(searchSource.searchQuery).to.equal('');
 			expect(searchSource.isActive).to.be.false;
 			expect(searchSource.isLoading).to.be.false;
-			expect(searchSource.hasMore).to.be.true;
+			expect(searchSource.hasNext).to.be.true;
 			expect(searchSource.items).to.be.undefined;
 			expect(searchSource.offset).to.be.eql(0);
 		});

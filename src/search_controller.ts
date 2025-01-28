@@ -29,7 +29,7 @@ type DebouncedExecQueryFunction = DebouncedFunc<(searchString?: string) => Promi
 export interface SearchSource<T = any> {
   activate(sourceStateOverride?: Partial<SearchSourceState>): void;
   deactivate(): void;
-  readonly hasMore: boolean;
+  readonly hasNext: boolean;
   readonly hasResults: boolean;
   readonly isActive: boolean;
   readonly isLoading: boolean;
@@ -48,7 +48,7 @@ export interface SearchSource<T = any> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SearchSourceState<T = any> = {
-  hasMore: boolean;
+  hasNext: boolean;
   isActive: boolean;
   isLoading: boolean;
   items: T[] | undefined;
@@ -81,7 +81,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     const { debounceMs, isActive, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
     this.pageSize = pageSize;
     this.state = new StateStore<SearchSourceState<T>>({
-      hasMore: true,
+      hasNext: true,
       isActive,
       isLoading: false,
       items: undefined,
@@ -95,8 +95,8 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     return this.state.getLatestValue().lastQueryError;
   }
 
-  get hasMore() {
-    return this.state.getLatestValue().hasMore;
+  get hasNext() {
+    return this.state.getLatestValue().hasNext;
   }
 
   get hasResults() {
@@ -148,7 +148,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   async executeQuery(newSearchString?: string) {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
-    if (!this.isActive || this.isLoading || (!this.hasMore && !hasNewSearchQuery) || !searchString) return;
+    if (!this.isActive || this.isLoading || (!this.hasNext && !hasNewSearchQuery) || !searchString) return;
 
     if (hasNewSearchQuery) {
       this.resetState({ isActive: this.isActive, isLoading: true, searchQuery: newSearchString });
@@ -164,10 +164,10 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
       if (next) {
         stateUpdate.next = next;
-        stateUpdate.hasMore = !!next;
+        stateUpdate.hasNext = !!next;
       } else {
         stateUpdate.offset = (this.offset ?? 0) + items.length;
-        stateUpdate.hasMore = items.length === this.pageSize;
+        stateUpdate.hasNext = items.length === this.pageSize;
       }
 
       stateUpdate.items = await this.filterQueryResults(items);
@@ -190,7 +190,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
   resetState(stateOverrides?: Partial<SearchSourceState<T>>) {
     this.state.next({
-      hasMore: true,
+      hasNext: true,
       isActive: false,
       isLoading: false,
       items: undefined,
@@ -375,8 +375,8 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
     });
     this.config = { keepSingleActiveSource: true, ...config };
   }
-  get hasMore() {
-    return this.sources.some((source) => source.hasMore);
+  get hasNext() {
+    return this.sources.some((source) => source.hasNext);
   }
 
   get sources() {
