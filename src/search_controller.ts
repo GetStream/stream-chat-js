@@ -31,13 +31,14 @@ export interface SearchSource<T = any> {
   deactivate(): void;
   readonly hasNext: boolean;
   readonly hasResults: boolean;
+  readonly initialState: SearchSourceState<T>;
   readonly isActive: boolean;
   readonly isLoading: boolean;
   readonly items: T[] | undefined;
   readonly lastQueryError: Error | undefined;
   readonly next: string | undefined;
   readonly offset: number | undefined;
-  resetState(stateOverrides?: Partial<SearchSourceState<T>>): void;
+  resetState(): void;
   search(text?: string): void;
   searchDebounced: DebouncedExecQueryFunction;
   readonly searchQuery: string;
@@ -71,6 +72,7 @@ const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<SearchSourceOptions> = {
   pageSize: 10,
 } as const;
 
+
 export abstract class BaseSearchSource<T> implements SearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
   protected pageSize: number;
@@ -80,14 +82,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   protected constructor(options?: SearchSourceOptions) {
     const { debounceMs, isActive, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
     this.pageSize = pageSize;
-    this.state = new StateStore<SearchSourceState<T>>({
-      hasNext: true,
-      isActive,
-      isLoading: false,
-      items: undefined,
-      offset: 0,
-      searchQuery: '',
-    });
+    this.state = new StateStore<SearchSourceState<T>>({...this.initialState, isActive});
     this.setDebounceOptions({ debounceMs });
   }
 
@@ -109,6 +104,19 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
   get isLoading() {
     return this.state.getLatestValue().isLoading;
+  }
+
+  get initialState() {
+    return {
+      hasNext: true,
+      isActive: false,
+      isLoading: false,
+      items: undefined,
+      lastQueryError: undefined,
+      next: undefined,
+      offset: 0,
+      searchQuery: '',
+    };
   }
 
   get items() {
@@ -135,9 +143,9 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
 
-  activate = (sourceStateOverride?: Partial<SearchSourceState>) => {
+  activate = () => {
     if (this.isActive) return;
-    this.state.partialNext({ ...sourceStateOverride, isActive: true });
+    this.state.partialNext({ isActive: true });
   };
 
   deactivate = () => {
@@ -151,7 +159,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     if (!this.isActive || this.isLoading || (!this.hasNext && !hasNewSearchQuery) || !searchString) return;
 
     if (hasNewSearchQuery) {
-      this.resetState({ isActive: this.isActive, isLoading: true, searchQuery: newSearchString });
+      this.state.next({...this.initialState, isActive: this.isActive, isLoading: true, searchQuery: newSearchString ?? '' });
     } else {
       this.state.partialNext({ isLoading: true });
     }
@@ -188,18 +196,8 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     this.searchDebounced(searchQuery);
   };
 
-  resetState(stateOverrides?: Partial<SearchSourceState<T>>) {
-    this.state.next({
-      hasNext: true,
-      isActive: false,
-      isLoading: false,
-      items: undefined,
-      lastQueryError: undefined,
-      next: undefined,
-      offset: 0,
-      searchQuery: '',
-      ...stateOverrides,
-    });
+  resetState() {
+    this.state.next(this.initialState);
   }
 }
 
@@ -458,7 +456,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
 
   clear = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.resetState({ isActive: source.isActive }));
+    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
     this.state.next((prev) => ({
       ...prev,
       isActive: true,
@@ -469,7 +467,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
 
   exit = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.resetState({ isActive: source.isActive }));
+    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
     this.state.next((prev) => ({
       ...prev,
       isActive: false,

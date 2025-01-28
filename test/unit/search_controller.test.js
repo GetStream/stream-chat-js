@@ -34,7 +34,7 @@ describe('SearchController', () => {
 			searchDebounced: sinon.stub(),
 			searchQuery: '',
 			setDebounceOptions: sinon.stub(),
-			state: {},
+			state: { next: sinon.stub()},
 		};
 
 		mockSource2 = {
@@ -54,7 +54,7 @@ describe('SearchController', () => {
 			searchDebounced: sinon.stub(),
 			searchQuery: '',
 			setDebounceOptions: sinon.stub(),
-			state: {},
+			state: { next: sinon.stub()},
 		};
 	});
 
@@ -184,14 +184,14 @@ describe('SearchController', () => {
 		it('clears search state correctly', () => {
 			searchController.clear();
 			expect(searchController.searchQuery).to.equal('');
-			sinon.assert.called(mockSource.resetState);
+			sinon.assert.called(mockSource.state.next);
 		});
 
 		it('exits search mode correctly', () => {
 			searchController.exit();
 			expect(searchController.isActive).to.be.false;
 			expect(searchController.searchQuery).to.equal('');
-			sinon.assert.called(mockSource.resetState);
+			sinon.assert.called(mockSource.state.next);
 		});
 	});
 
