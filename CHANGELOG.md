@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.53.0](https://github.com/GetStream/stream-chat-js/compare/v8.52.3...v8.53.0) (2025-01-28)
+
+
+### Features
+
+* push preferences ([#1431](https://github.com/GetStream/stream-chat-js/issues/1431)) ([c9861fd](https://github.com/GetStream/stream-chat-js/commit/c9861fd8f73be2446029368d98b88433d77a3443))
+
+
+### Bug Fixes
+
+* make initial message pagination state pesimistic ([#1444](https://github.com/GetStream/stream-chat-js/issues/1444)) ([24c94a4](https://github.com/GetStream/stream-chat-js/commit/24c94a41f1c25e6e6b6f871c8b87949ac54e8e8d))
+
+### [8.52.3](https://github.com/GetStream/stream-chat-js/compare/v8.52.2...v8.52.3) (2025-01-24)
+
+
+### Bug Fixes
+
+* correct reviewqueue item filter: teams ([#1447](https://github.com/GetStream/stream-chat-js/issues/1447)) ([39a8411](https://github.com/GetStream/stream-chat-js/commit/39a84119672784243f02fd603dc57c122b0d111d))
+
+### [8.52.2](https://github.com/GetStream/stream-chat-js/compare/v8.52.1...v8.52.2) (2025-01-24)
+
+
+### Bug Fixes
+
+* add team to reviewqueue filter types ([#1445](https://github.com/GetStream/stream-chat-js/issues/1445)) ([dd1c6e5](https://github.com/GetStream/stream-chat-js/commit/dd1c6e5fa4a4eaa819c4aa38c649a7275117c7c3))
+
 ### [8.52.1](https://github.com/GetStream/stream-chat-js/compare/v8.52.0...v8.52.1) (2025-01-22)
 
 
