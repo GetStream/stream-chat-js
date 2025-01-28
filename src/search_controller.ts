@@ -183,11 +183,11 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
       stateUpdate.lastQueryError = e as Error;
     } finally {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      this.state.next(({ lastQueryError, ...prev }: SearchSourceState<T>) => ({
-        ...prev,
+      this.state.next(({ lastQueryError, ...current }: SearchSourceState<T>) => ({
+        ...current,
         ...stateUpdate,
         isLoading: false,
-        items: [...(prev.items ?? []), ...(stateUpdate.items || [])],
+        items: [...(current.items ?? []), ...(stateUpdate.items || [])],
       }));
     }
   }
@@ -457,8 +457,8 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
   clear = () => {
     this.cancelSearchQueries();
     this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
-    this.state.next((prev) => ({
-      ...prev,
+    this.state.next((current) => ({
+      ...current,
       isActive: true,
       queriesInProgress: [],
       searchQuery: '',
@@ -468,8 +468,8 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
   exit = () => {
     this.cancelSearchQueries();
     this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
-    this.state.next((prev) => ({
-      ...prev,
+    this.state.next((current) => ({
+      ...current,
       isActive: false,
       queriesInProgress: [],
       searchQuery: '',
