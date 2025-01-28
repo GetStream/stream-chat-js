@@ -34,7 +34,7 @@ describe('SearchController', () => {
 			searchDebounced: sinon.stub(),
 			searchQuery: '',
 			setDebounceOptions: sinon.stub(),
-			state: { next: sinon.stub()},
+			state: { next: sinon.stub() },
 		};
 
 		mockSource2 = {
@@ -54,7 +54,7 @@ describe('SearchController', () => {
 			searchDebounced: sinon.stub(),
 			searchQuery: '',
 			setDebounceOptions: sinon.stub(),
-			state: { next: sinon.stub()},
+			state: { next: sinon.stub() },
 		};
 	});
 

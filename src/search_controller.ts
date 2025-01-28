@@ -72,7 +72,6 @@ const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<SearchSourceOptions> = {
   pageSize: 10,
 } as const;
 
-
 export abstract class BaseSearchSource<T> implements SearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
   protected pageSize: number;
@@ -82,7 +81,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   protected constructor(options?: SearchSourceOptions) {
     const { debounceMs, isActive, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
     this.pageSize = pageSize;
-    this.state = new StateStore<SearchSourceState<T>>({...this.initialState, isActive});
+    this.state = new StateStore<SearchSourceState<T>>({ ...this.initialState, isActive });
     this.setDebounceOptions({ debounceMs });
   }
 
@@ -159,7 +158,12 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     if (!this.isActive || this.isLoading || (!this.hasNext && !hasNewSearchQuery) || !searchString) return;
 
     if (hasNewSearchQuery) {
-      this.state.next({...this.initialState, isActive: this.isActive, isLoading: true, searchQuery: newSearchString ?? '' });
+      this.state.next({
+        ...this.initialState,
+        isActive: this.isActive,
+        isLoading: true,
+        searchQuery: newSearchString ?? '',
+      });
     } else {
       this.state.partialNext({ isLoading: true });
     }
