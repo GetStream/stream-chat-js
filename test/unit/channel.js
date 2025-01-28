@@ -1272,7 +1272,7 @@ describe('Channel.query', async () => {
 		mock.restore();
 	});
 
-	it('should not update pagination for queried message set', async () => {
+	it('should update pagination for queried message set to prevent more pagination', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
@@ -1283,11 +1283,11 @@ describe('Channel.query', async () => {
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: true });
+		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: false, hasPrev: true });
 		mock.restore();
 	});
 
-	it('should update pagination for queried message set to prevent more pagination', async () => {
+	it('should not update pagination for queried message set', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
@@ -1298,7 +1298,7 @@ describe('Channel.query', async () => {
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
+		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: false, hasPrev: false });
 		mock.restore();
 	});
 });
