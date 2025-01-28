@@ -17,7 +17,7 @@ import { isErrorResponse, isWSFailure } from './errors';
 import {
   addFileToFormData,
   axiosParamsSerializer,
-  chatCodes,
+  chatCodes, generateChannelTempCid,
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
@@ -125,7 +125,7 @@ import {
   MessageResponse,
   Mute,
   MuteUserOptions,
-  MuteUserResponse,
+  MuteUserResponse, NewMemberPayload,
   OGAttachment,
   OwnUserResponse,
   PartialMessageUpdate,
@@ -1926,10 +1926,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   getChannelByMembers = (channelType: string, custom: ChannelData<StreamChatGenerics>) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const membersStr = [...(custom.members || [])].sort().join(',');
-    const tempCid = `${channelType}:!members-${membersStr}`;
+    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload<StreamChatGenerics>) =>
+      typeof member === 'string' ? member : member.user_id ?? '',
+    );
+    const membersStr = memberIds.sort().join(',');
+    const tempCid = generateChannelTempCid(channelType, memberIds);
 
-    if (!membersStr) {
+    if (!tempCid) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
 

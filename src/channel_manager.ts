@@ -10,6 +10,7 @@ import type {
 } from './types';
 import { StateStore } from './store';
 import { Channel } from './channel';
+import { getAndWatchChannel } from './utils';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
   filters: ChannelFilters<SCG>;
@@ -19,7 +20,6 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
   options: ChannelOptions;
   sort: ChannelSort<SCG>;
   stateOptions: ChannelStateOptions;
-  // nextCursor: string | null;
 };
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
@@ -148,7 +148,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       Object.entries({
         channelDeletedHandler: this.channelDeletedHandler,
         channelHiddenHandler: this.channelHiddenHandler,
-        channelTruncatedHandler: this.channelTruncatedHandler,
         channelVisibleHandler: this.channelVisibleHandler,
         channelUpdatedHandler: this.channelUpdatedHandler,
         newMessageHandler: this.newMessageHandler,
@@ -260,10 +259,20 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
-    const { id, type } = event?.channel ?? {};
-    if (id && type) {
-      const channel = this.client.channel(type, id);
-      await channel.watch();
+    const { id, type, members } = event?.channel ?? {};
+    if (type) {
+      const channel = await getAndWatchChannel({
+        client: this.client,
+        id,
+        members: members?.reduce<string[]>((acc, { user, user_id }) => {
+          const userId = user_id || user?.id;
+          if (userId) {
+            acc.push(userId);
+          }
+          return acc;
+        }, []),
+        type,
+      });
       const { channels } = this.state.getLatestValue();
       this.state.partialNext({
         channels: channels ? [channel, ...channels.filter((c) => channel.cid !== c.cid)] : channels,
@@ -280,18 +289,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
   private channelHiddenHandler = this.channelDeletedHandler;
 
-  // TODO: This is currently used like so because of the fact that
-  //       the channel.state is not yet reactive. When it does become
-  //       reactive, we can let the channels themselves handle this
-  //       behaviour.
-  private channelTruncatedHandler = () => {
-    const { channels } = this.state.getLatestValue();
-    if (!channels) return;
-    this.state.partialNext({
-      channels: [...channels],
-    });
-  };
-
   private channelUpdatedHandler = (event: Event<SCG>) => {
     const { channels } = this.state.getLatestValue();
     if (!channels) return channels;
@@ -307,8 +304,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     this.state.partialNext({ channels: [...channels] });
   };
-
-  private channelVisibleHandler = this.notificationAddedToChannelHandler;
 
   private newMessageHandler = (event: Event<SCG>) => {
     const { channels } = this.state.getLatestValue();
@@ -330,27 +325,23 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  private notificationNewMessageHandler = this.notificationAddedToChannelHandler;
+  private notificationNewMessageHandler = async (event: Event<SCG>) => {
+    const { id, type } = event?.channel ?? {};
+
+    if (id && type) {
+      const channel = await getAndWatchChannel({
+        client: this.client,
+        id,
+        type,
+      });
+      const { channels } = this.state.getLatestValue();
+      this.state.partialNext({ channels: [channel, ...channels.filter((c) => c.cid !== event.cid)] });
+    }
+  };
+
+  private channelVisibleHandler = this.notificationNewMessageHandler;
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
-
-  // TODO: This doesn't belong here nor does it trigger rerenders properly due to the fact
-  //       that channels are not reactive. Needless to say, it doesn't work properly.
-  // private userPresenceHandler = (event: Event<SCG>) => {
-  //   const { channels } = this.state.getLatestValue();
-  //   if (!channels) return channels;
-  //
-  //   const newChannels = channels.map((channel) => {
-  //     if (!event.user?.id || !channel.state.members[event.user.id]) {
-  //       return channel;
-  //     }
-  //     const newChannel = channel;
-  //     newChannel.state.members[event.user.id].user = event.user;
-  //     return newChannel;
-  //   });
-  //
-  //   this.state.partialNext({ channels: [...newChannels] });
-  // };
 
   private subscriptionOrOverride = (event: Event<SCG>) => {
     const handlerName = eventToHandlerMapping[event.type as ChannelManagerEventTypes];

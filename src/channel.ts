@@ -1,5 +1,5 @@
 import { ChannelState } from './channel_state';
-import { logChatPromiseExecution, messageSetPagination, normalizeQuerySort } from './utils';
+import { generateChannelTempCid, logChatPromiseExecution, messageSetPagination, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
 import {
   APIResponse,
@@ -1177,13 +1177,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       this.cid = state.channel.cid;
       // set the channel as active...
 
-      const membersStr = state.members
-        .map((member) => member.user_id || member.user?.id)
-        .sort()
-        .join(',');
-      const tempChannelCid = `${this.type}:!members-${membersStr}`;
+      const tempChannelCid = generateChannelTempCid(this.type, state.members
+        .map((member) => member.user_id || member.user?.id || ''))
 
-      if (tempChannelCid in this.getClient().activeChannels) {
+      if (tempChannelCid && tempChannelCid in this.getClient().activeChannels) {
         // This gets set in `client.channel()` function, when channel is created
         // using members, not id.
         delete this.getClient().activeChannels[tempChannelCid];
