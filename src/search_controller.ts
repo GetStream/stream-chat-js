@@ -27,7 +27,7 @@ type DebouncedExecQueryFunction = DebouncedFunc<(searchString?: string) => Promi
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SearchSource<T = any> {
-  activate(sourceStateOverride?: Partial<SearchSourceState>): void;
+  activate(): void;
   deactivate(): void;
   readonly hasNext: boolean;
   readonly hasResults: boolean;
@@ -413,7 +413,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
     this.state.partialNext({ sources: newSources });
   };
 
-  activateSource = (sourceType: SearchSource['type'], sourceStateOverride?: Partial<SearchSourceState>) => {
+  activateSource = (sourceType: SearchSource['type']) => {
     const source = this.getSource(sourceType);
     if (!source || source.isActive) return;
     if (this.config.keepSingleActiveSource) {
@@ -423,7 +423,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
         }
       });
     }
-    source.activate(sourceStateOverride);
+    source.activate();
     this.state.partialNext({ sources: [...this.sources] });
   };
 
