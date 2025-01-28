@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.52.3](https://github.com/GetStream/stream-chat-js/compare/v8.52.2...v8.52.3) (2025-01-24)
+
+
+### Bug Fixes
+
+* correct reviewqueue item filter: teams ([#1447](https://github.com/GetStream/stream-chat-js/issues/1447)) ([39a8411](https://github.com/GetStream/stream-chat-js/commit/39a84119672784243f02fd603dc57c122b0d111d))
+
+### [8.52.2](https://github.com/GetStream/stream-chat-js/compare/v8.52.1...v8.52.2) (2025-01-24)
+
+
+### Bug Fixes
+
+* add team to reviewqueue filter types ([#1445](https://github.com/GetStream/stream-chat-js/issues/1445)) ([dd1c6e5](https://github.com/GetStream/stream-chat-js/commit/dd1c6e5fa4a4eaa819c4aa38c649a7275117c7c3))
+
+### [8.52.1](https://github.com/GetStream/stream-chat-js/compare/v8.52.0...v8.52.1) (2025-01-22)
+
+
+### Bug Fixes
+
+* add cache disabling option ([#1442](https://github.com/GetStream/stream-chat-js/issues/1442)) ([2bfdacd](https://github.com/GetStream/stream-chat-js/commit/2bfdacddd0b1505157652a3637b96291708a3a69))
+
+## [8.52.0](https://github.com/GetStream/stream-chat-js/compare/v8.51.0...v8.52.0) (2025-01-20)
+
+
+### Features
+
+* add translate API support ([#1415](https://github.com/GetStream/stream-chat-js/issues/1415)) ([7c1c58d](https://github.com/GetStream/stream-chat-js/commit/7c1c58df4d0c7cffdadf7062189053d9b7a5fb80))
+
 ## [8.51.0](https://github.com/GetStream/stream-chat-js/compare/v8.50.0...v8.51.0) (2025-01-17)
 
 

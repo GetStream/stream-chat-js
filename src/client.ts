@@ -141,6 +141,7 @@ import {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  PushPreference,
   PushProvider,
   PushProviderConfig,
   PushProviderID,
@@ -189,6 +190,7 @@ import {
   TestSNSDataInput,
   TestSQSDataInput,
   TokenOrProvider,
+  TranslateResponse,
   UnBanUserOptions,
   UpdateChannelOptions,
   UpdateChannelResponse,
@@ -200,6 +202,7 @@ import {
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
   UpdateSegmentData,
+  UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
   UserOptions,
@@ -295,7 +298,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // set the key
     this.key = key;
     this.listeners = {};
-    this.state = new ClientState<StreamChatGenerics>();
+    this.state = new ClientState<StreamChatGenerics>({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
@@ -318,6 +321,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       withCredentials: false, // making sure cookies are not sent
       warmUp: false,
       recoverStateOnReconnect: true,
+      disableCache: false,
       ...inputOptions,
     };
 
@@ -812,7 +816,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // ensure we no longer return inactive channels
     this.activeChannels = {};
     // reset client state
-    this.state = new ClientState();
+    this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
     // reset token manager
@@ -1221,10 +1225,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
-      const state = channel.state;
+      if (channel) {
+        const state = channel.state;
 
-      /** deleted the messages from this user. */
-      state?.deleteUserMessages(user, hardDelete);
+        /** deleted the messages from this user. */
+        state?.deleteUserMessages(user, hardDelete);
+      }
     }
   };
 
@@ -1662,6 +1668,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      c.push_preferences = channelState.push_preferences;
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
@@ -1802,6 +1809,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * setPushPreferences - Applies the list of push preferences.
+   *
+   * @param {PushPreference[]} A list of push preferences.
+   *
+   * @return {<UpsertPushPreferencesResponse>}
+   */
+  async setPushPreferences(preferences: PushPreference[]) {
+    return await this.post<UpsertPushPreferencesResponse>(this.baseURL + '/push_preferences', { preferences });
+  }
+
+  /**
    * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
    *
    * @param {string} id The device id
@@ -1840,7 +1858,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
-    this.configs[cid] = config;
+    if (this._cacheEnabled()) {
+      this.configs[cid] = config;
+    }
   }
 
   /**
@@ -1949,7 +1969,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[tempCid] = channel;
+    if (this._cacheEnabled()) {
+      this.activeChannels[tempCid] = channel;
+    }
+
     return channel;
   };
 
@@ -1976,7 +1999,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     // only allow 1 channel object per cid
     const cid = `${channelType}:${channelID}`;
-    if (cid in this.activeChannels && !this.activeChannels[cid].disconnected) {
+    if (cid in this.activeChannels && this.activeChannels[cid] && !this.activeChannels[cid].disconnected) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = { ...channel.data, ...custom };
@@ -1985,7 +2008,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return channel;
     }
     const channel = new Channel<StreamChatGenerics>(this, channelType, channelID, custom);
-    this.activeChannels[channel.cid] = channel;
+    if (this._cacheEnabled()) {
+      this.activeChannels[channel.cid] = channel;
+    }
 
     return channel;
   };
@@ -2517,6 +2542,23 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /**
+   * translate - translates the given text to provided language
+   *
+   * @param {string} text
+   * @param {string} destination_language
+   * @param {string} source_language
+   *
+   * @return {TranslateResponse} Response that includes the message
+   */
+  async translate(text: string, destination_language: string, source_language: string) {
+    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
+      text,
+      source_language,
+      destination_language,
+    });
+  }
+
+  /**
    * _normalizeExpiration - transforms expiration value into ISO string
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
    */
@@ -2863,6 +2905,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * _isUsingServerAuth - Returns true if we're using server side auth
    */
   _isUsingServerAuth = () => !!this.secret;
+
+  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
 
   _enrichAxiosOptions(
     options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {

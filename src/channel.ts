@@ -61,6 +61,7 @@ import {
   PartialUpdateMemberAPIResponse,
   AIState,
   MessageOptions,
+  PushPreference,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -97,6 +98,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  push_preferences?: PushPreference;
 
   /**
    * constructor - Create a channel
@@ -1189,7 +1191,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (!(this.cid in this.getClient().activeChannels)) {
+      if (!(this.cid in this.getClient().activeChannels) && this.getClient()._cacheEnabled()) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }

@@ -77,6 +77,11 @@ export type APIResponse = {
   duration: string;
 };
 
+export type TranslateResponse = {
+  language: string;
+  translated_text: string;
+};
+
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
     // TODO
@@ -318,6 +323,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
+  push_preferences?: PushPreference;
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
   watcher_count?: number;
@@ -628,6 +634,27 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_threads_count: number;
 };
 
+export type ChatLevelPushPreference = 'all' | 'none' | 'mentions' | (string & {});
+
+export type PushPreference = {
+  callLevel?: 'all' | 'none' | (string & {});
+  chatLevel?: ChatLevelPushPreference;
+  disabledUntil?: string; // snooze till this time
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+};
+
+export type ChannelPushPreference = {
+  chatLevel?: ChatLevelPushPreference; // "all", "none", "mentions", or other custom strings
+  disabledUntil?: string;
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+};
+
+export type UpsertPushPreferencesResponse = APIResponse & {
+  // Mapping of user IDs to their push preferences
+  userChannelPreferences: Record<string, Record<string, ChannelPushPreference>>;
+  userPreferences: Record<string, PushPreference>; // Mapping of user -> channel id -> push preferences
+};
+
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
   counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
 };
@@ -768,6 +795,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
+  push_preferences?: PushPreference;
   roles?: string[];
 };
 
@@ -1176,6 +1204,15 @@ export type StreamChatOptions = AxiosRequestConfig & {
   baseURL?: string;
   browser?: boolean;
   device?: BaseDeviceFields;
+  /**
+   * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
+   * this.polls.pollCache and this.config.
+   * It is mainly meant to be used for integrations where stream-chat is used as a server-side service
+   * interacting with Stream's REST API, not depending on any state and purely serving as a wrapper
+   * around HTTP requests. Using this property on either the client side or a backend implementation
+   * that also relies on WS events will break these functionalities, so please use carefully.
+   */
+  disableCache?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
@@ -1198,8 +1235,10 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
-  // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
-  // not be used in production apps.
+  /**
+   * Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
+   * not be used in production apps.
+   */
   wsConnection?: StableWSConnection;
 };
 
@@ -3527,6 +3566,14 @@ export type ReviewQueueFilters = QueryFilters<
     has_text?: boolean;
   } & {
     has_video?: boolean;
+  } & {
+    teams?:
+      | RequireOnlyOne<{
+          $contains?: PrimitiveFilter<string>;
+          $eq?: PrimitiveFilter<string>;
+          $in?: PrimitiveFilter<string>;
+        }>
+      | PrimitiveFilter<string>;
   }
 >;
 
