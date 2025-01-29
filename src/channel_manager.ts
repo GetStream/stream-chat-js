@@ -270,9 +270,31 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         }, []),
         type,
       });
-      const { channels } = this.state.getLatestValue();
+      const { pagination, channels } = this.state.getLatestValue();
+      if (!channels) {
+        return;
+      }
+
+      const { sort } = pagination ?? {};
+      const pinnedAtSort = findPinnedAtSortOrder({ sort });
+
+      // handle pinning
+      let lastPinnedChannelIndex: number | null = null;
+
+      const newChannels = [...channels];
+      if (pinnedAtSort === 1 || pinnedAtSort === -1) {
+        lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
+        const newTargetChannelIndex =
+          typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
+
+        newChannels.splice(newTargetChannelIndex, 0, channel);
+        // return newChannels;
+        this.state.partialNext({ channels: newChannels });
+        return;
+      }
+
       this.state.partialNext({
-        channels: channels ? [channel, ...channels.filter((c) => channel.cid !== c.cid)] : channels,
+        channels: [channel, ...channels.filter((c) => channel.cid !== c.cid)],
       });
     }
   };
