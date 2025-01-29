@@ -396,7 +396,18 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         id,
         type,
       });
-      const { channels } = this.state.getLatestValue();
+      const { channels, pagination } = this.state.getLatestValue();
+      const { filters } = pagination ?? {};
+
+      const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
+      if (isChannelArchived(channel) && considerArchivedChannels && !filters.archived) {
+        return;
+      }
+
+      if (!this.options.allowNewMessagesFromUnfilteredChannels) {
+        return;
+      }
+
       this.state.partialNext({ channels: [channel, ...channels.filter((c) => c.cid !== event.cid)] });
     }
   };
