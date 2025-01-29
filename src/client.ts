@@ -3101,14 +3101,41 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
+  /**
+   * Creates a new block list
+   *
+   * @param {BlockList} blockList - The block list to create
+   * @param {string} blockList.name - The name of the block list
+   * @param {string[]} blockList.words - List of words to block
+   * @param {string} [blockList.team] - Team ID the block list belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
   createBlockList(blockList: BlockList) {
     return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
 
+  /**
+   * Lists all block lists
+   *
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID to filter block lists by
+   *
+   * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
+   */
   listBlockLists(data?: { team?: string }) {
     return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`, data);
   }
 
+  /**
+   * Gets a specific block list
+   *
+   * @param {string} name - The name of the block list to retrieve
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
+   */
   getBlockList(name: string, data?: { team?: string }) {
     return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
@@ -3116,10 +3143,29 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
+  /**
+   * Updates an existing block list
+   *
+   * @param {string} name - The name of the block list to update
+   * @param {Object} data - The update data
+   * @param {string[]} data.words - New list of words to block
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
   updateBlockList(name: string, data: { words: string[]; team?: string }) {
     return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
+  /**
+   * Deletes a block list
+   *
+   * @param {string} name - The name of the block list to delete
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
   deleteBlockList(name: string, data?: { team?: string }) {
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
