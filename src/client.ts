@@ -3109,10 +3109,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`, data);
   }
 
-  getBlockList(name: string, team?: string) {
+  getBlockList(name: string, data?: { team?: string }) {
     return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      { team },
+      data,
     );
   }
 
@@ -3120,7 +3120,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
-  deleteBlockList(name: string, data: { team?: string }) {
+  deleteBlockList(name: string, data?: { team?: string }) {
     return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
