@@ -93,8 +93,6 @@ const eventTypes = [
   'channel.truncated',
   'channel.visible',
   'channel.updated',
-  'user.presence.changed',
-  'user.updated',
 ];
 
 const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames } = {
