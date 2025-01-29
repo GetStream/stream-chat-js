@@ -2228,6 +2228,7 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  team?: string;
   type?: string;
   validate?: boolean;
 };
