@@ -16,6 +16,7 @@ import {
   getAndWatchChannel,
   isChannelArchived,
   isChannelPinned,
+  moveChannelUpwards,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
 } from './utils';
@@ -96,6 +97,7 @@ const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManager
 };
 
 export type ChannelManagerOptions = {
+  allowNewMessagesFromUnfilteredChannels?: boolean;
   lockChannelOrder?: boolean;
 };
 
@@ -147,6 +149,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         channelHiddenHandler: this.channelHiddenHandler,
         channelVisibleHandler: this.channelVisibleHandler,
         channelUpdatedHandler: this.channelUpdatedHandler,
+        memberUpdatedHandler: this.memberUpdatedHandler,
         newMessageHandler: this.newMessageHandler,
         notificationAddedToChannelHandler: this.notificationAddedToChannelHandler,
         notificationNewMessageHandler: this.notificationNewMessageHandler,
@@ -284,8 +287,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       const newChannels = [...channels];
       if (pinnedAtSort === 1 || pinnedAtSort === -1) {
         lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
-        const newTargetChannelIndex =
-          typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
+        const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
 
         newChannels.splice(newTargetChannelIndex, 0, channel);
         // return newChannels;
@@ -325,23 +327,64 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private newMessageHandler = (event: Event<SCG>) => {
-    const { channels } = this.state.getLatestValue();
-    if (!channels) return;
-    const channelInList = channels.filter((channel) => channel.cid === event.cid).length > 0;
-
-    if (!channelInList && event?.channel?.type && event?.channel?.id) {
-      // If channel doesn't exist in existing list, check in activeChannels as well.
-      // It may happen that channel was hidden using channel.hide(). In that case
-      // We remove it from `channels` state, but it's still being watched and exists in client.activeChannels.
-      const channel = this.client.channel(event.channel.type, event?.channel?.id);
-      this.state.partialNext({ channels: [channel, ...channels] });
+    const { pagination, channels } = this.state.getLatestValue();
+    if (!channels) {
       return;
     }
+    const { filters, sort } = pagination ?? {};
 
-    if (!this.options.lockChannelOrder && event.cid) {
-      const channelIndex = channels.findIndex((c) => c.cid === event.cid);
-      this.state.partialNext({ channels: [channels[channelIndex], ...channels.filter((c) => c.cid !== event.cid)] });
+    const channelType = event.channel_type;
+    const channelId = event.channel_id;
+
+    if (channelType && channelId) {
+      const targetChannel = this.client.channel(channelType, channelId);
+      const targetChannelIndex = channels.indexOf(targetChannel);
+      const targetChannelExistsWithinList = targetChannelIndex >= 0;
+
+      const isTargetChannelPinned = isChannelPinned(targetChannel);
+      const isTargetChannelArchived = isChannelArchived(targetChannel);
+
+      const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
+      const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
+
+      if (
+        // filter is defined, target channel is archived and filter option is set to false
+        (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
+        // filter is defined, target channel isn't archived and filter option is set to true
+        (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
+        // sort option is defined, target channel is pinned
+        (considerPinnedChannels && isTargetChannelPinned) ||
+        // list order is locked
+        this.options.lockChannelOrder ||
+        // target channel is not within the loaded list and loading from cache is disallowed
+        (!targetChannelExistsWithinList && !this.options.allowNewMessagesFromUnfilteredChannels)
+      ) {
+        return;
+      }
+      this.state.partialNext({
+        channels: moveChannelUpwards({
+          channels,
+          channelToMove: targetChannel,
+          channelToMoveIndexWithinChannels: targetChannelIndex,
+          sort,
+        }),
+      });
     }
+    // const channelInList = channels.filter((channel) => channel.cid === event.cid).length > 0;
+    //
+    // if (!channelInList && event?.channel?.type && event?.channel?.id) {
+    //   // If channel doesn't exist in existing list, check in activeChannels as well.
+    //   // It may happen that channel was hidden using channel.hide(). In that case
+    //   // We remove it from `channels` state, but it's still being watched and exists in client.activeChannels.
+    //   const channel = this.client.channel(event.channel.type, event?.channel?.id);
+    //   this.state.partialNext({ channels: [channel, ...channels] });
+    //   return;
+    // }
+    //
+    // if (!this.options.lockChannelOrder && event.cid) {
+    //   const channelIndex = channels.findIndex((c) => c.cid === event.cid);
+    //   this.state.partialNext({ channels: [channels[channelIndex], ...channels.filter((c) => c.cid !== event.cid)] });
+    // }
   };
 
   private notificationNewMessageHandler = async (event: Event<SCG>) => {

@@ -17,6 +17,7 @@ import {
   ChannelSort,
   ChannelFilters,
   ChannelSortBase,
+  MoveChannelUpwardsParams,
 } from './types';
 import { StreamChat } from './client';
 import { Channel } from './channel';
@@ -954,3 +955,46 @@ export function findLastPinnedChannelIndex<StreamChatGenerics extends Extendable
 
   return lastPinnedChannelIndex;
 }
+
+export const moveChannelUpwards = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  channels,
+  channelToMove,
+  channelToMoveIndexWithinChannels,
+  sort,
+}: MoveChannelUpwardsParams<StreamChatGenerics>) => {
+  // get index of channel to move up
+  const targetChannelIndex =
+    channelToMoveIndexWithinChannels ?? channels.findIndex((channel) => channel.cid === channelToMove.cid);
+
+  const targetChannelExistsWithinList = targetChannelIndex >= 0;
+  const targetChannelAlreadyAtTheTop = targetChannelIndex === 0;
+
+  // pinned channels should not move within the list based on recent activity, channels which
+  // receive messages and are not pinned should move upwards but only under the last pinned channel
+  // in the list
+  const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
+  const isTargetChannelPinned = isChannelPinned<StreamChatGenerics>(channelToMove);
+
+  if (targetChannelAlreadyAtTheTop || (considerPinnedChannels && isTargetChannelPinned)) {
+    return channels;
+  }
+
+  const newChannels = [...channels];
+
+  // target channel index is known, remove it from the list
+  if (targetChannelExistsWithinList) {
+    newChannels.splice(targetChannelIndex, 1);
+  }
+
+  // as position of pinned channels has to stay unchanged, we need to
+  // find last pinned channel in the list to move the target channel after
+  let lastPinnedChannelIndex: number | null = null;
+  if (considerPinnedChannels) {
+    lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
+  }
+
+  // re-insert it at the new place (to specific index if pinned channels are considered)
+  newChannels.splice(typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0, 0, channelToMove);
+
+  return newChannels;
+};
