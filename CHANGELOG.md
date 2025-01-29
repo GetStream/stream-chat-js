@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.54.0](https://github.com/GetStream/stream-chat-js/compare/v8.53.0...v8.54.0) (2025-01-29)
+
+
+### Features
+
+* multitenant blocklist support ([#1450](https://github.com/GetStream/stream-chat-js/issues/1450)) ([e06d1bb](https://github.com/GetStream/stream-chat-js/commit/e06d1bbe019d36376e570077cfae02b5485e1350))
+
 ## [8.53.0](https://github.com/GetStream/stream-chat-js/compare/v8.52.3...v8.53.0) (2025-01-28)
 
 
