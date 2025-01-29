@@ -10,7 +10,15 @@ import type {
 } from './types';
 import { StateStore } from './store';
 import { Channel } from './channel';
-import { getAndWatchChannel } from './utils';
+import {
+  findLastPinnedChannelIndex,
+  findPinnedAtSortOrder,
+  getAndWatchChannel,
+  isChannelArchived,
+  isChannelPinned,
+  shouldConsiderArchivedChannels,
+  shouldConsiderPinnedChannels,
+} from './utils';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
   filters: ChannelFilters<SCG>;
@@ -50,11 +58,12 @@ export type ChannelManagerEventTypes =
   | 'notification.message_new'
   | 'notification.removed_from_channel'
   | 'message.new'
+  | 'member.updated'
   | 'channel.deleted'
   | 'channel.hidden'
   | 'channel.truncated'
   | 'channel.visible'
-  | 'channel.updated'
+  | 'channel.updated';
 
 export type ChannelManagerEventHandlerNames =
   | 'channelDeletedHandler'
@@ -63,6 +72,7 @@ export type ChannelManagerEventHandlerNames =
   | 'channelVisibleHandler'
   | 'channelUpdatedHandler'
   | 'newMessageHandler'
+  | 'memberUpdatedHandler'
   | 'notificationAddedToChannelHandler'
   | 'notificationNewMessageHandler'
   | 'notificationRemovedFromChannelHandler'
@@ -77,6 +87,7 @@ const eventTypes = [
   'notification.message_new',
   'notification.removed_from_channel',
   'message.new',
+  'member.updated',
   'channel.deleted',
   'channel.hidden',
   'channel.truncated',
@@ -93,6 +104,7 @@ const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManager
   'channel.visible': 'channelVisibleHandler',
   'channel.updated': 'channelUpdatedHandler',
   'message.new': 'newMessageHandler',
+  'member.updated': 'memberUpdatedHandler',
   'notification.added_to_channel': 'notificationAddedToChannelHandler',
   'notification.message_new': 'notificationNewMessageHandler',
   'notification.removed_from_channel': 'notificationRemovedFromChannelHandler',
@@ -355,6 +367,69 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (defaultEventHandler && typeof defaultEventHandler === 'function') {
       defaultEventHandler(event);
     }
+  };
+
+  private memberUpdatedHandler = (event: Event<SCG>) => {
+    const { pagination, channels } = this.state.getLatestValue();
+    const { filters, sort } = pagination;
+    if (!event.member?.user || event.member.user.id !== this.client.userID || !event.channel_type) {
+      return;
+    }
+    const channelType = event.channel_type;
+    const channelId = event.channel_id;
+
+    const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
+    const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
+    const pinnedAtSort = findPinnedAtSortOrder({ sort });
+
+    if (!channels) {
+      return;
+    }
+
+    const targetChannel = this.client.channel(channelType, channelId);
+    // assumes that channel instances are not changing
+    const targetChannelIndex = channels.indexOf(targetChannel);
+    const targetChannelExistsWithinList = targetChannelIndex >= 0;
+
+    const isTargetChannelPinned = isChannelPinned(targetChannel);
+    const isTargetChannelArchived = isChannelArchived(targetChannel);
+
+    if (!considerPinnedChannels || this.options.lockChannelOrder) {
+      return;
+    }
+
+    const newChannels = [...channels];
+
+    if (targetChannelExistsWithinList) {
+      newChannels.splice(targetChannelIndex, 1);
+    }
+
+    // handle archiving (remove channel)
+    if (
+      // When archived filter true, and channel is unarchived
+      (considerArchivedChannels && !isTargetChannelArchived && filters?.archived) ||
+      // When archived filter false, and channel is archived
+      (considerArchivedChannels && isTargetChannelArchived && !filters?.archived)
+    ) {
+      this.state.partialNext({ channels: newChannels });
+      return;
+    }
+
+    // handle pinning
+    let lastPinnedChannelIndex: number | null = null;
+
+    if (pinnedAtSort === 1 || (pinnedAtSort === -1 && !isTargetChannelPinned)) {
+      lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
+    }
+    const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
+
+    // skip state update if the position of the channel does not change
+    if (channels[newTargetChannelIndex] === targetChannel) {
+      return;
+    }
+
+    newChannels.splice(newTargetChannelIndex, 0, targetChannel);
+    this.state.partialNext({ channels: newChannels });
   };
 
   public registerSubscriptions = () => {

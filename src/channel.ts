@@ -1177,8 +1177,10 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
       this.cid = state.channel.cid;
       // set the channel as active...
 
-      const tempChannelCid = generateChannelTempCid(this.type, state.members
-        .map((member) => member.user_id || member.user?.id || ''))
+      const tempChannelCid = generateChannelTempCid(
+        this.type,
+        state.members.map((member) => member.user_id || member.user?.id || ''),
+      );
 
       if (tempChannelCid && tempChannelCid in this.getClient().activeChannels) {
         // This gets set in `client.channel()` function, when channel is created

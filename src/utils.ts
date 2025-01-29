@@ -13,9 +13,10 @@ import {
   MessageSet,
   MessagePaginationOptions,
   ChannelQueryOptions,
-  QueryChannelAPIResponse, ChannelSort,
+  QueryChannelAPIResponse,
+  ChannelSort,
   ChannelFilters,
-  ChannelSortBase
+  ChannelSortBase,
 } from './types';
 import { StreamChat } from './client';
 import { Channel } from './channel';
@@ -757,14 +758,9 @@ export const messageSetPagination = <StreamChatGenerics extends ExtendableGeneri
  * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
  * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
  */
-const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
-  string,
-  Promise<QueryChannelAPIResponse> | undefined
-> = {};
+const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<string, Promise<QueryChannelAPIResponse> | undefined> = {};
 
-type GetChannelParams<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = {
+type GetChannelParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   client: StreamChat<StreamChatGenerics>;
   channel?: Channel<StreamChatGenerics>;
   id?: string;
@@ -782,16 +778,14 @@ type GetChannelParams<
  * @param id
  * @param channel
  */
-export const getAndWatchChannel = async <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
->({
-    channel,
-    client,
-    id,
-    members,
-    options,
-    type,
-  }: GetChannelParams<StreamChatGenerics>) => {
+export const getAndWatchChannel = async <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  channel,
+  client,
+  id,
+  members,
+  options,
+  type,
+}: GetChannelParams<StreamChatGenerics>) => {
   if (!channel && !type) {
     throw new Error('Channel or channel type have to be provided to query a channel.');
   }
@@ -804,8 +798,8 @@ export const getAndWatchChannel = async <
   const originalCid = channelToWatch?.id
     ? channelToWatch.cid
     : members && members.length
-      ? generateChannelTempCid(channelToWatch.type, members)
-      : undefined;
+    ? generateChannelTempCid(channelToWatch.type, members)
+    : undefined;
 
   if (!originalCid) {
     throw new Error('Channel ID or channel members array have to be provided to query a channel.');
@@ -841,9 +835,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
   return `${channelType}:!members-${membersStr}`;
 };
 
-export const isChannelPinned = <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->(
+export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   channel: Channel<StreamChatGenerics>,
 ) => {
   if (!channel) return false;
@@ -853,9 +845,7 @@ export const isChannelPinned = <
   return !!member?.pinned_at;
 };
 
-export const isChannelArchived = <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->(
+export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   channel: Channel<StreamChatGenerics>,
 ) => {
   if (!channel) return false;
@@ -865,9 +855,7 @@ export const isChannelArchived = <
   return !!member?.archived_at;
 };
 
-export const shouldConsiderArchivedChannels = <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->(
+export const shouldConsiderArchivedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   filters: ChannelFilters<StreamChatGenerics>,
 ) => {
   if (!filters) return false;
@@ -875,13 +863,11 @@ export const shouldConsiderArchivedChannels = <
   return typeof filters.archived === 'boolean';
 };
 
-export const extractSortValue = <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->({
-    atIndex,
-    sort,
-    targetKey,
-  }: {
+export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  atIndex,
+  sort,
+  targetKey,
+}: {
   atIndex: number;
   targetKey: keyof ChannelSortBase<StreamChatGenerics>;
   sort?: ChannelSort<StreamChatGenerics>;
@@ -915,9 +901,7 @@ export const extractSortValue = <
 /**
  * Returns true only if `{ pinned_at: -1 }` or `{ pinned_at: 1 }` option is first within the `sort` array.
  */
-export const shouldConsiderPinnedChannels = <
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->(
+export const shouldConsiderPinnedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   sort: ChannelSort<StreamChatGenerics>,
 ) => {
   const value = extractSortValue({
@@ -931,9 +915,11 @@ export const shouldConsiderPinnedChannels = <
   return Math.abs(value) === 1;
 };
 
-export function findPinnedAtSortOrder<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->({ sort }: { sort: ChannelSort<StreamChatGenerics> }) {
+export function findPinnedAtSortOrder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  sort,
+}: {
+  sort: ChannelSort<StreamChatGenerics>;
+}) {
   if (!sort) return null;
 
   if (Array.isArray(sort)) {
@@ -949,9 +935,11 @@ export function findPinnedAtSortOrder<
   }
 }
 
-export function findLastPinnedChannelIndex<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics,
->({ channels }: { channels: Channel<StreamChatGenerics>[] }) {
+export function findLastPinnedChannelIndex<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+  channels,
+}: {
+  channels: Channel<StreamChatGenerics>[];
+}) {
   let lastPinnedChannelIndex: number | null = null;
 
   for (const channel of channels) {
@@ -966,4 +954,3 @@ export function findLastPinnedChannelIndex<
 
   return lastPinnedChannelIndex;
 }
-
