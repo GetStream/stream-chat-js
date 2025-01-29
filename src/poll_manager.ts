@@ -2,7 +2,7 @@ import type { StreamChat } from './client';
 import type {
   CreatePollData,
   DefaultGenerics,
-  ExtendableGenerics,
+  ExtendableGenerics, MessageResponse,
   PollResponse,
   PollSort,
   QueryPollsFilters,
@@ -90,7 +90,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     };
   };
 
-  public hydratePollCache = (messages: FormatMessageResponse<SCG>[], overwriteState?: boolean) => {
+  public hydratePollCache = (messages: FormatMessageResponse<SCG>[] | MessageResponse<SCG>[], overwriteState?: boolean) => {
     for (const message of messages) {
       if (!message.poll) {
         continue;
