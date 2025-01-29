@@ -82,19 +82,6 @@ export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics =
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType<SCG>>
 >;
 
-const eventTypes = [
-  'notification.added_to_channel',
-  'notification.message_new',
-  'notification.removed_from_channel',
-  'message.new',
-  'member.updated',
-  'channel.deleted',
-  'channel.hidden',
-  'channel.truncated',
-  'channel.visible',
-  'channel.updated',
-];
-
 const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames } = {
   'channel.deleted': 'channelDeletedHandler',
   'channel.hidden': 'channelHiddenHandler',
@@ -436,7 +423,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       return;
     }
 
-    for (const eventType of eventTypes) {
+    for (const eventType of Object.keys(eventToHandlerMapping)) {
       this.unsubscribeFunctions.add(this.client.on(eventType, this.subscriptionOrOverride).unsubscribe);
     }
   };
