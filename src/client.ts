@@ -74,7 +74,6 @@ import {
   CreatePollOptionAPIResponse,
   CustomPermissionOptions,
   DeactivateUsersOptions,
-  DefaultGenerics,
   DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteUserOptions,
@@ -89,7 +88,6 @@ import {
   ExportChannelStatusResponse,
   ExportUsersRequest,
   ExportUsersResponse,
-  ExtendableGenerics,
   FlagMessageResponse,
   FlagReportsFilters,
   FlagReportsPaginationOptions,
@@ -119,7 +117,6 @@ import {
   ListImportsResponse,
   Logger,
   MarkChannelsReadOptions,
-  Message,
   MessageFilters,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
@@ -226,15 +223,15 @@ function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
-export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
-  _user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>;
+  _user?: OwnUserResponse | UserResponse;
   activeChannels: {
-    [key: string]: Channel<StreamChatGenerics>;
+    [key: string]: Channel;
   };
-  threads: ThreadManager<StreamChatGenerics>;
-  polls: PollManager<StreamChatGenerics>;
+  threads: ThreadManager;
+  polls: PollManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -242,9 +239,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
-  configs: Configs<StreamChatGenerics>;
+  configs: Configs;
   key: string;
-  listeners: Record<string, Array<(event: Event<StreamChatGenerics>) => void>>;
+  listeners: Record<string, Array<(event: Event) => void>>;
   logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -256,22 +253,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
-  moderation: Moderation<StreamChatGenerics>;
-  mutedChannels: ChannelMute<StreamChatGenerics>[];
-  mutedUsers: Mute<StreamChatGenerics>[];
+  moderation: Moderation;
+  mutedChannels: ChannelMute[];
+  mutedUsers: Mute[];
   node: boolean;
   options: StreamChatOptions;
   secret?: string;
-  setUserPromise: ConnectAPIResponse<StreamChatGenerics> | null;
-  state: ClientState<StreamChatGenerics>;
-  tokenManager: TokenManager<StreamChatGenerics>;
-  user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>;
+  setUserPromise: ConnectAPIResponse | null;
+  state: ClientState;
+  tokenManager: TokenManager;
+  user?: OwnUserResponse | UserResponse;
   userAgent?: string;
   userID?: string;
   wsBaseURL?: string;
-  wsConnection: StableWSConnection<StreamChatGenerics> | null;
-  wsFallback?: WSConnectionFallback<StreamChatGenerics>;
-  wsPromise: ConnectAPIResponse<StreamChatGenerics> | null;
+  wsConnection: StableWSConnection | null;
+  wsFallback?: WSConnectionFallback;
+  wsPromise: ConnectAPIResponse | null;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
@@ -304,7 +301,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // set the key
     this.key = key;
     this.listeners = {};
-    this.state = new ClientState<StreamChatGenerics>({ client: this });
+    this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
@@ -449,29 +446,22 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @example <caption>secret is optional and only used in server side mode</caption>
    * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
    */
-  public static getInstance<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-    key: string,
-    options?: StreamChatOptions,
-  ): StreamChat<StreamChatGenerics>;
-  public static getInstance<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-    key: string,
-    secret?: string,
-    options?: StreamChatOptions,
-  ): StreamChat<StreamChatGenerics>;
-  public static getInstance<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
+  public static getInstance(key: string, secret?: string, options?: StreamChatOptions): StreamChat;
+  public static getInstance(
     key: string,
     secretOrOptions?: StreamChatOptions | string,
     options?: StreamChatOptions,
-  ): StreamChat<StreamChatGenerics> {
+  ): StreamChat {
     if (!StreamChat._instance) {
       if (typeof secretOrOptions === 'string') {
-        StreamChat._instance = new StreamChat<StreamChatGenerics>(key, secretOrOptions, options);
+        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
       } else {
-        StreamChat._instance = new StreamChat<StreamChatGenerics>(key, secretOrOptions);
+        StreamChat._instance = new StreamChat(key, secretOrOptions);
       }
     }
 
-    return StreamChat._instance as StreamChat<StreamChatGenerics>;
+    return StreamChat._instance as StreamChat;
   }
 
   devToken(userID: string) {
@@ -494,15 +484,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * connectUser - Set the current user and open a WebSocket connection
    *
-   * @param {OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {ConnectAPIResponse<StreamChatGenerics>} Returns a promise that resolves when the connection is setup
+   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
    */
-  connectUser = async (
-    user: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
+  connectUser = async (user: OwnUserResponse | UserResponse, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
@@ -561,17 +548,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * setUser - Set the current user and open a WebSocket connection
    *
-   * @param {OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>} user Data about this user. IE {name: "john"}
+   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
    * @param {TokenOrProvider} userTokenOrProvider Token or provider
    *
-   * @return {ConnectAPIResponse<StreamChatGenerics>} Returns a promise that resolves when the connection is setup
+   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
    */
   setUser = this.connectUser;
 
-  _setToken = (user: UserResponse<StreamChatGenerics>, userTokenOrProvider: TokenOrProvider) =>
+  _setToken = (user: UserResponse, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>) {
+  _setUser(user: OwnUserResponse | UserResponse) {
     /**
      * This one is used by the frontend. This is a copy of the current user object stored on backend.
      * It contains reserved properties and own user properties which are not present in `this._user`.
@@ -738,11 +725,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       before = this._normalizeDate(before);
     }
 
-    const users: PartialUserUpdate<StreamChatGenerics>[] = [];
+    const users: PartialUserUpdate[] = [];
     for (const userID of userIDs) {
       users.push({
         id: userID,
-        set: <Partial<UserResponse<StreamChatGenerics>>>{
+        set: <Partial<UserResponse>>{
           revoke_tokens_issued_before: before,
         },
       });
@@ -755,7 +742,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    return await this.get<AppSettingsAPIResponse<StreamChatGenerics>>(this.baseURL + '/app');
+    return await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
   }
 
   /**
@@ -873,7 +860,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     const anonymousUser = {
       id: this.userID,
       anon: true,
-    } as UserResponse<StreamChatGenerics>;
+    } as UserResponse;
 
     this._setToken(anonymousUser, '');
     this._setUser(anonymousUser);
@@ -889,18 +876,18 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * setGuestUser - Setup a temporary guest user
    *
-   * @param {UserResponse<StreamChatGenerics>} user Data about this user. IE {name: "john"}
+   * @param {UserResponse} user Data about this user. IE {name: "john"}
    *
-   * @return {ConnectAPIResponse<StreamChatGenerics>} Returns a promise that resolves when the connection is setup
+   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
    */
-  async setGuestUser(user: UserResponse<StreamChatGenerics>) {
-    let response: { access_token: string; user: UserResponse<StreamChatGenerics> } | undefined;
+  async setGuestUser(user: UserResponse) {
+    let response: { access_token: string; user: UserResponse } | undefined;
     this.anonymous = true;
     try {
       response = await this.post<
         APIResponse & {
           access_token: string;
-          user: UserResponse<StreamChatGenerics>;
+          user: UserResponse;
         }
       >(this.baseURL + '/guest', { user });
     } catch (e) {
@@ -910,7 +897,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     this.anonymous = false;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
-    return await this.connectUser(guestUser as UserResponse<StreamChatGenerics>, response.access_token);
+    return await this.connectUser(guestUser as UserResponse, response.access_token);
   }
 
   /**
@@ -946,19 +933,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * or
    * client.on(event => {console.log(event.type)})
    *
-   * @param {EventHandler<StreamChatGenerics> | string} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler<StreamChatGenerics>} [callbackOrNothing] The callback to call
+   * @param {EventHandler | string} callbackOrString  The event type to listen for (optional)
+   * @param {EventHandler} [callbackOrNothing] The callback to call
    *
    * @return {{ unsubscribe: () => void }} Description
    */
-  on(callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler<StreamChatGenerics>): { unsubscribe: () => void };
-  on(
-    callbackOrString: EventHandler<StreamChatGenerics> | string,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
-  ): { unsubscribe: () => void } {
+  on(callback: EventHandler): { unsubscribe: () => void };
+  on(eventType: string, callback: EventHandler): { unsubscribe: () => void };
+  on(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
+    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -980,14 +964,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * off - Remove the event handler
    *
    */
-  off(callback: EventHandler<StreamChatGenerics>): void;
-  off(eventType: string, callback: EventHandler<StreamChatGenerics>): void;
-  off(
-    callbackOrString: EventHandler<StreamChatGenerics> | string,
-    callbackOrNothing?: EventHandler<StreamChatGenerics>,
-  ) {
+  off(callback: EventHandler): void;
+  off(eventType: string, callback: EventHandler): void;
+  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler<StreamChatGenerics>);
+    const callback = callbackOrNothing ? callbackOrNothing : (callbackOrString as EventHandler);
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
@@ -1117,7 +1098,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
-    user?: UserResponse<StreamChatGenerics>,
+    user?: UserResponse,
   ) {
     const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
     if (user != null) data.append('user', JSON.stringify(user));
@@ -1152,7 +1133,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return data;
   }
 
-  dispatchEvent = (event: Event<StreamChatGenerics>) => {
+  dispatchEvent = (event: Event) => {
     if (!event.received_at) event.received_at = new Date();
 
     // client event handlers
@@ -1177,16 +1158,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
     // dispatch the event to the channel listeners
     const jsonString = messageEvent.data as string;
-    const event = JSON.parse(jsonString) as Event<StreamChatGenerics>;
+    const event = JSON.parse(jsonString) as Event;
     this.dispatchEvent(event);
   };
 
   /**
    * Updates the members, watchers and read references of the currently active channels that contain this user
    *
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    */
-  _updateMemberWatcherReferences = (user: UserResponse<StreamChatGenerics>) => {
+  _updateMemberWatcherReferences = (user: UserResponse) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
@@ -1216,9 +1197,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Updates the messages from the currently active channels that contain this user,
    * with updated user object.
    *
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    */
-  _updateUserMessageReferences = (user: UserResponse<StreamChatGenerics>) => {
+  _updateUserMessageReferences = (user: UserResponse) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
 
     for (const channelID in refMap) {
@@ -1241,10 +1222,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * If hardDelete is true, all the content of message will be stripped down.
    * Otherwise, only 'message.type' will be set as 'deleted'.
    *
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    * @param {boolean} hardDelete
    */
-  _deleteUserMessageReference = (user: UserResponse<StreamChatGenerics>, hardDelete = false) => {
+  _deleteUserMessageReference = (user: UserResponse, hardDelete = false) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
 
     for (const channelID in refMap) {
@@ -1268,7 +1249,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {Event} event
    */
-  _handleUserEvent = (event: Event<StreamChatGenerics>) => {
+  _handleUserEvent = (event: Event) => {
     if (!event.user) {
       return;
     }
@@ -1276,8 +1257,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
       if (event.user.id === this.userID) {
-        const user = { ...(this.user || {}) };
-        const _user = { ...(this._user || {}) };
+        const user = { ...this.user } as NonNullable<StreamChat['user']>;
+        const _user = { ...this._user } as NonNullable<StreamChat['_user']>;
 
         // Remove deleted properties from user objects.
         for (const key in this.user) {
@@ -1285,19 +1266,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
             continue;
           }
 
-          delete user[key];
-          delete _user[key];
+          const deleteKey = key as keyof typeof user;
+
+          delete user[deleteKey];
+          delete _user[deleteKey];
         }
 
         /** Updating only available properties in _user object. */
         for (const key in event.user) {
           if (_user && key in _user) {
-            _user[key] = event.user[key];
+            const updateKey = key as keyof typeof event.user;
+
+            // TODO: revisit
+            // @ts-expect-error ???
+            _user[updateKey] = event.user[updateKey];
           }
         }
 
-        // @ts-expect-error
-        this._user = { ..._user };
+        this._user = _user;
         this.user = { ...user, ...event.user };
       }
 
@@ -1314,7 +1300,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
   };
 
-  _handleClientEvent(event: Event<StreamChatGenerics>) {
+  _handleClientEvent(event: Event) {
     const client = this;
     const postListenerCallbacks = [];
     this.logger('info', `client:_handleClientEvent - Received event of type { ${event.type} }`, {
@@ -1389,10 +1375,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     };
   }
 
-  _callClientListeners = (event: Event<StreamChatGenerics>) => {
+  _callClientListeners = (event: Event) => {
     const client = this;
     // gather and call the listeners
-    const listeners: Array<(event: Event<StreamChatGenerics>) => void> = [];
+    const listeners: Array<(event: Event) => void> = [];
     if (client.listeners.all) {
       listeners.push(...client.listeners.all);
     }
@@ -1417,20 +1403,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         tags: ['connection', 'client'],
       });
 
-      await this.queryChannels(
-        { cid: { $in: cids } } as ChannelFilters<StreamChatGenerics>,
-        { last_message_at: -1 },
-        { limit: 30 },
-      );
+      await this.queryChannels({ cid: { $in: cids } } as ChannelFilters, { last_message_at: -1 }, { limit: 30 });
 
       this.logger('info', 'client:recoverState() - Querying channels finished', { tags: ['connection', 'client'] });
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event<StreamChatGenerics>);
+      } as Event);
     } else {
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event<StreamChatGenerics>);
+      } as Event);
     }
 
     this.wsPromise = Promise.resolve();
@@ -1457,10 +1439,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // The StableWSConnection handles all the reconnection logic.
     if (this.options.wsConnection && this.node) {
       // Intentionally avoiding adding ts generics on wsConnection in options since its only useful for unit test purpose.
-      ((this.options.wsConnection as unknown) as StableWSConnection<StreamChatGenerics>).setClient(this);
-      this.wsConnection = (this.options.wsConnection as unknown) as StableWSConnection<StreamChatGenerics>;
+      ((this.options.wsConnection as unknown) as StableWSConnection).setClient(this);
+      this.wsConnection = (this.options.wsConnection as unknown) as StableWSConnection;
     } else {
-      this.wsConnection = new StableWSConnection<StreamChatGenerics>({
+      this.wsConnection = new StableWSConnection({
         client: this,
       });
     }
@@ -1485,7 +1467,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
         this.wsConnection._destroyCurrentWSConnection();
         this.wsConnection.disconnect().then(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback<StreamChatGenerics>({
+        this.wsFallback = new WSConnectionFallback({
           client: this,
         });
         return await this.wsFallback.connect();
@@ -1517,18 +1499,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * queryUsers - Query users and watch user presence
    *
-   * @param {UserFilters<StreamChatGenerics>} filterConditions MongoDB style filter conditions
-   * @param {UserSort<StreamChatGenerics>} sort Sort options, for instance [{last_active: -1}].
+   * @param {UserFilters} filterConditions MongoDB style filter conditions
+   * @param {UserSort} sort Sort options, for instance [{last_active: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {UserOptions} options Option object, {presence: true}
    *
-   * @return {Promise<{ users: Array<UserResponse<StreamChatGenerics>> }>} User Query Response
+   * @return {Promise<{ users: Array<UserResponse> }>} User Query Response
    */
-  async queryUsers(
-    filterConditions: UserFilters<StreamChatGenerics>,
-    sort: UserSort<StreamChatGenerics> = [],
-    options: UserOptions = {},
-  ) {
+  async queryUsers(filterConditions: UserFilters, sort: UserSort = [], options: UserOptions = {}) {
     const defaultOptions = {
       presence: false,
     };
@@ -1541,17 +1519,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
 
     // Return a list of users
-    const data = await this.get<APIResponse & { users: Array<UserResponse<StreamChatGenerics>> }>(
-      this.baseURL + '/users',
-      {
-        payload: {
-          filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
-          ...defaultOptions,
-          ...options,
-        },
+    const data = await this.get<APIResponse & { users: Array<UserResponse> }>(this.baseURL + '/users', {
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...defaultOptions,
+        ...options,
       },
-    );
+    });
 
     this.state.updateUsers(data.users);
 
@@ -1565,7 +1540,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
    * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0, exclude_expired_bans: true}
    *
-   * @return {Promise<BannedUsersResponse<StreamChatGenerics>>} Ban Query Response
+   * @return {Promise<BannedUsersResponse>} Ban Query Response
    */
   async queryBannedUsers(
     filterConditions: BannedUsersFilters = {},
@@ -1573,7 +1548,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     options: BannedUsersPaginationOptions = {},
   ) {
     // Return a list of user bans
-    return await this.get<BannedUsersResponse<StreamChatGenerics>>(this.baseURL + '/query_banned_users', {
+    return await this.get<BannedUsersResponse>(this.baseURL + '/query_banned_users', {
       payload: {
         filter_conditions: filterConditions,
         sort: normalizeQuerySort(sort),
@@ -1588,11 +1563,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
    * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
-   * @return {Promise<MessageFlagsResponse<StreamChatGenerics>>} Message Flags Response
+   * @return {Promise<MessageFlagsResponse>} Message Flags Response
    */
   async queryMessageFlags(filterConditions: MessageFlagsFilters = {}, options: MessageFlagsPaginationOptions = {}) {
     // Return a list of message flags
-    return await this.get<MessageFlagsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flags/message', {
+    return await this.get<MessageFlagsResponse>(this.baseURL + '/moderation/flags/message', {
       payload: { filter_conditions: filterConditions, ...options },
     });
   }
@@ -1600,8 +1575,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * queryChannels - Query channels
    *
-   * @param {ChannelFilters<StreamChatGenerics>} filterConditions object MongoDB style filters
-   * @param {ChannelSort<StreamChatGenerics>} [sort] Sort options, for instance {created_at: -1}.
+   * @param {ChannelFilters} filterConditions object MongoDB style filters
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
@@ -1610,8 +1585,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {Promise<{ channels: Array<ChannelAPIResponse<AStreamChatGenerics>>}> } search channels response
    */
   async queryChannels(
-    filterConditions: ChannelFilters<StreamChatGenerics>,
-    sort: ChannelSort<StreamChatGenerics> = [],
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) {
@@ -1635,7 +1610,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const data = await this.post<QueryChannelsAPIResponse<StreamChatGenerics>>(this.baseURL + '/channels', payload);
+    const data = await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -1651,16 +1626,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * queryReactions - Query reactions
    *
-   * @param {ReactionFilters<StreamChatGenerics>} filter object MongoDB style filters
-   * @param {ReactionSort<StreamChatGenerics>} [sort] Sort options, for instance {created_at: -1}.
+   * @param {ReactionFilters} filter object MongoDB style filters
+   * @param {ReactionSort} [sort] Sort options, for instance {created_at: -1}.
    * @param {QueryReactionsOptions} [options] Pagination object
    *
    * @return {Promise<{ QueryReactionsAPIResponse } search channels response
    */
   async queryReactions(
     messageID: string,
-    filter: ReactionFilters<StreamChatGenerics>,
-    sort: ReactionSort<StreamChatGenerics> = [],
+    filter: ReactionFilters,
+    sort: ReactionSort = [],
     options: QueryReactionsOptions = {},
   ) {
     // Make sure we wait for the connect promise if there is a pending one
@@ -1673,19 +1648,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    return await this.post<QueryReactionsAPIResponse<StreamChatGenerics>>(
+    return await this.post<QueryReactionsAPIResponse>(
       this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
       payload,
     );
   }
 
   hydrateActiveChannels(
-    channelsFromApi: ChannelAPIResponse<StreamChatGenerics>[] = [],
+    channelsFromApi: ChannelAPIResponse[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
-    const channels: Channel<StreamChatGenerics>[] = [];
+    const channels: Channel[] = [];
 
     for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState.channel);
@@ -1727,24 +1702,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * search - Query messages
    *
-   * @param {ChannelFilters<StreamChatGenerics>} filterConditions MongoDB style filter conditions
-   * @param {MessageFilters<StreamChatGenerics> | string} query search query or object MongoDB style filters
-   * @param {SearchOptions<StreamChatGenerics>} [options] Option object, {user_id: 'tommaso'}
+   * @param {ChannelFilters} filterConditions MongoDB style filter conditions
+   * @param {MessageFilters | string} query search query or object MongoDB style filters
+   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
    *
-   * @return {Promise<SearchAPIResponse<StreamChatGenerics>>} search messages response
+   * @return {Promise<SearchAPIResponse>} search messages response
    */
-  async search(
-    filterConditions: ChannelFilters<StreamChatGenerics>,
-    query: string | MessageFilters<StreamChatGenerics>,
-    options: SearchOptions<StreamChatGenerics> = {},
-  ) {
+  async search(filterConditions: ChannelFilters, query: string | MessageFilters, options: SearchOptions = {}) {
     if (options.offset && options.next) {
       throw Error(`Cannot specify offset with next`);
     }
-    const payload: SearchPayload<StreamChatGenerics> = {
+    const payload: SearchPayload = {
       filter_conditions: filterConditions,
       ...options,
-      sort: options.sort ? normalizeQuerySort<SearchMessageSortBase<StreamChatGenerics>>(options.sort) : undefined,
+      sort: options.sort ? normalizeQuerySort<SearchMessageSortBase>(options.sort) : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -1757,7 +1728,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.get<SearchAPIResponse<StreamChatGenerics>>(this.baseURL + '/search', { payload });
+    return await this.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
   }
 
   /**
@@ -1802,10 +1773,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {string} [userID] User ID. Only works on serverside
    *
-   * @return {Device<StreamChatGenerics>[]} Array of devices
+   * @return {Device[]} Array of devices
    */
   async getDevices(userID?: string) {
-    return await this.get<APIResponse & { devices?: Device<StreamChatGenerics>[] }>(
+    return await this.get<APIResponse & { devices?: Device[] }>(
       this.baseURL + '/devices',
       userID ? { user_id: userID } : {},
     );
@@ -1882,7 +1853,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
-  _addChannelConfig({ cid, config }: ChannelResponse<StreamChatGenerics>) {
+  _addChannelConfig({ cid, config }: ChannelResponse) {
     if (this._cacheEnabled()) {
       this.configs[cid] = config;
     }
@@ -1897,21 +1868,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * await channel.create() to assign an ID to channel
    *
    * @param {string} channelType The channel type
-   * @param {string | ChannelData<StreamChatGenerics> | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
+   * @param {string | ChannelData | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
    * @param {object} [custom]    Custom data to attach to the channel
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
+  channel(channelType: string, channelID?: string | null, custom?: ChannelData): Channel;
+  channel(channelType: string, custom?: ChannelData): Channel;
   channel(
     channelType: string,
-    channelID?: string | null,
-    custom?: ChannelData<StreamChatGenerics>,
-  ): Channel<StreamChatGenerics>;
-  channel(channelType: string, custom?: ChannelData<StreamChatGenerics>): Channel<StreamChatGenerics>;
-  channel(
-    channelType: string,
-    channelIDOrCustom?: string | ChannelData<StreamChatGenerics> | null,
-    custom: ChannelData<StreamChatGenerics> = {} as ChannelData<StreamChatGenerics>,
+    channelIDOrCustom?: string | ChannelData | null,
+    custom: ChannelData = {} as ChannelData,
   ) {
     if (!this.userID && !this._isUsingServerAuth()) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
@@ -1935,7 +1902,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
     if (!channelIDOrCustom) {
-      return new Channel<StreamChatGenerics>(this, channelType, undefined, custom);
+      return new Channel(this, channelType, undefined, custom);
     }
 
     return this.getChannelById(channelType, channelIDOrCustom, custom);
@@ -1957,7 +1924,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
-  getChannelByMembers = (channelType: string, custom: ChannelData<StreamChatGenerics>) => {
+  getChannelByMembers = (channelType: string, custom: ChannelData) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
     const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload<StreamChatGenerics>) =>
@@ -1993,7 +1960,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       }
     }
 
-    const channel = new Channel<StreamChatGenerics>(this, channelType, undefined, custom);
+    const channel = new Channel(this, channelType, undefined, custom);
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
@@ -2020,7 +1987,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
-  getChannelById = (channelType: string, channelID: string, custom: ChannelData<StreamChatGenerics>) => {
+  getChannelById = (channelType: string, channelID: string, custom: ChannelData) => {
     if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
       throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
     }
@@ -2035,7 +2002,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       }
       return channel;
     }
-    const channel = new Channel<StreamChatGenerics>(this, channelType, channelID, custom);
+    const channel = new Channel(this, channelType, channelID, custom);
     if (this._cacheEnabled()) {
       this.activeChannels[channel.cid] = channel;
     }
@@ -2046,24 +2013,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * partialUpdateUser - Update the given user object
    *
-   * @param {PartialUserUpdate<StreamChatGenerics>} partialUserObject which should contain id and any of "set" or "unset" params;
+   * @param {PartialUserUpdate} partialUserObject which should contain id and any of "set" or "unset" params;
    * example: {id: "user1", set:{field: value}, unset:["field2"]}
    *
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>} list of updated users
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>} list of updated users
    */
-  async partialUpdateUser(partialUserObject: PartialUserUpdate<StreamChatGenerics>) {
+  async partialUpdateUser(partialUserObject: PartialUserUpdate) {
     return await this.partialUpdateUsers([partialUserObject]);
   }
 
   /**
    * upsertUsers - Batch upsert the list of users
    *
-   * @param {UserResponse<StreamChatGenerics>[]} users list of users
+   * @param {UserResponse[]} users list of users
    *
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>}
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
-  async upsertUsers(users: UserResponse<StreamChatGenerics>[]) {
-    const userMap: { [key: string]: UserResponse<StreamChatGenerics> } = {};
+  async upsertUsers(users: UserResponse[]) {
+    const userMap: { [key: string]: UserResponse } = {};
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');
@@ -2073,7 +2040,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     return await this.post<
       APIResponse & {
-        users: { [key: string]: UserResponse<StreamChatGenerics> };
+        users: { [key: string]: UserResponse };
       }
     >(this.baseURL + '/users', { users: userMap });
   }
@@ -2083,19 +2050,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * updateUsers - Batch update the list of users
    *
-   * @param {UserResponse<StreamChatGenerics>[]} users list of users
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>}
+   * @param {UserResponse[]} users list of users
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
   updateUsers = this.upsertUsers;
 
   /**
    * upsertUser - Update or Create the given user object
    *
-   * @param {UserResponse<StreamChatGenerics>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
+   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
    *
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>}
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
-  upsertUser(userObject: UserResponse<StreamChatGenerics>) {
+  upsertUser(userObject: UserResponse) {
     return this.upsertUsers([userObject]);
   }
 
@@ -2104,19 +2071,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * updateUser - Update or Create the given user object
    *
-   * @param {UserResponse<StreamChatGenerics>} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>}
+   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
   updateUser = this.upsertUser;
 
   /**
    * partialUpdateUsers - Batch partial update of users
    *
-   * @param {PartialUserUpdate<StreamChatGenerics>[]} users list of partial update requests
+   * @param {PartialUserUpdate[]} users list of partial update requests
    *
-   * @return {Promise<{ users: { [key: string]: UserResponse<StreamChatGenerics> } }>}
+   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
-  async partialUpdateUsers(users: PartialUserUpdate<StreamChatGenerics>[]) {
+  async partialUpdateUsers(users: PartialUserUpdate[]) {
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');
@@ -2125,7 +2092,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     return await this.patch<
       APIResponse & {
-        users: { [key: string]: UserResponse<StreamChatGenerics> };
+        users: { [key: string]: UserResponse };
       }
     >(this.baseURL + '/users', { users });
   }
@@ -2139,7 +2106,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     },
   ) {
     return await this.delete<
-      APIResponse & { user: UserResponse<StreamChatGenerics> } & {
+      APIResponse & { user: UserResponse } & {
         task_id?: string;
       }
     >(this.baseURL + `/users/${encodeURIComponent(userID)}`, params);
@@ -2167,7 +2134,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {UserResponse} Reactivated user
    */
   async reactivateUser(userID: string, options?: ReactivateUserOptions) {
-    return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
+    return await this.post<APIResponse & { user: UserResponse }>(
       this.baseURL + `/users/${encodeURIComponent(userID)}/reactivate`,
       { ...options },
     );
@@ -2194,7 +2161,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @return {UserResponse} Deactivated user
    */
   async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & { user: UserResponse<StreamChatGenerics> }>(
+    return await this.post<APIResponse & { user: UserResponse }>(
       this.baseURL + `/users/${encodeURIComponent(userID)}/deactivate`,
       { ...options },
     );
@@ -2215,9 +2182,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   async exportUser(userID: string, options?: Record<string, string>) {
     return await this.get<
       APIResponse & {
-        messages: MessageResponse<StreamChatGenerics>[];
-        reactions: ReactionResponse<StreamChatGenerics>[];
-        user: UserResponse<StreamChatGenerics>;
+        messages: MessageResponse[];
+        reactions: ReactionResponse[];
+        user: UserResponse;
       }
     >(this.baseURL + `/users/${encodeURIComponent(userID)}/export`, { ...options });
   }
@@ -2225,10 +2192,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /** banUser - bans a user from all channels
    *
    * @param {string} targetUserID
-   * @param {BanUserOptions<StreamChatGenerics>} [options]
+   * @param {BanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async banUser(targetUserID: string, options?: BanUserOptions<StreamChatGenerics>) {
+  async banUser(targetUserID: string, options?: BanUserOptions) {
     return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserID,
       ...options,
@@ -2251,10 +2218,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /** shadowBan - shadow bans a user from all channels
    *
    * @param {string} targetUserID
-   * @param {BanUserOptions<StreamChatGenerics>} [options]
+   * @param {BanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async shadowBan(targetUserID: string, options?: BanUserOptions<StreamChatGenerics>) {
+  async shadowBan(targetUserID: string, options?: BanUserOptions) {
     return await this.banUser(targetUserID, {
       shadow: true,
       ...options,
@@ -2295,11 +2262,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {string} targetID
    * @param {string} [userID] Only used with serverside auth
-   * @param {MuteUserOptions<StreamChatGenerics>} [options]
-   * @returns {Promise<MuteUserResponse<StreamChatGenerics>>}
+   * @param {MuteUserOptions} [options]
+   * @returns {Promise<MuteUserResponse>}
    */
-  async muteUser(targetID: string, userID?: string, options: MuteUserOptions<StreamChatGenerics> = {}) {
-    return await this.post<MuteUserResponse<StreamChatGenerics>>(this.baseURL + '/moderation/mute', {
+  async muteUser(targetID: string, userID?: string, options: MuteUserOptions = {}) {
+    return await this.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
       target_id: targetID,
       ...(userID ? { user_id: userID } : {}),
       ...options,
@@ -2342,7 +2309,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   async flagMessage(targetMessageID: string, options: { reason?: string; user_id?: string } = {}) {
-    return await this.post<FlagMessageResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flag', {
+    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
       target_message_id: targetMessageID,
       ...options,
     });
@@ -2355,7 +2322,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   async flagUser(targetID: string, options: { reason?: string; user_id?: string } = {}) {
-    return await this.post<FlagUserResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flag', {
+    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
       target_user_id: targetID,
       ...options,
     });
@@ -2368,7 +2335,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   async unflagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagMessageResponse<StreamChatGenerics>>(this.baseURL + '/moderation/unflag', {
+    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
       target_message_id: targetMessageID,
       ...options,
     });
@@ -2381,7 +2348,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>}
    */
   async unflagUser(targetID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagUserResponse<StreamChatGenerics>>(this.baseURL + '/moderation/unflag', {
+    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
       target_user_id: targetID,
       ...options,
     });
@@ -2409,11 +2376,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {FlagsFilters} filterConditions MongoDB style filter conditions
    * @param {FlagsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
-   * @return {Promise<FlagsResponse<StreamChatGenerics>>} Flags Response
+   * @return {Promise<FlagsResponse>} Flags Response
    */
   async _queryFlags(filterConditions: FlagsFilters = {}, options: FlagsPaginationOptions = {}) {
     // Return a list of flags
-    return await this.post<FlagsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/flags', {
+    return await this.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
       filter_conditions: filterConditions,
       ...options,
     });
@@ -2430,11 +2397,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
    * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
    *
-   * @return {Promise<FlagReportsResponse<StreamChatGenerics>>} Flag Reports Response
+   * @return {Promise<FlagReportsResponse>} Flag Reports Response
    */
   async _queryFlagReports(filterConditions: FlagReportsFilters = {}, options: FlagReportsPaginationOptions = {}) {
     // Return a list of message flags
-    return await this.post<FlagReportsResponse<StreamChatGenerics>>(this.baseURL + '/moderation/reports', {
+    return await this.post<FlagReportsResponse>(this.baseURL + '/moderation/reports', {
       filter_conditions: filterConditions,
       ...options,
     });
@@ -2455,13 +2422,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<ReviewFlagReportResponse>>}
    */
   async _reviewFlagReport(id: string, reviewResult: string, options: ReviewFlagReportOptions = {}) {
-    return await this.patch<ReviewFlagReportResponse<StreamChatGenerics>>(
-      this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
-      {
-        review_result: reviewResult,
-        ...options,
-      },
-    );
+    return await this.patch<ReviewFlagReportResponse>(this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`, {
+      review_result: reviewResult,
+      ...options,
+    });
   }
 
   /**
@@ -2485,7 +2449,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @deprecated use markChannelsRead instead
    *
    * markAllRead - marks all channels for this user as read
-   * @param {MarkAllReadOptions<StreamChatGenerics>} [data]
+   * @param {MarkAllReadOptions} [data]
    *
    * @return {Promise<APIResponse>}
    */
@@ -2495,55 +2459,45 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * markChannelsRead - marks channels read -
    * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
    *
-   * @param {MarkChannelsReadOptions <StreamChatGenerics>} [data]
+   * @param {MarkChannelsReadOptions } [data]
    *
    * @return {Promise<APIResponse>}
    */
-  async markChannelsRead(data: MarkChannelsReadOptions<StreamChatGenerics> = {}) {
+  async markChannelsRead(data: MarkChannelsReadOptions = {}) {
     await this.post<APIResponse>(this.baseURL + '/channels/read', { ...data });
   }
 
-  createCommand(data: CreateCommandOptions<StreamChatGenerics>) {
-    return this.post<CreateCommandResponse<StreamChatGenerics>>(this.baseURL + '/commands', data);
+  createCommand(data: CreateCommandOptions) {
+    return this.post<CreateCommandResponse>(this.baseURL + '/commands', data);
   }
 
   getCommand(name: string) {
-    return this.get<GetCommandResponse<StreamChatGenerics>>(this.baseURL + `/commands/${encodeURIComponent(name)}`);
+    return this.get<GetCommandResponse>(this.baseURL + `/commands/${encodeURIComponent(name)}`);
   }
 
-  updateCommand(name: string, data: UpdateCommandOptions<StreamChatGenerics>) {
-    return this.put<UpdateCommandResponse<StreamChatGenerics>>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-      data,
-    );
+  updateCommand(name: string, data: UpdateCommandOptions) {
+    return this.put<UpdateCommandResponse>(this.baseURL + `/commands/${encodeURIComponent(name)}`, data);
   }
 
   deleteCommand(name: string) {
-    return this.delete<DeleteCommandResponse<StreamChatGenerics>>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
+    return this.delete<DeleteCommandResponse>(this.baseURL + `/commands/${encodeURIComponent(name)}`);
   }
 
   listCommands() {
-    return this.get<ListCommandsResponse<StreamChatGenerics>>(this.baseURL + `/commands`);
+    return this.get<ListCommandsResponse>(this.baseURL + `/commands`);
   }
 
-  createChannelType(data: CreateChannelOptions<StreamChatGenerics>) {
+  createChannelType(data: CreateChannelOptions) {
     const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.post<CreateChannelResponse<StreamChatGenerics>>(this.baseURL + '/channeltypes', channelData);
+    return this.post<CreateChannelResponse>(this.baseURL + '/channeltypes', channelData);
   }
 
   getChannelType(channelType: string) {
-    return this.get<GetChannelTypeResponse<StreamChatGenerics>>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
+    return this.get<GetChannelTypeResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`);
   }
 
-  updateChannelType(channelType: string, data: UpdateChannelOptions<StreamChatGenerics>) {
-    return this.put<UpdateChannelResponse<StreamChatGenerics>>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-      data,
-    );
+  updateChannelType(channelType: string, data: UpdateChannelOptions) {
+    return this.put<UpdateChannelResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`, data);
   }
 
   deleteChannelType(channelType: string) {
@@ -2551,7 +2505,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   listChannelTypes() {
-    return this.get<ListChannelResponse<StreamChatGenerics>>(this.baseURL + `/channeltypes`);
+    return this.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
   }
 
   /**
@@ -2560,10 +2514,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} messageId
    * @param {string} language
    *
-   * @return {MessageResponse<StreamChatGenerics>} Response that includes the message
+   * @return {MessageResponse} Response that includes the message
    */
   async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & MessageResponse<StreamChatGenerics>>(
+    return await this.post<APIResponse & MessageResponse>(
       this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
       { language },
     );
@@ -2647,7 +2601,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
           pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
           pinned_at: this._normalizeExpiration(pinnedAt),
         },
-      } as unknown) as PartialMessageUpdate<StreamChatGenerics>,
+      } as unknown) as PartialMessageUpdate,
       pinnedBy,
     );
   }
@@ -2666,7 +2620,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       messageId,
       ({
         set: { pinned: false },
-      } as unknown) as PartialMessageUpdate<StreamChatGenerics>,
+      } as unknown) as PartialMessageUpdate,
       userId,
     );
   }
@@ -2674,22 +2628,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * updateMessage - Update the given message
    *
-   * @param {Omit<MessageResponse<StreamChatGenerics>, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
+   * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
    * @param {string | { id: string }} [userId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
-   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
+   * @return {{ message: MessageResponse }} Response that includes the message
    */
-  async updateMessage(
-    message: UpdatedMessage<StreamChatGenerics>,
-    userId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
+  async updateMessage(message: UpdatedMessage, userId?: string | { id: string }, options?: UpdateMessageOptions) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    const clonedMessage: Message = Object.assign({}, message);
+    // FIXME: brother in fucking christ
+    const clonedMessage: Partial<UpdatedMessage & { __html: string }> = { ...message };
     delete clonedMessage.id;
 
     const reservedMessageFields: Array<ReservedMessageFields> = [
@@ -2708,7 +2659,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     ];
 
     reservedMessageFields.forEach(function (item) {
-      if (clonedMessage[item] != null) {
+      if (clonedMessage[item]) {
         delete clonedMessage[item];
       }
     });
@@ -2719,7 +2670,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       } else {
         clonedMessage.user = {
           id: userId.id,
-        } as UserResponse<StreamChatGenerics>;
+        } as UserResponse;
       }
     }
 
@@ -2731,7 +2682,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       clonedMessage.mentioned_users = clonedMessage.mentioned_users.map((mu) => ((mu as unknown) as UserResponse).id);
     }
 
-    return await this.post<UpdateMessageAPIResponse<StreamChatGenerics>>(
+    return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
         message: clonedMessage,
@@ -2745,17 +2696,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @param {string} id the message id
    *
-   * @param {PartialUpdateMessage<StreamChatGenerics>}  partialMessageObject which should contain id and any of "set" or "unset" params;
+   * @param {PartialUpdateMessage}  partialMessageObject which should contain id and any of "set" or "unset" params;
    *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
    * @param {string | { id: string }} [userId]
    *
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
-   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the updated message
+   * @return {{ message: MessageResponse }} Response that includes the updated message
    */
   async partialUpdateMessage(
     id: string,
-    partialMessageObject: PartialMessageUpdate<StreamChatGenerics>,
+    partialMessageObject: PartialMessageUpdate,
     userId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
@@ -2766,14 +2717,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (userId != null && isString(userId)) {
       user = { id: userId };
     }
-    return await this.put<UpdateMessageAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
+    return await this.put<UpdateMessageAPIResponse>(this.baseURL + `/messages/${encodeURIComponent(id)}`, {
+      ...partialMessageObject,
+      ...options,
+      user,
+    });
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
@@ -2781,7 +2729,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (hardDelete) {
       params = { hard: true };
     }
-    return await this.delete<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+    return await this.delete<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
       params,
     );
@@ -2797,20 +2745,19 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} messageID The id of the message to undelete
    * @param {string} userID The id of the user who undeleted the message
    *
-   * @return {{ message: MessageResponse<StreamChatGenerics> }} Response that includes the message
+   * @return {{ message: MessageResponse }} Response that includes the message
    */
   async undeleteMessage(messageID: string, userID: string) {
-    return await this.post<APIResponse & { message: MessageResponse<StreamChatGenerics> }>(
+    return await this.post<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}/undelete`,
       { undeleted_by: userID },
     );
   }
 
   async getMessage(messageID: string, options?: GetMessageOptions) {
-    return await this.get<GetMessageAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      { ...options },
-    );
+    return await this.get<GetMessageAPIResponse>(this.baseURL + `/messages/${encodeURIComponent(messageID)}`, {
+      ...options,
+    });
   }
 
   /**
@@ -2822,7 +2769,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
    *
-   * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
+   * @returns {{ threads: Thread[], next: string }} Returns the list of threads and the next cursor.
    */
   async queryThreads(options: QueryThreadsOptions = {}) {
     const optionsWithDefaults = {
@@ -2833,15 +2780,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(
-      `${this.baseURL}/threads`,
-      optionsWithDefaults,
-    );
+    const response = await this.post<QueryThreadsAPIResponse>(`${this.baseURL}/threads`, optionsWithDefaults);
 
     return {
-      threads: response.threads.map(
-        (thread) => new Thread<StreamChatGenerics>({ client: this, threadData: thread }),
-      ),
+      threads: response.threads.map((thread) => new Thread({ client: this, threadData: thread })),
       next: response.next,
     };
   }
@@ -2855,7 +2797,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {number}            options.participant_limit Limits the number of participants returned per threads.
    * @param {number}            options.reply_limit Limits the number of replies returned per threads.
    *
-   * @returns {Thread<StreamChatGenerics>} Returns the thread.
+   * @returns {Thread} Returns the thread.
    */
   async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
@@ -2869,12 +2811,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
-    const response = await this.get<GetThreadAPIResponse<StreamChatGenerics>>(
+    const response = await this.get<GetThreadAPIResponse>(
       `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
       optionsWithDefaults,
     );
 
-    return new Thread<StreamChatGenerics>({ client: this, threadData: response.thread });
+    return new Thread({ client: this, threadData: response.thread });
   }
 
   /**
@@ -2883,7 +2825,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string}              messageId The id of the thread message which needs to be updated.
    * @param {PartialThreadUpdate} partialThreadObject should contain "set" or "unset" params for any of the thread's non-reserved fields.
    *
-   * @returns {GetThreadAPIResponse<StreamChatGenerics>} Returns the updated thread.
+   * @returns {GetThreadAPIResponse} Returns the updated thread.
    */
   async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
     if (!messageId) {
@@ -2913,7 +2855,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       }
     }
 
-    return await this.patch<GetThreadAPIResponse<StreamChatGenerics>>(
+    return await this.patch<GetThreadAPIResponse>(
       `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
       partialThreadObject,
     );
@@ -3727,8 +3669,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: CreatePollData<StreamChatGenerics>, userId?: string) {
-    return await this.post<APIResponse & CreatePollAPIResponse<StreamChatGenerics>>(this.baseURL + `/polls`, {
+  async createPoll(poll: CreatePollData, userId?: string) {
+    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
       ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
@@ -3740,8 +3682,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *  @param userId string The user id (only serverside)
    * @returns {APIResponse & GetPollAPIResponse} The poll
    */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse<StreamChatGenerics>> {
-    return await this.get<APIResponse & GetPollAPIResponse<StreamChatGenerics>>(
+  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
+    return await this.get<APIResponse & GetPollAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(id)}`,
       userId ? { user_id: userId } : {},
     );
@@ -3753,8 +3695,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData<StreamChatGenerics>, userId?: string) {
-    return await this.put<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>>(this.baseURL + `/polls`, {
+  async updatePoll(poll: PollData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
       ...poll,
       ...(userId ? { user_id: userId } : {}),
     });
@@ -3763,23 +3705,20 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   /**
    * Partially updates a poll
    * @param id string The poll id
-   * @param {PartialPollUpdate<StreamChatGenerics>} partialPollObject which should contain id and any of "set" or "unset" params;
+   * @param {PartialPollUpdate} partialPollObject which should contain id and any of "set" or "unset" params;
    * @param userId string The user id (only serverside)
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
   async partialUpdatePoll(
     id: string,
-    partialPollObject: PartialPollUpdate<StreamChatGenerics>,
+    partialPollObject: PartialPollUpdate,
     userId?: string,
-  ): Promise<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...partialPollObject,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  ): Promise<APIResponse & UpdatePollAPIResponse> {
+    return await this.patch<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls/${encodeURIComponent(id)}`, {
+      ...partialPollObject,
+      ...(userId ? { user_id: userId } : {}),
+    });
   }
 
   /**
@@ -3800,13 +3739,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse<StreamChatGenerics>> {
+  async closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
     return this.partialUpdatePoll(
       id,
       {
         set: {
           is_closed: true,
-        } as PartialPollUpdate<StreamChatGenerics>['set'],
+        } as PartialPollUpdate['set'],
       },
       userId,
     );
@@ -3819,8 +3758,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData<StreamChatGenerics>, userId?: string) {
-    return await this.post<APIResponse & CreatePollOptionAPIResponse<StreamChatGenerics>>(
+  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
+    return await this.post<APIResponse & CreatePollOptionAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
       {
         ...option,
@@ -3837,7 +3776,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
   async getPollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.get<APIResponse & GetPollOptionAPIResponse<StreamChatGenerics>>(
+    return await this.get<APIResponse & GetPollOptionAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
       userId ? { user_id: userId } : {},
     );
@@ -3850,8 +3789,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param userId string The user id (only serverside)
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData<StreamChatGenerics>, userId?: string) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse<StreamChatGenerics>>(
+  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
+    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
       {
         ...option,
@@ -3883,7 +3822,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
   async castPollVote(messageId: string, pollId: string, vote: PollVoteData, userId?: string) {
-    return await this.post<APIResponse & CastVoteAPIResponse<StreamChatGenerics>>(
+    return await this.post<APIResponse & CastVoteAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
       {
         vote,
@@ -3935,9 +3874,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: PollSort = [],
     options: QueryPollsOptions = {},
     userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse<StreamChatGenerics>> {
+  ): Promise<APIResponse & QueryPollsResponse> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse<StreamChatGenerics>>(this.baseURL + `/polls/query${q}`, {
+    return await this.post<APIResponse & QueryPollsResponse>(this.baseURL + `/polls/query${q}`, {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
@@ -3959,9 +3898,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
     userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse<StreamChatGenerics>> {
+  ): Promise<APIResponse & PollVotesAPIResponse> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse<StreamChatGenerics>>(
+    return await this.post<APIResponse & PollVotesAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter,
@@ -3986,9 +3925,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
     userId?: string,
-  ): Promise<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>> {
+  ): Promise<APIResponse & PollAnswersAPIResponse> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollAnswersAPIResponse<StreamChatGenerics>>(
+    return await this.post<APIResponse & PollAnswersAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter: { ...filter, is_answer: true },
@@ -4009,15 +3948,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     filter: QueryMessageHistoryFilters = {},
     sort: QueryMessageHistorySort = [],
     options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse<StreamChatGenerics>>(
-      this.baseURL + '/messages/history',
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
+  ): Promise<APIResponse & QueryMessageHistoryResponse> {
+    return await this.post<APIResponse & QueryMessageHistoryResponse>(this.baseURL + '/messages/history', {
+      filter,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    });
   }
 
   /**
