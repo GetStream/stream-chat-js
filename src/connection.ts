@@ -310,7 +310,10 @@ export class StableWSConnection {
         this.client.insightMetrics.wsConsecutiveFailures++;
         this.client.insightMetrics.wsTotalFailures++;
 
-        const insights = buildWsFatalInsight((this as unknown) as StableWSConnection, convertErrorToJson(error as Error));
+        const insights = buildWsFatalInsight(
+          (this as unknown) as StableWSConnection,
+          convertErrorToJson(error as Error),
+        );
         postInsights?.('ws_fatal', insights);
       }
       throw error;

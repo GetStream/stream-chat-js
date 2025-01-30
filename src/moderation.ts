@@ -102,13 +102,10 @@ export class Moderation {
    * @returns
    */
   async muteUser(targetID: string, options: ModerationMuteOptions = {}) {
-    return await this.client.post<MuteUserResponse & APIResponse>(
-      this.client.baseURL + '/api/v2/moderation/mute',
-      {
-        target_ids: [targetID],
-        ...options,
-      },
-    );
+    return await this.client.post<MuteUserResponse & APIResponse>(this.client.baseURL + '/api/v2/moderation/mute', {
+      target_ids: [targetID],
+      ...options,
+    });
   }
 
   /**

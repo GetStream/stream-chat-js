@@ -48,22 +48,13 @@ type PollVoteCastedRemoved = PollVoteEvent & {
   type: 'poll.vote_removed';
 };
 
-const isPollUpdatedEvent = (e: Event): e is PollUpdatedEvent =>
-  e.type === 'poll.updated';
-const isPollClosedEventEvent = (e: Event): e is PollClosedEvent =>
-  e.type === 'poll.closed';
-const isPollVoteCastedEvent = (e: Event): e is PollVoteCastedEvent =>
-  e.type === 'poll.vote_casted';
-const isPollVoteChangedEvent = (
-  e: Event,
-): e is PollVoteCastedChanged => e.type === 'poll.vote_changed';
-const isPollVoteRemovedEvent = (
-  e: Event,
-): e is PollVoteCastedRemoved => e.type === 'poll.vote_removed';
+const isPollUpdatedEvent = (e: Event): e is PollUpdatedEvent => e.type === 'poll.updated';
+const isPollClosedEventEvent = (e: Event): e is PollClosedEvent => e.type === 'poll.closed';
+const isPollVoteCastedEvent = (e: Event): e is PollVoteCastedEvent => e.type === 'poll.vote_casted';
+const isPollVoteChangedEvent = (e: Event): e is PollVoteCastedChanged => e.type === 'poll.vote_changed';
+const isPollVoteRemovedEvent = (e: Event): e is PollVoteCastedRemoved => e.type === 'poll.vote_removed';
 
-export const isVoteAnswer = (
-  vote: PollVote | PollAnswer,
-): vote is PollAnswer => !!(vote as PollAnswer)?.answer_text;
+export const isVoteAnswer = (vote: PollVote | PollAnswer): vote is PollAnswer => !!(vote as PollAnswer)?.answer_text;
 
 export type PollAnswersQueryParams = {
   filter?: QueryVotesFilters;
@@ -79,7 +70,8 @@ export type PollOptionVotesQueryParams = {
 
 type OptionId = string;
 
-export type PollState = CustomPollType &
+// FIXME: ideally this would work without the unknown record...
+export type PollState = (CustomPollType & Record<string, unknown>) &
   Omit<PollResponse, 'own_votes' | 'id'> & {
     lastActivityAt: Date; // todo: would be ideal to get this from the BE
     maxVotedOptionIds: OptionId[];
@@ -381,9 +373,7 @@ function getOwnVotesByOptionId(ownVotes: PollVote[]) {
       }, {});
 }
 
-export function extractPollData(
-  pollResponse: PollResponse,
-): PollData {
+export function extractPollData(pollResponse: PollResponse): PollData {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
