@@ -1,9 +1,8 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
 import type {
-  DefaultGenerics,
+  CustomPollType,
   Event,
-  ExtendableGenerics,
   PartialPollUpdate,
   PollAnswer,
   PollData,
@@ -16,58 +15,55 @@ import type {
   VoteSort,
 } from './types';
 
-type PollEvent<SCG extends ExtendableGenerics = DefaultGenerics> = {
+type PollEvent = {
   cid: string;
   created_at: string;
-  poll: PollResponse<SCG>;
+  poll: PollResponse;
 };
 
-type PollUpdatedEvent<SCG extends ExtendableGenerics = DefaultGenerics> = PollEvent<SCG> & {
+type PollUpdatedEvent = PollEvent & {
   type: 'poll.updated';
 };
 
-type PollClosedEvent<SCG extends ExtendableGenerics = DefaultGenerics> = PollEvent<SCG> & {
+type PollClosedEvent = PollEvent & {
   type: 'poll.closed';
 };
 
-type PollVoteEvent<SCG extends ExtendableGenerics = DefaultGenerics> = {
+type PollVoteEvent = {
   cid: string;
   created_at: string;
-  poll: PollResponse<SCG>;
-  poll_vote: PollVote<SCG> | PollAnswer<SCG>;
+  poll: PollResponse;
+  poll_vote: PollVote | PollAnswer;
 };
 
-type PollVoteCastedEvent<SCG extends ExtendableGenerics = DefaultGenerics> = PollVoteEvent<SCG> & {
+type PollVoteCastedEvent = PollVoteEvent & {
   type: 'poll.vote_casted';
 };
 
-type PollVoteCastedChanged<SCG extends ExtendableGenerics = DefaultGenerics> = PollVoteEvent<SCG> & {
+type PollVoteCastedChanged = PollVoteEvent & {
   type: 'poll.vote_removed';
 };
 
-type PollVoteCastedRemoved<SCG extends ExtendableGenerics = DefaultGenerics> = PollVoteEvent<SCG> & {
+type PollVoteCastedRemoved = PollVoteEvent & {
   type: 'poll.vote_removed';
 };
 
-const isPollUpdatedEvent = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  e: Event<SCG>,
-): e is PollUpdatedEvent<SCG> => e.type === 'poll.updated';
-const isPollClosedEventEvent = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  e: Event<SCG>,
-): e is PollClosedEvent<SCG> => e.type === 'poll.closed';
-const isPollVoteCastedEvent = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  e: Event<SCG>,
-): e is PollVoteCastedEvent<SCG> => e.type === 'poll.vote_casted';
-const isPollVoteChangedEvent = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  e: Event<SCG>,
-): e is PollVoteCastedChanged<SCG> => e.type === 'poll.vote_changed';
-const isPollVoteRemovedEvent = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  e: Event<SCG>,
-): e is PollVoteCastedRemoved<SCG> => e.type === 'poll.vote_removed';
+const isPollUpdatedEvent = (e: Event): e is PollUpdatedEvent =>
+  e.type === 'poll.updated';
+const isPollClosedEventEvent = (e: Event): e is PollClosedEvent =>
+  e.type === 'poll.closed';
+const isPollVoteCastedEvent = (e: Event): e is PollVoteCastedEvent =>
+  e.type === 'poll.vote_casted';
+const isPollVoteChangedEvent = (
+  e: Event,
+): e is PollVoteCastedChanged => e.type === 'poll.vote_changed';
+const isPollVoteRemovedEvent = (
+  e: Event,
+): e is PollVoteCastedRemoved => e.type === 'poll.vote_removed';
 
-export const isVoteAnswer = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  vote: PollVote<SCG> | PollAnswer<SCG>,
-): vote is PollAnswer<SCG> => !!(vote as PollAnswer<SCG>)?.answer_text;
+export const isVoteAnswer = (
+  vote: PollVote | PollAnswer,
+): vote is PollAnswer => !!(vote as PollAnswer)?.answer_text;
 
 export type PollAnswersQueryParams = {
   filter?: QueryVotesFilters;
@@ -83,36 +79,36 @@ export type PollOptionVotesQueryParams = {
 
 type OptionId = string;
 
-export type PollState<SCG extends ExtendableGenerics = DefaultGenerics> = SCG['pollType'] &
-  Omit<PollResponse<SCG>, 'own_votes' | 'id'> & {
+export type PollState = CustomPollType &
+  Omit<PollResponse, 'own_votes' | 'id'> & {
     lastActivityAt: Date; // todo: would be ideal to get this from the BE
     maxVotedOptionIds: OptionId[];
-    ownVotesByOptionId: Record<OptionId, PollVote<SCG>>;
+    ownVotesByOptionId: Record<OptionId, PollVote>;
     ownAnswer?: PollAnswer; // each user can have only one answer
   };
 
-type PollInitOptions<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  client: StreamChat<SCG>;
-  poll: PollResponse<SCG>;
+type PollInitOptions = {
+  client: StreamChat;
+  poll: PollResponse;
 };
 
-export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: StateStore<PollState<SCG>>;
+export class Poll {
+  public readonly state: StateStore<PollState>;
   public id: string;
-  private client: StreamChat<SCG>;
+  private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client, poll }: PollInitOptions<SCG>) {
+  constructor({ client, poll }: PollInitOptions) {
     this.client = client;
     this.id = poll.id;
 
-    this.state = new StateStore<PollState<SCG>>(this.getInitialStateFromPollResponse(poll));
+    this.state = new StateStore<PollState>(this.getInitialStateFromPollResponse(poll));
   }
 
-  private getInitialStateFromPollResponse = (poll: PollInitOptions<SCG>['poll']) => {
+  private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { own_votes, id, ...pollResponseForState } = poll;
-    const { ownAnswer, ownVotes } = own_votes?.reduce<{ ownVotes: PollVote<SCG>[]; ownAnswer?: PollAnswer }>(
+    const { ownAnswer, ownVotes } = own_votes?.reduce<{ ownVotes: PollVote[]; ownAnswer?: PollAnswer }>(
       (acc, voteOrAnswer) => {
         if (isVoteAnswer(voteOrAnswer)) {
           acc.ownAnswer = voteOrAnswer;
@@ -128,22 +124,22 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
       ...pollResponseForState,
       lastActivityAt: new Date(),
       maxVotedOptionIds: getMaxVotedOptionIds(
-        pollResponseForState.vote_counts_by_option as PollResponse<SCG>['vote_counts_by_option'],
+        pollResponseForState.vote_counts_by_option as PollResponse['vote_counts_by_option'],
       ),
       ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
     };
   };
 
-  public reinitializeState = (poll: PollInitOptions<SCG>['poll']) => {
+  public reinitializeState = (poll: PollInitOptions['poll']) => {
     this.state.partialNext(this.getInitialStateFromPollResponse(poll));
   };
 
-  get data(): PollState<SCG> {
+  get data(): PollState {
     return this.state.getLatestValue();
   }
 
-  public handlePollUpdated = (event: Event<SCG>) => {
+  public handlePollUpdated = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollUpdatedEvent(event)) return;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -152,14 +148,14 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
   };
 
-  public handlePollClosed = (event: Event<SCG>) => {
+  public handlePollClosed = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollClosedEventEvent(event)) return;
     // @ts-ignore
     this.state.partialNext({ is_closed: true, lastActivityAt: new Date(event.created_at) });
   };
 
-  public handleVoteCasted = (event: Event<SCG>) => {
+  public handleVoteCasted = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteCastedEvent(event)) return;
     const currentState = this.data;
@@ -195,7 +191,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
 
-  public handleVoteChanged = (event: Event<SCG>) => {
+  public handleVoteChanged = (event: Event) => {
     // this event is triggered only when event.poll.enforce_unique_vote === true
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteChangedEvent(event)) return;
@@ -214,7 +210,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
         if (event.poll.enforce_unique_votes) {
           ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
-          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVote<SCG>>>(
+          ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<Record<OptionId, PollVote>>(
             (acc, [optionId, vote]) => {
               if (optionId !== event.poll_vote.option_id && vote.id === event.poll_vote.id) {
                 return acc;
@@ -250,7 +246,7 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
 
-  public handleVoteRemoved = (event: Event<SCG>) => {
+  public handleVoteRemoved = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteRemovedEvent(event)) return;
     const currentState = this.data;
@@ -291,11 +287,11 @@ export class Poll<SCG extends ExtendableGenerics = DefaultGenerics> {
     return poll;
   };
 
-  update = async (data: Exclude<PollData<SCG>, 'id'>) => {
+  update = async (data: Exclude<PollData, 'id'>) => {
     return await this.client.updatePoll({ ...data, id: this.id });
   };
 
-  partialUpdate = async (partialPollObject: PartialPollUpdate<SCG>) => {
+  partialUpdate = async (partialPollObject: PartialPollUpdate) => {
     return await this.client.partialUpdatePoll(this.id as string, partialPollObject);
   };
 
@@ -375,19 +371,19 @@ function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_o
   return winningOptions;
 }
 
-function getOwnVotesByOptionId<SCG extends ExtendableGenerics = DefaultGenerics>(ownVotes: PollVote<SCG>[]) {
+function getOwnVotesByOptionId(ownVotes: PollVote[]) {
   return !ownVotes
-    ? ({} as Record<OptionId, PollVote<SCG>>)
-    : ownVotes.reduce<Record<OptionId, PollVote<SCG>>>((acc, vote) => {
+    ? ({} as Record<OptionId, PollVote>)
+    : ownVotes.reduce<Record<OptionId, PollVote>>((acc, vote) => {
         if (isVoteAnswer(vote) || !vote.option_id) return acc;
         acc[vote.option_id] = vote;
         return acc;
       }, {});
 }
 
-export function extractPollData<SCG extends ExtendableGenerics = DefaultGenerics>(
-  pollResponse: PollResponse<SCG>,
-): PollData<SCG> {
+export function extractPollData(
+  pollResponse: PollResponse,
+): PollData {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
@@ -402,9 +398,9 @@ export function extractPollData<SCG extends ExtendableGenerics = DefaultGenerics
   };
 }
 
-export function extractPollEnrichedData<SCG extends ExtendableGenerics = DefaultGenerics>(
-  pollResponse: PollResponse<SCG>,
-): Omit<PollEnrichData<SCG>, 'own_votes' | 'latest_answers'> {
+export function extractPollEnrichedData(
+  pollResponse: PollResponse,
+): Omit<PollEnrichData, 'own_votes' | 'latest_answers'> {
   return {
     answers_count: pollResponse.answers_count,
     latest_votes_by_option: pollResponse.latest_votes_by_option,

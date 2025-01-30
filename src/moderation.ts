@@ -1,8 +1,6 @@
 import {
   APIResponse,
   ModerationConfig,
-  DefaultGenerics,
-  ExtendableGenerics,
   GetConfigResponse,
   GetUserModerationReportResponse,
   MuteUserResponse,
@@ -31,10 +29,10 @@ export const MODERATION_ENTITY_TYPES = {
 };
 
 // Moderation class provides all the endpoints related to moderation v2.
-export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  client: StreamChat<StreamChatGenerics>;
+export class Moderation {
+  client: StreamChat;
 
-  constructor(client: StreamChat<StreamChatGenerics>) {
+  constructor(client: StreamChat) {
     this.client = client;
   }
 
@@ -104,7 +102,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns
    */
   async muteUser(targetID: string, options: ModerationMuteOptions = {}) {
-    return await this.client.post<MuteUserResponse<StreamChatGenerics> & APIResponse>(
+    return await this.client.post<MuteUserResponse & APIResponse>(
       this.client.baseURL + '/api/v2/moderation/mute',
       {
         target_ids: [targetID],
@@ -144,7 +142,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.include_user_mutes Include user mutes
    */
   async getUserModerationReport(userID: string, options: GetUserModerationReportOptions = {}) {
-    return await this.client.get<GetUserModerationReportResponse<StreamChatGenerics>>(
+    return await this.client.get<GetUserModerationReportResponse>(
       this.client.baseURL + `/api/v2/moderation/user_report`,
       {
         user_id: userID,
