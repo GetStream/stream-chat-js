@@ -64,14 +64,12 @@ export type ChannelManagerEventTypes =
   | 'channel.hidden'
   | 'channel.truncated'
   | 'channel.visible'
-  | 'channel.updated';
 
 export type ChannelManagerEventHandlerNames =
   | 'channelDeletedHandler'
   | 'channelHiddenHandler'
   | 'channelTruncatedHandler'
   | 'channelVisibleHandler'
-  | 'channelUpdatedHandler'
   | 'newMessageHandler'
   | 'memberUpdatedHandler'
   | 'notificationAddedToChannelHandler'
@@ -88,7 +86,6 @@ const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManager
   'channel.hidden': 'channelHiddenHandler',
   'channel.truncated': 'channelTruncatedHandler',
   'channel.visible': 'channelVisibleHandler',
-  'channel.updated': 'channelUpdatedHandler',
   'message.new': 'newMessageHandler',
   'member.updated': 'memberUpdatedHandler',
   'notification.added_to_channel': 'notificationAddedToChannelHandler',
@@ -148,7 +145,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         channelDeletedHandler: this.channelDeletedHandler,
         channelHiddenHandler: this.channelHiddenHandler,
         channelVisibleHandler: this.channelVisibleHandler,
-        channelUpdatedHandler: this.channelUpdatedHandler,
         memberUpdatedHandler: this.memberUpdatedHandler,
         newMessageHandler: this.newMessageHandler,
         notificationAddedToChannelHandler: this.notificationAddedToChannelHandler,
@@ -309,22 +305,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
   private channelHiddenHandler = this.channelDeletedHandler;
-
-  private channelUpdatedHandler = (event: Event<SCG>) => {
-    const { channels } = this.state.getLatestValue();
-    if (!channels) return channels;
-
-    const index = channels.findIndex((channel) => channel.cid === (event.cid || event.channel?.cid));
-    if (index >= 0 && event.channel) {
-      channels[index].data = {
-        ...event.channel,
-        hidden: event.channel?.hidden ?? channels[index].data?.hidden,
-        own_capabilities: event.channel?.own_capabilities ?? channels[index].data?.own_capabilities,
-      };
-    }
-
-    this.state.partialNext({ channels: [...channels] });
-  };
 
   private newMessageHandler = (event: Event<SCG>) => {
     const { pagination, channels } = this.state.getLatestValue();
