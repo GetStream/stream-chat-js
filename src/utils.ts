@@ -826,9 +826,7 @@ const messagePaginationLinear = ({
   return newPagination;
 };
 
-export const messageSetPagination = (
-  params: MessagePaginationUpdatedParams,
-) => {
+export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
   if (params.parentSet.messages.length < params.returnedPage.length) {
     params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
     return params.parentSet.pagination;

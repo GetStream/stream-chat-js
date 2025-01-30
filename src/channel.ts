@@ -60,6 +60,7 @@ import {
   MessageOptions,
   PushPreference,
   UpdateChannelOptions,
+  CustomChannelType,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -71,8 +72,8 @@ export class Channel {
   _client: StreamChat;
   type: string;
   id: string | undefined;
-  data: ChannelData | ChannelResponse | undefined;
-  _data: ChannelData | ChannelResponse;
+  data: Partial<ChannelData & ChannelResponse> | undefined;
+  _data: Partial<ChannelData & ChannelResponse>;
   cid: string;
   /**  */
   listeners: { [key: string]: (string | EventHandler)[] };
@@ -371,12 +372,13 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async update(
-    channelData: Partial<ChannelData> | Partial<ChannelResponse> = {},
+    channelData: Partial<ChannelData & ChannelResponse> = {},
     updateMessage?: Message,
     options?: ChannelUpdateOptions,
   ) {
     // Strip out reserved names that will result in API errors.
-    const reserved = [
+    // TODO: this needs to be typed better
+    const reserved: Exclude<keyof (ChannelResponse & ChannelData), keyof CustomChannelType>[] = [
       'config',
       'cid',
       'created_by',
@@ -388,8 +390,8 @@ export class Channel {
       'last_message_at',
       'own_capabilities',
     ];
+
     reserved.forEach((key) => {
-      // @ts-expect-error certain keys don't exist
       delete channelData[key];
     });
 
@@ -412,7 +414,6 @@ export class Channel {
 
     const areCapabilitiesChanged =
       [...(data.channel.own_capabilities || [])].sort().join() !==
-      // @ts-expect-error capabilities do not exist on channel
       [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
     this.data = data.channel;
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
@@ -420,7 +421,6 @@ export class Channel {
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
-        // @ts-expect-error capabilities do not exist on channel
         own_capabilities: data.channel.own_capabilities,
       });
     }
@@ -1050,7 +1050,6 @@ export class Channel {
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
 
     // Return false if channel doesn't allow read events.
-    // @ts-expect-error capabilities
     if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events')) {
       return false;
     }
@@ -1184,8 +1183,7 @@ export class Channel {
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
-      // @ts-expect-error capabilities
-      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
+      [...(this.data && Array.isArray(this.data?.own_capabilities) ? this.data.own_capabilities : [])].sort().join();
     this.data = state.channel;
     this.offlineMode = false;
 
@@ -1193,7 +1191,6 @@ export class Channel {
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
-        // @ts-expect-error capabilities
         own_capabilities: state.channel.own_capabilities,
       });
     }
@@ -1568,16 +1565,13 @@ export class Channel {
       }
       case 'channel.updated':
         if (event.channel) {
-          // @ts-expect-error frozen
           const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
           channel.data = {
             ...event.channel,
-            // @ts-expect-error hidden
             hidden: event.channel?.hidden ?? channel.data?.hidden,
-            // @ts-expect-error capabilities
             own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
         }
@@ -1611,9 +1605,7 @@ export class Channel {
         if (!event.user?.id) break;
         channelState.members[event.user.id] = {
           ...(channelState.members[event.user.id] || {}),
-          // @ts-expect-error shadow
           shadow_banned: !!event.shadow,
-          // @ts-expect-error shadow
           banned: !event.shadow,
           user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
         };

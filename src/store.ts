@@ -7,11 +7,7 @@ export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> => {
   return typeof value === 'function';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-interface EmptyInterface {}
-type StateShape = Record<string, unknown> | EmptyInterface;
-
-export class StateStore<T extends StateShape> {
+export class StateStore<T extends Record<string, unknown>> {
   private handlerSet = new Set<Handler<T>>();
 
   private static logCount = 5;
