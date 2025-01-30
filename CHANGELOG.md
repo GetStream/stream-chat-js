@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.54.1](https://github.com/GetStream/stream-chat-js/compare/v8.54.0...v8.54.1) (2025-01-30)
+
+
+### Bug Fixes
+
+* add missing types for review queue filter ([#1449](https://github.com/GetStream/stream-chat-js/issues/1449)) ([b2a01bf](https://github.com/GetStream/stream-chat-js/commit/b2a01bf1e0869bb9f3368e32dc2ce55c26eb9c34))
+* improper poll state overwrite ([#1456](https://github.com/GetStream/stream-chat-js/issues/1456)) ([4384085](https://github.com/GetStream/stream-chat-js/commit/4384085be45281c0df104bdf6f18f25dd51c98b4))
+
 ## [8.54.0](https://github.com/GetStream/stream-chat-js/compare/v8.53.0...v8.54.0) (2025-01-29)
 
 
