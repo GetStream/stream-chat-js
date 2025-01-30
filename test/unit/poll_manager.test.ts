@@ -15,8 +15,6 @@ import {
   PollResponse,
   StreamChat,
 } from '../../src';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
-import { channel } from 'node:diagnostics_channel';
 
 const TEST_USER_ID = 'observer';
 
