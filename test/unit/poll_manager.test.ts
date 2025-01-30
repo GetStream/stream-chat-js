@@ -218,7 +218,10 @@ describe('PollManager', () => {
       let pollMessages: MessageResponse[] = [];
       const spy = sinon.spy(client.polls, 'hydratePollCache');
       for (let ci = 0; ci < 5; ci++) {
-        const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(5, `_prev_${ci}`);
+        const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(
+          5,
+          `_prev_${ci}`,
+        );
         pollMessages = pollMessages.concat(prevPollMessages);
         const channelResponse = generateChannel({ channel: { id: uuidv4() }, messages: prevMessages });
         channels.push(channelResponse);
