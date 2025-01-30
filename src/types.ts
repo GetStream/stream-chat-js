@@ -1254,6 +1254,7 @@ export type Event = CustomEventType & {
   message_id?: string;
   mode?: string;
   online?: boolean;
+  own_capabilities?: string[];
   parent_id?: string;
   poll?: PollResponse;
   poll_vote?: PollVote | PollAnswer;
@@ -1263,6 +1264,7 @@ export type Event = CustomEventType & {
   };
   reaction?: ReactionResponse;
   received_at?: string | Date;
+  shadow?: boolean;
   team?: string;
   thread?: ThreadResponse;
   // @deprecated number of all unread messages across all current user's unread channels, equals unread_count
@@ -2620,8 +2622,7 @@ export type ReservedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'user'
-  | '__html';
+  | 'user';
 
 export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] };
 

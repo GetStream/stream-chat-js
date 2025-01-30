@@ -116,7 +116,6 @@ import {
   ListImportsResponse,
   Logger,
   MarkChannelsReadOptions,
-  Message,
   MessageFilters,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
@@ -1271,12 +1270,11 @@ export class StreamChat {
         }
 
         /** Updating only available properties in _user object. */
-        for (const key in event.user) {
-          if (_user && key in _user) {
-            const updateKey = key as keyof typeof event.user;
+        for (const key in _user) {
+          const updateKey = key as keyof typeof _user;
 
-            // TODO: revisit
-            // @ts-expect-error ???
+          if (updateKey in event.user) {
+            // @ts-expect-error it has an issue with this, not sure why
             _user[updateKey] = event.user[updateKey];
           }
         }
@@ -2636,8 +2634,7 @@ export class StreamChat {
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    // FIXME: brother in fucking christ
-    const clonedMessage: Partial<UpdatedMessage & { __html: string }> = { ...message };
+    const clonedMessage: Partial<UpdatedMessage> = { ...message };
     delete clonedMessage.id;
 
     const reservedMessageFields: Array<ReservedMessageFields> = [
@@ -2652,7 +2649,6 @@ export class StreamChat {
       'type',
       'updated_at',
       'user',
-      '__html',
     ];
 
     reservedMessageFields.forEach(function (item) {

@@ -280,11 +280,7 @@ export class ChannelState {
     this.pinnedMessages = result;
   }
 
-  addReaction(
-    reaction: ReactionResponse,
-    message?: MessageResponse,
-    enforce_unique?: boolean,
-  ) {
+  addReaction(reaction: ReactionResponse, message?: MessageResponse, enforce_unique?: boolean) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
@@ -313,10 +309,7 @@ export class ChannelState {
     return ownReactions;
   }
 
-  _removeOwnReactionFromMessage(
-    ownReactions: ReactionResponse[] | null | undefined,
-    reaction: ReactionResponse,
-  ) {
+  _removeOwnReactionFromMessage(ownReactions: ReactionResponse[] | null | undefined, reaction: ReactionResponse) {
     if (ownReactions) {
       return ownReactions.filter((item) => item.user_id !== reaction.user_id || item.type !== reaction.type);
     }
@@ -333,13 +326,7 @@ export class ChannelState {
     return messageWithReaction;
   }
 
-  _updateQuotedMessageReferences({
-    message,
-    remove,
-  }: {
-    message: MessageResponse;
-    remove?: boolean;
-  }) {
+  _updateQuotedMessageReferences({ message, remove }: { message: MessageResponse; remove?: boolean }) {
     const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
       (({
         ...m,
@@ -382,9 +369,7 @@ export class ChannelState {
       pinned?: boolean;
       show_in_channel?: boolean;
     },
-    updateFunc: (
-      msg: ReturnType<ChannelState['formatMessage']>,
-    ) => ReturnType<ChannelState['formatMessage']>,
+    updateFunc: (msg: ReturnType<ChannelState['formatMessage']>) => ReturnType<ChannelState['formatMessage']>,
   ) {
     const { parent_id, show_in_channel, pinned } = message;
 
@@ -495,10 +480,7 @@ export class ChannelState {
    * @param {UserResponse} user
    */
   updateUserMessages = (user: UserResponse) => {
-    const _updateUserMessages = (
-      messages: Array<ReturnType<ChannelState['formatMessage']>>,
-      user: UserResponse,
-    ) => {
+    const _updateUserMessages = (messages: Array<ReturnType<ChannelState['formatMessage']>>, user: UserResponse) => {
       for (let i = 0; i < messages.length; i++) {
         const m = messages[i];
         if (m.user?.id === user.id) {
@@ -701,10 +683,7 @@ export class ChannelState {
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    let messagesToAdd: (
-      | MessageResponse
-      | ReturnType<ChannelState['formatMessage']>
-    )[] = newMessages;
+    let messagesToAdd: (MessageResponse | ReturnType<ChannelState['formatMessage']>)[] = newMessages;
     let targetMessageSetIndex!: number;
     if (addIfDoesNotExist) {
       const overlappingMessageSetIndices = this.messageSets
