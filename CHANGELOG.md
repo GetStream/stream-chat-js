@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.54.0](https://github.com/GetStream/stream-chat-js/compare/v8.53.0...v8.54.0) (2025-01-29)
+
+
+### Features
+
+* multitenant blocklist support ([#1450](https://github.com/GetStream/stream-chat-js/issues/1450)) ([e06d1bb](https://github.com/GetStream/stream-chat-js/commit/e06d1bbe019d36376e570077cfae02b5485e1350))
+
+## [8.53.0](https://github.com/GetStream/stream-chat-js/compare/v8.52.3...v8.53.0) (2025-01-28)
+
+
+### Features
+
+* push preferences ([#1431](https://github.com/GetStream/stream-chat-js/issues/1431)) ([c9861fd](https://github.com/GetStream/stream-chat-js/commit/c9861fd8f73be2446029368d98b88433d77a3443))
+
+
+### Bug Fixes
+
+* make initial message pagination state pesimistic ([#1444](https://github.com/GetStream/stream-chat-js/issues/1444)) ([24c94a4](https://github.com/GetStream/stream-chat-js/commit/24c94a41f1c25e6e6b6f871c8b87949ac54e8e8d))
+
+### [8.52.3](https://github.com/GetStream/stream-chat-js/compare/v8.52.2...v8.52.3) (2025-01-24)
+
+
+### Bug Fixes
+
+* correct reviewqueue item filter: teams ([#1447](https://github.com/GetStream/stream-chat-js/issues/1447)) ([39a8411](https://github.com/GetStream/stream-chat-js/commit/39a84119672784243f02fd603dc57c122b0d111d))
+
+### [8.52.2](https://github.com/GetStream/stream-chat-js/compare/v8.52.1...v8.52.2) (2025-01-24)
+
+
+### Bug Fixes
+
+* add team to reviewqueue filter types ([#1445](https://github.com/GetStream/stream-chat-js/issues/1445)) ([dd1c6e5](https://github.com/GetStream/stream-chat-js/commit/dd1c6e5fa4a4eaa819c4aa38c649a7275117c7c3))
+
+### [8.52.1](https://github.com/GetStream/stream-chat-js/compare/v8.52.0...v8.52.1) (2025-01-22)
+
+
+### Bug Fixes
+
+* add cache disabling option ([#1442](https://github.com/GetStream/stream-chat-js/issues/1442)) ([2bfdacd](https://github.com/GetStream/stream-chat-js/commit/2bfdacddd0b1505157652a3637b96291708a3a69))
+
+## [8.52.0](https://github.com/GetStream/stream-chat-js/compare/v8.51.0...v8.52.0) (2025-01-20)
+
+
+### Features
+
+* add translate API support ([#1415](https://github.com/GetStream/stream-chat-js/issues/1415)) ([7c1c58d](https://github.com/GetStream/stream-chat-js/commit/7c1c58df4d0c7cffdadf7062189053d9b7a5fb80))
+
+## [8.51.0](https://github.com/GetStream/stream-chat-js/compare/v8.50.0...v8.51.0) (2025-01-17)
+
+
+### Features
+
+* **threads:** handle custom data ([#1428](https://github.com/GetStream/stream-chat-js/issues/1428)) ([964f008](https://github.com/GetStream/stream-chat-js/commit/964f008dfca0c7740995d708dec12cdfbeb1b8b8))
+
 ## [8.50.0](https://github.com/GetStream/stream-chat-js/compare/v8.49.0...v8.50.0) (2025-01-16)
 
 

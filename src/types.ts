@@ -78,6 +78,11 @@ export type APIResponse = {
   duration: string;
 };
 
+export type TranslateResponse = {
+  language: string;
+  translated_text: string;
+};
+
 export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   app?: {
     // TODO
@@ -319,6 +324,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
+  push_preferences?: PushPreference;
   read?: ReadResponse<StreamChatGenerics>[];
   threads?: ThreadResponse[];
   watcher_count?: number;
@@ -521,7 +527,10 @@ export type GetMessageAPIResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = SendMessageAPIResponse<StreamChatGenerics>;
 
-export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> {
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface ThreadResponseCustomData {}
+
+export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
   channel: ChannelResponse<SCG>;
   channel_cid: string;
@@ -532,6 +541,7 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   parent_message_id: string;
   title: string;
   updated_at: string;
+  active_participant_count?: number;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
@@ -548,6 +558,8 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
     user?: UserResponse<SCG>;
     user_id?: string;
   }>;
+  // TODO: when moving to API v2 we should do this instead
+  // custom: ThreadResponseCustomData;
 }
 
 // TODO: Figure out a way to strongly type set and unset.
@@ -621,6 +633,27 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   }[];
   total_unread_count: number;
   total_unread_threads_count: number;
+};
+
+export type ChatLevelPushPreference = 'all' | 'none' | 'mentions' | (string & {});
+
+export type PushPreference = {
+  callLevel?: 'all' | 'none' | (string & {});
+  chatLevel?: ChatLevelPushPreference;
+  disabledUntil?: string; // snooze till this time
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+};
+
+export type ChannelPushPreference = {
+  chatLevel?: ChatLevelPushPreference; // "all", "none", "mentions", or other custom strings
+  disabledUntil?: string;
+  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+};
+
+export type UpsertPushPreferencesResponse = APIResponse & {
+  // Mapping of user IDs to their push preferences
+  userChannelPreferences: Record<string, Record<string, ChannelPushPreference>>;
+  userPreferences: Record<string, PushPreference>; // Mapping of user -> channel id -> push preferences
 };
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
@@ -763,6 +796,7 @@ export type OwnUserBase<StreamChatGenerics extends ExtendableGenerics = DefaultG
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
+  push_preferences?: PushPreference;
   roles?: string[];
 };
 
@@ -1171,6 +1205,15 @@ export type StreamChatOptions = AxiosRequestConfig & {
   baseURL?: string;
   browser?: boolean;
   device?: BaseDeviceFields;
+  /**
+   * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
+   * this.polls.pollCache and this.config.
+   * It is mainly meant to be used for integrations where stream-chat is used as a server-side service
+   * interacting with Stream's REST API, not depending on any state and purely serving as a wrapper
+   * around HTTP requests. Using this property on either the client side or a backend implementation
+   * that also relies on WS events will break these functionalities, so please use carefully.
+   */
+  disableCache?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
@@ -1193,8 +1236,10 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
-  // Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
-  // not be used in production apps.
+  /**
+   * Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
+   * not be used in production apps.
+   */
   wsConnection?: StableWSConnection;
 };
 
@@ -2184,6 +2229,7 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  team?: string;
   type?: string;
   validate?: boolean;
 };
@@ -2599,6 +2645,7 @@ export type MessageBase<
   pinned_at?: string | null;
   poll_id?: string;
   quoted_message_id?: string;
+  restricted_visibility?: string[];
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
@@ -3522,6 +3569,55 @@ export type ReviewQueueFilters = QueryFilters<
     has_text?: boolean;
   } & {
     has_video?: boolean;
+  } & {
+    has_media?: boolean;
+  } & {
+    language?: RequireOnlyOne<{
+      $contains?: string;
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
+    teams?:
+      | RequireOnlyOne<{
+          $contains?: PrimitiveFilter<string>;
+          $eq?: PrimitiveFilter<string>;
+          $in?: PrimitiveFilter<string>;
+        }>
+      | PrimitiveFilter<string>;
+  } & {
+    user_report_reason?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    recommended_action?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    flagged_user_id?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    category?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    label?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    reporter_type?: RequireOnlyOne<{
+      $eq?: 'automod' | 'user' | 'moderator' | 'admin' | 'velocity_filter';
+    }>;
+  } & {
+    reporter_id?: RequireOnlyOne<{
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
+    date_range?: RequireOnlyOne<{
+      $eq?: string; // Format: "date1_date2"
+    }>;
   }
 >;
 
