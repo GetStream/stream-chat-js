@@ -7,9 +7,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import sinon from 'sinon';
 import {
-  ChannelResponse,
   EventTypes,
-  formatMessage,
   FormatMessageResponse,
   MessageResponse,
   Poll,
@@ -18,6 +16,7 @@ import {
   StreamChat,
 } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import { channel } from 'node:diagnostics_channel';
 
 const TEST_USER_ID = 'observer';
 
@@ -210,7 +209,39 @@ describe('PollManager', () => {
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(5);
       for (let i = 0; i < 5; i++) {
-        expect(spy.calledWith(mockedChannelsQueryResponse[i].messages.map(formatMessage), true)).to.be.true;
+        expect(spy.calledWith(mockedChannelsQueryResponse[i].messages, true)).to.be.true;
+      }
+    });
+
+    it.only('populates pollCache only with new messages on client.queryChannels invocation', async () => {
+      let channels = [];
+      let pollMessages: MessageResponse[] = [];
+      const spy = sinon.spy(client.polls, 'hydratePollCache');
+      for (let ci = 0; ci < 5; ci++) {
+        const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(5, `_prev_${ci}`);
+        pollMessages = pollMessages.concat(prevPollMessages);
+        const channelResponse = generateChannel({ channel: { id: uuidv4() }, messages: prevMessages });
+        channels.push(channelResponse);
+        client.channel(channelResponse.channel.type, channelResponse.channel.id);
+        client.polls.hydratePollCache(prevMessages, true);
+      }
+
+      const mockedChannelsQueryResponse = [];
+      for (let ci = 0; ci < 5; ci++) {
+        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        pollMessages = pollMessages.concat(onlyPollMessages);
+        const channelResponse = { ...channels[ci], messages };
+        mockedChannelsQueryResponse.push(channelResponse);
+      }
+      const mock = sinon.mock(client);
+      mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+      await client.queryChannels({});
+      expect(client.polls.data.size).to.equal(pollMessages.length);
+      expect(spy.callCount).to.be.equal(10);
+      for (let i = 0; i < 5; i++) {
+        expect(spy.calledWith(mockedChannelsQueryResponse[i].messages, true)).to.be.true;
+        expect(spy.calledWith(channels[i].messages, true)).to.be.true;
+        expect(spy.calledWith([...channels[i].messages, ...mockedChannelsQueryResponse[i].messages], true)).to.be.false;
       }
     });
 
@@ -230,8 +261,8 @@ describe('PollManager', () => {
       expect(spy.calledWith(mockedChannelQueryResponse.messages, true)).to.be.true;
     });
 
-    it('populates pollCache with new messages only on channel.query invocation', async () => {
-      const channel = client.channel('messaging', uuidv4());
+    it('populates pollCache with only new messages on channel.query invocation', async () => {
+      const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
       const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(5, `_prev`);
       channel.state.addMessagesSorted(prevMessages);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
@@ -246,7 +277,6 @@ describe('PollManager', () => {
       await channel.query();
       expect(client.polls.data.size).to.equal(prevPollMessages.length + pollMessages.length);
       expect(spy.calledTwice).to.be.true;
-      expect(spy.calledWith(mockedChannelQueryResponse.messages, true)).to.be.true;
       expect(spy.args[0][0]).to.deep.equal(prevMessages);
       expect(spy.args[1][0]).to.deep.equal(mockedChannelQueryResponse.messages);
       expect(spy.calledWith([...prevMessages, ...messages], true)).to.be.false;
