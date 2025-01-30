@@ -1,12 +1,12 @@
 import { StreamChat } from './client';
-import { CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
+import { CampaignData } from './types';
 
-export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class Campaign {
   id: string | null;
   data?: CampaignData;
-  client: StreamChat<StreamChatGenerics>;
+  client: StreamChat;
 
-  constructor(client: StreamChat<StreamChatGenerics>, id: string | null, data?: CampaignData) {
+  constructor(client: StreamChat, id: string | null, data?: CampaignData) {
     this.client = client;
     this.id = id;
     this.data = data;

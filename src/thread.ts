@@ -3,32 +3,30 @@ import type { StreamChat } from './client';
 import { StateStore } from './store';
 import type {
   AscDesc,
-  DefaultGenerics,
   EventTypes,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
   ThreadResponse,
-  ThreadResponseCustomData,
+  CustomThreadType,
   UserResponse,
 } from './types';
 import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
 
-type QueryRepliesOptions<SCG extends ExtendableGenerics> = {
+type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
-} & MessagePaginationOptions & { user?: UserResponse<SCG>; user_id?: string };
+} & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
 
-export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadState = {
   /**
    * Determines if the thread is currently opened and on-screen. When the thread is active,
    * all new messages are immediately marked as read.
    */
   active: boolean;
-  channel: Channel<SCG>;
+  channel: Channel;
   createdAt: Date;
-  custom: ThreadResponseCustomData;
+  custom: CustomThreadType;
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
@@ -37,10 +35,10 @@ export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
    */
-  parentMessage: FormatMessageResponse<SCG>;
-  participants: ThreadResponse<SCG>['thread_participants'];
+  parentMessage: FormatMessageResponse;
+  participants: ThreadResponse['thread_participants'];
   read: ThreadReadState;
-  replies: Array<FormatMessageResponse<SCG>>;
+  replies: Array<FormatMessageResponse>;
   replyCount: number;
   title: string;
   updatedAt: Date | null;
@@ -53,17 +51,14 @@ export type ThreadRepliesPagination = {
   prevCursor: string | null;
 };
 
-export type ThreadUserReadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadUserReadState = {
   lastReadAt: Date;
   unreadMessageCount: number;
-  user: UserResponse<SCG>;
+  user: UserResponse;
   lastReadMessageId?: string;
 };
 
-export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = Record<
-  string,
-  ThreadUserReadState<SCG> | undefined
->;
+export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
@@ -91,14 +86,14 @@ export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> =
 
 // TODO: remove this once we move to API v2
 const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
-  const custom: ThreadResponseCustomData = {};
+  const custom: CustomThreadType = {};
 
   for (const key in threadData) {
     if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
       continue;
     }
 
-    const customKey = key as keyof ThreadResponseCustomData;
+    const customKey = key as keyof CustomThreadType;
 
     custom[customKey] = threadData[customKey];
   }
@@ -106,15 +101,15 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   return custom;
 };
 
-export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: StateStore<ThreadState<SCG>>;
+export class Thread {
+  public readonly state: StateStore<ThreadState>;
   public readonly id: string;
 
-  private client: StreamChat<SCG>;
+  private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private failedRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
+  private failedRepliesMap: Map<string, FormatMessageResponse> = new Map();
 
-  constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
+  constructor({ client, threadData }: { client: StreamChat; threadData: ThreadResponse }) {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
       name: threadData.channel.name,
     });
@@ -126,7 +121,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       ? [{ user: { id: client.userID }, unread_messages: 0, last_read: new Date().toISOString() }]
       : [];
 
-    this.state = new StateStore<ThreadState<SCG>>({
+    this.state = new StateStore<ThreadState>({
       // local only
       active: false,
       isLoading: false,
@@ -188,7 +183,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public hydrateState = (thread: Thread<SCG>) => {
+  public hydrateState = (thread: Thread) => {
     if (thread === this) {
       // skip if the instances are the same
       return;
@@ -410,7 +405,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.clear();
   };
 
-  public deleteReplyLocally = ({ message }: { message: MessageResponse<SCG> }) => {
+  public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
     const { replies } = this.state.getLatestValue();
 
     const index = findIndexInSortedArray({
@@ -437,7 +432,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     message,
     timestampChanged = false,
   }: {
-    message: MessageResponse<SCG>;
+    message: MessageResponse;
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -459,7 +454,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }));
   };
 
-  public updateParentMessageLocally = ({ message }: { message: MessageResponse<SCG> }) => {
+  public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
@@ -476,7 +471,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
 
-  public updateParentMessageOrReplyLocally = (message: MessageResponse<SCG>) => {
+  public updateParentMessageOrReplyLocally = (message: MessageResponse) => {
     if (message.parent_id === this.id) {
       this.upsertReplyLocally({ message });
     }
@@ -500,7 +495,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     limit = DEFAULT_PAGE_LIMIT,
     sort = DEFAULT_SORT,
     ...otherOptions
-  }: QueryRepliesOptions<SCG> = {}) => {
+  }: QueryRepliesOptions = {}) => {
     return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
   };
 
@@ -585,8 +580,5 @@ const repliesPaginationFromInitialThread = (thread: ThreadResponse): ThreadRepli
   };
 };
 
-const ownUnreadCountSelector = (currentUserId: string | undefined) => <
-  SCG extends ExtendableGenerics = DefaultGenerics
->(
-  state: ThreadState<SCG>,
-) => (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
+const ownUnreadCountSelector = (currentUserId: string | undefined) => (state: ThreadState) =>
+  (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
