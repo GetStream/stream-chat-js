@@ -211,7 +211,7 @@ describe('PollManager', () => {
       }
     });
 
-    it.only('populates pollCache only with new messages on client.queryChannels invocation', async () => {
+    it('populates pollCache only with new messages on client.queryChannels invocation', async () => {
       let channels = [];
       let pollMessages: MessageResponse[] = [];
       const spy = sinon.spy(client.polls, 'hydratePollCache');
