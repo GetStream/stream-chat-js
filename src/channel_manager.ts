@@ -301,12 +301,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         return;
       }
 
-      this.setChannels(moveChannelUpwards({
-        channels,
-        channelToMove: channel,
-        channelToMoveIndexWithinChannels: -1,
-        sort,
-      }));
+      this.setChannels(
+        moveChannelUpwards({
+          channels,
+          channelToMove: channel,
+          channelToMoveIndexWithinChannels: -1,
+          sort,
+        }),
+      );
     }
   };
 
@@ -386,12 +388,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         return;
       }
 
-      this.setChannels(moveChannelUpwards({
-        channels,
-        channelToMove: channel,
-        channelToMoveIndexWithinChannels: -1,
-        sort,
-      }));
+      this.setChannels(
+        moveChannelUpwards({
+          channels,
+          channelToMove: channel,
+          channelToMoveIndexWithinChannels: -1,
+          sort,
+        }),
+      );
     }
   };
 
@@ -405,12 +409,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         type: event.channel_type,
       });
 
-      this.setChannels(moveChannelUpwards({
-        channels,
-        channelToMove: channel,
-        channelToMoveIndexWithinChannels: -1,
-        sort,
-      }));
+      this.setChannels(
+        moveChannelUpwards({
+          channels,
+          channelToMove: channel,
+          channelToMoveIndexWithinChannels: -1,
+          sort,
+        }),
+      );
     }
   };
 
