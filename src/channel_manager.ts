@@ -63,7 +63,7 @@ export type ChannelManagerEventTypes =
   | 'channel.deleted'
   | 'channel.hidden'
   | 'channel.truncated'
-  | 'channel.visible'
+  | 'channel.visible';
 
 export type ChannelManagerEventHandlerNames =
   | 'channelDeletedHandler'
@@ -152,6 +152,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       newValue = newValue(prevChannels);
     }
 
+    // TODO: Figure out if we need to allow nullability or not
     this.state.partialNext({ channels: newValue ? [...newValue] : newValue });
   };
 
@@ -167,11 +168,11 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.eventHandlerOverrides = new Map(
       Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][],
     );
-  }
+  };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
     this.options = options;
-  }
+  };
 
   public queryChannels = async (
     filters: ChannelFilters<SCG>,
@@ -294,25 +295,22 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (pinnedAtSort === 1 || pinnedAtSort === -1) {
         lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
         const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
-
         newChannels.splice(newTargetChannelIndex, 0, channel);
-        this.state.partialNext({ channels: newChannels });
+
+        this.setChannels(newChannels);
         return;
       }
 
-      this.state.partialNext({
-        channels: [channel, ...channels.filter((c) => channel.cid !== c.cid)],
-      });
+      this.setChannels([channel, ...channels.filter((c) => channel.cid !== c.cid)]);
     }
   };
 
   private channelDeletedHandler = (event: Event<SCG>) => {
     const { channels } = this.state.getLatestValue();
     if (!channels) return;
-    this.state.partialNext({
-      channels: channels.filter((c) => c.cid !== (event.cid || event.channel?.cid)),
-    });
+    this.setChannels(channels.filter((c) => c.cid !== (event.cid || event.channel?.cid)));
   };
+
   private channelHiddenHandler = this.channelDeletedHandler;
 
   private newMessageHandler = (event: Event<SCG>) => {
@@ -350,30 +348,16 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       ) {
         return;
       }
-      this.state.partialNext({
-        channels: moveChannelUpwards({
+
+      this.setChannels(
+        moveChannelUpwards({
           channels,
           channelToMove: targetChannel,
           channelToMoveIndexWithinChannels: targetChannelIndex,
           sort,
         }),
-      });
+      );
     }
-    // const channelInList = channels.filter((channel) => channel.cid === event.cid).length > 0;
-    //
-    // if (!channelInList && event?.channel?.type && event?.channel?.id) {
-    //   // If channel doesn't exist in existing list, check in activeChannels as well.
-    //   // It may happen that channel was hidden using channel.hide(). In that case
-    //   // We remove it from `channels` state, but it's still being watched and exists in client.activeChannels.
-    //   const channel = this.client.channel(event.channel.type, event?.channel?.id);
-    //   this.state.partialNext({ channels: [channel, ...channels] });
-    //   return;
-    // }
-    //
-    // if (!this.options.lockChannelOrder && event.cid) {
-    //   const channelIndex = channels.findIndex((c) => c.cid === event.cid);
-    //   this.state.partialNext({ channels: [channels[channelIndex], ...channels.filter((c) => c.cid !== event.cid)] });
-    // }
   };
 
   private notificationNewMessageHandler = async (event: Event<SCG>) => {
@@ -397,7 +381,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         return;
       }
 
-      this.state.partialNext({ channels: [channel, ...channels.filter((c) => c.cid !== event.cid)] });
+      this.setChannels([channel, ...channels.filter((c) => c.cid !== event.cid)]);
     }
   };
 
@@ -461,7 +445,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       // When archived filter false, and channel is archived
       (considerArchivedChannels && isTargetChannelArchived && !filters?.archived)
     ) {
-      this.state.partialNext({ channels: newChannels });
+      this.setChannels(newChannels);
       return;
     }
 
@@ -479,7 +463,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     newChannels.splice(newTargetChannelIndex, 0, targetChannel);
-    this.state.partialNext({ channels: newChannels });
+    this.setChannels(newChannels);
   };
 
   public registerSubscriptions = () => {
