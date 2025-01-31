@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.55.0](https://github.com/GetStream/stream-chat-js/compare/v8.54.1...v8.55.0) (2025-01-31)
+
+
+### Features
+
+* add SearchController ([#1434](https://github.com/GetStream/stream-chat-js/issues/1434)) ([7f09a35](https://github.com/GetStream/stream-chat-js/commit/7f09a3509f6a4c204dc1795e564c2e1d75e38be8))
+
 ### [8.54.1](https://github.com/GetStream/stream-chat-js/compare/v8.54.0...v8.54.1) (2025-01-30)
 
 
