@@ -171,7 +171,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
-    this.options = options;
+    this.options = { allowNewMessagesFromUnfilteredChannels: true, ...options };
   };
 
   public queryChannels = async (
