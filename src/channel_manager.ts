@@ -301,7 +301,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         return;
       }
 
-      this.setChannels([channel, ...channels.filter((c) => channel.cid !== c.cid)]);
+      this.setChannels(moveChannelUpwards({
+        channels,
+        channelToMove: channel,
+        channelToMoveIndexWithinChannels: -1,
+        sort,
+      }));
     }
   };
 
@@ -370,7 +375,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         type,
       });
       const { channels, pagination } = this.state.getLatestValue();
-      const { filters } = pagination ?? {};
+      const { filters, sort } = pagination ?? {};
 
       const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
       if (isChannelArchived(channel) && considerArchivedChannels && !filters.archived) {
@@ -381,11 +386,33 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         return;
       }
 
-      this.setChannels([channel, ...channels.filter((c) => c.cid !== event.cid)]);
+      this.setChannels(moveChannelUpwards({
+        channels,
+        channelToMove: channel,
+        channelToMoveIndexWithinChannels: -1,
+        sort,
+      }));
     }
   };
 
-  private channelVisibleHandler = this.notificationNewMessageHandler;
+  private channelVisibleHandler = async (event: Event<SCG>) => {
+    const { channels, pagination } = this.state.getLatestValue();
+    const { sort } = pagination ?? {};
+    if (channels && event.channel_type && event.channel_id) {
+      const channel = await getAndWatchChannel({
+        client: this.client,
+        id: event.channel_id,
+        type: event.channel_type,
+      });
+
+      this.setChannels(moveChannelUpwards({
+        channels,
+        channelToMove: channel,
+        channelToMoveIndexWithinChannels: -1,
+        sort,
+      }));
+    }
+  };
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
 
