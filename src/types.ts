@@ -2228,6 +2228,7 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  team?: string;
   type?: string;
   validate?: boolean;
 };
@@ -2643,6 +2644,7 @@ export type MessageBase<
   pinned_at?: string | null;
   poll_id?: string;
   quoted_message_id?: string;
+  restricted_visibility?: string[];
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
@@ -3567,6 +3569,14 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     has_video?: boolean;
   } & {
+    has_media?: boolean;
+  } & {
+    language?: RequireOnlyOne<{
+      $contains?: string;
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
@@ -3574,6 +3584,39 @@ export type ReviewQueueFilters = QueryFilters<
           $in?: PrimitiveFilter<string>;
         }>
       | PrimitiveFilter<string>;
+  } & {
+    user_report_reason?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    recommended_action?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    flagged_user_id?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    category?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    label?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    reporter_type?: RequireOnlyOne<{
+      $eq?: 'automod' | 'user' | 'moderator' | 'admin' | 'velocity_filter';
+    }>;
+  } & {
+    reporter_id?: RequireOnlyOne<{
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
+    date_range?: RequireOnlyOne<{
+      $eq?: string; // Format: "date1_date2"
+    }>;
   }
 >;
 

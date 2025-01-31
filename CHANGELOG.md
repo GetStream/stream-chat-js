@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.54.1](https://github.com/GetStream/stream-chat-js/compare/v8.54.0...v8.54.1) (2025-01-30)
+
+
+### Bug Fixes
+
+* add missing types for review queue filter ([#1449](https://github.com/GetStream/stream-chat-js/issues/1449)) ([b2a01bf](https://github.com/GetStream/stream-chat-js/commit/b2a01bf1e0869bb9f3368e32dc2ce55c26eb9c34))
+* improper poll state overwrite ([#1456](https://github.com/GetStream/stream-chat-js/issues/1456)) ([4384085](https://github.com/GetStream/stream-chat-js/commit/4384085be45281c0df104bdf6f18f25dd51c98b4))
+
+## [8.54.0](https://github.com/GetStream/stream-chat-js/compare/v8.53.0...v8.54.0) (2025-01-29)
+
+
+### Features
+
+* multitenant blocklist support ([#1450](https://github.com/GetStream/stream-chat-js/issues/1450)) ([e06d1bb](https://github.com/GetStream/stream-chat-js/commit/e06d1bbe019d36376e570077cfae02b5485e1350))
+
+## [8.53.0](https://github.com/GetStream/stream-chat-js/compare/v8.52.3...v8.53.0) (2025-01-28)
+
+
+### Features
+
+* push preferences ([#1431](https://github.com/GetStream/stream-chat-js/issues/1431)) ([c9861fd](https://github.com/GetStream/stream-chat-js/commit/c9861fd8f73be2446029368d98b88433d77a3443))
+
+
+### Bug Fixes
+
+* make initial message pagination state pesimistic ([#1444](https://github.com/GetStream/stream-chat-js/issues/1444)) ([24c94a4](https://github.com/GetStream/stream-chat-js/commit/24c94a41f1c25e6e6b6f871c8b87949ac54e8e8d))
+
 ### [8.52.3](https://github.com/GetStream/stream-chat-js/compare/v8.52.2...v8.52.3) (2025-01-24)
 
 
