@@ -104,7 +104,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private unsubscribeFunctions: Set<() => void> = new Set();
   private eventHandlers: Map<string, EventHandlerType<SCG>> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType<SCG>> = new Map();
-  private options: ChannelManagerOptions;
+  private options: ChannelManagerOptions = {};
 
   constructor({
     client,
@@ -129,17 +129,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       },
       ready: false,
     });
-    const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
-      Partial<ChannelManagerEventHandlerOverrides<SCG>>
-    >((acc, [key, value]) => {
-      if (value) {
-        acc[key as keyof ChannelManagerEventHandlerOverrides<SCG>] = value;
-      }
-      return acc;
-    }, {});
-    this.eventHandlerOverrides = new Map(
-      Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][],
-    );
+    this.setEventHandlerOverrides(eventHandlerOverrides);
+    this.setOptions(options);
     this.eventHandlers = new Map(
       Object.entries({
         channelDeletedHandler: this.channelDeletedHandler,
@@ -152,7 +143,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         notificationRemovedFromChannelHandler: this.notificationRemovedFromChannelHandler,
       }) as [string, EventHandlerType<SCG>][],
     );
-    this.options = options;
   }
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
@@ -164,6 +154,24 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     this.state.partialNext({ channels: newValue ? [...newValue] : newValue });
   };
+
+  public setEventHandlerOverrides = (eventHandlerOverrides: ChannelManagerEventHandlerOverrides<SCG> = {}) => {
+    const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
+      Partial<ChannelManagerEventHandlerOverrides<SCG>>
+    >((acc, [key, value]) => {
+      if (value) {
+        acc[key as keyof ChannelManagerEventHandlerOverrides<SCG>] = value;
+      }
+      return acc;
+    }, {});
+    this.eventHandlerOverrides = new Map(
+      Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][],
+    );
+  }
+
+  public setOptions = (options: ChannelManagerOptions = {}) => {
+    this.options = options;
+  }
 
   public queryChannels = async (
     filters: ChannelFilters<SCG>,
@@ -288,7 +296,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
 
         newChannels.splice(newTargetChannelIndex, 0, channel);
-        // return newChannels;
         this.state.partialNext({ channels: newChannels });
         return;
       }
