@@ -62,13 +62,11 @@ export type SearchSourceState<T = any> = {
 export type SearchSourceOptions = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
-  isActive?: boolean;
   pageSize?: number;
 };
 
 const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<SearchSourceOptions> = {
   debounceMs: 300,
-  isActive: false,
   pageSize: 10,
 } as const;
 
@@ -79,9 +77,9 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   searchDebounced!: DebouncedExecQueryFunction;
 
   protected constructor(options?: SearchSourceOptions) {
-    const { debounceMs, isActive, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
+    const { debounceMs, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
     this.pageSize = pageSize;
-    this.state = new StateStore<SearchSourceState<T>>({ ...this.initialState, isActive });
+    this.state = new StateStore<SearchSourceState<T>>(this.initialState);
     this.setDebounceOptions({ debounceMs });
   }
 

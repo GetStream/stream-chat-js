@@ -268,9 +268,8 @@ describe('BaseSearchSource and implementations', () => {
 		});
 
 		it('initializes with custom options', () => {
-			searchSource = new TestSearchSource({ pageSize: 20, isActive: true });
+			searchSource = new TestSearchSource({ pageSize: 20 });
 			expect(searchSource.pageSize).to.equal(20);
-			expect(searchSource.isActive).to.be.true;
 		});
 
 		describe('activate/deactivate', () => {
