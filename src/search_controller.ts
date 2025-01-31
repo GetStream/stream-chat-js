@@ -346,10 +346,13 @@ export type DefaultSearchSources<StreamChatGenerics extends ExtendableGenerics =
   MessageSearchSource<StreamChatGenerics>,
 ];
 
-export type SearchControllerState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type SearchControllerState = {
   isActive: boolean;
   searchQuery: string;
   sources: SearchSource[];
+};
+
+export type InternalSearchControllerState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   // FIXME: focusedMessage should live in a MessageListController class that does not exist yet.
   //  This state prop should be then removed
   focusedMessage?: MessageResponse<StreamChatGenerics>;
@@ -366,15 +369,18 @@ export type SearchControllerOptions = {
 };
 
 export class SearchController<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  state: StateStore<SearchControllerState<StreamChatGenerics>>;
+  // Keeps data that is subject to change. Not intended for direct use by integrators.
+  internalState: StateStore<InternalSearchControllerState<StreamChatGenerics>>;
+  state: StateStore<SearchControllerState>;
   config: SearchControllerConfig;
 
   constructor({ config, sources }: SearchControllerOptions = {}) {
-    this.state = new StateStore<SearchControllerState<StreamChatGenerics>>({
+    this.state = new StateStore<SearchControllerState>({
       isActive: false,
       searchQuery: '',
       sources: sources ?? [],
     });
+    this.internalState = new StateStore<InternalSearchControllerState<StreamChatGenerics>>({});
     this.config = { keepSingleActiveSource: true, ...config };
   }
   get hasNext() {
