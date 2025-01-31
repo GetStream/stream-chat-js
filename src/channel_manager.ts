@@ -215,6 +215,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         ...currentState,
         pagination: { ...currentState.pagination, isLoading: false },
       }));
+      throw error;
     }
   };
 
@@ -251,6 +252,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         ...currentState,
         pagination: { ...currentState.pagination, isLoadingNext: false },
       }));
+      throw error;
     }
   };
 
