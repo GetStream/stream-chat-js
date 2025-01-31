@@ -367,8 +367,11 @@ export type SearchControllerOptions = {
 };
 
 export class SearchController<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  // Keeps data that is subject to change. Not intended for direct use by integrators.
-  internalState: StateStore<InternalSearchControllerState<StreamChatGenerics>>;
+  /**
+   * Not intended for direct use by integrators, might be removed without notice resulting in
+   * broken integrations.
+   */
+  _internalState: StateStore<InternalSearchControllerState<StreamChatGenerics>>;
   state: StateStore<SearchControllerState>;
   config: SearchControllerConfig;
 
@@ -378,7 +381,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
       searchQuery: '',
       sources: sources ?? [],
     });
-    this.internalState = new StateStore<InternalSearchControllerState<StreamChatGenerics>>({});
+    this._internalState = new StateStore<InternalSearchControllerState<StreamChatGenerics>>({});
     this.config = { keepSingleActiveSource: true, ...config };
   }
   get hasNext() {
