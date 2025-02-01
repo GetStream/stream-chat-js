@@ -65,9 +65,9 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return this.client.stopCampaign(this.id as string);
   }
 
-  async get() {
+  async get(users?: { limit?: number; next?: string; prev?: string }) {
     this.verifyCampaignId();
 
-    return this.client.getCampaign(this.id as string);
+    return this.client.getCampaign(this.id as string, users);
   }
 }
