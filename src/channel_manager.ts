@@ -28,7 +28,6 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
   isLoadingNext: boolean;
   options: ChannelOptions;
   sort: ChannelSort<SCG>;
-  stateOptions: ChannelStateOptions;
 };
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
@@ -105,6 +104,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private eventHandlers: Map<string, EventHandlerType<SCG>> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType<SCG>> = new Map();
   private options: ChannelManagerOptions = {};
+  private stateOptions: ChannelStateOptions = {};
 
   constructor({
     client,
@@ -125,7 +125,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         filters: {},
         sort: {},
         options: { limit: 10, offset: 0 },
-        stateOptions: {},
       },
       ready: false,
     });
@@ -196,6 +195,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     try {
+      this.stateOptions = stateOptions;
       this.state.next((currentState) => ({
         ...currentState,
         pagination: {
@@ -205,7 +205,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
           filters,
           sort,
           options,
-          stateOptions,
         },
       }));
 
@@ -236,7 +235,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   public loadNext = async () => {
     const { pagination, channels } = this.state.getLatestValue();
-    const { filters, sort, options, stateOptions, isLoadingNext, hasNext } = pagination;
+    const { filters, sort, options, isLoadingNext, hasNext } = pagination;
 
     if (isLoadingNext || !hasNext) {
       return;
@@ -247,7 +246,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
-      const nextChannels = await this.client.queryChannels(filters, sort, options, stateOptions);
+      const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
       const newOffset = offset + (nextChannels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
 
