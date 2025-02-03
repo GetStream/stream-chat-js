@@ -1,11 +1,15 @@
 import { expect } from 'chai';
+import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateMsg } from './test-utils/generateMessage';
+import { generateChannel } from './test-utils/generateChannel';
+import { getClientWithUser } from './test-utils/getClient';
 
-import { addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
+import { getAndWatchChannel, addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
 
-import type { FormatMessageResponse, MessageResponse } from '../../src';
+import type { ChannelResponse, FormatMessageResponse, MessageResponse } from '../../src';
+import { StreamChat, Channel } from '../../src';
 
 describe('addToMessageList', () => {
   const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
@@ -247,5 +251,103 @@ describe('findIndexInSortedArray', () => {
         selectValueToCompare: selectValue,
       }),
     ).to.eq(3);
+  });
+});
+
+describe('getAndWatchChannel', () => {
+  let client: StreamChat;
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(async () => {
+    sandbox = sinon.createSandbox();
+
+    client = await getClientWithUser();
+
+    const mockedChannelsQueryResponse = Array.from({ length: 2 }, () => generateChannel());
+    const mock = sandbox.mock(client);
+    mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw an error if neither channel nor type is provided', async () => {
+    await client.queryChannels({});
+    await expect(getAndWatchChannel({ client, id: 'test-id', members: [] })).to.be.rejectedWith(
+      'Channel or channel type have to be provided to query a channel.',
+    );
+  });
+
+  it('should throw an error if neither channel ID nor members array is provided', async () => {
+    await client.queryChannels({});
+    await expect(getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] })).to.be.rejectedWith(
+      'Channel ID or channel members array have to be provided to query a channel.',
+    );
+  });
+
+  it('should return an existing channel if provided', async () => {
+    const channels = await client.queryChannels({});
+    const channel = channels[0];
+    const watchStub = sandbox.stub(channel, 'watch');
+    const result = await getAndWatchChannel({
+      channel,
+      client,
+      members: [],
+      options: {},
+    });
+
+    expect(result).to.equal(channel);
+    expect(watchStub.calledOnce).to.be.true;
+  });
+
+  it('should create a new channel if only type and id are provided', async () => {
+    const channels = await client.queryChannels({});
+    const channel = channels[0];
+    const { id, type } = channel;
+    const watchStub = sandbox.stub(channel, 'watch');
+    const channelSpy = sandbox.spy(client, 'channel');
+    const result = await getAndWatchChannel({
+      client,
+      type,
+      id,
+      members: [],
+      options: {},
+    });
+
+    expect(channelSpy.calledOnce).to.be.true;
+    // @ts-ignore
+    expect(channelSpy.calledWith(type, id, { members: [] })).to.be.true;
+    expect(watchStub.calledOnce).to.be.true;
+    expect(result).to.equal(channel);
+  });
+
+  it('should not call watch again if a query is already in progress', async () => {
+    const channels = await client.queryChannels({});
+    const channel = channels[0];
+    const { id, type, cid } = channel;
+    // @ts-ignore
+    const watchStub = sandbox.stub(channel, 'watch').resolves({});
+
+    const result = await Promise.all([
+      getAndWatchChannel({
+        client,
+        type,
+        id,
+        members: [],
+        options: {},
+      }),
+      getAndWatchChannel({
+        client,
+        type,
+        id,
+        members: [],
+        options: {},
+      }),
+    ]);
+
+    expect(watchStub.calledOnce).to.be.true;
+    expect(result[0]).to.equal(channel);
+    expect(result[1]).to.equal(channel);
   });
 });

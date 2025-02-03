@@ -145,7 +145,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
-    this.state.next(current => {
+    this.state.next((current) => {
       const { channels: prevChannels } = current;
       let newValue = valueOrFactory;
       if (newValue && typeof newValue === 'function') {
@@ -157,7 +157,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       if (prevChannels === newValue) {
         return current;
       }
-      return ({ ...current, channels: newValue });
+      return { ...current, channels: newValue };
     });
   };
 
