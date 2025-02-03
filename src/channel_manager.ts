@@ -146,14 +146,18 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   }
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
-    const { channels: prevChannels } = this.state.getLatestValue();
-    let newValue = valueOrFactory;
-    if (newValue && typeof newValue === 'function') {
-      newValue = newValue(prevChannels);
-    }
+    this.state.next(current => {
+      const { channels: prevChannels } = current;
+      let newValue = valueOrFactory;
+      if (newValue && typeof newValue === 'function') {
+        newValue = newValue(prevChannels);
+      }
 
-    // TODO: Figure out if we need to allow nullability or not
-    this.state.partialNext({ channels: newValue ? [...newValue] : newValue });
+      if (prevChannels === newValue) {
+        return current;
+      }
+      return ({ ...current, channels: newValue });
+    });
   };
 
   public setEventHandlerOverrides = (eventHandlerOverrides: ChannelManagerEventHandlerOverrides<SCG> = {}) => {
