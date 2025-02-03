@@ -3387,8 +3387,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         campaign: CampaignResponse;
         users: {
-          next?: string | undefined;
-          prev?: string | undefined;
+          next?: string;
+          prev?: string;
         };
       } & APIResponse
     >(this.baseURL + `/campaigns`, { ...params });
@@ -3400,8 +3400,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         campaign: CampaignResponse;
         users: {
-          next?: string | undefined;
-          prev?: string | undefined;
+          next?: string;
+          prev?: string;
         };
       } & APIResponse
     >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...users });
@@ -3413,8 +3413,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       {
         campaign: CampaignResponse;
         users: {
-          next?: string | undefined;
-          prev?: string | undefined;
+          next?: string;
+          prev?: string;
         };
       } & APIResponse
     >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
@@ -3456,8 +3456,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return this.put<{
       campaign: CampaignResponse;
       users: {
-        next?: string | undefined;
-        prev?: string | undefined;
+        next?: string;
+        prev?: string;
       };
     }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
   }
