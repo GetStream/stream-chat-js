@@ -153,6 +153,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         newValue = newValue(prevChannels);
       }
 
+      // If the references between the two values are the same, just return the
+      // current state; otherwise trigger a state change.
       if (prevChannels === newValue) {
         return current;
       }
