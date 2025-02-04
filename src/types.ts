@@ -3013,6 +3013,7 @@ export type CampaignQueryOptions = {
   next?: string;
   prev?: string;
   sort?: CampaignSort;
+  user_limit?: number;
 };
 
 export type SegmentQueryOptions = CampaignQueryOptions;
