@@ -2999,6 +2999,10 @@ export type QuerySegmentTargetsFilter = {
 };
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 
+export type GetCampaignOptions = {
+  users?: { limit?: number; next?: string; prev?: string };
+};
+
 export type CampaignSort = {
   field: string;
   direction?: number;

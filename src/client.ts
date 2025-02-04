@@ -99,6 +99,7 @@ import {
   FlagUserResponse,
   GetBlockedUsersAPIResponse,
   GetCallTokenResponse,
+  GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
   GetImportResponse,
@@ -3394,7 +3395,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     >(this.baseURL + `/campaigns`, { ...params });
   }
 
-  async getCampaign(id: string, users?: { limit?: number; next?: string; prev?: string }) {
+  async getCampaign(id: string, options?: GetCampaignOptions) {
     this.validateServerSideAuth();
     return this.get<
       {
@@ -3404,7 +3405,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
           prev?: string;
         };
       } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...users });
+    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
   }
 
   async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
