@@ -17,10 +17,19 @@ import {
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
   isChannelArchived,
-  isChannelPinned
+  isChannelPinned,
+  findLastPinnedChannelIndex,
+  findPinnedAtSortOrder,
+  extractSortValue,
 } from '../../src/utils';
 
-import type { ChannelFilters, ChannelResponse, FormatMessageResponse, MessageResponse } from '../../src';
+import type {
+  ChannelFilters,
+  ChannelResponse,
+  ChannelSortBase,
+  FormatMessageResponse,
+  MessageResponse,
+} from '../../src';
 import { StreamChat, Channel } from '../../src';
 
 describe('addToMessageList', () => {
@@ -409,54 +418,150 @@ describe('generateChannelTempCid', () => {
   });
 });
 
-describe.only('Channel pinning and archiving utils', () => {
+describe('Channel pinning and archiving utils', () => {
   let client: StreamChat;
+  let sandbox: sinon.SinonSandbox;
 
   beforeEach(async () => {
+    sandbox = sinon.createSandbox();
     client = await getClientWithUser();
   });
 
-  describe('Channel pinning', () => {
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe.only('Channel pinning', () => {
     it('should return false if channel is null', () => {
-      expect(isChannelPinned(null as unknown as Channel)).to.be.false;
+      expect(isChannelPinned((null as unknown) as Channel)).to.be.false;
     });
 
     it('should return false if pinned_at is undefined', () => {
-      const channelResponse = generateChannel({ membership: {}})
+      const channelResponse = generateChannel({ membership: {} });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
       expect(isChannelPinned(channel)).to.be.false;
     });
 
     it('should return true if pinned_at is set', () => {
-      const channelResponse = generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' }})
+      const channelResponse = generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
       expect(isChannelPinned(channel)).to.be.true;
+    });
+
+    describe('extractSortValue', () => {
+      it('should return null if sort is undefined', () => {
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort: undefined })).to.be.null;
+      });
+
+      it('should extract correct sort value from an array', () => {
+        const sort = ([{ pinned_at: -1 }, { created_at: 1 }] as unknown) as ChannelSortBase;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(-1);
+      });
+
+      it('should extract correct sort value from an object', () => {
+        const sort = ({ pinned_at: 1 } as unknown) as ChannelSortBase;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(1);
+      });
+
+      it('should return null if key does not match targetKey', () => {
+        const sort = ({ created_at: 1 } as unknown) as ChannelSortBase;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.be.null;
+      });
+    });
+
+    describe('shouldConsiderPinnedChannels', () => {
+      it('should return false if sort is undefined', () => {
+        expect(shouldConsiderPinnedChannels(undefined as any)).to.be.false;
+      });
+
+      it('should return false if pinned_at is not a number', () => {
+        const sort = [{ pinned_at: 'invalid' }];
+        expect(shouldConsiderPinnedChannels(sort as any)).to.be.false;
+      });
+
+      it('should return false if pinned_at is not first in sort', () => {
+        const sort = ([{ created_at: 1 }, { pinned_at: 1 }] as unknown) as ChannelSortBase;
+        expect(shouldConsiderPinnedChannels(sort)).to.be.false;
+      });
+
+      it('should return true if pinned_at is 1 or -1 at index 0', () => {
+        const sort1 = ([{ pinned_at: 1 }] as unknown) as ChannelSortBase;
+        const sort2 = ([{ pinned_at: -1 }] as unknown) as ChannelSortBase;
+        expect(shouldConsiderPinnedChannels(sort1)).to.be.true;
+        expect(shouldConsiderPinnedChannels(sort2)).to.be.true;
+      });
+    });
+
+    describe('findPinnedAtSortOrder', () => {
+      it('should return null if sort is undefined', () => {
+        expect(findPinnedAtSortOrder({ sort: (null as unknown) as ChannelSortBase })).to.be.null;
+      });
+
+      it('should return null if pinned_at is not present', () => {
+        const sort = ([{ created_at: 1 }] as unknown) as ChannelSortBase;
+        expect(findPinnedAtSortOrder({ sort })).to.be.null;
+      });
+
+      it('should return pinned_at if found in an object', () => {
+        const sort = ({ pinned_at: -1 } as unknown) as ChannelSortBase;
+        expect(findPinnedAtSortOrder({ sort })).to.equal(-1);
+      });
+
+      it('should return pinned_at if found in an array', () => {
+        const sort = ([{ pinned_at: 1 }] as unknown) as ChannelSortBase;
+        expect(findPinnedAtSortOrder({ sort })).to.equal(1);
+      });
+    });
+
+    describe('findLastPinnedChannelIndex', () => {
+      it('should return null if no channels are provided', () => {
+        expect(findLastPinnedChannelIndex({ channels: [] })).to.be.null;
+      });
+
+      it('should return null if no channels are pinned', () => {
+        const channelsResponse = [generateChannel({ membership: {} }), generateChannel({ membership: {} })];
+        client.hydrateActiveChannels(channelsResponse);
+        const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+        expect(findLastPinnedChannelIndex({ channels })).to.be.null;
+      });
+
+      it('should return last index of a pinned channel', () => {
+        const channelsResponse = [
+          generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
+          generateChannel({ membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
+          generateChannel({ membership: {} }),
+        ];
+        client.hydrateActiveChannels(channelsResponse);
+        const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+
+        expect(findLastPinnedChannelIndex({ channels })).to.equal(1);
+      });
     });
   });
 
   describe('Channel archiving', () => {
     it('should return false if channel is null', () => {
-      expect(isChannelArchived(null as unknown as Channel)).to.be.false;
+      expect(isChannelArchived((null as unknown) as Channel)).to.be.false;
     });
 
     it('should return false if archived_at is undefined', () => {
-      const channelResponse = generateChannel({ membership: {}})
+      const channelResponse = generateChannel({ membership: {} });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
       expect(isChannelArchived(channel)).to.be.false;
     });
 
     it('should return true if archived_at is set', () => {
-      const channelResponse = generateChannel({ membership: { archived_at: '2024-02-04T12:00:00Z' }})
+      const channelResponse = generateChannel({ membership: { archived_at: '2024-02-04T12:00:00Z' } });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
       expect(isChannelArchived(channel)).to.be.true;
     });
 
     it('should return false if filters is null', () => {
-      expect(shouldConsiderArchivedChannels(null as unknown as ChannelFilters)).to.be.false;
+      expect(shouldConsiderArchivedChannels((null as unknown) as ChannelFilters)).to.be.false;
     });
 
     it('should return false if filters.archived is missing', () => {
@@ -465,7 +570,7 @@ describe.only('Channel pinning and archiving utils', () => {
     });
 
     it('should return false if filters.archived is not a boolean', () => {
-      const mockFilters = { archived: 'yes' } as unknown as ChannelFilters;
+      const mockFilters = ({ archived: 'yes' } as unknown) as ChannelFilters;
       expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
     });
 
@@ -479,4 +584,4 @@ describe.only('Channel pinning and archiving utils', () => {
       expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
     });
   });
-})
+});
