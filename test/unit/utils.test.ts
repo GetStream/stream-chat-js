@@ -14,9 +14,13 @@ import {
   findIndexInSortedArray,
   formatMessage,
   generateChannelTempCid,
+  shouldConsiderArchivedChannels,
+  shouldConsiderPinnedChannels,
+  isChannelArchived,
+  isChannelPinned
 } from '../../src/utils';
 
-import type { ChannelResponse, FormatMessageResponse, MessageResponse } from '../../src';
+import type { ChannelFilters, ChannelResponse, FormatMessageResponse, MessageResponse } from '../../src';
 import { StreamChat, Channel } from '../../src';
 
 describe('addToMessageList', () => {
@@ -272,10 +276,6 @@ describe('getAndWatchChannel', () => {
     client = await getClientWithUser();
 
     const mockedMembers = [generateMember({ user: generateUser() }), generateMember({ user: generateUser() })];
-    const mockedMembersStr = mockedMembers
-      .map((m) => m.user.id)
-      .sort()
-      .join();
     const mockedChannelsQueryResponse = [
       ...Array.from({ length: 2 }, () => generateChannel()),
       generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
@@ -408,3 +408,75 @@ describe('generateChannelTempCid', () => {
     expect(result).to.equal('team:!members-alice,charlie,zack');
   });
 });
+
+describe.only('Channel pinning and archiving utils', () => {
+  let client: StreamChat;
+
+  beforeEach(async () => {
+    client = await getClientWithUser();
+  });
+
+  describe('Channel pinning', () => {
+    it('should return false if channel is null', () => {
+      expect(isChannelPinned(null as unknown as Channel)).to.be.false;
+    });
+
+    it('should return false if pinned_at is undefined', () => {
+      const channelResponse = generateChannel({ membership: {}})
+      client.hydrateActiveChannels([channelResponse]);
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      expect(isChannelPinned(channel)).to.be.false;
+    });
+
+    it('should return true if pinned_at is set', () => {
+      const channelResponse = generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' }})
+      client.hydrateActiveChannels([channelResponse]);
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      expect(isChannelPinned(channel)).to.be.true;
+    });
+  });
+
+  describe('Channel archiving', () => {
+    it('should return false if channel is null', () => {
+      expect(isChannelArchived(null as unknown as Channel)).to.be.false;
+    });
+
+    it('should return false if archived_at is undefined', () => {
+      const channelResponse = generateChannel({ membership: {}})
+      client.hydrateActiveChannels([channelResponse]);
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      expect(isChannelArchived(channel)).to.be.false;
+    });
+
+    it('should return true if archived_at is set', () => {
+      const channelResponse = generateChannel({ membership: { archived_at: '2024-02-04T12:00:00Z' }})
+      client.hydrateActiveChannels([channelResponse]);
+      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id)
+      expect(isChannelArchived(channel)).to.be.true;
+    });
+
+    it('should return false if filters is null', () => {
+      expect(shouldConsiderArchivedChannels(null as unknown as ChannelFilters)).to.be.false;
+    });
+
+    it('should return false if filters.archived is missing', () => {
+      const mockFilters = {};
+      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
+    });
+
+    it('should return false if filters.archived is not a boolean', () => {
+      const mockFilters = { archived: 'yes' } as unknown as ChannelFilters;
+      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
+    });
+
+    it('should return true if filters.archived is true', () => {
+      const mockFilters = { archived: true };
+      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
+    });
+
+    it('should return true if filters.archived is false', () => {
+      const mockFilters = { archived: false };
+      expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
+    });
+  });
+})
