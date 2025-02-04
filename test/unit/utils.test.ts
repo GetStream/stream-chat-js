@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
+import { generateMember } from './test-utils/generateMember';
+import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 
 import { getAndWatchChannel, addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
@@ -263,7 +265,15 @@ describe('getAndWatchChannel', () => {
 
     client = await getClientWithUser();
 
-    const mockedChannelsQueryResponse = Array.from({ length: 2 }, () => generateChannel());
+    const mockedMembers = [generateMember({ user: generateUser() }), generateMember({ user: generateUser() })];
+    const mockedMembersStr = mockedMembers
+      .map((m) => m.user.id)
+      .sort()
+      .join();
+    const mockedChannelsQueryResponse = [
+      ...Array.from({ length: 2 }, () => generateChannel()),
+      generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
+    ];
     const mock = sandbox.mock(client);
     mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
   });
@@ -301,7 +311,7 @@ describe('getAndWatchChannel', () => {
     expect(watchStub.calledOnce).to.be.true;
   });
 
-  it('should create a new channel if only type and id are provided', async () => {
+  it('should return the channel if only type and id are provided', async () => {
     const channels = await client.queryChannels({});
     const channel = channels[0];
     const { id, type } = channel;
@@ -311,13 +321,32 @@ describe('getAndWatchChannel', () => {
       client,
       type,
       id,
-      members: [],
       options: {},
     });
 
     expect(channelSpy.calledOnce).to.be.true;
     // @ts-ignore
-    expect(channelSpy.calledWith(type, id, { members: [] })).to.be.true;
+    expect(channelSpy.calledWith(type, id)).to.be.true;
+    expect(watchStub.calledOnce).to.be.true;
+    expect(result).to.equal(channel);
+  });
+
+  it('should return the channel if only type and members are provided', async () => {
+    const channels = await client.queryChannels({});
+    const channel = channels[2];
+    const { type } = channel;
+    const members = Object.keys(channel.state.members);
+    const watchStub = sandbox.stub(channel, 'watch');
+    const channelSpy = sandbox.spy(client, 'channel');
+    const result = await getAndWatchChannel({
+      client,
+      type,
+      members,
+      options: {},
+    });
+    expect(channelSpy.calledOnce).to.be.true;
+    // @ts-ignore
+    expect(channelSpy.calledWith(type, undefined, { members })).to.be.true;
     expect(watchStub.calledOnce).to.be.true;
     expect(result).to.equal(channel);
   });
