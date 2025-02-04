@@ -1,7 +1,6 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
 import type {
-  CustomPollType,
   Event,
   PartialPollUpdate,
   PollAnswer,
@@ -70,14 +69,12 @@ export type PollOptionVotesQueryParams = {
 
 type OptionId = string;
 
-// FIXME: ideally this would work without the unknown record...
-export type PollState = (CustomPollType & Record<string, unknown>) &
-  Omit<PollResponse, 'own_votes' | 'id'> & {
-    lastActivityAt: Date; // todo: would be ideal to get this from the BE
-    maxVotedOptionIds: OptionId[];
-    ownVotesByOptionId: Record<OptionId, PollVote>;
-    ownAnswer?: PollAnswer; // each user can have only one answer
-  };
+export type PollState = Omit<PollResponse, 'own_votes' | 'id'> & {
+  lastActivityAt: Date; // todo: would be ideal to get this from the BE
+  maxVotedOptionIds: OptionId[];
+  ownVotesByOptionId: Record<OptionId, PollVote>;
+  ownAnswer?: PollAnswer; // each user can have only one answer
+};
 
 type PollInitOptions = {
   client: StreamChat;
