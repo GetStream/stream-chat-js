@@ -587,7 +587,7 @@ describe('Channel pinning and archiving utils', () => {
   });
 });
 
-describe.only('moveChannelUpwards', () => {
+describe('moveChannelUpwards', () => {
   let client: StreamChat;
 
   beforeEach(async () => {
