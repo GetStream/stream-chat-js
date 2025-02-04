@@ -8,7 +8,13 @@ import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 
-import { getAndWatchChannel, addToMessageList, findIndexInSortedArray, formatMessage } from '../../src/utils';
+import {
+  getAndWatchChannel,
+  addToMessageList,
+  findIndexInSortedArray,
+  formatMessage,
+  generateChannelTempCid,
+} from '../../src/utils';
 
 import type { ChannelResponse, FormatMessageResponse, MessageResponse } from '../../src';
 import { StreamChat, Channel } from '../../src';
@@ -378,5 +384,27 @@ describe('getAndWatchChannel', () => {
     expect(watchStub.calledOnce).to.be.true;
     expect(result[0]).to.equal(channel);
     expect(result[1]).to.equal(channel);
+  });
+});
+
+describe('generateChannelTempCid', () => {
+  it('should return a valid temp cid for valid input', () => {
+    const result = generateChannelTempCid('messaging', ['alice', 'bob']);
+    expect(result).to.equal('messaging:!members-alice,bob');
+  });
+
+  it('should return undefined if members is null', () => {
+    const result = generateChannelTempCid('messaging', (null as unknown) as string[]);
+    expect(result).to.be.undefined;
+  });
+
+  it('should return undefined if members is an empty array', () => {
+    const result = generateChannelTempCid('messaging', []);
+    expect(result).to.be.undefined;
+  });
+
+  it('should correctly format cid for multiple members', () => {
+    const result = generateChannelTempCid('team', ['zack', 'alice', 'charlie']);
+    expect(result).to.equal('team:!members-alice,charlie,zack');
   });
 });
