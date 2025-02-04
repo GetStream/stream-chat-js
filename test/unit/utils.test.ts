@@ -431,7 +431,7 @@ describe('Channel pinning and archiving utils', () => {
     sandbox.restore();
   });
 
-  describe.only('Channel pinning', () => {
+  describe('Channel pinning', () => {
     it('should return false if channel is null', () => {
       expect(isChannelPinned((null as unknown) as Channel)).to.be.false;
     });
