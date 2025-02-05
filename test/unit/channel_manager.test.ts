@@ -544,14 +544,24 @@ describe('ChannelManager', () => {
         await clock.runAllAsync();
         expect(setChannelsStub.calledOnce).to.be.false;
 
-        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: '123' } as unknown as ChannelResponse});
+        client.dispatchEvent({
+          type: 'notification.added_to_channel',
+          channel: ({ id: '123' } as unknown) as ChannelResponse,
+        });
         await clock.runAllAsync();
         expect(setChannelsStub.calledOnce).to.be.false;
       });
 
       it('should not update state if allowNewMessagesFromUnfilteredChannels is false', async () => {
         channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
-        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+        client.dispatchEvent({
+          type: 'notification.added_to_channel',
+          channel: ({
+            id: 'channel4',
+            type: 'messaging',
+            members: [{ user_id: 'user1' }],
+          } as unknown) as ChannelResponse,
+        });
 
         expect(setChannelsStub.calledOnce).to.be.false;
         channelManager.setOptions({});
@@ -561,19 +571,38 @@ describe('ChannelManager', () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
         getAndWatchChannelStub.resolves(newChannel);
-        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+        client.dispatchEvent({
+          type: 'notification.added_to_channel',
+          channel: ({
+            id: 'channel4',
+            type: 'messaging',
+            members: [{ user_id: 'user1' }],
+          } as unknown) as ChannelResponse,
+        });
 
         await clock.runAllAsync();
 
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
-        expect(getAndWatchChannelStub.args[0][0]).to.deep.equal({ client, id: 'channel4', type: 'messaging', members: ['user1']})
+        expect(getAndWatchChannelStub.args[0][0]).to.deep.equal({
+          client,
+          id: 'channel4',
+          type: 'messaging',
+          members: ['user1'],
+        });
       });
 
       it('should move the channel upwards when criteria is met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
         getAndWatchChannelStub.resolves(newChannel);
-        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+        client.dispatchEvent({
+          type: 'notification.added_to_channel',
+          channel: ({
+            id: 'channel4',
+            type: 'messaging',
+            members: [{ user_id: 'user1' }],
+          } as unknown) as ChannelResponse,
+        });
 
         await clock.runAllAsync();
 
