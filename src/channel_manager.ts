@@ -272,7 +272,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
     const { id, type, members } = event?.channel ?? {};
-    if (type) {
+    if (type && this.options.allowNewMessagesFromUnfilteredChannels) {
       const channel = await getAndWatchChannel({
         client: this.client,
         id,
@@ -319,8 +319,19 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private channelDeletedHandler = (event: Event<SCG>) => {
     const { channels } = this.state.getLatestValue();
-    if (!channels) return;
-    this.setChannels(channels.filter((c) => c.cid !== (event.cid || event.channel?.cid)));
+    if (!channels) {
+      return;
+    }
+
+    const newChannels = [...channels];
+    const channelIndex = newChannels.findIndex((channel) => channel.cid === (event.cid || event.channel?.cid));
+
+    if (channelIndex < 0) {
+      return;
+    }
+
+    newChannels.splice(channelIndex, 1);
+    this.setChannels(newChannels);
   };
 
   private channelHiddenHandler = this.channelDeletedHandler;
