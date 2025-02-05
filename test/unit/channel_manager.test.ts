@@ -26,7 +26,7 @@ describe('ChannelManager', () => {
     sinon.reset();
   });
 
-  describe.only('websocket event handlers', () => {
+  describe('websocket event handlers', () => {
     let setChannelsStub: sinon.SinonStub;
     let isChannelPinnedStub: sinon.SinonStub;
     let isChannelArchivedStub: sinon.SinonStub;
@@ -64,7 +64,7 @@ describe('ChannelManager', () => {
       sinon.reset();
     });
 
-    describe('channelDeletedHandler and channelHiddenHandler', () => {
+    describe('channelDeletedHandler, channelHiddenHandler and notificationRemovedFromChannelHandler', () => {
       (['channel.deleted', 'channel.hidden', 'notification.removed_from_channel'] as const).forEach((eventType) => {
         it('should return early if channels is undefined', () => {
           channelManager.state.partialNext({ channels: undefined });
@@ -392,7 +392,7 @@ describe('ChannelManager', () => {
       });
     });
 
-    describe.only('memberUpdatedHandler', () => {
+    describe('memberUpdatedHandler', () => {
       let clock: sinon.SinonFakeTimers;
       let dispatchMemberUpdatedEvent: (id?: string) => void;
 
@@ -484,7 +484,7 @@ describe('ChannelManager', () => {
         ]);
       });
 
-      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is not pinned', function () {
+      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is not pinned', () => {
         isChannelPinnedStub.callsFake((c) => c.id === 'channel1');
         shouldConsiderPinnedChannelsStub.returns(true);
         findLastPinnedChannelIndexStub.returns(0);
@@ -525,6 +525,72 @@ describe('ChannelManager', () => {
 
         expect(setChannelsStub.calledOnce).to.be.false;
         expect(channels[1].id).to.equal('channel2');
+      });
+    });
+
+    describe('notificationAddedToChannelHandler', () => {
+      let clock: sinon.SinonFakeTimers;
+
+      beforeEach(() => {
+        clock = sinon.useFakeTimers();
+      });
+
+      afterEach(() => {
+        clock.restore();
+      });
+
+      it('should not update state if event.channel defaults are missing', async () => {
+        client.dispatchEvent({ type: 'notification.added_to_channel' });
+        await clock.runAllAsync();
+        expect(setChannelsStub.calledOnce).to.be.false;
+
+        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: '123' } as unknown as ChannelResponse});
+        await clock.runAllAsync();
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should not update state if allowNewMessagesFromUnfilteredChannels is false', async () => {
+        channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
+        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+        channelManager.setOptions({});
+      });
+
+      it('should call getAndWatchChannel with correct parameters', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        getAndWatchChannelStub.resolves(newChannel);
+        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.calledOnce).to.be.true;
+        expect(getAndWatchChannelStub.args[0][0]).to.deep.equal({ client, id: 'channel4', type: 'messaging', members: ['user1']})
+      });
+
+      it('should move the channel upwards when criteria is met', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        getAndWatchChannelStub.resolves(newChannel);
+        client.dispatchEvent({ type: 'notification.added_to_channel', channel: { id: 'channel4', type: 'messaging', members: [{ user_id: 'user1' }]} as unknown as ChannelResponse });
+
+        await clock.runAllAsync();
+
+        const {
+          pagination: { sort },
+          channels,
+        } = channelManager.state.getLatestValue();
+        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
+        expect(moveChannelUpwardsArgs).to.deep.equal({
+          channels,
+          channelToMove: newChannel,
+          sort,
+        });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
       });
     });
   });
