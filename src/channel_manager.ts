@@ -310,7 +310,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         moveChannelUpwards({
           channels,
           channelToMove: channel,
-          channelToMoveIndexWithinChannels: -1,
           sort,
         }),
       );
@@ -408,7 +407,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         moveChannelUpwards({
           channels,
           channelToMove: channel,
-          channelToMoveIndexWithinChannels: -1,
           sort,
         }),
       );
@@ -429,7 +427,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         moveChannelUpwards({
           channels,
           channelToMove: channel,
-          channelToMoveIndexWithinChannels: -1,
           sort,
         }),
       );
