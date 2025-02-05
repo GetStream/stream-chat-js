@@ -424,7 +424,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private memberUpdatedHandler = (event: Event<SCG>) => {
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = pagination;
-    if (!event.member?.user || event.member.user.id !== this.client.userID || !event.channel_type || !event.channel_id) {
+    if (
+      !event.member?.user ||
+      event.member.user.id !== this.client.userID ||
+      !event.channel_type ||
+      !event.channel_id
+    ) {
       return;
     }
     const channelType = event.channel_type;
