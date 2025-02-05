@@ -40,39 +40,41 @@ describe('ChannelManager', () => {
       sinon.reset();
     })
 
-    describe('channelDeletedHandler', () => {
-      it('should return early if channels is undefined', () => {
-        channelManager.state.partialNext({ channels: undefined })
+    describe('channelDeletedHandler and channelHiddenHandler', () => {
+      (['channel.deleted', 'channel.hidden'] as const).forEach((eventType) => {
+        it('should return early if channels is undefined', () => {
+          channelManager.state.partialNext({ channels: undefined })
 
-        client.dispatchEvent({ type: 'channel.deleted', cid: channelToRemove.cid })
-        client.dispatchEvent({ type: 'channel.deleted', channel: channelToRemove })
+          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid })
+          client.dispatchEvent({ type: eventType, channel: channelToRemove })
 
-        expect(setChannelsSpy.calledOnce).to.be.false;
-      });
+          expect(setChannelsSpy.calledOnce).to.be.false;
+        });
 
-      it('should remove the channel when event.cid matches', () => {
-        client.dispatchEvent({ type: 'channel.deleted', cid: channelToRemove.cid })
+        it('should remove the channel when event.cid matches', () => {
+          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid })
 
-        expect(setChannelsSpy.calledOnce).to.be.true;
-        expect(setChannelsSpy.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
-      });
+          expect(setChannelsSpy.calledOnce).to.be.true;
+          expect(setChannelsSpy.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
+        });
 
-      it('should remove the channel when event.channel?.cid matches', () => {
-        client.dispatchEvent({ type: 'channel.deleted', channel: channelToRemove })
+        it('should remove the channel when event.channel?.cid matches', () => {
+          client.dispatchEvent({ type: eventType, channel: channelToRemove })
 
-        expect(setChannelsSpy.calledOnce).to.be.true;
-        expect(setChannelsSpy.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
-      });
+          expect(setChannelsSpy.calledOnce).to.be.true;
+          expect(setChannelsSpy.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
+        });
 
-      it('should not modify the list if no channels match', () => {
-        const { channels: prevChannels } = channelManager.state.getLatestValue();
-        client.dispatchEvent({ type: 'channel.deleted', cid: 'channel123' })
-        const { channels: newChannels } = channelManager.state.getLatestValue();
+        it('should not modify the list if no channels match', () => {
+          const { channels: prevChannels } = channelManager.state.getLatestValue();
+          client.dispatchEvent({ type: eventType, cid: 'channel123' })
+          const { channels: newChannels } = channelManager.state.getLatestValue();
 
-        expect(setChannelsSpy.calledOnce).to.be.false;
-        expect(prevChannels).to.equal(newChannels)
-        expect(prevChannels).to.deep.equal(newChannels);
-      });
+          expect(setChannelsSpy.calledOnce).to.be.false;
+          expect(prevChannels).to.equal(newChannels)
+          expect(prevChannels).to.deep.equal(newChannels);
+        });
+      })
     });
   })
 })
