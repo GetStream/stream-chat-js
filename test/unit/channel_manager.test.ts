@@ -32,6 +32,7 @@ describe('ChannelManager', () => {
     let shouldConsiderArchivedChannelsStub: sinon.SinonStub;
     let shouldConsiderPinnedChannelsStub: sinon.SinonStub;
     let moveChannelUpwardsSpy: sinon.SinonSpy;
+    let getAndWatchChannelStub: sinon.SinonStub;
     let channelToRemove: ChannelResponse;
 
     beforeEach(() => {
@@ -44,8 +45,9 @@ describe('ChannelManager', () => {
       isChannelArchivedStub = sinon.stub(Utils, 'isChannelArchived');
       shouldConsiderArchivedChannelsStub = sinon.stub(Utils, 'shouldConsiderArchivedChannels');
       shouldConsiderPinnedChannelsStub = sinon.stub(Utils, 'shouldConsiderPinnedChannels');
+      getAndWatchChannelStub = sinon.stub(Utils, 'getAndWatchChannel');
       moveChannelUpwardsSpy = sinon.spy(Utils, 'moveChannelUpwards');
-      channelToRemove = channelsResponse[1];
+      channelToRemove = channelsResponse[1].channel;
     })
 
     afterEach(() => {
@@ -212,5 +214,82 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs))
       });
     })
+
+    describe('notificationNewMessageHandler', () => {
+      let clock: sinon.SinonFakeTimers;
+
+      beforeEach(() => {
+        clock = sinon.useFakeTimers();
+      })
+
+      afterEach(() => {
+        clock.restore();
+      })
+
+      it('should not update the state if the event has no id and type', async () => {
+        client.dispatchEvent({ type: 'notification.message_new', channel: {} as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.false;
+        expect(setChannelsStub.called).to.be.false;
+      });
+
+      it('should execute getAndWatchChannel if id and type are provided', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } })
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id)
+        getAndWatchChannelStub.resolves(newChannel);
+        client.dispatchEvent({ type: 'notification.message_new', channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.calledOnce).to.be.true;
+        expect(getAndWatchChannelStub.calledWith({ client, id: 'channel4', type: 'messaging' })).to.be.true;
+      })
+
+      it('should not update the state if channel is archived and filters do not allow it', async () => {
+        isChannelArchivedStub.returns(true);
+        shouldConsiderArchivedChannelsStub.returns(true);
+        channelManager.state.next(prevState => ({ ...prevState, pagination: { ...prevState.pagination, filters: { archived: false }}}))
+
+        client.dispatchEvent({ type: 'notification.message_new', channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.true;
+        expect(setChannelsStub.called).to.be.false;
+      });
+
+      it('should not update the state if allowNewMessagesFromUnfilteredChannels is false', async () => {
+        channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
+        client.dispatchEvent({ type: 'notification.message_new', channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.true;
+        expect(setChannelsStub.called).to.be.false;
+
+        channelManager.setOptions({});
+      });
+
+      it('should move channel when all criteria are met', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } })
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id)
+        getAndWatchChannelStub.resolves(newChannel);
+        client.dispatchEvent({ type: 'notification.message_new', channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        const { pagination: { sort }, channels } = channelManager.state.getLatestValue();
+        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+
+        expect(getAndWatchChannelStub.calledOnce).to.be.true;
+        expect(moveChannelUpwardsSpy.calledOnce).to.be.true
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs))
+      });
+    });
+
   })
 })
