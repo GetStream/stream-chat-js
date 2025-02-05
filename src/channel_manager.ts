@@ -435,20 +435,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
 
-  private subscriptionOrOverride = (event: Event<SCG>) => {
-    const handlerName = eventToHandlerMapping[event.type as ChannelManagerEventTypes];
-    const defaultEventHandler = this.eventHandlers.get(handlerName);
-    const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
-    if (eventHandlerOverride && typeof eventHandlerOverride === 'function') {
-      eventHandlerOverride(this.setChannels, event);
-      return;
-    }
-
-    if (defaultEventHandler && typeof defaultEventHandler === 'function') {
-      defaultEventHandler(event);
-    }
-  };
-
   private memberUpdatedHandler = (event: Event<SCG>) => {
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = pagination;
@@ -510,6 +496,20 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     newChannels.splice(newTargetChannelIndex, 0, targetChannel);
     this.setChannels(newChannels);
+  };
+
+  private subscriptionOrOverride = (event: Event<SCG>) => {
+    const handlerName = eventToHandlerMapping[event.type as ChannelManagerEventTypes];
+    const defaultEventHandler = this.eventHandlers.get(handlerName);
+    const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
+    if (eventHandlerOverride && typeof eventHandlerOverride === 'function') {
+      eventHandlerOverride(this.setChannels, event);
+      return;
+    }
+
+    if (defaultEventHandler && typeof defaultEventHandler === 'function') {
+      defaultEventHandler(event);
+    }
   };
 
   public registerSubscriptions = () => {
