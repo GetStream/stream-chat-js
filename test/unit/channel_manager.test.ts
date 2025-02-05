@@ -25,7 +25,7 @@ describe('ChannelManager', () => {
     sinon.reset();
   })
 
-  describe('websocket event handlers', () => {
+  describe.only('websocket event handlers', () => {
     let setChannelsStub: sinon.SinonStub;
     let isChannelPinnedStub: sinon.SinonStub;
     let isChannelArchivedStub: sinon.SinonStub;
@@ -56,7 +56,7 @@ describe('ChannelManager', () => {
     })
 
     describe('channelDeletedHandler and channelHiddenHandler', () => {
-      (['channel.deleted', 'channel.hidden'] as const).forEach((eventType) => {
+      (['channel.deleted', 'channel.hidden', 'notification.removed_from_channel'] as const).forEach((eventType) => {
         it('should return early if channels is undefined', () => {
           channelManager.state.partialNext({ channels: undefined })
 
@@ -291,5 +291,53 @@ describe('ChannelManager', () => {
       });
     });
 
+    describe('channelVisibleHandler', () => {
+      let clock: sinon.SinonFakeTimers;
+
+      beforeEach(() => {
+        clock = sinon.useFakeTimers();
+      })
+
+      afterEach(() => {
+        clock.restore();
+      })
+
+      it('should not update the state if the event has no id and type', async () => {
+        client.dispatchEvent({ type: 'channel.visible', channel: {} as unknown as ChannelResponse })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.false;
+        expect(setChannelsStub.called).to.be.false;
+      });
+
+      it('should not update the state if channels is undefined', async () => {
+        channelManager.state.partialNext({ channels: undefined });
+        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' })
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.false;
+        expect(setChannelsStub.called).to.be.false;
+      });
+
+      it('should add the channel to the list if all criteria are met', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } })
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id)
+        getAndWatchChannelStub.resolves(newChannel);
+        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' })
+
+        await clock.runAllAsync();
+
+        const { pagination: { sort }, channels } = channelManager.state.getLatestValue();
+        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+
+        expect(getAndWatchChannelStub.calledOnce).to.be.true;
+        expect(moveChannelUpwardsSpy.calledOnce).to.be.true
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs))
+      });
+    });
   })
 })
