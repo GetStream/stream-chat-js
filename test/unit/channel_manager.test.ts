@@ -9,6 +9,7 @@ import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import * as Utils from '../../src/utils';
 import { Channel } from 'node:diagnostics_channel';
+import { extractSortValue } from '../../src/utils';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
@@ -33,6 +34,8 @@ describe('ChannelManager', () => {
     let shouldConsiderPinnedChannelsStub: sinon.SinonStub;
     let moveChannelUpwardsSpy: sinon.SinonSpy;
     let getAndWatchChannelStub: sinon.SinonStub;
+    let findLastPinnedChannelIndexStub: sinon.SinonStub;
+    let extractSortValueStub: sinon.SinonStub;
     let channelToRemove: ChannelResponse;
 
     beforeEach(() => {
@@ -46,6 +49,8 @@ describe('ChannelManager', () => {
       shouldConsiderArchivedChannelsStub = sinon.stub(Utils, 'shouldConsiderArchivedChannels');
       shouldConsiderPinnedChannelsStub = sinon.stub(Utils, 'shouldConsiderPinnedChannels');
       getAndWatchChannelStub = sinon.stub(Utils, 'getAndWatchChannel');
+      findLastPinnedChannelIndexStub = sinon.stub(Utils, 'findLastPinnedChannelIndex');
+      extractSortValueStub = sinon.stub(Utils, 'extractSortValue');
       moveChannelUpwardsSpy = sinon.spy(Utils, 'moveChannelUpwards');
       channelToRemove = channelsResponse[1].channel;
     })
@@ -337,6 +342,109 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.calledOnce).to.be.true;
         expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
         expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs))
+      });
+    });
+
+    describe.only('memberUpdatedHandler', () => {
+      let clock: sinon.SinonFakeTimers;
+      let dispatchMemberUpdatedEvent: (id?: string) => void;
+
+      beforeEach(() => {
+        clock = sinon.useFakeTimers();
+        dispatchMemberUpdatedEvent = (id?: string) => client.dispatchEvent({ type: 'member.updated', channel_id: id ?? 'channel2', channel_type: 'messaging', member: { user: { id: client?.userID ?? 'anonymous' } }});
+      })
+
+      afterEach(() => {
+        clock.restore();
+      })
+
+
+      it('should not update state if event member does not have user or user id does not match', () => {
+        client.dispatchEvent({ type: 'member.updated', channel_id: 'channel2', channel_type: 'messaging', member: { user: { id: 'wrongUserID' } }});
+        expect(setChannelsStub.calledOnce).to.be.false;
+
+        client.dispatchEvent({ type: 'member.updated', channel_id: 'channel2', channel_type: 'messaging', member: {}});
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should not update state if channel_type or channel_id is not present', () => {
+        client.dispatchEvent({ type: 'member.updated', member: { user: { id: 'user123' }}});
+        expect(setChannelsStub.calledOnce).to.be.false;
+        client.dispatchEvent({ type: 'member.updated', member: { user: { id: 'user123' }}, channel_type: 'messaging' });
+        expect(setChannelsStub.calledOnce).to.be.false;
+        client.dispatchEvent({ type: 'member.updated', member: { user: { id: 'user123' }}, channel_id: 'channel2' });
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should not update state early if channels are not available in state', () => {
+        channelManager.state.partialNext({ channels: undefined });
+        dispatchMemberUpdatedEvent();
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should not update state is channel pinning should not be considered', () => {
+        shouldConsiderPinnedChannelsStub.returns(false)
+        dispatchMemberUpdatedEvent();
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should handle archiving correctly', () => {
+        channelManager.state.next(prevState => ({ ...prevState, pagination: { ...prevState.pagination, filters: { archived: true }}}))
+        isChannelArchivedStub.returns(true);
+        shouldConsiderArchivedChannelsStub.returns(true);
+        shouldConsiderPinnedChannelsStub.returns(true);
+        dispatchMemberUpdatedEvent();
+
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel2', 'channel1', 'channel3']);
+      });
+
+      it('should pin channel at the correct position when pinnedAtSort is 1', () => {
+        isChannelPinnedStub.returns(false);
+        shouldConsiderPinnedChannelsStub.returns(true);
+        findLastPinnedChannelIndexStub.returns(0);
+        extractSortValueStub.returns(1);
+        dispatchMemberUpdatedEvent('channel3');
+
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3', 'channel2']);
+      });
+
+      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is not pinned', function () {
+        isChannelPinnedStub.callsFake(c => c.id === 'channel1');
+        shouldConsiderPinnedChannelsStub.returns(true);
+        findLastPinnedChannelIndexStub.returns(0);
+        extractSortValueStub.returns(-1);
+        dispatchMemberUpdatedEvent('channel3');
+
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3', 'channel2']);
+      });
+
+      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is pinned', () => {
+        isChannelPinnedStub.callsFake(c => ['channel1', 'channel3'].includes(c.id));
+        shouldConsiderPinnedChannelsStub.returns(true);
+        findLastPinnedChannelIndexStub.returns(0);
+        extractSortValueStub.returns(-1);
+        dispatchMemberUpdatedEvent('channel3');
+
+        expect(setChannelsStub.calledOnce).to.be.true;
+        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
+      });
+
+      it('should not update state if position of target channel does not change', () => {
+        isChannelPinnedStub.returns(false);
+        shouldConsiderPinnedChannelsStub.returns(true);
+        findLastPinnedChannelIndexStub.returns(0);
+        extractSortValueStub.returns(1);
+        dispatchMemberUpdatedEvent();
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+        expect(channels[1].id).to.equal('channel2');
       });
     });
   })

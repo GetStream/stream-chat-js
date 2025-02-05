@@ -11,8 +11,8 @@ import type {
 import { StateStore } from './store';
 import { Channel } from './channel';
 import {
+  extractSortValue,
   findLastPinnedChannelIndex,
-  findPinnedAtSortOrder,
   getAndWatchChannel,
   isChannelArchived,
   isChannelPinned,
@@ -291,20 +291,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }
 
       const { sort } = pagination ?? {};
-      const pinnedAtSort = findPinnedAtSortOrder({ sort });
-
-      // handle pinning
-      let lastPinnedChannelIndex: number | null = null;
-
-      const newChannels = [...channels];
-      if (pinnedAtSort === 1 || pinnedAtSort === -1) {
-        lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
-        const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
-        newChannels.splice(newTargetChannelIndex, 0, channel);
-
-        this.setChannels(newChannels);
-        return;
-      }
 
       this.setChannels(
         moveChannelUpwards({
@@ -438,7 +424,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private memberUpdatedHandler = (event: Event<SCG>) => {
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = pagination;
-    if (!event.member?.user || event.member.user.id !== this.client.userID || !event.channel_type) {
+    if (!event.member?.user || event.member.user.id !== this.client.userID || !event.channel_type || !event.channel_id) {
       return;
     }
     const channelType = event.channel_type;
@@ -446,7 +432,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
-    const pinnedAtSort = findPinnedAtSortOrder({ sort });
+    const pinnedAtSort = extractSortValue({ atIndex: 0, sort, targetKey: 'pinned_at' });
 
     if (!channels) {
       return;
