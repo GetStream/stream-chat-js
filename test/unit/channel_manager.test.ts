@@ -862,6 +862,39 @@ describe('ChannelManager', () => {
         expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
         expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
       });
+
+      it('should not add duplicate channels for multiple event invocations', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        getAndWatchChannelStub.resolves(newChannel);
+
+        const event = {
+          type: 'notification.message_new',
+          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+        } as const;
+        // call the event 3 times
+        client.dispatchEvent(event);
+        client.dispatchEvent(event);
+        client.dispatchEvent(event);
+
+        await clock.runAllAsync();
+
+        const {
+          pagination: { sort },
+          channels,
+        } = channelManager.state.getLatestValue();
+        const moveChannelUpwardsArgs = { channels, channelToMove: newChannel, sort };
+
+        expect(getAndWatchChannelStub.callCount).to.equal(3);
+        expect(moveChannelUpwardsSpy.callCount).to.equal(3);
+        expect(setChannelsStub.callCount).to.equal(3);
+        moveChannelUpwardsSpy.args.forEach(arg => {
+          expect(arg[0]).to.deep.equal(moveChannelUpwardsArgs);
+        })
+        setChannelsStub.args.forEach(arg => {
+          expect(arg[0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        })
+      });
     });
 
     describe('channelVisibleHandler', () => {
