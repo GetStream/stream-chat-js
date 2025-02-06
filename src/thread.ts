@@ -1,6 +1,5 @@
-import type { Channel } from './channel';
-import type { StreamChat } from './client';
 import { StateStore } from './store';
+import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
 import type {
   AscDesc,
   EventTypes,
@@ -9,10 +8,11 @@ import type {
   MessageResponse,
   ReadResponse,
   ThreadResponse,
-  CustomThreadType,
   UserResponse,
 } from './types';
-import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
+import type { Channel } from './channel';
+import type { StreamChat } from './client';
+import type { CustomThreadData } from './custom_types';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
@@ -26,7 +26,7 @@ export type ThreadState = {
   active: boolean;
   channel: Channel;
   createdAt: Date;
-  custom: CustomThreadType;
+  custom: CustomThreadData;
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
@@ -86,14 +86,14 @@ export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> =
 
 // TODO: remove this once we move to API v2
 const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
-  const custom: CustomThreadType = {};
+  const custom: CustomThreadData = {};
 
   for (const key in threadData) {
     if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
       continue;
     }
 
-    const customKey = key as keyof CustomThreadType;
+    const customKey = key as keyof CustomThreadData;
 
     custom[customKey] = threadData[customKey];
   }

@@ -1,7 +1,8 @@
 import { ChannelState } from './channel_state';
 import { generateChannelTempCid, logChatPromiseExecution, messageSetPagination, normalizeQuerySort } from './utils';
 import { StreamChat } from './client';
-import {
+import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
+import type {
   APIResponse,
   BanUserOptions,
   ChannelAPIResponse,
@@ -60,10 +61,9 @@ import {
   MessageOptions,
   PushPreference,
   UpdateChannelOptions,
-  CustomChannelType,
 } from './types';
-import { Role } from './permissions';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
+import type { Role } from './permissions';
+import type { CustomChannelData } from './custom_types';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -378,7 +378,7 @@ export class Channel {
   ) {
     // Strip out reserved names that will result in API errors.
     // TODO: this needs to be typed better
-    const reserved: Exclude<keyof (ChannelResponse & ChannelData), keyof CustomChannelType>[] = [
+    const reserved: Exclude<keyof (ChannelResponse & ChannelData), keyof CustomChannelData>[] = [
       'config',
       'cid',
       'created_by',

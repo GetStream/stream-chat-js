@@ -11,7 +11,7 @@ import {
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
 import { ConnectAPIResponse, ConnectionOpen, UR, LogLevel } from './types';
 import { StreamChat } from './client';
-import { APIError } from 'errors';
+import { APIError } from './errors';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent): res is WebSocket.CloseEvent =>
