@@ -1,9 +1,21 @@
-/* eslint-disable @typescript-eslint/no-empty-interface */
-import { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
-import { Role } from './permissions';
 import type { Channel } from './channel';
+import type { AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { StableWSConnection } from './connection';
+import type { Role } from './permissions';
+import type {
+  CustomChannelData,
+  CustomMemberData,
+  CustomThreadData,
+  CustomEventData,
+  CustomMessageData,
+  CustomUserData,
+  CustomReactionData,
+  CustomAttachmentData,
+  CustomCommandData,
+  CustomPollData,
+  CustomPollOptionData,
+} from './custom_types';
 
 /**
  * Utility Types
@@ -40,18 +52,6 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; // alias to avoid breaking change
-
-export interface CustomAttachmentType {}
-export interface CustomChannelType {}
-export interface CustomCommandType {}
-export interface CustomEventType {}
-export interface CustomMemberType {}
-export interface CustomMessageType {}
-export interface CustomPollOptionType {}
-export interface CustomPollType {}
-export interface CustomReactionType {}
-export interface CustomUserType {}
-export interface CustomThreadType {}
 
 export type Unpacked<T> = T extends (infer U)[]
   ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,7 +261,7 @@ export type BlockListResponse = BlockList & {
   updated_at?: string;
 };
 
-export type ChannelResponse = CustomChannelType & {
+export type ChannelResponse = CustomChannelData & {
   cid: string;
   disabled: boolean;
   frozen: boolean;
@@ -328,13 +328,13 @@ export type ChannelMemberAPIResponse = APIResponse & {
   members: ChannelMemberResponse[];
 };
 
-export type ChannelMemberUpdates = CustomMemberType & {
+export type ChannelMemberUpdates = CustomMemberData & {
   archived?: boolean;
   channel_role?: Role;
   pinned?: boolean;
 };
 
-export type ChannelMemberResponse = CustomMemberType & {
+export type ChannelMemberResponse = CustomMemberData & {
   archived_at?: string;
   ban_expires?: string;
   banned?: boolean;
@@ -489,7 +489,7 @@ export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtU
 
 export type GetMessageAPIResponse = SendMessageAPIResponse;
 
-export interface ThreadResponse extends CustomThreadType {
+export interface ThreadResponse extends CustomThreadData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
   channel: ChannelResponse;
   channel_cid: string;
@@ -1000,7 +1000,7 @@ export type DeactivateUsersOptions = {
   mark_messages_deleted?: boolean;
 };
 
-export type NewMemberPayload = CustomMemberType & Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
+export type NewMemberPayload = CustomMemberData & Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
 export type UpdateChannelOptions = {
   accept_invite?: boolean;
@@ -1229,7 +1229,7 @@ export type ConnectionChangeEvent = {
   online?: boolean;
 };
 
-export type Event = CustomEventType & {
+export type Event = CustomEventData & {
   type: EventTypes;
   ai_message?: string;
   ai_state?: AIState;
@@ -1282,7 +1282,7 @@ export type Event = CustomEventType & {
   watcher_count?: number;
 };
 
-export type UserCustomEvent = CustomEventType & {
+export type UserCustomEvent = CustomEventData & {
   type: string;
 };
 
@@ -1458,7 +1458,7 @@ export type ReactionFilters = QueryFilters<
 >;
 
 export type ChannelFilters = QueryFilters<
-  ContainsOperator<CustomChannelType> & {
+  ContainsOperator<CustomChannelData> & {
     members?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
@@ -1472,7 +1472,7 @@ export type ChannelFilters = QueryFilters<
         >
       | PrimitiveFilter<ChannelResponse['name']>;
   } & {
-      [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelType>]:
+      [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
         | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
         | PrimitiveFilter<ChannelResponse[Key]>;
     } & {
@@ -1588,7 +1588,7 @@ export type ContainsOperator<CustomType = {}> = {
 };
 
 export type MessageFilters = QueryFilters<
-  ContainsOperator<CustomMessageType> & {
+  ContainsOperator<CustomMessageData> & {
     text?:
       | RequireOnlyOne<
           {
@@ -1598,7 +1598,7 @@ export type MessageFilters = QueryFilters<
         >
       | PrimitiveFilter<MessageResponse['text']>;
   } & {
-      [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageType>]?:
+      [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
         | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
         | PrimitiveFilter<MessageResponse[Key]>;
     }
@@ -1638,7 +1638,7 @@ export type QueryLogicalOperators<Operators> = {
 };
 
 export type UserFilters = QueryFilters<
-  ContainsOperator<CustomUserType> & {
+  ContainsOperator<CustomUserData> & {
     id?:
       | RequireOnlyOne<{ $autocomplete?: UserResponse['id'] } & QueryFilter<UserResponse['id']>>
       | PrimitiveFilter<UserResponse['id']>;
@@ -1661,7 +1661,7 @@ export type UserFilters = QueryFilters<
       | RequireOnlyOne<{ $autocomplete?: UserResponse['username'] } & QueryFilter<UserResponse['username']>>
       | PrimitiveFilter<UserResponse['username']>;
   } & {
-      [Key in keyof Omit<UserResponse, 'id' | 'name' | 'teams' | 'username' | keyof CustomUserType>]?:
+      [Key in keyof Omit<UserResponse, 'id' | 'name' | 'teams' | 'username' | keyof CustomUserData>]?:
         | RequireOnlyOne<QueryFilter<UserResponse[Key]>>
         | PrimitiveFilter<UserResponse[Key]>;
     }
@@ -1732,9 +1732,9 @@ export type MemberFilters = QueryFilters<
         }>
       | PrimitiveFilter<NonNullable<ChannelMemberResponse['user']>['id'][]>;
   } & {
-    [Key in keyof ContainsOperator<CustomMemberType>]?:
-      | RequireOnlyOne<QueryFilter<ContainsOperator<CustomMemberType>[Key]>>
-      | PrimitiveFilter<ContainsOperator<CustomMemberType>[Key]>;
+    [Key in keyof ContainsOperator<CustomMemberData>]?:
+      | RequireOnlyOne<QueryFilter<ContainsOperator<CustomMemberData>[Key]>>
+      | PrimitiveFilter<ContainsOperator<CustomMemberData>[Key]>;
   }
 >;
 
@@ -1748,13 +1748,13 @@ export type BannedUsersSortBase = { created_at?: AscDesc };
 
 export type ReactionSort = ReactionSortBase | Array<ReactionSortBase>;
 
-export type ReactionSortBase = Sort<CustomReactionType> & {
+export type ReactionSortBase = Sort<CustomReactionData> & {
   created_at?: AscDesc;
 };
 
 export type ChannelSort = ChannelSortBase | Array<ChannelSortBase>;
 
-export type ChannelSortBase = Sort<CustomChannelType> & {
+export type ChannelSortBase = Sort<CustomChannelData> & {
   created_at?: AscDesc;
   has_unread?: AscDesc;
   last_message_at?: AscDesc;
@@ -1778,7 +1778,7 @@ export type MemberSort =
   | Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>
   | Array<Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>>;
 
-export type SearchMessageSortBase = Sort<CustomMessageType> & {
+export type SearchMessageSortBase = Sort<CustomMessageData> & {
   attachments?: AscDesc;
   'attachments.type'?: AscDesc;
   created_at?: AscDesc;
@@ -1932,7 +1932,7 @@ export type AppSettings = {
   };
 };
 
-export type Attachment = CustomAttachmentType & {
+export type Attachment = CustomAttachmentData & {
   actions?: Action[];
   asset_url?: string;
   author_icon?: string;
@@ -2028,7 +2028,7 @@ export type ChannelConfigWithInfo = ChannelConfigFields &
     commands?: CommandResponse[];
   };
 
-export type ChannelData = CustomChannelType & {
+export type ChannelData = CustomChannelData & {
   blocked?: boolean;
   members?: string[] | Array<NewMemberPayload>;
   name?: string;
@@ -2122,7 +2122,7 @@ export type CommandVariants =
   | 'mute'
   | 'unban'
   | 'unmute'
-  | keyof CustomCommandType;
+  | keyof CustomCommandData;
 
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
@@ -2365,7 +2365,7 @@ export type Message = Partial<MessageBase> & {
   mentioned_users?: string[];
 };
 
-export type MessageBase = CustomMessageType & {
+export type MessageBase = CustomMessageData & {
   id: string;
   attachments?: Attachment[];
   html?: string;
@@ -2483,7 +2483,7 @@ export type RateLimitsInfo = {
 
 export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
 
-export type Reaction = CustomReactionType & {
+export type Reaction = CustomReactionData & {
   type: string;
   message_id?: string;
   score?: number;
@@ -2626,7 +2626,7 @@ export type ReservedMessageFields =
 
 export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] };
 
-export type User = CustomUserType & {
+export type User = CustomUserData & {
   id: string;
   anon?: boolean;
   name?: string;
@@ -2947,7 +2947,7 @@ export type UpdatePollAPIResponse = {
   poll: PollResponse;
 };
 
-export type PollResponse = CustomPollType &
+export type PollResponse = CustomPollData &
   PollEnrichData & {
     created_at: string;
     created_by: UserResponse | null;
@@ -2990,7 +2990,7 @@ export type PollEnrichData = {
   own_votes?: (PollVote | PollAnswer)[]; // not updated with WS events
 };
 
-export type PollData = CustomPollType & {
+export type PollData = CustomPollData & {
   id: string;
   name: string;
   allow_answers?: boolean;
@@ -3011,7 +3011,7 @@ export type PartialPollUpdate = {
   unset?: Array<keyof PollData>;
 };
 
-export type PollOptionData = CustomPollOptionType & {
+export type PollOptionData = CustomPollOptionData & {
   text: string;
   id?: string;
   position?: number;
@@ -3040,7 +3040,7 @@ export type CreatePollOptionAPIResponse = {
 export type GetPollOptionAPIResponse = CreatePollOptionAPIResponse;
 export type UpdatePollOptionAPIResponse = CreatePollOptionAPIResponse;
 
-export type PollOptionResponse = CustomPollType & {
+export type PollOptionResponse = CustomPollData & {
   created_at: string;
   id: string;
   poll_id: string;
