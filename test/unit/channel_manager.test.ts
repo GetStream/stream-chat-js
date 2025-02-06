@@ -7,6 +7,7 @@ import {
   StreamChat,
   ChannelManagerOptions,
   DEFAULT_CHANNEL_MANAGER_OPTIONS,
+  channelManagerEventToHandlerMapping,
 } from '../../src';
 
 import { generateMsg } from './test-utils/generateMessage';
@@ -194,6 +195,98 @@ describe('ChannelManager', () => {
       });
     });
   });
+
+  describe('event subscriptions', () => {
+    it('should only invoke event handlers if registerSubscriptions has been called', () => {
+      const newChannelManager = client.createChannelManager({});
+
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+
+      const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+      const clientOnSpy = sinon.spy(client, 'on');
+
+      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+
+      client.dispatchEvent({ type: 'message.new' })
+      client.dispatchEvent({ type: 'notification.added_to_channel' })
+
+      expect(clientOnSpy.called).to.be.false;
+      expect(newMessageHandlerSpy.called).to.be.false;
+      expect(notificationAddedToChannelHandlerSpy.called).to.be.false;
+
+      newChannelManager.registerSubscriptions();
+
+      expect(clientOnSpy.called).to.be.true;
+
+      client.dispatchEvent({ type: 'message.new' })
+      client.dispatchEvent({ type: 'notification.added_to_channel' })
+
+      expect(newMessageHandlerSpy.calledOnce).to.be.true;
+      expect(notificationAddedToChannelHandlerSpy.calledOnce).to.be.true;
+    })
+
+    it('should register listeners to all configured event handlers and do it exactly once', () => {
+      const clientOnSpy = sinon.spy(client, 'on');
+      const newChannelManager = client.createChannelManager({});
+
+      newChannelManager.registerSubscriptions();
+      newChannelManager.registerSubscriptions();
+
+      expect(clientOnSpy.callCount).to.equal(Object.keys(channelManagerEventToHandlerMapping).length);
+      Object.keys(channelManagerEventToHandlerMapping).forEach(eventType => {
+        expect(clientOnSpy.calledWith(eventType)).to.be.true;
+      })
+    })
+
+    it('should unregister subscriptions if unregisterSubscriptions is called', () => {
+      const newChannelManager = client.createChannelManager({});
+
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+
+      const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+
+      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+
+      newChannelManager.registerSubscriptions();
+      newChannelManager.unregisterSubscriptions();
+
+      client.dispatchEvent({ type: 'message.new' })
+      client.dispatchEvent({ type: 'notification.added_to_channel' })
+
+      expect(newMessageHandlerSpy.called).to.be.false;
+      expect(notificationAddedToChannelHandlerSpy.called).to.be.false;
+    })
+
+    it('should call overrides for event handlers if they exist', () => {
+      const newChannelManager = client.createChannelManager({});
+
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+
+      const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+      const newMessageHandlerOverrideSpy = sinon.spy(() => {});
+
+      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+
+      newChannelManager.registerSubscriptions();
+      newChannelManager.setEventHandlerOverrides({ newMessageHandler: newMessageHandlerOverrideSpy })
+
+      client.dispatchEvent({ type: 'message.new' })
+      client.dispatchEvent({ type: 'notification.added_to_channel' })
+
+      expect(newMessageHandlerSpy.called).to.be.false;
+      expect(newMessageHandlerOverrideSpy.called).to.be.true;
+      expect(notificationAddedToChannelHandlerSpy.called).to.be.true;
+    })
+  })
 
   describe('websocket event handlers', () => {
     let setChannelsStub: sinon.SinonStub;
