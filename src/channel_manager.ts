@@ -79,7 +79,9 @@ export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics =
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType<SCG>>
 >;
 
-export const channelManagerEventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames } = {
+export const channelManagerEventToHandlerMapping: {
+  [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames;
+} = {
   'channel.deleted': 'channelDeletedHandler',
   'channel.hidden': 'channelHiddenHandler',
   'channel.truncated': 'channelTruncatedHandler',
@@ -238,10 +240,10 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public loadNext = async () => {
-    const { pagination, channels } = this.state.getLatestValue();
+    const { pagination, channels, ready } = this.state.getLatestValue();
     const { filters, sort, options, isLoadingNext, hasNext } = pagination;
 
-    if (isLoadingNext || !hasNext) {
+    if (!ready || isLoadingNext || !hasNext) {
       return;
     }
 

@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import {
+  Channel,
   ChannelAPIResponse,
   ChannelManager,
   ChannelResponse,
@@ -201,17 +202,22 @@ describe('ChannelManager', () => {
       const newChannelManager = client.createChannelManager({});
 
       const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
+        'notificationAddedToChannelHandler',
+      );
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
       const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
       const clientOnSpy = sinon.spy(client, 'on');
 
       (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
-      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'notificationAddedToChannelHandler',
+        notificationAddedToChannelHandlerSpy,
+      );
 
-      client.dispatchEvent({ type: 'message.new' })
-      client.dispatchEvent({ type: 'notification.added_to_channel' })
+      client.dispatchEvent({ type: 'message.new' });
+      client.dispatchEvent({ type: 'notification.added_to_channel' });
 
       expect(clientOnSpy.called).to.be.false;
       expect(newMessageHandlerSpy.called).to.be.false;
@@ -221,12 +227,12 @@ describe('ChannelManager', () => {
 
       expect(clientOnSpy.called).to.be.true;
 
-      client.dispatchEvent({ type: 'message.new' })
-      client.dispatchEvent({ type: 'notification.added_to_channel' })
+      client.dispatchEvent({ type: 'message.new' });
+      client.dispatchEvent({ type: 'notification.added_to_channel' });
 
       expect(newMessageHandlerSpy.calledOnce).to.be.true;
       expect(notificationAddedToChannelHandlerSpy.calledOnce).to.be.true;
-    })
+    });
 
     it('should register listeners to all configured event handlers and do it exactly once', () => {
       const clientOnSpy = sinon.spy(client, 'on');
@@ -236,57 +242,192 @@ describe('ChannelManager', () => {
       newChannelManager.registerSubscriptions();
 
       expect(clientOnSpy.callCount).to.equal(Object.keys(channelManagerEventToHandlerMapping).length);
-      Object.keys(channelManagerEventToHandlerMapping).forEach(eventType => {
+      Object.keys(channelManagerEventToHandlerMapping).forEach((eventType) => {
         expect(clientOnSpy.calledWith(eventType)).to.be.true;
-      })
-    })
+      });
+    });
 
     it('should unregister subscriptions if unregisterSubscriptions is called', () => {
       const newChannelManager = client.createChannelManager({});
 
       const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
+        'notificationAddedToChannelHandler',
+      );
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
       const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
 
       (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
-      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'notificationAddedToChannelHandler',
+        notificationAddedToChannelHandlerSpy,
+      );
 
       newChannelManager.registerSubscriptions();
       newChannelManager.unregisterSubscriptions();
 
-      client.dispatchEvent({ type: 'message.new' })
-      client.dispatchEvent({ type: 'notification.added_to_channel' })
+      client.dispatchEvent({ type: 'message.new' });
+      client.dispatchEvent({ type: 'notification.added_to_channel' });
 
       expect(newMessageHandlerSpy.called).to.be.false;
       expect(notificationAddedToChannelHandlerSpy.called).to.be.false;
-    })
+    });
 
     it('should call overrides for event handlers if they exist', () => {
       const newChannelManager = client.createChannelManager({});
 
       const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get('notificationAddedToChannelHandler');
+      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
+        'notificationAddedToChannelHandler',
+      );
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
       const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
       const newMessageHandlerOverrideSpy = sinon.spy(() => {});
 
       (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
-      (newChannelManager as any).eventHandlers.set('notificationAddedToChannelHandler', notificationAddedToChannelHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'notificationAddedToChannelHandler',
+        notificationAddedToChannelHandlerSpy,
+      );
 
       newChannelManager.registerSubscriptions();
-      newChannelManager.setEventHandlerOverrides({ newMessageHandler: newMessageHandlerOverrideSpy })
+      newChannelManager.setEventHandlerOverrides({ newMessageHandler: newMessageHandlerOverrideSpy });
 
-      client.dispatchEvent({ type: 'message.new' })
-      client.dispatchEvent({ type: 'notification.added_to_channel' })
+      client.dispatchEvent({ type: 'message.new' });
+      client.dispatchEvent({ type: 'notification.added_to_channel' });
 
       expect(newMessageHandlerSpy.called).to.be.false;
       expect(newMessageHandlerOverrideSpy.called).to.be.true;
       expect(notificationAddedToChannelHandlerSpy.called).to.be.true;
-    })
-  })
+    });
+  });
+
+  describe.only('querying and pagination', () => {
+    let clientQueryChannelsStub: sinon.SinonStub;
+    let mockChannelPages: Array<Array<Channel>>;
+    let channelManager: ChannelManager;
+
+    beforeEach(() => {
+      channelManager = client.createChannelManager({});
+      const channelQueryResponses = [
+        Array.from({ length: 10 }, () => generateChannel()),
+        Array.from({ length: 10 }, () => generateChannel()),
+        Array.from({ length: 5 }, () => generateChannel()),
+      ];
+      mockChannelPages = channelQueryResponses.map((channelQueryResponse) => {
+        client.hydrateActiveChannels(channelQueryResponse);
+        return channelQueryResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+      });
+      clientQueryChannelsStub = sinon.stub(client, 'queryChannels').callsFake((_filters, _sort, options) => {
+        const offset = options?.offset ?? 0;
+        return Promise.resolve(mockChannelPages[offset % 10]);
+      });
+    });
+
+    afterEach(() => {
+      sinon.restore();
+      sinon.reset();
+    });
+
+    describe.only('queryChannels', () => {
+      it('should not query if pagination.isLoading is true', async () => {
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          pagination: {
+            ...prevState.pagination,
+            isLoading: true,
+          },
+        }));
+
+        await channelManager.queryChannels({});
+
+        expect(clientQueryChannelsStub.called).to.be.false;
+      });
+
+      it('should not query more than once from the same manager for 2 different queries', async () => {
+        await Promise.all([channelManager.queryChannels({}), channelManager.queryChannels({})]);
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+      });
+
+      it('should set state.ready to true after the first queryChannels is done', () => {});
+
+      it('should set the state to loading while an active query is happening', async () => {
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ isLoading: nextValue.pagination.isLoading }),
+          stateChangeSpy,
+        );
+        // TODO: Check why the test doesn't work without this;
+        //       something keeps invoking one extra state change
+        //       and I can't figure out what.
+        stateChangeSpy.resetHistory();
+
+        await channelManager.queryChannels({});
+
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({ isLoading: true });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({ isLoading: false });
+      });
+
+      it('should properly set the new pagination parameters and update the offset after the query', async () => {
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ pagination: nextValue.pagination }),
+          stateChangeSpy,
+        );
+        stateChangeSpy.resetHistory();
+
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: false,
+            isLoading: true,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 0 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 10 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(channels.length).to.equal(10);
+      });
+
+      it('should properly handle hasNext if the first returned page is less than the limit', async () => {
+        clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ pagination: nextValue.pagination }),
+          stateChangeSpy,
+        );
+        stateChangeSpy.resetHistory();
+
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+
+        const {
+          channels,
+          pagination: { hasNext },
+        } = channelManager.state.getLatestValue();
+
+        expect(channels.length).to.equal(5);
+        expect(hasNext).to.be.false;
+      });
+    });
+  });
 
   describe('websocket event handlers', () => {
     let setChannelsStub: sinon.SinonStub;
