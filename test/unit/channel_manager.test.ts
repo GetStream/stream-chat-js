@@ -11,10 +11,7 @@ import {
   channelManagerEventToHandlerMapping,
 } from '../../src';
 
-import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
-import { generateMember } from './test-utils/generateMember';
-import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import * as Utils from '../../src/utils';
 
