@@ -73,8 +73,7 @@ export type ChannelManagerEventHandlerNames =
   | 'memberUpdatedHandler'
   | 'notificationAddedToChannelHandler'
   | 'notificationNewMessageHandler'
-  | 'notificationRemovedFromChannelHandler'
-  | 'userPresenceHandler';
+  | 'notificationRemovedFromChannelHandler';
 
 export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics = DefaultGenerics> = Partial<
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType<SCG>>
@@ -95,6 +94,11 @@ const eventToHandlerMapping: { [key in ChannelManagerEventTypes]: ChannelManager
 export type ChannelManagerOptions = {
   allowNewMessagesFromUnfilteredChannels?: boolean;
   lockChannelOrder?: boolean;
+};
+
+export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
+  allowNewMessagesFromUnfilteredChannels: true,
+  lockChannelOrder: false,
 };
 
 export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
@@ -176,7 +180,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
-    this.options = { allowNewMessagesFromUnfilteredChannels: true, ...options };
+    this.options = { ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options };
   };
 
   public queryChannels = async (
