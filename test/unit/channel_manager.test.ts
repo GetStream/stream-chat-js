@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { ChannelManager, ChannelResponse, StreamChat } from '../../src';
+import { ChannelAPIResponse, ChannelManager, ChannelResponse, StreamChat } from '../../src';
 
 import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
@@ -8,10 +8,8 @@ import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import * as Utils from '../../src/utils';
-import { Channel } from 'node:diagnostics_channel';
-import { extractSortValue } from '../../src/utils';
 
-describe('ChannelManager', () => {
+describe.only('ChannelManager', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
 
@@ -27,6 +25,7 @@ describe('ChannelManager', () => {
   });
 
   describe('websocket event handlers', () => {
+    let channelsResponse: ChannelAPIResponse[];
     let setChannelsStub: sinon.SinonStub;
     let isChannelPinnedStub: sinon.SinonStub;
     let isChannelArchivedStub: sinon.SinonStub;
@@ -36,10 +35,9 @@ describe('ChannelManager', () => {
     let getAndWatchChannelStub: sinon.SinonStub;
     let findLastPinnedChannelIndexStub: sinon.SinonStub;
     let extractSortValueStub: sinon.SinonStub;
-    let channelToRemove: ChannelResponse;
 
     beforeEach(() => {
-      const channelsResponse = [
+      channelsResponse = [
         generateChannel({ channel: { id: 'channel1' } }),
         generateChannel({ channel: { id: 'channel2' } }),
         generateChannel({ channel: { id: 'channel3' } }),
@@ -56,7 +54,6 @@ describe('ChannelManager', () => {
       findLastPinnedChannelIndexStub = sinon.stub(Utils, 'findLastPinnedChannelIndex');
       extractSortValueStub = sinon.stub(Utils, 'extractSortValue');
       moveChannelUpwardsSpy = sinon.spy(Utils, 'moveChannelUpwards');
-      channelToRemove = channelsResponse[1].channel;
     });
 
     afterEach(() => {
@@ -65,6 +62,12 @@ describe('ChannelManager', () => {
     });
 
     describe('channelDeletedHandler, channelHiddenHandler and notificationRemovedFromChannelHandler', () => {
+      let channelToRemove: ChannelResponse;
+
+      beforeEach(() => {
+        channelToRemove = channelsResponse[1].channel;
+      });
+
       (['channel.deleted', 'channel.hidden', 'notification.removed_from_channel'] as const).forEach((eventType) => {
         it('should return early if channels is undefined', () => {
           channelManager.state.partialNext({ channels: undefined });
