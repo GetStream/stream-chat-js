@@ -888,12 +888,12 @@ describe('ChannelManager', () => {
         expect(getAndWatchChannelStub.callCount).to.equal(3);
         expect(moveChannelUpwardsSpy.callCount).to.equal(3);
         expect(setChannelsStub.callCount).to.equal(3);
-        moveChannelUpwardsSpy.args.forEach(arg => {
+        moveChannelUpwardsSpy.args.forEach((arg) => {
           expect(arg[0]).to.deep.equal(moveChannelUpwardsArgs);
-        })
-        setChannelsStub.args.forEach(arg => {
+        });
+        setChannelsStub.args.forEach((arg) => {
           expect(arg[0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
-        })
+        });
       });
     });
 
