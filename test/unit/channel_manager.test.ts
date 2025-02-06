@@ -304,7 +304,7 @@ describe('ChannelManager', () => {
     });
   });
 
-  describe.only('querying and pagination', () => {
+  describe('querying and pagination', () => {
     let clientQueryChannelsStub: sinon.SinonStub;
     let mockChannelPages: Array<Array<Channel>>;
     let channelManager: ChannelManager;
@@ -322,7 +322,7 @@ describe('ChannelManager', () => {
       });
       clientQueryChannelsStub = sinon.stub(client, 'queryChannels').callsFake((_filters, _sort, options) => {
         const offset = options?.offset ?? 0;
-        return Promise.resolve(mockChannelPages[offset % 10]);
+        return Promise.resolve(mockChannelPages[offset / 10]);
       });
     });
 
@@ -331,7 +331,7 @@ describe('ChannelManager', () => {
       sinon.reset();
     });
 
-    describe.only('queryChannels', () => {
+    describe('queryChannels', () => {
       it('should not query if pagination.isLoading is true', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
@@ -366,6 +366,7 @@ describe('ChannelManager', () => {
 
         await channelManager.queryChannels({});
 
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({ isLoading: true });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({ isLoading: false });
@@ -383,6 +384,7 @@ describe('ChannelManager', () => {
 
         const { channels } = channelManager.state.getLatestValue();
 
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
@@ -407,8 +409,86 @@ describe('ChannelManager', () => {
         expect(channels.length).to.equal(10);
       });
 
-      it('should properly handle hasNext if the first returned page is less than the limit', async () => {
+      it('should properly update hasNext and offset if the first returned page is less than the limit', async () => {
         clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+
+        const {
+          channels,
+          pagination: {
+            hasNext,
+            options: { offset },
+          },
+        } = channelManager.state.getLatestValue();
+
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+        expect(channels.length).to.equal(5);
+        expect(offset).to.equal(5);
+        expect(hasNext).to.be.false;
+      });
+    });
+
+    describe('loadNext', () => {
+      it('should not run loadNext if queryChannels has not been run at least once', async () => {
+        channelManager.state.partialNext({ ready: false });
+
+        await channelManager.loadNext();
+
+        expect(clientQueryChannelsStub.called).to.be.false;
+      });
+
+      it('should not run loadNext if a query is already in progress or if we are at the last page', async () => {
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          ready: true,
+          pagination: { ...prevState.pagination, isLoadingNext: true, hasNext: true },
+        }));
+        await channelManager.loadNext();
+        expect(clientQueryChannelsStub.called).to.be.false;
+
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          ready: true,
+          pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: false },
+        }));
+        await channelManager.loadNext();
+        expect(clientQueryChannelsStub.called).to.be.false;
+      });
+
+      it('should not queryChannels more than once regardless of number of consecutive loadNext invocations', async () => {
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          ready: true,
+          pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: true },
+        }));
+        await Promise.all([channelManager.loadNext(), channelManager.loadNext()]);
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+      });
+
+      it('should set the state to loading next page while an active query is happening', async () => {
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          ready: true,
+          pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: true },
+        }));
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ isLoadingNext: nextValue.pagination.isLoadingNext }),
+          stateChangeSpy,
+        );
+        stateChangeSpy.resetHistory();
+
+        await channelManager.loadNext();
+
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({ isLoadingNext: true });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({ isLoadingNext: false });
+      });
+
+      it('should properly set the new pagination parameters and update the offset after loading next', async () => {
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+
         const stateChangeSpy = sinon.spy();
         channelManager.state.subscribeWithSelector(
           (nextValue) => ({ pagination: nextValue.pagination }),
@@ -416,15 +496,63 @@ describe('ChannelManager', () => {
         );
         stateChangeSpy.resetHistory();
 
+        await channelManager.loadNext();
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        // one from queryChannels and one from loadNext
+        expect(clientQueryChannelsStub.callCount).to.equal(2);
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: true,
+            options: { limit: 10, offset: 10 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 20 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(channels.length).to.equal(20);
+      });
+
+      it('should correctly update hasNext and offset if the last page has been reached', async () => {
+        const { channels: initialChannels } = channelManager.state.getLatestValue();
+        expect(initialChannels.length).to.equal(0);
+
         await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.loadNext();
 
         const {
-          channels,
-          pagination: { hasNext },
+          channels: secondToLastPage,
+          pagination: { hasNext: prevHasNext },
+        } = channelManager.state.getLatestValue();
+        expect(secondToLastPage.length).to.equal(20);
+        expect(prevHasNext).to.be.true;
+
+        await channelManager.loadNext();
+
+        const {
+          channels: lastPage,
+          pagination: {
+            hasNext,
+            options: { offset },
+          },
         } = channelManager.state.getLatestValue();
 
-        expect(channels.length).to.equal(5);
+        expect(lastPage.length).to.equal(25);
         expect(hasNext).to.be.false;
+        expect(offset).to.equal(25);
       });
     });
   });

@@ -260,7 +260,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         channels: [...(channels || []), ...nextChannels],
         pagination: {
           ...pagination,
-          hasNext: (channels?.length ?? 0) >= limit,
+          hasNext: (nextChannels?.length ?? 0) >= limit,
           isLoading: false,
           isLoadingNext: false,
           options: newOptions,
