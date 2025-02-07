@@ -282,7 +282,7 @@ export type ChannelResponse = CustomChannelData & {
   member_count?: number;
   members?: ChannelMemberResponse[];
   muted?: boolean;
-  name?: string;
+  name?: string; // FIXME: I believe this property should live in CustomChannelData
   own_capabilities?: string[];
   team?: string;
   truncated_at?: string;
