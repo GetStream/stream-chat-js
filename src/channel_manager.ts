@@ -129,6 +129,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         hasNext: false,
         filters: {},
         sort: {},
+        // TODO: Check if these defaults are valid
         options: { limit: 10, offset: 0 },
       },
       ready: false,

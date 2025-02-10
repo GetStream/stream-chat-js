@@ -989,6 +989,11 @@ export const shouldConsiderPinnedChannels = <StreamChatGenerics extends Extendab
   return Math.abs(value) === 1;
 };
 
+/**
+ * Checks whether the sort value of type object contains a pinned_at value or if
+ * an array sort value type has the first value be an object containing pinned_at.
+ * @param sort
+ */
 export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   sort,
 }: {
@@ -999,6 +1004,12 @@ export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGener
   targetKey: 'pinned_at',
 });
 
+/**
+ * Finds the index of the last consecutively pinned channel, starting from the start of the
+ * array. Will not consider any pinned channels after the contiguous subsequence at the
+ * start of the array.
+ * @param channels
+ */
 export const findLastPinnedChannelIndex = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
 }: {
@@ -1017,7 +1028,7 @@ export const findLastPinnedChannelIndex = <StreamChatGenerics extends Extendable
   }
 
   return lastPinnedChannelIndex;
-}
+};
 
 export const moveChannelUpwards = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
