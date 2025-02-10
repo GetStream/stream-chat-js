@@ -999,11 +999,11 @@ export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGener
   targetKey: 'pinned_at',
 });
 
-export function findLastPinnedChannelIndex<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const findLastPinnedChannelIndex = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
 }: {
   channels: Channel<StreamChatGenerics>[];
-}) {
+}) => {
   let lastPinnedChannelIndex: number | null = null;
 
   for (const channel of channels) {
