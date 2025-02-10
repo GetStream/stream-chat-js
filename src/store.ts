@@ -1,8 +1,9 @@
 export type Patch<T> = (value: T) => T;
+export type ValueOrPatch<T> = T | Patch<T>;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
 export type Unsubscribe = () => void;
 
-export const isPatch = <T>(value: T | Patch<T>): value is Patch<T> => {
+export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> => {
   return typeof value === 'function';
 };
 
@@ -13,7 +14,7 @@ export class StateStore<T extends Record<string, unknown>> {
 
   constructor(private value: T) {}
 
-  public next = (newValueOrPatch: T | Patch<T>): void => {
+  public next = (newValueOrPatch: ValueOrPatch<T>): void => {
     // newValue (or patch output) should never be mutated previous value
     const newValue = isPatch(newValueOrPatch) ? newValueOrPatch(this.value) : newValueOrPatch;
 

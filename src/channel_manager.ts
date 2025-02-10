@@ -8,7 +8,7 @@ import type {
   ChannelFilters,
   ChannelSort,
 } from './types';
-import { StateStore } from './store';
+import { StateStore, ValueOrPatch, isPatch } from './store';
 import { Channel } from './channel';
 import {
   extractSortValue,
@@ -20,7 +20,6 @@ import {
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
 } from './utils';
-import { isPatch } from './store';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
   filters: ChannelFilters<SCG>;
@@ -37,8 +36,7 @@ export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics
   ready: boolean;
 };
 
-export type SetterParameterType<T> = T | ((prevState: T) => T);
-export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = SetterParameterType<
+export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = ValueOrPatch<
   ChannelManagerState<SCG>['channels']
 >;
 export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> = (
