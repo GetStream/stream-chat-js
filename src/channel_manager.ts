@@ -43,7 +43,6 @@ export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> 
   arg: ChannelSetterParameterType<SCG>,
 ) => void;
 
-// TODO: Figure out a better way to infer a generic handler type here
 export type GenericEventHandlerType<T extends unknown[]> = (
   ...args: T
 ) => void | (() => void) | ((...args: T) => Promise<void>) | Promise<void>;
@@ -116,6 +115,11 @@ export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
   lockChannelOrder: false,
 };
 
+export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
+  limit: 10,
+  offset: 0,
+};
+
 export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ChannelManagerState<SCG>>;
   private client: StreamChat<SCG>;
@@ -143,8 +147,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         hasNext: false,
         filters: {},
         sort: {},
-        // TODO: Check if these defaults are valid
-        options: { limit: 10, offset: 0 },
+        options: DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
       },
       initialized: false,
     });
@@ -200,7 +203,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) => {
-    const { offset = 0, limit = 10 } = options;
+    const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
     const {
       pagination: { isLoading },
     } = this.state.getLatestValue();
@@ -257,7 +260,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     try {
-      const { offset = 0, limit = 10 } = options;
+      const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
