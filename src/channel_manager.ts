@@ -32,6 +32,12 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   channels: Channel<SCG>[];
+  /**
+   * This value will become true the first time queryChannels is successfully executed and
+   * will remain false otherwise. It's used as a control property regarding whether the list
+   * has been initialized yet (i.e a query has already been done at least once) or not. We do
+   * this to prevent state.channels from being forced to be nullable.
+   */
   initialized: boolean;
   pagination: ChannelManagerPagination<SCG>;
 };

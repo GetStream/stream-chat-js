@@ -913,6 +913,10 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
   return `${channelType}:!members-${membersStr}`;
 };
 
+/**
+ * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
+ * @param channel
+ */
 export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   channel: Channel<StreamChatGenerics>,
 ) => {
@@ -923,6 +927,10 @@ export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = 
   return !!member?.pinned_at;
 };
 
+/**
+ * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
+ * @param channel
+ */
 export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   channel: Channel<StreamChatGenerics>,
 ) => {
@@ -933,6 +941,11 @@ export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics 
   return !!member?.archived_at;
 };
 
+/**
+ * A utility that tells us whether we should consider archived channels or not based
+ * on filters. Will return true only if filters.archived exists and is a boolean value.
+ * @param filters
+ */
 export const shouldConsiderArchivedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   filters: ChannelFilters<StreamChatGenerics>,
 ) => {
@@ -941,6 +954,14 @@ export const shouldConsiderArchivedChannels = <StreamChatGenerics extends Extend
   return typeof filters.archived === 'boolean';
 };
 
+/**
+ * Extracts the value of the sort parameter at a given index, for a targeted key. Can
+ * handle both array and object versions of sort. Will return null if the index/key
+ * combination does not exist.
+ * @param atIndex - the index at which we'll examine the sort value, if it's an array one
+ * @param sort - the sort value - both array and object notations are accepted
+ * @param targetKey - the target key which needs to exist for the sort at a certain index
+ */
 export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   atIndex,
   sort,
@@ -1031,6 +1052,15 @@ export const findLastPinnedChannelIndex = <StreamChatGenerics extends Extendable
   return lastPinnedChannelIndex;
 };
 
+/**
+ * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
+ * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
+ * should actually change. It will try to move the channel as high as it can within the list.
+ * @param channels - the list of channels we want to modify
+ * @param channelToMove - the channel we want to promote
+ * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
+ * @param sort - the sort value used to check for pinned channels
+ */
 export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
   channelToMove,
