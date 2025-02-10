@@ -331,41 +331,43 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     const channelType = event.channel_type;
     const channelId = event.channel_id;
 
-    if (channelType && channelId) {
-      const targetChannel = this.client.channel(channelType, channelId);
-      const targetChannelIndex = channels.indexOf(targetChannel);
-      const targetChannelExistsWithinList = targetChannelIndex >= 0;
-
-      const isTargetChannelPinned = isChannelPinned(targetChannel);
-      const isTargetChannelArchived = isChannelArchived(targetChannel);
-
-      const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
-      const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
-
-      if (
-        // filter is defined, target channel is archived and filter option is set to false
-        (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
-        // filter is defined, target channel isn't archived and filter option is set to true
-        (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
-        // sort option is defined, target channel is pinned
-        (considerPinnedChannels && isTargetChannelPinned) ||
-        // list order is locked
-        this.options.lockChannelOrder ||
-        // target channel is not within the loaded list and loading from cache is disallowed
-        (!targetChannelExistsWithinList && !this.options.allowNewMessagesFromUnfilteredChannels)
-      ) {
-        return;
-      }
-
-      this.setChannels(
-        moveChannelUpwards({
-          channels,
-          channelToMove: targetChannel,
-          channelToMoveIndexWithinChannels: targetChannelIndex,
-          sort,
-        }),
-      );
+    if (!channelType || !channelId) {
+      return;
     }
+
+    const targetChannel = this.client.channel(channelType, channelId);
+    const targetChannelIndex = channels.indexOf(targetChannel);
+    const targetChannelExistsWithinList = targetChannelIndex >= 0;
+
+    const isTargetChannelPinned = isChannelPinned(targetChannel);
+    const isTargetChannelArchived = isChannelArchived(targetChannel);
+
+    const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
+    const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
+
+    if (
+      // filter is defined, target channel is archived and filter option is set to false
+      (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
+      // filter is defined, target channel isn't archived and filter option is set to true
+      (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
+      // sort option is defined, target channel is pinned
+      (considerPinnedChannels && isTargetChannelPinned) ||
+      // list order is locked
+      this.options.lockChannelOrder ||
+      // target channel is not within the loaded list and loading from cache is disallowed
+      (!targetChannelExistsWithinList && !this.options.allowNewMessagesFromUnfilteredChannels)
+    ) {
+      return;
+    }
+
+    this.setChannels(
+      moveChannelUpwards({
+        channels,
+        channelToMove: targetChannel,
+        channelToMoveIndexWithinChannels: targetChannelIndex,
+        sort,
+      }),
+    );
   };
 
   private notificationNewMessageHandler = async (event: Event<SCG>) => {
