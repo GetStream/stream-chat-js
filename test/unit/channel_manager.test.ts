@@ -31,7 +31,7 @@ describe('ChannelManager', () => {
     ];
     client.hydrateActiveChannels(channelsResponse);
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
-    channelManager.state.partialNext({ channels, ready: true });
+    channelManager.state.partialNext({ channels, initialized: true });
   });
 
   afterEach(() => {
@@ -57,7 +57,7 @@ describe('ChannelManager', () => {
         sort: {},
         options: { limit: 10, offset: 0 },
       });
-      expect(state.ready).to.be.false;
+      expect(state.initialized).to.be.false;
     });
 
     it('should properly set eventHandlerOverrides and options if they are passed', () => {
@@ -377,20 +377,20 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.args[1][0]).to.deep.equal({ isLoading: false });
       });
 
-      it('should set state.ready to true after the first queryChannels is done', async () => {
+      it('should set state.initialized to true after the first queryChannels is done', async () => {
         const stateChangeSpy = sinon.spy();
-        channelManager.state.subscribeWithSelector((nextValue) => ({ ready: nextValue.ready }), stateChangeSpy);
+        channelManager.state.subscribeWithSelector((nextValue) => ({ initialized: nextValue.initialized }), stateChangeSpy);
         stateChangeSpy.resetHistory();
 
-        const { ready } = channelManager.state.getLatestValue();
+        const { initialized } = channelManager.state.getLatestValue();
 
-        expect(ready).to.be.false;
+        expect(initialized).to.be.false;
 
         await channelManager.queryChannels({});
 
         expect(clientQueryChannelsStub.calledOnce).to.be.true;
         expect(stateChangeSpy.calledOnce).to.be.true;
-        expect(stateChangeSpy.args[0][0]).to.deep.equal({ ready: true });
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({ initialized: true });
       });
 
       it('should properly set the new pagination parameters and update the offset after the query', async () => {
@@ -451,7 +451,7 @@ describe('ChannelManager', () => {
 
     describe('loadNext', () => {
       it('should not run loadNext if queryChannels has not been run at least once', async () => {
-        channelManager.state.partialNext({ ready: false });
+        channelManager.state.partialNext({ initialized: false });
 
         await channelManager.loadNext();
 
@@ -461,7 +461,7 @@ describe('ChannelManager', () => {
       it('should not run loadNext if a query is already in progress or if we are at the last page', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
-          ready: true,
+          initialized: true,
           pagination: { ...prevState.pagination, isLoadingNext: true, hasNext: true },
         }));
         await channelManager.loadNext();
@@ -469,7 +469,7 @@ describe('ChannelManager', () => {
 
         channelManager.state.next((prevState) => ({
           ...prevState,
-          ready: true,
+          initialized: true,
           pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: false },
         }));
         await channelManager.loadNext();
@@ -479,7 +479,7 @@ describe('ChannelManager', () => {
       it('should not queryChannels more than once regardless of number of consecutive loadNext invocations', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
-          ready: true,
+          initialized: true,
           pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: true },
         }));
         await Promise.all([channelManager.loadNext(), channelManager.loadNext()]);
@@ -489,7 +489,7 @@ describe('ChannelManager', () => {
       it('should set the state to loading next page while an active query is happening', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
-          ready: true,
+          initialized: true,
           pagination: { ...prevState.pagination, isLoadingNext: false, hasNext: true },
         }));
         const stateChangeSpy = sinon.spy();

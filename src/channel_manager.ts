@@ -33,7 +33,7 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   channels: Channel<SCG>[];
   pagination: ChannelManagerPagination<SCG>;
-  ready: boolean;
+  initialized: boolean;
 };
 
 export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = ValueOrPatch<
@@ -146,7 +146,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         // TODO: Check if these defaults are valid
         options: { limit: 10, offset: 0 },
       },
-      ready: false,
+      initialized: false,
     });
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
@@ -236,7 +236,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
           isLoading: false,
           options: newOptions,
         },
-        ready: true,
+        initialized: true,
       });
     } catch (error) {
       this.client.logger('error', (error as Error).message);
@@ -249,10 +249,10 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public loadNext = async () => {
-    const { pagination, channels, ready } = this.state.getLatestValue();
+    const { pagination, channels, initialized } = this.state.getLatestValue();
     const { filters, sort, options, isLoadingNext, hasNext } = pagination;
 
-    if (!ready || isLoadingNext || !hasNext) {
+    if (!initialized || isLoadingNext || !hasNext) {
       return;
     }
 
