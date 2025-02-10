@@ -93,11 +93,25 @@ export const channelManagerEventToHandlerMapping: {
 };
 
 export type ChannelManagerOptions = {
+  /**
+   * Aborts a channels query that is already in progress and runs the new one.
+   */
+  abortInFlightQuery?: boolean;
+  /**
+   * Allows new messages from unfiltered channels in the list. A good example of
+   * this would be a channel that is being watched and it receives a new message,
+   * but is not part of the list initially.
+   */
   allowNewMessagesFromUnfilteredChannels?: boolean;
+  /**
+   * Allows us to lock the order of channels within the list. Any event that would
+   * change the order of channels within the list will do nothing.
+   */
   lockChannelOrder?: boolean;
 };
 
 export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
+  abortInFlightQuery: false,
   allowNewMessagesFromUnfilteredChannels: true,
   lockChannelOrder: false,
 };
@@ -191,7 +205,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       pagination: { isLoading },
     } = this.state.getLatestValue();
 
-    if (isLoading) {
+    if (isLoading && !this.options.abortInFlightQuery) {
       return;
     }
 

@@ -998,11 +998,12 @@ export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGener
   sort,
 }: {
   sort: ChannelSort<StreamChatGenerics>;
-}) => extractSortValue({
-  atIndex: 0,
-  sort,
-  targetKey: 'pinned_at',
-});
+}) =>
+  extractSortValue({
+    atIndex: 0,
+    sort,
+    targetKey: 'pinned_at',
+  });
 
 /**
  * Finds the index of the last consecutively pinned channel, starting from the start of the

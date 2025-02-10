@@ -111,7 +111,11 @@ describe('ChannelManager', () => {
     });
 
     it('should properly set options', () => {
-      const options = { lockChannelOrder: true, allowNewMessagesFromUnfilteredChannels: false };
+      const options = {
+        lockChannelOrder: true,
+        allowNewMessagesFromUnfilteredChannels: false,
+        abortInFlightQuery: false,
+      };
       channelManager.setOptions(options);
 
       expect((channelManager as any).options).to.deep.equal(options);
@@ -348,7 +352,11 @@ describe('ChannelManager', () => {
         expect(clientQueryChannelsStub.calledOnce).to.be.true;
       });
 
-      it('should set state.ready to true after the first queryChannels is done', () => {});
+      it('should query more than once if channelManager.options.abortInFlightQuery is true', async () => {
+        channelManager.setOptions({ abortInFlightQuery: true });
+        await Promise.all([channelManager.queryChannels({}), channelManager.queryChannels({})]);
+        expect(clientQueryChannelsStub.callCount).to.equal(2);
+      });
 
       it('should set the state to loading while an active query is happening', async () => {
         const stateChangeSpy = sinon.spy();
@@ -367,6 +375,22 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({ isLoading: true });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({ isLoading: false });
+      });
+
+      it('should set state.ready to true after the first queryChannels is done', async () => {
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector((nextValue) => ({ ready: nextValue.ready }), stateChangeSpy);
+        stateChangeSpy.resetHistory();
+
+        const { ready } = channelManager.state.getLatestValue();
+
+        expect(ready).to.be.false;
+
+        await channelManager.queryChannels({});
+
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+        expect(stateChangeSpy.calledOnce).to.be.true;
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({ ready: true });
       });
 
       it('should properly set the new pagination parameters and update the offset after the query', async () => {
