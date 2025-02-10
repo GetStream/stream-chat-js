@@ -32,8 +32,8 @@ export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGen
 
 export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
   channels: Channel<SCG>[];
-  pagination: ChannelManagerPagination<SCG>;
   initialized: boolean;
+  pagination: ChannelManagerPagination<SCG>;
 };
 
 export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = ValueOrPatch<

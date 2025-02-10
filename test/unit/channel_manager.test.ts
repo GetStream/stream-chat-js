@@ -379,7 +379,10 @@ describe('ChannelManager', () => {
 
       it('should set state.initialized to true after the first queryChannels is done', async () => {
         const stateChangeSpy = sinon.spy();
-        channelManager.state.subscribeWithSelector((nextValue) => ({ initialized: nextValue.initialized }), stateChangeSpy);
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ initialized: nextValue.initialized }),
+          stateChangeSpy,
+        );
         stateChangeSpy.resetHistory();
 
         const { initialized } = channelManager.state.getLatestValue();
