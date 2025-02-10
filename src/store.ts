@@ -2,9 +2,9 @@ export type Patch<T> = (value: T) => T;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
 export type Unsubscribe = () => void;
 
-function isPatch<T>(value: T | Patch<T>): value is Patch<T> {
+export const isPatch = <T>(value: T | Patch<T>): value is Patch<T> => {
   return typeof value === 'function';
-}
+};
 
 export class StateStore<T extends Record<string, unknown>> {
   private handlerSet = new Set<Handler<T>>();

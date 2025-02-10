@@ -20,6 +20,7 @@ import {
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
 } from './utils';
+import { isPatch } from './store';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
   filters: ChannelFilters<SCG>;
@@ -152,18 +153,15 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
     this.state.next((current) => {
-      const { channels: prevChannels } = current;
-      let newValue = valueOrFactory;
-      if (newValue && typeof newValue === 'function') {
-        newValue = newValue(prevChannels);
-      }
+      const { channels: currentChannels } = current;
+      const newChannels = isPatch(valueOrFactory) ? valueOrFactory(currentChannels) : valueOrFactory;
 
       // If the references between the two values are the same, just return the
       // current state; otherwise trigger a state change.
-      if (prevChannels === newValue) {
+      if (currentChannels === newChannels) {
         return current;
       }
-      return { ...current, channels: newValue };
+      return { ...current, channels: newChannels };
     });
   };
 
