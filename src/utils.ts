@@ -982,36 +982,22 @@ export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics =
 export const shouldConsiderPinnedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
   sort: ChannelSort<StreamChatGenerics>,
 ) => {
-  const value = extractSortValue({
-    atIndex: 0,
-    sort,
-    targetKey: 'pinned_at',
-  });
+  const value = findPinnedAtSortOrder({ sort });
 
   if (typeof value !== 'number') return false;
 
   return Math.abs(value) === 1;
 };
 
-export function findPinnedAtSortOrder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   sort,
 }: {
   sort: ChannelSort<StreamChatGenerics>;
-}) {
-  if (!sort) return null;
-
-  if (Array.isArray(sort)) {
-    const [option] = sort;
-
-    if (!option?.pinned_at) return null;
-
-    return option.pinned_at;
-  } else {
-    if (!sort.pinned_at) return null;
-
-    return sort.pinned_at;
-  }
-}
+}) => extractSortValue({
+  atIndex: 0,
+  sort,
+  targetKey: 'pinned_at',
+});
 
 export function findLastPinnedChannelIndex<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
