@@ -547,7 +547,7 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async inviteMembers(
-    members: string[] | Array<NewMemberPayload>,
+    members: string[] | Required<Omit<NewMemberPayload, 'channel_role'>>[],
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
