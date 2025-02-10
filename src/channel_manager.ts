@@ -16,7 +16,7 @@ import {
   getAndWatchChannel,
   isChannelArchived,
   isChannelPinned,
-  moveChannelUpwards,
+  promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
 } from './utils';
@@ -308,7 +308,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       const { sort } = pagination ?? {};
 
       this.setChannels(
-        moveChannelUpwards({
+        promoteChannel({
           channels,
           channelToMove: channel,
           sort,
@@ -376,7 +376,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     this.setChannels(
-      moveChannelUpwards({
+      promoteChannel({
         channels,
         channelToMove: targetChannel,
         channelToMoveIndexWithinChannels: targetChannelIndex,
@@ -407,7 +407,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }
 
       this.setChannels(
-        moveChannelUpwards({
+        promoteChannel({
           channels,
           channelToMove: channel,
           sort,
@@ -427,7 +427,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       });
 
       this.setChannels(
-        moveChannelUpwards({
+        promoteChannel({
           channels,
           channelToMove: channel,
           sort,

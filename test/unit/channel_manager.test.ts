@@ -584,7 +584,7 @@ describe('ChannelManager', () => {
     let isChannelArchivedStub: sinon.SinonStub;
     let shouldConsiderArchivedChannelsStub: sinon.SinonStub;
     let shouldConsiderPinnedChannelsStub: sinon.SinonStub;
-    let moveChannelUpwardsSpy: sinon.SinonSpy;
+    let promoteChannelSpy: sinon.SinonSpy;
     let getAndWatchChannelStub: sinon.SinonStub;
     let findLastPinnedChannelIndexStub: sinon.SinonStub;
     let extractSortValueStub: sinon.SinonStub;
@@ -598,7 +598,7 @@ describe('ChannelManager', () => {
       getAndWatchChannelStub = sinon.stub(Utils, 'getAndWatchChannel');
       findLastPinnedChannelIndexStub = sinon.stub(Utils, 'findLastPinnedChannelIndex');
       extractSortValueStub = sinon.stub(Utils, 'extractSortValue');
-      moveChannelUpwardsSpy = sinon.spy(Utils, 'moveChannelUpwards');
+      promoteChannelSpy = sinon.spy(Utils, 'promoteChannel');
     });
 
     afterEach(() => {
@@ -754,18 +754,18 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+        const promoteChannelArgs = promoteChannelSpy.args[0][0];
         const newChannel = client.channel('messaging', 'channel4');
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
-        expect(moveChannelUpwardsArgs).to.deep.equal({
+        expect(promoteChannelSpy.calledOnce).to.be.true;
+        expect(promoteChannelArgs).to.deep.equal({
           channels,
           channelToMove: newChannel,
           channelToMoveIndexWithinChannels: -1,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
       });
 
       it('should move the channel upwards if all conditions allow it', () => {
@@ -780,17 +780,17 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+        const promoteChannelArgs = promoteChannelSpy.args[0][0];
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
-        expect(moveChannelUpwardsArgs).to.deep.equal({
+        expect(promoteChannelSpy.calledOnce).to.be.true;
+        expect(promoteChannelArgs).to.deep.equal({
           channels,
           channelToMove: channels[1],
           channelToMoveIndexWithinChannels: 1,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
       });
     });
 
@@ -878,13 +878,13 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+        const promoteChannelArgs = promoteChannelSpy.args[0][0];
 
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
+        expect(promoteChannelSpy.calledOnce).to.be.true;
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        expect(promoteChannelArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
       });
 
       it('should not add duplicate channels for multiple event invocations', async () => {
@@ -907,16 +907,16 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = { channels, channelToMove: newChannel, sort };
+        const promoteChannelArgs = { channels, channelToMove: newChannel, sort };
 
         expect(getAndWatchChannelStub.callCount).to.equal(3);
-        expect(moveChannelUpwardsSpy.callCount).to.equal(3);
+        expect(promoteChannelSpy.callCount).to.equal(3);
         expect(setChannelsStub.callCount).to.equal(3);
-        moveChannelUpwardsSpy.args.forEach((arg) => {
-          expect(arg[0]).to.deep.equal(moveChannelUpwardsArgs);
+        promoteChannelSpy.args.forEach((arg) => {
+          expect(arg[0]).to.deep.equal(promoteChannelArgs);
         });
         setChannelsStub.args.forEach((arg) => {
-          expect(arg[0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+          expect(arg[0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
         });
       });
     });
@@ -963,13 +963,13 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+        const promoteChannelArgs = promoteChannelSpy.args[0][0];
 
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
+        expect(promoteChannelSpy.calledOnce).to.be.true;
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        expect(promoteChannelArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
       });
     });
 
@@ -1191,16 +1191,16 @@ describe('ChannelManager', () => {
           pagination: { sort },
           channels,
         } = channelManager.state.getLatestValue();
-        const moveChannelUpwardsArgs = moveChannelUpwardsSpy.args[0][0];
+        const promoteChannelArgs = promoteChannelSpy.args[0][0];
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(moveChannelUpwardsSpy.calledOnce).to.be.true;
-        expect(moveChannelUpwardsArgs).to.deep.equal({
+        expect(promoteChannelSpy.calledOnce).to.be.true;
+        expect(promoteChannelArgs).to.deep.equal({
           channels,
           channelToMove: newChannel,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.moveChannelUpwards(moveChannelUpwardsArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
       });
     });
   });

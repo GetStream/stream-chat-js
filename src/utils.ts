@@ -17,7 +17,7 @@ import {
   ChannelSort,
   ChannelFilters,
   ChannelSortBase,
-  MoveChannelUpwardsParams,
+  PromoteChannelParams,
 } from './types';
 import { StreamChat } from './client';
 import { Channel } from './channel';
@@ -1031,12 +1031,12 @@ export const findLastPinnedChannelIndex = <StreamChatGenerics extends Extendable
   return lastPinnedChannelIndex;
 };
 
-export const moveChannelUpwards = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
   channels,
   channelToMove,
   channelToMoveIndexWithinChannels,
   sort,
-}: MoveChannelUpwardsParams<StreamChatGenerics>) => {
+}: PromoteChannelParams<StreamChatGenerics>) => {
   // get index of channel to move up
   const targetChannelIndex =
     channelToMoveIndexWithinChannels ?? channels.findIndex((channel) => channel.cid === channelToMove.cid);

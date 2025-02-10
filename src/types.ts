@@ -3798,7 +3798,7 @@ export type VelocityFilterConfig = {
   async?: boolean;
 };
 
-export type MoveChannelUpwardsParams<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGenerics> = {
   channels: Array<Channel<SCG>>;
   channelToMove: Channel<SCG>;
   sort: ChannelSort<SCG>;

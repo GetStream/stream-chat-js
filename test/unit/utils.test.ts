@@ -21,7 +21,7 @@ import {
   findLastPinnedChannelIndex,
   findPinnedAtSortOrder,
   extractSortValue,
-  moveChannelUpwards,
+  promoteChannel,
 } from '../../src/utils';
 
 import type {
@@ -587,7 +587,7 @@ describe('Channel pinning and archiving utils', () => {
   });
 });
 
-describe('moveChannelUpwards', () => {
+describe('promoteChannel', () => {
   let client: StreamChat;
 
   beforeEach(async () => {
@@ -598,7 +598,7 @@ describe('moveChannelUpwards', () => {
     const channelsResponse = [generateChannel(), generateChannel()];
     client.hydrateActiveChannels(channelsResponse);
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove: channels[0],
       sort: {},
@@ -617,7 +617,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = channels[1];
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: [{ pinned_at: 1 }],
@@ -637,7 +637,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = channels[2];
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: {},
@@ -657,7 +657,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = channels[2];
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: {},
@@ -679,7 +679,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: {},
@@ -700,7 +700,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: {},
@@ -722,7 +722,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = channels[3];
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: [{ pinned_at: -1 }],
@@ -743,7 +743,7 @@ describe('moveChannelUpwards', () => {
     const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
     const channelToMove = channels[2];
 
-    const result = moveChannelUpwards({
+    const result = promoteChannel({
       channels,
       channelToMove,
       sort: {},
