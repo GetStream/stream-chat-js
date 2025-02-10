@@ -47,7 +47,7 @@ export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> 
 // TODO: Figure out a better way to infer a generic handler type here
 export type GenericEventHandlerType<T extends unknown[]> = (
   ...args: T
-) => void | (() => void) | ((...args: T) => Promise<void>);
+) => void | (() => void) | ((...args: T) => Promise<void>) | Promise<void>;
 export type EventHandlerType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<[Event<SCG>]>;
 export type EventHandlerOverrideType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<
   [ChannelSetterType<SCG>, Event<SCG>]
@@ -137,7 +137,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
     this.eventHandlers = new Map(
-      Object.entries({
+      Object.entries<EventHandlerType<SCG>>({
         channelDeletedHandler: this.channelDeletedHandler,
         channelHiddenHandler: this.channelHiddenHandler,
         channelVisibleHandler: this.channelVisibleHandler,
@@ -146,7 +146,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         notificationAddedToChannelHandler: this.notificationAddedToChannelHandler,
         notificationNewMessageHandler: this.notificationNewMessageHandler,
         notificationRemovedFromChannelHandler: this.notificationRemovedFromChannelHandler,
-      }) as [string, EventHandlerType<SCG>][],
+      }),
     );
   }
 
@@ -176,9 +176,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }
       return acc;
     }, {});
-    this.eventHandlerOverrides = new Map(
-      Object.entries(truthyEventHandlerOverrides) as [string, EventHandlerOverrideType<SCG>][],
-    );
+    this.eventHandlerOverrides = new Map(Object.entries<EventHandlerOverrideType<SCG>>(truthyEventHandlerOverrides));
   };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
