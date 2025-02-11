@@ -1029,6 +1029,21 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.calledOnce).to.be.false;
       });
 
+      it('should not update state if options.lockChannelOrder is true', () => {
+        channelManager.setOptions({ lockChannelOrder: true });
+        dispatchMemberUpdatedEvent();
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
+      it('should not update state if neither channel pinning nor archiving should not be considered', () => {
+        shouldConsiderPinnedChannelsStub.returns(false);
+        shouldConsiderArchivedChannelsStub.returns(false);
+        dispatchMemberUpdatedEvent();
+
+        expect(setChannelsStub.calledOnce).to.be.false;
+      });
+
       it('should update the state if only pinned channels should be considered', () => {
         shouldConsiderPinnedChannelsStub.returns(true);
         shouldConsiderArchivedChannelsStub.returns(false);
@@ -1043,14 +1058,6 @@ describe('ChannelManager', () => {
         dispatchMemberUpdatedEvent();
 
         expect(setChannelsStub.calledOnce).to.be.true;
-      });
-
-      it('should not update state if neither channel pinning nor archiving should not be considered', () => {
-        shouldConsiderPinnedChannelsStub.returns(false);
-        shouldConsiderArchivedChannelsStub.returns(false);
-        dispatchMemberUpdatedEvent();
-
-        expect(setChannelsStub.calledOnce).to.be.false;
       });
 
       it('should handle archiving correctly', () => {
