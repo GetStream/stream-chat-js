@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.56.0](https://github.com/GetStream/stream-chat-js/compare/v8.55.0...v8.56.0) (2025-02-11)
+
+
+### Features
+
+* reactive channel list ([#1460](https://github.com/GetStream/stream-chat-js/issues/1460)) ([e6a78bf](https://github.com/GetStream/stream-chat-js/commit/e6a78bfc8a2465e7e67a0e982108b38e4ce07b3a))
+
 ## [8.55.0](https://github.com/GetStream/stream-chat-js/compare/v8.54.1...v8.55.0) (2025-01-31)
 
 
