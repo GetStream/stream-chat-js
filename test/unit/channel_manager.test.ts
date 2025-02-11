@@ -852,6 +852,25 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.called).to.be.false;
       });
 
+      it('should not update the state if channel is not archived and and filters allow it', async () => {
+        isChannelArchivedStub.returns(false);
+        shouldConsiderArchivedChannelsStub.returns(true);
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          pagination: { ...prevState.pagination, filters: { archived: true } },
+        }));
+
+        client.dispatchEvent({
+          type: 'notification.message_new',
+          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+        });
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.true;
+        expect(setChannelsStub.called).to.be.false;
+      });
+
       it('should not update the state if allowNewMessagesFromUnfilteredChannels is false', async () => {
         channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
         client.dispatchEvent({
@@ -954,6 +973,38 @@ describe('ChannelManager', () => {
         expect(getAndWatchChannelStub.called).to.be.false;
         expect(setChannelsStub.called).to.be.false;
       });
+
+      it('should not update the state if the channel is archived and filters do not allow it', async() => {
+        isChannelArchivedStub.returns(true);
+        shouldConsiderArchivedChannelsStub.returns(true);
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          pagination: { ...prevState.pagination, filters: { archived: false } },
+        }));
+
+        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.true;
+        expect(setChannelsStub.called).to.be.false;
+      })
+
+      it('should not update the state if the channel is archived and filters do not allow it', async() => {
+        isChannelArchivedStub.returns(false);
+        shouldConsiderArchivedChannelsStub.returns(true);
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          pagination: { ...prevState.pagination, filters: { archived: true } },
+        }));
+
+        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+
+        await clock.runAllAsync();
+
+        expect(getAndWatchChannelStub.called).to.be.true;
+        expect(setChannelsStub.called).to.be.false;
+      })
 
       it('should add the channel to the list if all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
