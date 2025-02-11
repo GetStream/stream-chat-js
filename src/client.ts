@@ -602,6 +602,14 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     return Promise.resolve();
   };
 
+  /**
+   * Creates an instance of ChannelManager.
+   *
+   * @internal
+   *
+   * @param eventHandlerOverrides - the overrides for event handlers to be used
+   * @param options - the options used for the channel manager
+   */
   createChannelManager = ({
     eventHandlerOverrides = {},
     options = {},

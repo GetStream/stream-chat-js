@@ -126,6 +126,12 @@ export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
   offset: 0,
 };
 
+/**
+ * A class that manages a list of channels and changes it based on configuration and WS events. The
+ * list of channels is reactive as well as the pagination and it can be subscribed to for state updates.
+ *
+ * @internal
+ */
 export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   public readonly state: StateStore<ChannelManagerState<SCG>>;
   private client: StreamChat<SCG>;
