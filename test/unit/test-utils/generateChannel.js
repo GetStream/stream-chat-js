@@ -3,8 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 export const generateChannel = (options = { channel: {} }) => {
 	const { channel: optionsChannel, config, ...optionsBesidesChannel } = options;
 	const idFromOptions = optionsChannel && optionsChannel.id;
-	const id = idFromOptions ? idFromOptions : uuidv4();
 	const type = (optionsChannel && optionsChannel.type) || 'messaging';
+	const id = idFromOptions
+		? idFromOptions
+		: options.members && options.members.length
+		? `!members-${uuidv4()}`
+		: uuidv4();
 	return {
 		messages: [],
 		members: [],
@@ -12,7 +16,7 @@ export const generateChannel = (options = { channel: {} }) => {
 		channel: {
 			id,
 			type,
-			cid: idFromOptions ? `${type}:${id}` : `${type}:!members-${uuidv4()}`,
+			cid: `${type}:${id}`,
 			created_at: '2020-04-28T11:20:48.578147Z',
 			updated_at: '2020-04-28T11:20:48.578147Z',
 			created_by: {

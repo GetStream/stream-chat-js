@@ -594,7 +594,7 @@ describe('Client WSFallback', () => {
 	});
 });
 
-describe('Channel.queryChannels', async () => {
+describe('StreamChat.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
