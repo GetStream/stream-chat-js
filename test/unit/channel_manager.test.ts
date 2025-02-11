@@ -63,7 +63,14 @@ describe('ChannelManager', () => {
 
     it('should properly set eventHandlerOverrides and options if they are passed', () => {
       const eventHandlerOverrides = { newMessageHandler: () => {} };
-      const options = { allowNewMessagesFromUnfilteredChannels: false };
+      const options = {
+        allowNotLoadedChannelPromotionForEvent: {
+          'channel.visible': false,
+          'message.new': false,
+          'notification.added_to_channel': false,
+          'notification.message_new': false,
+        },
+      };
       const newChannelManager = client.createChannelManager({ eventHandlerOverrides, options });
 
       expect(Object.fromEntries((newChannelManager as any).eventHandlerOverrides)).to.deep.equal(eventHandlerOverrides);
@@ -114,7 +121,12 @@ describe('ChannelManager', () => {
     it('should properly set options', () => {
       const options = {
         lockChannelOrder: true,
-        allowNewMessagesFromUnfilteredChannels: false,
+        allowNotLoadedChannelPromotionForEvent: {
+          'channel.visible': false,
+          'message.new': false,
+          'notification.added_to_channel': true,
+          'notification.message_new': true,
+        },
         abortInFlightQuery: false,
       };
       channelManager.setOptions(options);
@@ -727,13 +739,20 @@ describe('ChannelManager', () => {
         channelManager.setOptions({});
       });
 
-      it('should not update the state if the channel is not part of the list and allowNewMessagesFromUnfilteredChannels if false', () => {
+      it('should not update the state if the channel is not part of the list and allowNotLoadedChannelPromotionForEvent["message.new"] if false', () => {
         const { channels: prevChannels } = channelManager.state.getLatestValue();
         isChannelPinnedStub.returns(false);
         isChannelArchivedStub.returns(false);
         shouldConsiderArchivedChannelsStub.returns(false);
         shouldConsiderPinnedChannelsStub.returns(false);
-        channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
+        channelManager.setOptions({
+          allowNotLoadedChannelPromotionForEvent: {
+            'channel.visible': true,
+            'message.new': false,
+            'notification.added_to_channel': true,
+            'notification.message_new': true,
+          },
+        });
 
         client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel4' });
 
@@ -746,7 +765,7 @@ describe('ChannelManager', () => {
         channelManager.setOptions({});
       });
 
-      it('should move the channel upwards if it is not part of the list and allowNewMessagesFromUnfilteredChannels is true', () => {
+      it('should move the channel upwards if it is not part of the list and allowNotLoadedChannelPromotionForEvent["message.new"] is true', () => {
         isChannelPinnedStub.returns(false);
         isChannelArchivedStub.returns(false);
         shouldConsiderArchivedChannelsStub.returns(false);
@@ -871,8 +890,18 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.called).to.be.false;
       });
 
-      it('should not update the state if allowNewMessagesFromUnfilteredChannels is false', async () => {
-        channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
+      it('should not update the state if allowNotLoadedChannelPromotionForEvent["notification.message_new"] is false', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        getAndWatchChannelStub.resolves(newChannel);
+        channelManager.setOptions({
+          allowNotLoadedChannelPromotionForEvent: {
+            'channel.visible': true,
+            'message.new': true,
+            'notification.added_to_channel': true,
+            'notification.message_new': false,
+          },
+        });
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
@@ -1212,8 +1241,18 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.calledOnce).to.be.false;
       });
 
-      it('should not update state if allowNewMessagesFromUnfilteredChannels is false', async () => {
-        channelManager.setOptions({ allowNewMessagesFromUnfilteredChannels: false });
+      it('should not update state if allowNotLoadedChannelPromotionForEvent["notification.added_to_channel"] is false', async () => {
+        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
+        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        getAndWatchChannelStub.resolves(newChannel);
+        channelManager.setOptions({
+          allowNotLoadedChannelPromotionForEvent: {
+            'channel.visible': true,
+            'message.new': true,
+            'notification.added_to_channel': false,
+            'notification.message_new': true,
+          },
+        });
         client.dispatchEvent({
           type: 'notification.added_to_channel',
           channel: ({
@@ -1223,7 +1262,9 @@ describe('ChannelManager', () => {
           } as unknown) as ChannelResponse,
         });
 
-        expect(setChannelsStub.calledOnce).to.be.false;
+        await clock.runAllAsync();
+
+        expect(setChannelsStub.called).to.be.false;
         channelManager.setOptions({});
       });
 

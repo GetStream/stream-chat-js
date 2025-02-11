@@ -103,11 +103,17 @@ export type ChannelManagerOptions = {
    */
   abortInFlightQuery?: boolean;
   /**
-   * Allows new messages from unfiltered channels in the list. A good example of
+   * Allows channel promotion to be applied where applicable for channels that are
+   * currently not part of the channel list within the state. A good example of
    * this would be a channel that is being watched and it receives a new message,
    * but is not part of the list initially.
    */
-  allowNewMessagesFromUnfilteredChannels?: boolean;
+  allowNotLoadedChannelPromotionForEvent?: {
+    'channel.visible': boolean;
+    'message.new': boolean;
+    'notification.added_to_channel': boolean;
+    'notification.message_new': boolean;
+  };
   /**
    * Allows us to lock the order of channels within the list. Any event that would
    * change the order of channels within the list will do nothing.
@@ -117,7 +123,12 @@ export type ChannelManagerOptions = {
 
 export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
   abortInFlightQuery: false,
-  allowNewMessagesFromUnfilteredChannels: true,
+  allowNotLoadedChannelPromotionForEvent: {
+    'channel.visible': true,
+    'message.new': true,
+    'notification.added_to_channel': true,
+    'notification.message_new': true,
+  },
   lockChannelOrder: false,
 };
 
@@ -302,34 +313,35 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
     const { id, type, members } = event?.channel ?? {};
-    if (type && this.options.allowNewMessagesFromUnfilteredChannels) {
-      const channel = await getAndWatchChannel({
-        client: this.client,
-        id,
-        members: members?.reduce<string[]>((acc, { user, user_id }) => {
-          const userId = user_id || user?.id;
-          if (userId) {
-            acc.push(userId);
-          }
-          return acc;
-        }, []),
-        type,
-      });
-      const { pagination, channels } = this.state.getLatestValue();
-      if (!channels) {
-        return;
-      }
-
-      const { sort } = pagination ?? {};
-
-      this.setChannels(
-        promoteChannel({
-          channels,
-          channelToMove: channel,
-          sort,
-        }),
-      );
+    if (!type || !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.added_to_channel']) {
+      return;
     }
+    const channel = await getAndWatchChannel({
+      client: this.client,
+      id,
+      members: members?.reduce<string[]>((acc, { user, user_id }) => {
+        const userId = user_id || user?.id;
+        if (userId) {
+          acc.push(userId);
+        }
+        return acc;
+      }, []),
+      type,
+    });
+    const { pagination, channels } = this.state.getLatestValue();
+    if (!channels) {
+      return;
+    }
+
+    const { sort } = pagination ?? {};
+
+    this.setChannels(
+      promoteChannel({
+        channels,
+        channelToMove: channel,
+        sort,
+      }),
+    );
   };
 
   private channelDeletedHandler = (event: Event<SCG>) => {
@@ -385,7 +397,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       // list order is locked
       this.options.lockChannelOrder ||
       // target channel is not within the loaded list and loading from cache is disallowed
-      (!targetChannelExistsWithinList && !this.options.allowNewMessagesFromUnfilteredChannels)
+      (!targetChannelExistsWithinList && !this.options.allowNotLoadedChannelPromotionForEvent?.['message.new'])
     ) {
       return;
     }
@@ -422,7 +434,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
-      !this.options.allowNewMessagesFromUnfilteredChannels
+      !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.message_new']
     ) {
       return;
     }
@@ -457,7 +469,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
-      !this.options.allowNewMessagesFromUnfilteredChannels
+      !this.options.allowNotLoadedChannelPromotionForEvent?.['channel.visible']
     ) {
       return;
     }
