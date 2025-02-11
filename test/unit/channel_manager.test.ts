@@ -974,7 +974,7 @@ describe('ChannelManager', () => {
         expect(setChannelsStub.called).to.be.false;
       });
 
-      it('should not update the state if the channel is archived and filters do not allow it', async() => {
+      it('should not update the state if the channel is archived and filters do not allow it', async () => {
         isChannelArchivedStub.returns(true);
         shouldConsiderArchivedChannelsStub.returns(true);
         channelManager.state.next((prevState) => ({
@@ -988,9 +988,9 @@ describe('ChannelManager', () => {
 
         expect(getAndWatchChannelStub.called).to.be.true;
         expect(setChannelsStub.called).to.be.false;
-      })
+      });
 
-      it('should not update the state if the channel is archived and filters do not allow it', async() => {
+      it('should not update the state if the channel is archived and filters do not allow it', async () => {
         isChannelArchivedStub.returns(false);
         shouldConsiderArchivedChannelsStub.returns(true);
         channelManager.state.next((prevState) => ({
@@ -1004,7 +1004,7 @@ describe('ChannelManager', () => {
 
         expect(getAndWatchChannelStub.called).to.be.true;
         expect(setChannelsStub.called).to.be.false;
-      })
+      });
 
       it('should add the channel to the list if all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
