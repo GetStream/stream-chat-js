@@ -465,7 +465,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const pinnedAtSort = extractSortValue({ atIndex: 0, sort, targetKey: 'pinned_at' });
 
-    if (!channels) {
+    if (!channels || (!considerPinnedChannels && !considerArchivedChannels) || this.options.lockChannelOrder) {
       return;
     }
 
@@ -476,10 +476,6 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
     const isTargetChannelPinned = isChannelPinned(targetChannel);
     const isTargetChannelArchived = isChannelArchived(targetChannel);
-
-    if (!considerPinnedChannels || this.options.lockChannelOrder) {
-      return;
-    }
 
     const newChannels = [...channels];
 
