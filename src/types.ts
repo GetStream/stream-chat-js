@@ -3514,10 +3514,10 @@ export type VelocityFilterConfig = {
   async?: boolean;
 };
 
-export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channels: Array<Channel<SCG>>;
-  channelToMove: Channel<SCG>;
-  sort: ChannelSort<SCG>;
+export type PromoteChannelParams = {
+  channels: Array<Channel>;
+  channelToMove: Channel;
+  sort: ChannelSort;
   /**
    * If the index of the channel within `channels` list which is being moved upwards
    * (`channelToMove`) is known, you can supply it to skip extra calculation.

@@ -604,7 +604,7 @@ export class StreamChat {
     eventHandlerOverrides = {},
     options = {},
   }: {
-    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides<StreamChatGenerics>;
+    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
   }) => {
     return new ChannelManager({ client: this, eventHandlerOverrides, options });
@@ -1581,7 +1581,7 @@ export class StreamChat {
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    *
-   * @return {Promise<{ channels: Array<ChannelAPIResponse<AStreamChatGenerics>>}> } search channels response
+   * @return {Promise<{ channels: Array<ChannelAPIResponse>}> } search channels response
    */
   async queryChannels(
     filterConditions: ChannelFilters,
@@ -1922,7 +1922,7 @@ export class StreamChat {
   getChannelByMembers = (channelType: string, custom: ChannelData) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload<StreamChatGenerics>) =>
+    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload) =>
       typeof member === 'string' ? member : member.user_id ?? '',
     );
     const membersStr = memberIds.sort().join(',');
