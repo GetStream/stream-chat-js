@@ -290,7 +290,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       });
       const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
       const { channels } = this.state.getLatestValue();
-      const newChannels = uniqBy([...(channels || []), ...nextChannels], 'cid');
+      const newChannels = uniqBy<Channel<SCG>>([...(channels || []), ...nextChannels], 'cid');
       const newOptions = { ...options, offset: newChannels.length };
 
       this.state.partialNext({
