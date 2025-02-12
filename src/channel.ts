@@ -1131,6 +1131,14 @@ export class Channel {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
+    if (
+      this.getClient()._isUsingServerAuth() &&
+      typeof options?.created_by_id !== 'string' &&
+      typeof options?.created_by?.id !== 'string'
+    ) {
+      throw new Error('Either `created_by` (with `id` property) or `created_by_id` are required');
+    }
+
     let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
     if (this.id) {
       queryURL += `/${encodeURIComponent(this.id)}`;
