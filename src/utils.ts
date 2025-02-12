@@ -611,7 +611,7 @@ const get = <T>(obj: T, path: string): unknown =>
   }, obj);
 
 // works exactly the same as lodash.uniqBy
-export const uniqBy = <T>(array: T[], iteratee: ((item: T) => unknown) | keyof T): T[] => {
+export const uniqBy = <T>(array: unknown, iteratee: ((item: T) => unknown) | keyof T): T[] => {
   if (!Array.isArray(array)) return [];
 
   const seen = new Map<unknown, boolean>();
