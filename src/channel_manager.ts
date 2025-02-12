@@ -19,6 +19,7 @@ import {
   promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
+  uniqBy,
 } from './utils';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
@@ -275,7 +276,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public loadNext = async () => {
-    const { pagination, channels, initialized } = this.state.getLatestValue();
+    const { pagination, initialized } = this.state.getLatestValue();
     const { filters, sort, options, isLoadingNext, hasNext } = pagination;
 
     if (!initialized || isLoadingNext || !hasNext) {
@@ -283,16 +284,17 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     try {
-      const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+      const { limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
       const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
-      const newOffset = offset + (nextChannels?.length ?? 0);
-      const newOptions = { ...options, offset: newOffset };
+      const { channels } = this.state.getLatestValue();
+      const newChannels = uniqBy([...(channels || []), ...nextChannels], 'cid');
+      const newOptions = { ...options, offset: newChannels.length };
 
       this.state.partialNext({
-        channels: [...(channels || []), ...nextChannels],
+        channels: newChannels,
         pagination: {
           ...pagination,
           hasNext: (nextChannels?.length ?? 0) >= limit,

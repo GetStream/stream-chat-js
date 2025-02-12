@@ -602,6 +602,27 @@ export const throttle = <T extends (...args: unknown[]) => unknown>(
   };
 };
 
+const get = <T>(obj: T, path: string): unknown =>
+  path.split('.').reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === 'object' && key in acc) {
+      return (acc as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
+
+// works exactly the same as lodash.uniqBy
+export const uniqBy = <T>(array: T[], iteratee: ((item: T) => unknown) | keyof T): T[] => {
+  if (!Array.isArray(array)) return [];
+
+  const seen = new Map<unknown, boolean>();
+  return array.filter((item) => {
+    const key = typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
+    if (seen.has(key)) return false;
+    seen.set(key, true);
+    return true;
+  });
+};
+
 type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   parentSet: MessageSet;
   requestedPageSize: number;

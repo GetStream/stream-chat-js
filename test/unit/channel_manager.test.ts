@@ -16,7 +16,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { getClientWithUser } from './test-utils/getClient';
 import * as Utils from '../../src/utils';
 
-describe('ChannelManager', () => {
+describe.only('ChannelManager', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
   let channelsResponse: ChannelAPIResponse[];
@@ -336,7 +336,7 @@ describe('ChannelManager', () => {
       });
       clientQueryChannelsStub = sinon.stub(client, 'queryChannels').callsFake((_filters, _sort, options) => {
         const offset = options?.offset ?? 0;
-        return Promise.resolve(mockChannelPages[offset / 10]);
+        return Promise.resolve(mockChannelPages[Math.floor(offset / 10)]);
       });
     });
 
@@ -561,6 +561,149 @@ describe('ChannelManager', () => {
           },
         });
         expect(channels.length).to.equal(20);
+      });
+
+      it('should properly paginate even if state.channels gets modified in the meantime', async () => {
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          channels: [...mockChannelPages[2].slice(0, 5), ...prevState.channels],
+        }));
+
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ pagination: nextValue.pagination }),
+          stateChangeSpy,
+        );
+
+        stateChangeSpy.resetHistory();
+
+        await channelManager.loadNext();
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        expect(clientQueryChannelsStub.callCount).to.equal(2);
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: true,
+            options: { limit: 10, offset: 10 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 25 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(channels.length).to.equal(25);
+      });
+
+      it('should properly deduplicate when paginating if channels from the next page have been promoted', async () => {
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          channels: [...mockChannelPages[1].slice(0, 5), ...prevState.channels],
+        }));
+
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ pagination: nextValue.pagination }),
+          stateChangeSpy,
+        );
+
+        stateChangeSpy.resetHistory();
+
+        await channelManager.loadNext();
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        expect(clientQueryChannelsStub.callCount).to.equal(2);
+        expect(stateChangeSpy.callCount).to.equal(2);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: true,
+            options: { limit: 10, offset: 10 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 20 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(channels.length).to.equal(20);
+      });
+
+      it.only('should properly deduplicate when paginating if channels latter pages have been promoted and reached', async () => {
+        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        channelManager.state.next((prevState) => ({
+          ...prevState,
+          channels: [...mockChannelPages[2].slice(0, 3), ...prevState.channels],
+        }));
+
+        const stateChangeSpy = sinon.spy();
+        channelManager.state.subscribeWithSelector(
+          (nextValue) => ({ pagination: nextValue.pagination }),
+          stateChangeSpy,
+        );
+
+        stateChangeSpy.resetHistory();
+
+        await channelManager.loadNext();
+        await channelManager.loadNext();
+
+        const { channels } = channelManager.state.getLatestValue();
+
+        expect(clientQueryChannelsStub.callCount).to.equal(3);
+        expect(stateChangeSpy.callCount).to.equal(4);
+        expect(stateChangeSpy.args[0][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: true,
+            options: { limit: 10, offset: 10 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[1][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: true,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 23 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(stateChangeSpy.args[3][0]).to.deep.equal({
+          pagination: {
+            filters: { filterA: true },
+            hasNext: false,
+            isLoading: false,
+            isLoadingNext: false,
+            options: { limit: 10, offset: 25 },
+            sort: { asc: 1 },
+          },
+        });
+        expect(channels.length).to.equal(25);
       });
 
       it('should correctly update hasNext and offset if the last page has been reached', async () => {
