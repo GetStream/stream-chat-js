@@ -315,9 +315,11 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
     const { id, type, members } = event?.channel ?? {};
+
     if (!type || !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.added_to_channel']) {
       return;
     }
+
     const channel = await getAndWatchChannel({
       client: this.client,
       id,
@@ -330,6 +332,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }, []),
       type,
     });
+
     const { pagination, channels } = this.state.getLatestValue();
     if (!channels) {
       return;
@@ -417,10 +420,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private notificationNewMessageHandler = async (event: Event<SCG>) => {
     const { id, type } = event?.channel ?? {};
 
-    const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = pagination ?? {};
-
-    if (!channels || !id || !type) {
+    if (!id || !type) {
       return;
     }
 
@@ -430,10 +430,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       type,
     });
 
+    const { channels, pagination } = this.state.getLatestValue();
+    const { filters, sort } = pagination ?? {};
+
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
 
     if (
+      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.message_new']
@@ -451,11 +455,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private channelVisibleHandler = async (event: Event<SCG>) => {
-    const { channels, pagination } = this.state.getLatestValue();
-    const { sort, filters } = pagination ?? {};
     const { channel_type: channelType, channel_id: channelId } = event;
 
-    if (!channels || !channelType || !channelId) {
+    if (!channelType || !channelId) {
       return;
     }
 
@@ -465,10 +467,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       type: event.channel_type,
     });
 
+    const { channels, pagination } = this.state.getLatestValue();
+    const { sort, filters } = pagination ?? {};
+
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
 
     if (
+      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['channel.visible']

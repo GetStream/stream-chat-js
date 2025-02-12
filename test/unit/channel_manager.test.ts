@@ -16,7 +16,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { getClientWithUser } from './test-utils/getClient';
 import * as Utils from '../../src/utils';
 
-describe.only('ChannelManager', () => {
+describe('ChannelManager', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
   let channelsResponse: ChannelAPIResponse[];
@@ -651,7 +651,7 @@ describe.only('ChannelManager', () => {
         expect(channels.length).to.equal(20);
       });
 
-      it.only('should properly deduplicate when paginating if channels latter pages have been promoted and reached', async () => {
+      it('should properly deduplicate when paginating if channels latter pages have been promoted and reached', async () => {
         await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
         channelManager.state.next((prevState) => ({
           ...prevState,
@@ -1142,7 +1142,7 @@ describe.only('ChannelManager', () => {
 
         await clock.runAllAsync();
 
-        expect(getAndWatchChannelStub.called).to.be.false;
+        expect(getAndWatchChannelStub.called).to.be.true;
         expect(setChannelsStub.called).to.be.false;
       });
 
