@@ -1870,17 +1870,21 @@ export class StreamChat {
    */
   channel(channelType: string, channelID?: string | null, custom?: ChannelData): Channel;
   channel(channelType: string, custom?: ChannelData): Channel;
-  channel(
-    channelType: string,
-    channelIDOrCustom?: string | ChannelData | null,
-    custom: ChannelData = {} as ChannelData,
-  ) {
+  channel(channelType: string, channelIDOrCustom?: string | ChannelData | null, custom: ChannelData = {}) {
     if (!this.userID && !this._isUsingServerAuth()) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
+    if (
+      this._isUsingServerAuth() &&
+      typeof custom?.created_by_id !== 'string' &&
+      typeof custom?.created_by?.id !== 'string'
+    ) {
+      throw new Error('Either `created_by` (with `id` property) or `created_by_id` are required');
+    }
+
     if (~channelType.indexOf(':')) {
-      throw Error(`Invalid channel group ${channelType}, can't contain the : character`);
+      throw new Error(`Invalid channel group ${channelType}, can't contain the : character`);
     }
 
     // support channel("messaging", {options})
@@ -1888,7 +1892,7 @@ export class StreamChat {
       return this.getChannelByMembers(channelType, channelIDOrCustom);
     }
 
-    // // support channel("messaging", undefined, {options})
+    // support channel("messaging", undefined, {options})
     if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
       return this.getChannelByMembers(channelType, custom);
     }

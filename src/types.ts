@@ -44,9 +44,9 @@ export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<keyof T, K>>>;
 }[keyof T];
 
-export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<keyof T, Keys>> &
+export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
-    [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
   }[Keys];
 
 /* Unknown Record */
@@ -2030,6 +2030,8 @@ export type ChannelConfigWithInfo = ChannelConfigFields &
 
 export type ChannelData = CustomChannelData & {
   blocked?: boolean;
+  created_by?: UserResponse | null;
+  created_by_id?: string;
   members?: string[] | Array<NewMemberPayload>;
   name?: string;
 };
