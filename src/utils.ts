@@ -865,14 +865,7 @@ type GetChannelParams = {
  * @param id
  * @param channel
  */
-export const getAndWatchChannel = async ({
-  channel,
-  client,
-  id,
-  members,
-  options,
-  type,
-}: GetChannelParams) => {
+export const getAndWatchChannel = async ({ channel, client, id, members, options, type }: GetChannelParams) => {
   if (!channel && !type) {
     throw new Error('Channel or channel type have to be provided to query a channel.');
   }
@@ -926,9 +919,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
  * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
  * @param channel
  */
-export const isChannelPinned = (
-  channel: Channel,
-) => {
+export const isChannelPinned = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -940,9 +931,7 @@ export const isChannelPinned = (
  * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
  * @param channel
  */
-export const isChannelArchived = (
-  channel: Channel,
-) => {
+export const isChannelArchived = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -955,9 +944,7 @@ export const isChannelArchived = (
  * on filters. Will return true only if filters.archived exists and is a boolean value.
  * @param filters
  */
-export const shouldConsiderArchivedChannels = (
-  filters: ChannelFilters,
-) => {
+export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
@@ -1009,9 +996,7 @@ export const extractSortValue = ({
 /**
  * Returns true only if `{ pinned_at: -1 }` or `{ pinned_at: 1 }` option is first within the `sort` array.
  */
-export const shouldConsiderPinnedChannels = (
-  sort: ChannelSort,
-) => {
+export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
   const value = findPinnedAtSortOrder({ sort });
 
   if (typeof value !== 'number') return false;
@@ -1024,11 +1009,7 @@ export const shouldConsiderPinnedChannels = (
  * an array sort value type has the first value be an object containing pinned_at.
  * @param sort
  */
-export const findPinnedAtSortOrder = ({
-  sort,
-}: {
-  sort: ChannelSort;
-}) =>
+export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   extractSortValue({
     atIndex: 0,
     sort,
@@ -1041,11 +1022,7 @@ export const findPinnedAtSortOrder = ({
  * start of the array.
  * @param channels
  */
-export const findLastPinnedChannelIndex = ({
-  channels,
-}: {
-  channels: Channel[];
-}) => {
+export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
   let lastPinnedChannelIndex: number | null = null;
 
   for (const channel of channels) {
