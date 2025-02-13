@@ -1,8 +1,6 @@
 import FormData from 'form-data';
 import {
   AscDesc,
-  ExtendableGenerics,
-  DefaultGenerics,
   Logger,
   OwnUserBase,
   OwnUserResponse,
@@ -76,10 +74,8 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
-export function isOwnUser<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
-): user is OwnUserResponse<StreamChatGenerics> {
-  return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
+export function isOwnUser(user?: OwnUserResponse | UserResponse): user is OwnUserResponse {
+  return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
 function isBlobWebAPI(uri: unknown): uri is Blob {
@@ -292,17 +288,11 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * Takes the message object, parses the dates, sets `__html`
  * and sets the status to `received` if missing; returns a new message object.
  *
- * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
+ * @param {MessageResponse} message `MessageResponse` object
  */
-export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>,
-): FormatMessageResponse<StreamChatGenerics> {
+export function formatMessage(message: MessageResponse | FormatMessageResponse): FormatMessageResponse {
   return {
     ...message,
-    /**
-     * @deprecated please use `html`
-     */
-    __html: message.html,
     // parse the dates
     pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
@@ -623,10 +613,10 @@ export const uniqBy = <T>(array: T[] | unknown, iteratee: ((item: T) => unknown)
   });
 };
 
-type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+type MessagePaginationUpdatedParams = {
   parentSet: MessageSet;
   requestedPageSize: number;
-  returnedPage: MessageResponse<StreamChatGenerics>[];
+  returnedPage: MessageResponse[];
   logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
@@ -661,12 +651,12 @@ export function binarySearchByDateEqualOrNearestGreater(
   return left;
 }
 
-const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationCreatedAtAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
   if (!messagePaginationOptions?.created_at_around) return newPagination;
   let hasPrev;
@@ -726,12 +716,12 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
   return newPagination;
 };
 
-const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationIdAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
   const { id_around } = messagePaginationOptions || {};
   if (!id_around) return newPagination;
@@ -779,12 +769,12 @@ const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics
   return newPagination;
 };
 
-const messagePaginationLinear = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationLinear = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
 
   let hasPrev;
@@ -836,9 +826,7 @@ const messagePaginationLinear = <StreamChatGenerics extends ExtendableGenerics =
   return newPagination;
 };
 
-export const messageSetPagination = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  params: MessagePaginationUpdatedParams<StreamChatGenerics>,
-) => {
+export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
   if (params.parentSet.messages.length < params.returnedPage.length) {
     params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
     return params.parentSet.pagination;
@@ -859,12 +847,12 @@ export const messageSetPagination = <StreamChatGenerics extends ExtendableGeneri
  */
 const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<string, Promise<QueryChannelAPIResponse> | undefined> = {};
 
-type GetChannelParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  client: StreamChat<StreamChatGenerics>;
-  channel?: Channel<StreamChatGenerics>;
+type GetChannelParams = {
+  client: StreamChat;
+  channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions<StreamChatGenerics>;
+  options?: ChannelQueryOptions;
   type?: string;
 };
 /**
@@ -877,14 +865,7 @@ type GetChannelParams<StreamChatGenerics extends ExtendableGenerics = DefaultGen
  * @param id
  * @param channel
  */
-export const getAndWatchChannel = async <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
-  channel,
-  client,
-  id,
-  members,
-  options,
-  type,
-}: GetChannelParams<StreamChatGenerics>) => {
+export const getAndWatchChannel = async ({ channel, client, id, members, options, type }: GetChannelParams) => {
   if (!channel && !type) {
     throw new Error('Channel or channel type have to be provided to query a channel.');
   }
@@ -938,9 +919,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
  * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
  * @param channel
  */
-export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  channel: Channel<StreamChatGenerics>,
-) => {
+export const isChannelPinned = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -952,9 +931,7 @@ export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = 
  * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
  * @param channel
  */
-export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  channel: Channel<StreamChatGenerics>,
-) => {
+export const isChannelArchived = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -967,9 +944,7 @@ export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics 
  * on filters. Will return true only if filters.archived exists and is a boolean value.
  * @param filters
  */
-export const shouldConsiderArchivedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  filters: ChannelFilters<StreamChatGenerics>,
-) => {
+export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
@@ -983,17 +958,17 @@ export const shouldConsiderArchivedChannels = <StreamChatGenerics extends Extend
  * @param sort - the sort value - both array and object notations are accepted
  * @param targetKey - the target key which needs to exist for the sort at a certain index
  */
-export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const extractSortValue = ({
   atIndex,
   sort,
   targetKey,
 }: {
   atIndex: number;
-  targetKey: keyof ChannelSortBase<StreamChatGenerics>;
-  sort?: ChannelSort<StreamChatGenerics>;
+  targetKey: keyof ChannelSortBase;
+  sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-  let option: null | ChannelSortBase<StreamChatGenerics> = null;
+  let option: null | ChannelSortBase = null;
 
   if (Array.isArray(sort)) {
     option = sort[atIndex] ?? null;
@@ -1021,9 +996,7 @@ export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics =
 /**
  * Returns true only if `{ pinned_at: -1 }` or `{ pinned_at: 1 }` option is first within the `sort` array.
  */
-export const shouldConsiderPinnedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  sort: ChannelSort<StreamChatGenerics>,
-) => {
+export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
   const value = findPinnedAtSortOrder({ sort });
 
   if (typeof value !== 'number') return false;
@@ -1036,11 +1009,7 @@ export const shouldConsiderPinnedChannels = <StreamChatGenerics extends Extendab
  * an array sort value type has the first value be an object containing pinned_at.
  * @param sort
  */
-export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
-  sort,
-}: {
-  sort: ChannelSort<StreamChatGenerics>;
-}) =>
+export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   extractSortValue({
     atIndex: 0,
     sort,
@@ -1053,11 +1022,7 @@ export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGener
  * start of the array.
  * @param channels
  */
-export const findLastPinnedChannelIndex = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
-  channels,
-}: {
-  channels: Channel<StreamChatGenerics>[];
-}) => {
+export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
   let lastPinnedChannelIndex: number | null = null;
 
   for (const channel of channels) {
@@ -1082,12 +1047,12 @@ export const findLastPinnedChannelIndex = <StreamChatGenerics extends Extendable
  * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
  * @param sort - the sort value used to check for pinned channels
  */
-export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const promoteChannel = ({
   channels,
   channelToMove,
   channelToMoveIndexWithinChannels,
   sort,
-}: PromoteChannelParams<StreamChatGenerics>) => {
+}: PromoteChannelParams) => {
   // get index of channel to move up
   const targetChannelIndex =
     channelToMoveIndexWithinChannels ?? channels.findIndex((channel) => channel.cid === channelToMove.cid);
@@ -1099,7 +1064,7 @@ export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = D
   // receive messages and are not pinned should move upwards but only under the last pinned channel
   // in the list
   const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
-  const isTargetChannelPinned = isChannelPinned<StreamChatGenerics>(channelToMove);
+  const isTargetChannelPinned = isChannelPinned(channelToMove);
 
   if (targetChannelAlreadyAtTheTop || (considerPinnedChannels && isTargetChannelPinned)) {
     return channels;

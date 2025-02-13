@@ -1,8 +1,8 @@
 import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
 import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
-import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import { ConnectionOpen, Event, UR, ExtendableGenerics, DefaultGenerics, LogLevel } from './types';
+import { APIError, isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
+import { ConnectionOpen, Event, UR, LogLevel } from './types';
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -12,14 +12,14 @@ export enum ConnectionState {
   Init = 'INIT',
 }
 
-export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  client: StreamChat<StreamChatGenerics>;
+export class WSConnectionFallback {
+  client: StreamChat;
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
   cancelToken?: CancelTokenSource;
 
-  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
+  constructor({ client }: { client: StreamChat }) {
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
@@ -84,7 +84,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
     } catch (err) {
       this.consecutiveFailures += 1;
 
-      if (retry && isErrorRetryable(err)) {
+      if (retry && isErrorRetryable(err as APIError)) {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
         return this._req<T>(params, config, retry);
@@ -99,7 +99,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{
-          events: Event<StreamChatGenerics>[];
+          events: Event[];
         }>({}, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
 
         if (data.events?.length) {
@@ -115,14 +115,14 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
-        if (isConnectionIDError(err)) {
+        if (isConnectionIDError(err as APIError)) {
           this._log(`_poll() - ConnectionID error, connecting without ID...`);
           this._setState(ConnectionState.Disconnected);
           this.connect(true);
           return;
         }
 
-        if (isAPIError(err) && !isErrorRetryable(err)) {
+        if (isAPIError(err as APIError) && !isErrorRetryable(err as APIError)) {
           this._setState(ConnectionState.Closed);
           return;
         }
@@ -149,7 +149,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
     this._setState(ConnectionState.Connecting);
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
-      const { event } = await this._req<{ event: ConnectionOpen<StreamChatGenerics> }>(
+      const { event } = await this._req<{ event: ConnectionOpen }>(
         { json: this.client._buildWSPayload() },
         { timeout: 8000 }, // 8s
         reconnect,

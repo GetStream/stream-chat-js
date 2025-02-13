@@ -1,12 +1,5 @@
 import { StreamChat } from './client';
-import {
-  DefaultGenerics,
-  ExtendableGenerics,
-  QuerySegmentTargetsFilter,
-  SegmentData,
-  SegmentResponse,
-  SortParam,
-} from './types';
+import { QuerySegmentTargetsFilter, SegmentData, SegmentResponse, SortParam } from './types';
 
 type SegmentType = 'user' | 'channel';
 
@@ -16,13 +9,13 @@ type SegmentUpdatableFields = {
   name?: string;
 };
 
-export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class Segment {
   type: SegmentType;
   id: string | null;
-  client: StreamChat<StreamChatGenerics>;
+  client: StreamChat;
   data?: SegmentData | SegmentResponse;
 
-  constructor(client: StreamChat<StreamChatGenerics>, type: SegmentType, id: string | null, data?: SegmentData) {
+  constructor(client: StreamChat, type: SegmentType, id: string | null, data?: SegmentData) {
     this.client = client;
     this.type = type;
     this.id = id;
