@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.56.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.0...v8.56.1) (2025-02-13)
+
+
+### Bug Fixes
+
+* premature channels state consumption in ChannelManager ([#1466](https://github.com/GetStream/stream-chat-js/issues/1466)) ([ab24bf8](https://github.com/GetStream/stream-chat-js/commit/ab24bf8bc5c0ba7dab3b972cfcc2ed829471fa04))
+
 ## [8.56.0](https://github.com/GetStream/stream-chat-js/compare/v8.55.0...v8.56.0) (2025-02-11)
 
 
