@@ -99,7 +99,7 @@ message.custom_property; // in the response object as well
 ```
 
 > [!WARNING]  
-> Generics mechanism has been removed in version `9.0.0` in favour of the module augmentation, please see [the release guide](https://getstream.io/chat/docs/node/upgrade_to_v9) on how to migrate.
+> Generics mechanism has been removed in version `9.0.0` in favour of the module augmentation, please see [the release guide](https://getstream.io/chat/docs/node/upgrade-stream-chat-to-v9) on how to migrate.
 
 ## 🔗 (Optional) Development Setup in Combination With Our SDKs
 
@@ -149,7 +149,7 @@ yarn start
 
 ## 📚 More Code Examples
 
-Head over to [docs/typescript.md](./docs/typescript.md) for more examples.
+Read up more on [Logging](./docs/logging.md) and [User Token](./docs/userToken.md) or visit our [documentation](https://getstream.io/chat/docs/) for more examples.
 
 ## ✍️ Contributing
 
