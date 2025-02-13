@@ -19,6 +19,7 @@ import {
   promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
+  uniqBy,
 } from './utils';
 
 export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
@@ -275,7 +276,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public loadNext = async () => {
-    const { pagination, channels, initialized } = this.state.getLatestValue();
+    const { pagination, initialized } = this.state.getLatestValue();
     const { filters, sort, options, isLoadingNext, hasNext } = pagination;
 
     if (!initialized || isLoadingNext || !hasNext) {
@@ -288,11 +289,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
       const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
+      const { channels } = this.state.getLatestValue();
       const newOffset = offset + (nextChannels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
 
       this.state.partialNext({
-        channels: [...(channels || []), ...nextChannels],
+        channels: uniqBy<Channel<SCG>>([...(channels || []), ...nextChannels], 'cid'),
         pagination: {
           ...pagination,
           hasNext: (nextChannels?.length ?? 0) >= limit,
@@ -313,9 +315,11 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
     const { id, type, members } = event?.channel ?? {};
+
     if (!type || !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.added_to_channel']) {
       return;
     }
+
     const channel = await getAndWatchChannel({
       client: this.client,
       id,
@@ -328,6 +332,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }, []),
       type,
     });
+
     const { pagination, channels } = this.state.getLatestValue();
     if (!channels) {
       return;
@@ -415,10 +420,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   private notificationNewMessageHandler = async (event: Event<SCG>) => {
     const { id, type } = event?.channel ?? {};
 
-    const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = pagination ?? {};
-
-    if (!channels || !id || !type) {
+    if (!id || !type) {
       return;
     }
 
@@ -428,10 +430,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       type,
     });
 
+    const { channels, pagination } = this.state.getLatestValue();
+    const { filters, sort } = pagination ?? {};
+
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
 
     if (
+      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.message_new']
@@ -449,11 +455,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   private channelVisibleHandler = async (event: Event<SCG>) => {
-    const { channels, pagination } = this.state.getLatestValue();
-    const { sort, filters } = pagination ?? {};
     const { channel_type: channelType, channel_id: channelId } = event;
 
-    if (!channels || !channelType || !channelId) {
+    if (!channelType || !channelId) {
       return;
     }
 
@@ -463,10 +467,14 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       type: event.channel_type,
     });
 
+    const { channels, pagination } = this.state.getLatestValue();
+    const { sort, filters } = pagination ?? {};
+
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
 
     if (
+      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['channel.visible']

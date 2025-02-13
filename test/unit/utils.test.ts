@@ -22,15 +22,10 @@ import {
   findPinnedAtSortOrder,
   extractSortValue,
   promoteChannel,
+  uniqBy,
 } from '../../src/utils';
 
-import type {
-  ChannelFilters,
-  ChannelResponse,
-  ChannelSortBase,
-  FormatMessageResponse,
-  MessageResponse,
-} from '../../src';
+import type { ChannelFilters, ChannelSortBase, FormatMessageResponse, MessageResponse } from '../../src';
 import { StreamChat, Channel } from '../../src';
 
 describe('addToMessageList', () => {
@@ -751,5 +746,144 @@ describe('promoteChannel', () => {
 
     expect(result.map((c) => c.id)).to.deep.equal(['channel1', 'pinned1', 'pinned2', 'channel2']);
     expect(result).to.not.equal(channels);
+  });
+});
+
+describe('uniqBy', () => {
+  it('should return an empty array if input is not an array', () => {
+    expect(uniqBy(null, 'id')).to.deep.equal([]);
+    expect(uniqBy(undefined, 'id')).to.deep.equal([]);
+    expect(uniqBy(42, 'id')).to.deep.equal([]);
+    expect(uniqBy({}, 'id')).to.deep.equal([]);
+  });
+
+  it('should remove duplicates based on a property name', () => {
+    const array = [
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+      { id: 1, name: 'Alice' },
+    ];
+    const result = uniqBy(array, 'id');
+    expect(result).to.deep.equal([
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+    ]);
+  });
+
+  it('should remove duplicates based on a computed function', () => {
+    const array = [
+      { id: 1, value: 10 },
+      { id: 2, value: 20 },
+      { id: 3, value: 10 },
+    ];
+    const result = uniqBy(array, (item: { id: number; value: number }) => item.value);
+    expect(result).to.deep.equal([
+      { id: 1, value: 10 },
+      { id: 2, value: 20 },
+    ]);
+  });
+
+  it('should return the same array if all elements are unique', () => {
+    const array = [
+      { id: 1, value: 'A' },
+      { id: 2, value: 'B' },
+      { id: 3, value: 'C' },
+    ];
+    expect(uniqBy(array, 'id')).to.deep.equal(array);
+  });
+
+  it('should work with nested properties', () => {
+    const array = [
+      { user: { id: 1, name: 'Alice' } },
+      { user: { id: 2, name: 'Bob' } },
+      { user: { id: 1, name: 'Alice' } },
+    ];
+    const result = uniqBy(array, 'user.id');
+    expect(result).to.deep.equal([{ user: { id: 1, name: 'Alice' } }, { user: { id: 2, name: 'Bob' } }]);
+  });
+
+  it('should work with primitive identities', () => {
+    expect(uniqBy([1, 2, 2, 3, 1], (x) => x)).to.deep.equal([1, 2, 3]);
+    expect(uniqBy(['a', 'b', 'a', 'c'], (x) => x)).to.deep.equal(['a', 'b', 'c']);
+  });
+
+  it('should handle an empty array', () => {
+    expect(uniqBy([], 'id')).to.deep.equal([]);
+  });
+
+  it('should handle falsy values correctly', () => {
+    const array = [{ id: 0 }, { id: false }, { id: null }, { id: undefined }, { id: 0 }];
+    const result = uniqBy(array, 'id');
+    expect(result).to.deep.equal([{ id: 0 }, { id: false }, { id: null }, { id: undefined }]);
+  });
+
+  it('should work when all elements are identical', () => {
+    const array = [
+      { id: 1, name: 'Alice' },
+      { id: 1, name: 'Alice' },
+      { id: 1, name: 'Alice' },
+    ];
+    expect(uniqBy(array, 'id')).to.deep.equal([{ id: 1, name: 'Alice' }]);
+  });
+
+  it('should handle mixed types correctly', () => {
+    const array = [{ id: 1 }, { id: '1' }, { id: 1.0 }, { id: true }, { id: false }];
+    expect(uniqBy(array, 'id')).to.deep.equal([{ id: 1 }, { id: '1' }, { id: true }, { id: false }]);
+  });
+
+  it('should handle undefined values in objects', () => {
+    const array = [{ id: undefined }, { id: undefined }, { id: 1 }, { id: 2 }];
+    expect(uniqBy(array, 'id')).to.deep.equal([{ id: undefined }, { id: 1 }, { id: 2 }]);
+  });
+
+  it('should not modify the original array', () => {
+    const array = [
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+      { id: 1, name: 'Alice' },
+    ];
+    const originalArray = [...array];
+    uniqBy(array, 'id');
+    expect(array).to.deep.equal(originalArray);
+  });
+
+  it('should call iteratee function for each element', () => {
+    const array = [{ id: 1 }, { id: 2 }, { id: 1 }];
+    const iteratee = sinon.spy((item) => item.id);
+
+    uniqBy(array, iteratee);
+
+    expect(iteratee.calledThrice).to.be.true;
+    expect(iteratee.firstCall.returnValue).to.equal(1);
+    expect(iteratee.secondCall.returnValue).to.equal(2);
+    expect(iteratee.thirdCall.returnValue).to.equal(1);
+  });
+
+  it('should work with objects missing the given key', () => {
+    const array = [
+      { id: 1 },
+      { name: 'Alice' }, // missing 'id'
+      { id: 2 },
+      { id: 1 },
+    ];
+    const result = uniqBy(array, 'id');
+    expect(result).to.deep.equal([{ id: 1 }, { name: 'Alice' }, { id: 2 }]);
+  });
+
+  it('should work with an empty iteratee function', () => {
+    const array = [{ id: 1 }, { id: 2 }];
+    const result = uniqBy(array, () => {});
+    expect(result.length).to.equal(1); // Everything maps to `undefined`, so only first is kept
+  });
+
+  it('should handle more than 1 duplicate efficiently', () => {
+    const largeArray = Array.from({ length: 10000 }, (_, i) => ({ id: i % 100 }));
+    const result = uniqBy(largeArray, 'id');
+    expect(result.length).to.equal(100);
+  });
+
+  it('should return an empty array when array contains only undefined values', () => {
+    const array = [undefined, undefined, undefined];
+    expect(uniqBy(array, (x) => x)).to.deep.equal([undefined]);
   });
 });
