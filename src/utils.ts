@@ -614,11 +614,11 @@ const get = <T>(obj: T, path: string): unknown =>
 export const uniqBy = <T>(array: T[] | unknown, iteratee: ((item: T) => unknown) | keyof T): T[] => {
   if (!Array.isArray(array)) return [];
 
-  const seen = new Map<unknown, boolean>();
+  const seen = new Set<unknown>();
   return array.filter((item) => {
     const key = typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
     if (seen.has(key)) return false;
-    seen.set(key, true);
+    seen.add(key);
     return true;
   });
 };
