@@ -600,7 +600,7 @@ describe('ChannelManager', () => {
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 25 },
+            options: { limit: 10, offset: 20 },
             sort: { asc: 1 },
           },
         });
@@ -667,6 +667,10 @@ describe('ChannelManager', () => {
         stateChangeSpy.resetHistory();
 
         await channelManager.loadNext();
+
+        const { channels: channelsAfterFirstPagination } = channelManager.state.getLatestValue();
+        expect(channelsAfterFirstPagination.length).to.equal(23);
+
         await channelManager.loadNext();
 
         const { channels } = channelManager.state.getLatestValue();
@@ -689,7 +693,7 @@ describe('ChannelManager', () => {
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 23 },
+            options: { limit: 10, offset: 20 },
             sort: { asc: 1 },
           },
         });

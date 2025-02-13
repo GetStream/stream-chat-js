@@ -284,17 +284,17 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     try {
-      const { limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+      const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
       const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
       const { channels } = this.state.getLatestValue();
-      const newChannels = uniqBy<Channel<SCG>>([...(channels || []), ...nextChannels], 'cid');
-      const newOptions = { ...options, offset: newChannels.length };
+      const newOffset = offset + (nextChannels?.length ?? 0);
+      const newOptions = { ...options, offset: newOffset };
 
       this.state.partialNext({
-        channels: newChannels,
+        channels: uniqBy<Channel<SCG>>([...(channels || []), ...nextChannels], 'cid'),
         pagination: {
           ...pagination,
           hasNext: (nextChannels?.length ?? 0) >= limit,
