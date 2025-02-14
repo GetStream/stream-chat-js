@@ -3,11 +3,12 @@ description: Sets up Node and Build SDK
 
 inputs:
   node-version:
+    description: "Specify Node version"
     required: false
-    default: '16'
+    default: "lts/*"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Setup Node
       uses: actions/setup-node@v3
