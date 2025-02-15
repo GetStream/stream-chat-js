@@ -17,7 +17,6 @@ const bundledDeps = [
   'form-data',
   'isomorphic-ws',
   'base64-js',
-  // 'jsonwebtoken', 'crypto', 'https'
 ];
 
 const deps = Object.keys({
@@ -31,22 +30,11 @@ const cjsBundleConfig = {
   entryPoints: [mainEntrypoint],
   bundle: true,
   format: 'cjs',
-  target: 'es2015',
+  target: "ES6",
   external,
   outdir: outDir,
   outExtension: { '.js': '.cjs' },
   sourcemap: 'linked',
-};
-
-const browserPlugin = {
-  name: 'ignoreBrowser',
-  setup: (build) => {
-    const options = build.initialOptions;
-
-    if (options.platform !== 'browser') return;
-
-    build.onResolve({ filter: /(node:.+)|(jsonwebtoken)/ }, async ({ path }) => ({ path, external: true }));
-  },
 };
 
 // We build two CJS bundles: for browser and for node. The latter one can be
@@ -61,10 +49,6 @@ const bundles = ['browser', 'node'].map((platform) => {
       'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
     },
   };
-
-  if (platform === 'browser') {
-    config.plugins = [browserPlugin];
-  }
 
   esbuild.build(config);
 });

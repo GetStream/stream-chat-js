@@ -2,9 +2,15 @@
   "name": "stream-chat",
   "version": "8.56.1",
   "description": "JS SDK for the Stream Chat API",
-  "author": "GetStream",
   "homepage": "https://getstream.io/chat/",
-  "repository": "https://github.com/GetStream/stream-chat-js.git",
+  "author": {
+    "name": "GetStream.io, Inc.",
+    "url": "https://getstream.io/team/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GetStream/stream-chat-js.git"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,6 +25,11 @@
       "default": "./dist/index.js"
     }
   },
+  "browser": {
+    "node:https": false,
+    "node:crypto": false,
+    "jsonwebtoken": false
+  },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
     "chat",
@@ -30,10 +41,7 @@
     "getstream.io"
   ],
   "files": [
-    "/dist",
-    "/src",
-    "readme.md",
-    "license"
+    "/dist"
   ],
   "dependencies": {
     "axios": "^1.6.0",
