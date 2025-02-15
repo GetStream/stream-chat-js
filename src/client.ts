@@ -1475,7 +1475,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return await this.wsConnection.connect(
         this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
       );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
