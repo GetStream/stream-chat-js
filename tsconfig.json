@@ -16,15 +16,20 @@
     "noEmitOnError": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "moduleResolution": "Node",
-    "lib": ["ES6", "DOM"],
+    "lib": [
+      "ES6",
+      "DOM"
+    ],
     "noImplicitAny": true,
     "strict": true,
     "strictNullChecks": true,
     "declaration": true,
+    "outDir": "./dist",
+    "moduleResolution": "node10",
     "module": "ES2020",
     "target": "ES6",
-    "outDir": "./dist"
   },
-  "include": ["./src/**/*"]
+  "include": [
+    "./src/**/*"
+  ]
 }
