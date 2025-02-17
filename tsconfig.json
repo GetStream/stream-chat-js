@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "moduleDetection": "force",
+    "moduleDetection": "auto",
     "isolatedModules": true,
     "allowJs": true,
     "resolveJsonModule": true,
@@ -24,7 +24,7 @@
     "outDir": "./dist",
     "moduleResolution": "node10",
     "module": "ES2020",
-    "target": "ES6"
+    "target": "ES2020"
   },
   "include": ["./src/**/*"]
 }
