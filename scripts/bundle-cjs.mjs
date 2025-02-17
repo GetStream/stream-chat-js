@@ -30,7 +30,7 @@ const cjsBundleConfig = {
   entryPoints: [mainEntrypoint],
   bundle: true,
   format: 'cjs',
-  target: "ES6",
+  target: "ES2020",
   external,
   outdir: outDir,
   outExtension: { '.js': '.cjs' },
