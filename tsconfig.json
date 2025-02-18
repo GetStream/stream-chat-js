@@ -10,23 +10,19 @@
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strict": true,
-
     "allowSyntheticDefaultImports": true,
+
     "isolatedModules": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowJs": true,
-    "importHelpers": true,
     "skipLibCheck": true,
-
-    "outDir": "./dist/esm-node",
     "noEmitOnError": true,
-    "declaration": false,
-    "sourceMap": true,
+    "importHelpers": true,
 
     "lib": ["ES2020", "DOM"],
-    "moduleResolution": "node16",
-    "module": "Node16",
+    "moduleResolution": "node10",
+    "module": "ES2020",
     "target": "ES2020"
   },
   "include": ["./src/**/*"]
