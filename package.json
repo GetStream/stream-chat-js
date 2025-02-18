@@ -11,18 +11,19 @@
     "type": "git",
     "url": "https://github.com/GetStream/stream-chat-js.git"
   },
+  "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/types/index.d.ts",
       "node": {
         "require": "./dist/index.node.cjs",
-        "import": "./dist/index.js"
+        "import": "./dist/esm-node/index.js"
       },
       "browser": {
         "require": "./dist/index.browser.cjs",
-        "import": "./dist/index.js"
+        "import": "./dist/esm-browser/index.js"
       },
-      "default": "./dist/index.js"
+      "default": "./dist/esm-node/index.js"
     }
   },
   "browser": {
@@ -101,7 +102,7 @@
     "changelog": "standard-version --release-as $VERSION --skip.tag --skip.commit --tag-prefix=v",
     "commitlinter": "commitlint",
     "build": "rm -rf dist && yarn bundle",
-    "bundle": "concurrently ./scripts/bundle-esm.mjs scripts/bundle-cjs.mjs",
+    "bundle": "concurrently 'tsc --declaration --emitDeclarationOnly --outDir ./dist/types' ./scripts/bundle-esm.mjs scripts/bundle-cjs.mjs",
     "types": "tsc --noEmit",
     "prettier": "prettier --check '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
