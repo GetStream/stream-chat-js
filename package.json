@@ -26,7 +26,8 @@
   "browser": {
     "node:https": false,
     "node:crypto": false,
-    "jsonwebtoken": false
+    "jsonwebtoken": false,
+    "ws": false
   },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
