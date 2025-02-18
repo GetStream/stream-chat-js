@@ -42,6 +42,7 @@ const bundles = [
     platform,
     define: {
       'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
+      'process.env.BUILD': JSON.stringify(`${platform}-cjs`),
     },
   })),
   // ESM (browser only)
@@ -55,6 +56,7 @@ const bundles = [
     platform: 'browser',
     define: {
       'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
+      'process.env.BUILD': JSON.stringify(`browser-esm`),
     },
   },
 ]
