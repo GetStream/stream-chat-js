@@ -11,7 +11,7 @@ const execAsync = promisify(exec);
 const bundleEsm = async () => {
   // Run TypeScript compiler
   console.log('Running TypeScript compiler...');
-  await execAsync('tsc');
+  await Promise.all([execAsync('tsc'), execAsync('tsc -p tsconfig.browser.json')]);
 
   // Replace version string in generated files
   console.log('Replacing version strings...');

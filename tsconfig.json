@@ -1,9 +1,5 @@
 {
   "compilerOptions": {
-    "moduleDetection": "auto",
-    "isolatedModules": true,
-    "allowJs": true,
-    "resolveJsonModule": true,
     "allowUnreachableCode": false,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
@@ -11,19 +7,26 @@
     "noStrictGenericChecks": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strict": true,
+
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowJs": true,
     "importHelpers": true,
     "skipLibCheck": true,
+
+    "outDir": "./dist/esm-node",
     "noEmitOnError": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "lib": ["ES6", "DOM"],
-    "noImplicitAny": true,
-    "strict": true,
-    "strictNullChecks": true,
-    "declaration": true,
-    "outDir": "./dist",
-    "moduleResolution": "node10",
-    "module": "ES2020",
+    "declaration": false,
+    "sourceMap": true,
+
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "node16",
+    "module": "Node16",
     "target": "ES2020"
   },
   "include": ["./src/**/*"]
