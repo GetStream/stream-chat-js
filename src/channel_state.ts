@@ -1,6 +1,7 @@
 import type { Channel } from './channel';
 import type {
   ChannelMemberResponse,
+  DraftResponse,
   Event,
   FormatMessageResponse,
   MessageResponse,
@@ -41,6 +42,7 @@ export class ChannelState {
   unreadCount: number;
   membership: ChannelMemberResponse;
   last_message_at: Date | null;
+  messageDraft?: DraftResponse;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
    * This flag should be managed by UI sdks using a setter - setIsUpToDate.

@@ -11,6 +11,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import { generateMessageDraft } from './test-utils/generateMessageDraft';
 
 import { describe, beforeEach, it, expect } from 'vitest';
 
@@ -302,6 +303,68 @@ describe('Channel _handleChannelEvent', function () {
 			message: generateMsg({ user: { id: 'mute1' } }),
 		});
 		expect(channel.state.unreadCount).to.be.equal(30);
+	});
+
+	describe('draft.*', () => {
+		it('creates local draft on draft.updated', () => {
+			const draft = generateMessageDraft({ channel });
+			expect(channel.state.messageDraft).to.be.undefined;
+			channel._handleChannelEvent({
+				type: 'draft.updated',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				draft,
+			});
+
+			expect(channel.state.messageDraft).to.eql(draft);
+		});
+
+		it('updates local draft on draft.updated', () => {
+			channel.state.messageDraft = generateMessageDraft({ channel });
+
+			const draft = generateMessageDraft({ channel });
+			channel._handleChannelEvent({
+				type: 'draft.updated',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				draft,
+			});
+
+			expect(channel.state.messageDraft).to.eql(draft);
+		});
+
+		it('does not create local draft on draft.updated for thread drafts', () => {
+			const parent_message = generateMsg();
+			const draftMsg = generateMsg({ parent_id: parent_message.id });
+			const draft = generateMessageDraft({
+				channel,
+				message: draftMsg,
+				parent_id: parent_message.id,
+				parent_message,
+			});
+			expect(channel.state.messageDraft).to.be.undefined;
+			channel._handleChannelEvent({
+				type: 'draft.updated',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				draft,
+			});
+
+			expect(channel.state.messageDraft).to.be.undefined;
+		});
+
+		it('removes local draft on draft.deleted', () => {
+			channel.state.messageDraft = generateMessageDraft({ channel });
+
+			channel._handleChannelEvent({
+				type: 'draft.deleted',
+				created_at: new Date().toISOString(),
+				cid: channel.cid,
+				draft: channel.state.messageDraft,
+			});
+
+			expect(channel.state.messageDraft).to.be.undefined;
+		});
 	});
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
@@ -1390,6 +1453,21 @@ describe('Channel.query', async () => {
 			hasNext: false,
 			hasPrev: false,
 		});
+		mock.restore();
+	});
+
+	it('should store draft', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		const draft = generateMessageDraft({ channel });
+		const mockedChannelQueryResponse = {
+			...mockChannelQueryResponse,
+			draft,
+		};
+		const mock = sinon.mock(client);
+		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		await channel.query();
+		expect(channel.state.messageDraft).to.equal(draft);
 		mock.restore();
 	});
 });
