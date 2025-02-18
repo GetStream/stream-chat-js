@@ -8,16 +8,10 @@ import packageJson from '../package.json' with {'type': 'json'};
 const __dirname = import.meta.dirname;
 
 const mainEntrypoint = resolve(__dirname, '../src/index.ts');
-const outDir = resolve(__dirname, '../dist');
 
 // Those dependencies are distributed as ES modules, and cannot be externalized
 // in our CJS bundle. We convert them to CJS and bundle them instead.
-const bundledDeps = [
-  'axios',
-  'form-data',
-  'isomorphic-ws',
-  'base64-js',
-];
+const bundledDeps = ['axios', 'form-data', 'isomorphic-ws', 'base64-js'];
 
 const deps = Object.keys({
   ...packageJson.dependencies,
@@ -26,30 +20,45 @@ const deps = Object.keys({
 const external = deps.filter((dep) => !bundledDeps.includes(dep));
 
 /** @type esbuild.BuildOptions */
-const cjsBundleConfig = {
-  entryPoints: [mainEntrypoint],
-  bundle: true,
-  format: 'cjs',
-  target: "ES2020",
-  external,
-  outdir: outDir,
-  outExtension: { '.js': '.cjs' },
+const commonBuildOptions = {
+  target: 'ES2020',
   sourcemap: 'linked',
 };
 
 // We build two CJS bundles: for browser and for node. The latter one can be
 // used e.g. during SSR (although it makes little sence to SSR chat, but still
 // nice for import not to break on server).
-const bundles = ['browser', 'node'].map((platform) => {
-  const config = {
-    ...cjsBundleConfig,
+const bundles = [
+  // CJS (browser & Node)
+  ['browser', 'node'].map((platform) => ({
+    ...commonBuildOptions,
+    entryPoints: [mainEntrypoint],
+    bundle: true,
+    format: 'cjs',
+    external,
+    outExtension: { '.js': '.cjs' },
     entryNames: `[dir]/[name].${platform}`,
+    outdir: resolve(__dirname, '../dist/cjs'),
     platform,
     define: {
       'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
     },
-  };
+  })),
+  // ESM (browser only)
+  {
+    ...commonBuildOptions,
+    entryPoints: [resolve(__dirname, '../src/**/*')],
+    format: 'esm',
+    outdir: resolve(__dirname, '../dist/esm'),
+    entryNames: `[dir]/[name]`,
+    outExtension: { '.js': '.mjs' },
+    platform: 'browser',
+    define: {
+      'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
+    },
+  },
+]
+  .flat()
+  .map((config) => esbuild.build(config));
 
-  esbuild.build(config);
-});
 await Promise.all(bundles);

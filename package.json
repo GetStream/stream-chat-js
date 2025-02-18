@@ -15,15 +15,12 @@
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "node": {
-        "require": "./dist/index.node.cjs",
-        "import": "./dist/esm-node/index.js"
-      },
+      "node": "./dist/cjs/index.node.cjs",
       "browser": {
-        "require": "./dist/index.browser.cjs",
-        "import": "./dist/esm-browser/index.js"
+        "import": "./dist/esm/index.mjs",
+        "require": "./dist/cjs/index.browser.cjs"
       },
-      "default": "./dist/esm-node/index.js"
+      "default": "./dist/esm/index.mjs"
     }
   },
   "browser": {
@@ -102,7 +99,7 @@
     "changelog": "standard-version --release-as $VERSION --skip.tag --skip.commit --tag-prefix=v",
     "commitlinter": "commitlint",
     "build": "rm -rf dist && yarn bundle",
-    "bundle": "concurrently 'tsc --declaration --emitDeclarationOnly --outDir ./dist/types' ./scripts/bundle-esm.mjs scripts/bundle-cjs.mjs",
+    "bundle": "concurrently 'tsc --declaration --emitDeclarationOnly --outDir ./dist/types' ./scripts/bundle.mjs",
     "types": "tsc --noEmit",
     "prettier": "prettier --check '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
     "prettier-fix": "npx prettier --write '**/*.{js,ts,md,css,scss,json}' .eslintrc.json .prettierrc .babelrc",
