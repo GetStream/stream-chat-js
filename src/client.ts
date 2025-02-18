@@ -173,6 +173,7 @@ import {
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
@@ -274,6 +275,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
+  sdkIdentifier?: SdkIdentifier;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -2916,11 +2918,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getUserAgent() {
-    return (
-      this.userAgent || `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${process.env.PKG_VERSION}`
-    );
+    if (this.userAgent) {
+      return this.userAgent;
+    }
+    const version = process.env.PKG_VERSION;
+    if (this.sdkIdentifier) {
+      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+    } else {
+      return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+    }
   }
 
+  /**
+   * @deprecated use sdkIdentifier instead
+   * @param userAgent
+   */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
