@@ -13,5 +13,5 @@ jobs:
 
       - uses: ./.github/actions/setup-node
 
-      - name: Unit tests
+      - name: Unit Tests with Node ${{ env.NODE_VERSION }}
         run: yarn run test-coverage

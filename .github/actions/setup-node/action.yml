@@ -16,6 +16,10 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: https://registry.npmjs.org
 
+    - name: Set NODE_VERSION env
+      shell: bash
+      run: echo "NODE_VERSION=$(node --version)" >> $GITHUB_ENV
+
     - name: Cache Dependencies
       uses: actions/cache@v3
       with:
