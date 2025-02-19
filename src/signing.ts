@@ -1,5 +1,5 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
-import crypto from 'node:crypto';
+import crypto from 'crypto';
 import { encodeBase64, decodeBase64 } from './base64';
 import { UR } from './types';
 
