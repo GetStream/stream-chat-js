@@ -1,4 +1,4 @@
-import type { Secret } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
@@ -12,7 +12,7 @@ import type { TokenOrProvider, ExtendableGenerics, DefaultGenerics, UserResponse
 export class TokenManager<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
-  secret?: Secret;
+  secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
   user?: UserResponse<StreamChatGenerics>;
@@ -21,7 +21,7 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @param {Secret} secret
    */
-  constructor(secret?: Secret) {
+  constructor(secret?: jwt.Secret) {
     this.loadTokenPromise = null;
     if (secret) {
       this.secret = secret;
