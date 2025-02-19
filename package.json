@@ -27,9 +27,7 @@
     "https": false,
     "crypto": false,
     "jsonwebtoken": false,
-    "ws": false,
-    "@types/jsonwebtoken": false,
-    "@types/ws": false
+    "ws": false
   },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
@@ -46,6 +44,8 @@
     "/src"
   ],
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/ws": "^8.5.14",
     "axios": "^1.6.0",
     "base64-js": "^1.5.1",
     "form-data": "^4.0.0",
@@ -62,13 +62,11 @@
     "@types/chai-as-promised": "^7.1.4",
     "@types/chai-like": "^1.1.1",
     "@types/eslint": "7.2.7",
-    "@types/jsonwebtoken": "^9.0.8",
     "@types/mocha": "^9.0.0",
     "@types/node": "^16.11.11",
     "@types/prettier": "^2.2.2",
     "@types/sinon": "^10.0.6",
     "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.5.14",
     "@typescript-eslint/eslint-plugin": "^4.17.0",
     "@typescript-eslint/parser": "^4.17.0",
     "chai": "^4.3.4",
