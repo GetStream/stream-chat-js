@@ -12,14 +12,19 @@
     "url": "https://github.com/GetStream/stream-chat-js.git"
   },
   "types": "./dist/types/index.d.ts",
+  "main": "./dist/esm/index.js",
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "node": "./dist/cjs/index.node.cjs",
       "browser": {
         "import": "./dist/esm/index.js",
         "require": "./dist/cjs/index.browser.cjs"
       },
+      "react-native": {
+        "import": "./dist/esm/index.js",
+        "require": "./dist/cjs/index.browser.cjs"
+      },
+      "node": "./dist/cjs/index.node.cjs",
       "default": "./dist/esm/index.js"
     }
   },
