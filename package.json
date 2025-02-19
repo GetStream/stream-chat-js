@@ -17,10 +17,10 @@
       "types": "./dist/types/index.d.ts",
       "node": "./dist/cjs/index.node.cjs",
       "browser": {
-        "import": "./dist/esm/index.mjs",
+        "import": "./dist/esm/index.js",
         "require": "./dist/cjs/index.browser.cjs"
       },
-      "default": "./dist/esm/index.mjs"
+      "default": "./dist/esm/index.js"
     }
   },
   "browser": {
