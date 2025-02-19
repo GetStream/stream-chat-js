@@ -53,7 +53,7 @@ const bundles = [
     format: 'esm',
     outdir: resolve(__dirname, '../dist/esm'),
     entryNames: `[dir]/[name]`,
-    outExtension: { '.js': '.mjs' },
+    // outExtension: { '.js': '.mjs' },
     platform: 'browser',
     define: {
       ...commonBuildOptions.define,
