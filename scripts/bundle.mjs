@@ -19,11 +19,13 @@ const external = deps.filter((dep) => !bundledDeps.includes(dep));
 
 /** @type esbuild.BuildOptions */
 const commonBuildOptions = {
+  entryPoints: [resolve(__dirname, '../src/index.ts')],
+  bundle: true,
   target: 'ES2020',
   sourcemap: 'linked',
   define: {
     'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
-  }
+  },
 };
 
 // We build two CJS bundles: for browser and for node. The latter one can be
@@ -33,8 +35,6 @@ const bundles = [
   // CJS (browser & Node)
   ['browser', 'node'].map((platform) => ({
     ...commonBuildOptions,
-    entryPoints: [resolve(__dirname, '../src/index.ts')],
-    bundle: true,
     format: 'cjs',
     external,
     outExtension: { '.js': '.cjs' },
@@ -49,11 +49,9 @@ const bundles = [
   // ESM (browser only)
   {
     ...commonBuildOptions,
-    entryPoints: [resolve(__dirname, '../src/*')],
     format: 'esm',
     outdir: resolve(__dirname, '../dist/esm'),
     entryNames: `[dir]/[name]`,
-    // outExtension: { '.js': '.mjs' },
     platform: 'browser',
     define: {
       ...commonBuildOptions.define,
