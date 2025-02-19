@@ -1472,10 +1472,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return await this.wsConnection.connect(
         this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
       );
-    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
+      if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
         this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
         this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
 
@@ -1487,7 +1488,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         return await this.wsFallback.connect();
       }
 
-      throw err;
+      throw error;
     }
   }
 
