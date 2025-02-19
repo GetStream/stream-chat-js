@@ -27,7 +27,9 @@
     "node:https": false,
     "node:crypto": false,
     "jsonwebtoken": false,
-    "ws": false
+    "ws": false,
+    "@types/jsonwebtoken": false,
+    "@types/ws": false
   },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
