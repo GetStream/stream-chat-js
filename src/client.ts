@@ -2,7 +2,7 @@
 /* global process */
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import https from 'node:https';
+import https from 'https';
 import WebSocket from 'isomorphic-ws';
 
 import { Channel } from './channel';

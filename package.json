@@ -24,8 +24,8 @@
     }
   },
   "browser": {
-    "node:https": false,
-    "node:crypto": false,
+    "https": false,
+    "crypto": false,
     "jsonwebtoken": false,
     "ws": false,
     "@types/jsonwebtoken": false,
