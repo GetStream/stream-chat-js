@@ -644,6 +644,7 @@ describe('StreamChat.queryChannels', async () => {
 
 describe('X-Stream-Client header', () => {
 	process.env.PKG_VERSION = '1.2.3';
+	process.env.CLIENT_BUNDLE = 'browser-esm';
 	let client;
 
 	beforeEach(async () => {
@@ -653,21 +654,21 @@ describe('X-Stream-Client header', () => {
 	it('server-side integration', () => {
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-node');
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-node|client_bundle=browser-esm');
 	});
 
 	it('client-side integration', () => {
 		client.node = false;
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser');
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser|client_bundle=browser-esm');
 	});
 
 	it('SDK integration', () => {
 		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3');
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser-esm');
 	});
 
 	it('setUserAgent is now deprecated', () => {

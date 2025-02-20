@@ -2923,12 +2923,23 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (this.userAgent) {
       return this.userAgent;
     }
+
     const version = process.env.PKG_VERSION;
+    const clientBundle = process.env.CLIENT_BUNDLE;
+
+    let userAgentString = '';
     if (this.sdkIdentifier) {
-      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+      userAgentString = `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
     } else {
-      return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+      userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
+
+    const additionalOptions = ([
+      // reports which bundle is being picked from the exports
+      ['client_bundle', clientBundle],
+    ] as const).map(([key, value]) => `${key}=${value ?? ''}`);
+
+    return [userAgentString, ...additionalOptions].join('|');
   }
 
   /**
