@@ -3808,3 +3808,5 @@ export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGeneric
    */
   channelToMoveIndexWithinChannels?: number;
 };
+
+export type SdkIdentifier = { name: 'react' | 'react-native' | 'angular'; version: string };
