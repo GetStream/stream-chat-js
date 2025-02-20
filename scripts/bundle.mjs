@@ -28,6 +28,14 @@ const commonBuildOptions = {
   },
 };
 
+/**
+ * process.env.CLIENT_BUNDLE values:
+ *
+ * - index.js - browser-esm
+ * - index.browser.cjs - browser-cjs
+ * - index.node.cjs - node-cjs
+ */
+
 // We build two CJS bundles: for browser and for node. The latter one can be
 // used e.g. during SSR (although it makes little sence to SSR chat, but still
 // nice for import not to break on server).
@@ -43,7 +51,7 @@ const bundles = [
     platform,
     define: {
       ...commonBuildOptions.define,
-      'process.env.BUILD': JSON.stringify(`${platform}-cjs`),
+      'process.env.CLIENT_BUNDLE': JSON.stringify(`${platform}-cjs`),
     },
   })),
   // ESM (browser only)
@@ -55,7 +63,7 @@ const bundles = [
     platform: 'browser',
     define: {
       ...commonBuildOptions.define,
-      'process.env.BUILD': JSON.stringify(`browser-esm`),
+      'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
   },
 ]
