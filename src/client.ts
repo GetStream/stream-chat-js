@@ -3,7 +3,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import https from 'https';
-import WebSocket from 'isomorphic-ws';
+import type WebSocket from 'isomorphic-ws';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
