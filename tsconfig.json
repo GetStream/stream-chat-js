@@ -1,8 +1,6 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
-    "rootDir": "./src",
-    "baseUrl": "./src",
     "esModuleInterop": true,
     "moduleResolution": "node",
     "lib": ["DOM", "ES6"],
