@@ -477,14 +477,6 @@ export type FormatMessageResponse = Omit<
   updated_at: Date;
 };
 
-export type GetChannelTypeResponse = APIResponse &
-  Omit<CreateChannelOptions, 'client_id' | 'connection_id' | 'commands'> & {
-    created_at: string;
-    updated_at: string;
-    commands?: CommandResponse[];
-    grants?: Record<string, string[]>;
-  };
-
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
 export type GetMessageAPIResponse = SendMessageAPIResponse;
@@ -1004,21 +996,171 @@ export type DeactivateUsersOptions = {
 
 export type NewMemberPayload = CustomMemberData & Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
-export type UpdateChannelOptions = {
-  accept_invite?: boolean;
-  add_members?: string[];
-  add_moderators?: string[];
-  client_id?: string;
-  connection_id?: string;
-  data?: Omit<ChannelResponse, 'id' | 'cid'>;
-  demote_moderators?: string[];
-  invites?: string[];
-  message?: MessageResponse;
-  reject_invite?: boolean;
-  remove_members?: string[];
-  user?: UserResponse;
-  user_id?: string;
+export type Thresholds = Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>;
+
+export type BlockListOptions = {
+  behavior: BlocklistBehavior;
+  blocklist: string;
 };
+
+export type PolicyRequest = {
+  action: 'Deny' | 'Allow' | (string & {});
+  /**
+   * @description User-friendly policy name
+   */
+  name: string;
+  /**
+   * @description Whether policy applies to resource owner or not
+   */
+  owner: boolean;
+  priority: number;
+  /**
+   * @description List of resources to apply policy to
+   */
+  resources: string[];
+  /**
+   * @description List of roles to apply policy to
+   */
+  roles: string[];
+};
+
+export type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
+export type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
+export type BlocklistBehavior = AutomodBehavior;
+export type Command = {
+  args: string;
+  description: string;
+  name: string;
+  set: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type UpdateChannelTypeRequest =
+  // these three properties are required in OpenAPI spec but omitted in some QA tests
+  Partial<{
+    automod: Automod;
+    automod_behavior: AutomodBehavior;
+    max_message_length: number;
+  }> & {
+    allowed_flag_reasons?: string[];
+    automod_thresholds?: Thresholds;
+    blocklist?: string;
+    blocklist_behavior?: BlocklistBehavior;
+    blocklists?: BlockListOptions[];
+    commands?: CommandVariants[];
+    connect_events?: boolean;
+    custom_events?: boolean;
+    grants?: Record<string, string[]>;
+    mark_messages_pending?: boolean;
+    mutes?: boolean;
+    partition_size?: number;
+    /**
+     * @example 24h
+     */
+    partition_ttl?: string | null;
+    permissions?: PolicyRequest[];
+    polls?: boolean;
+    push_notifications?: boolean;
+    quotes?: boolean;
+    reactions?: boolean;
+    read_events?: boolean;
+    reminders?: boolean;
+    replies?: boolean;
+    search?: boolean;
+    skip_last_msg_update_for_system_msgs?: boolean;
+    typing_events?: boolean;
+    uploads?: boolean;
+    url_enrichment?: boolean;
+  };
+
+export type UpdateChannelTypeResponse = {
+  automod: Automod;
+  automod_behavior: AutomodBehavior;
+  commands: CommandVariants[];
+  connect_events: boolean;
+  created_at: string;
+  custom_events: boolean;
+  duration: string;
+  grants: Record<string, string[]>;
+  mark_messages_pending: boolean;
+  max_message_length: number;
+  mutes: boolean;
+  name: string;
+  permissions: PolicyRequest[];
+  polls: boolean;
+  push_notifications: boolean;
+  quotes: boolean;
+  reactions: boolean;
+  read_events: boolean;
+  reminders: boolean;
+  replies: boolean;
+  search: boolean;
+  skip_last_msg_update_for_system_msgs: boolean;
+  typing_events: boolean;
+  updated_at: string;
+  uploads: boolean;
+  url_enrichment: boolean;
+  allowed_flag_reasons?: string[];
+  automod_thresholds?: Thresholds;
+  blocklist?: string;
+  blocklist_behavior?: BlocklistBehavior;
+  blocklists?: BlockListOptions[];
+  partition_size?: number;
+  partition_ttl?: string;
+};
+
+export type GetChannelTypeResponse = {
+  automod: Automod;
+  automod_behavior: AutomodBehavior;
+  commands: Command[];
+  connect_events: boolean;
+  created_at: string;
+  custom_events: boolean;
+  duration: string;
+  grants: Record<string, string[]>;
+  mark_messages_pending: boolean;
+  max_message_length: number;
+  mutes: boolean;
+  name: string;
+  permissions: PolicyRequest[];
+  polls: boolean;
+  push_notifications: boolean;
+  quotes: boolean;
+  reactions: boolean;
+  read_events: boolean;
+  reminders: boolean;
+  replies: boolean;
+  search: boolean;
+  skip_last_msg_update_for_system_msgs: boolean;
+  typing_events: boolean;
+  updated_at: string;
+  uploads: boolean;
+  url_enrichment: boolean;
+  allowed_flag_reasons?: string[];
+  automod_thresholds?: Thresholds;
+  blocklist?: string;
+  blocklist_behavior?: BlocklistBehavior;
+  blocklists?: BlockListOptions[];
+  partition_size?: number;
+  partition_ttl?: string;
+};
+
+export type UpdateChannelOptions = Partial<{
+  accept_invite: boolean;
+  add_members: string[];
+  add_moderators: string[];
+  client_id: string;
+  connection_id: string;
+  data: Omit<ChannelResponse, 'id' | 'cid'>;
+  demote_moderators: string[];
+  invites: string[];
+  message: MessageResponse;
+  reject_invite: boolean;
+  remove_members: string[];
+  user: UserResponse;
+  user_id: string;
+}>;
 
 export type MarkChannelsReadOptions = {
   client_id?: string;
@@ -1202,11 +1344,6 @@ export type UnBanUserOptions = {
   shadow?: boolean;
   target_user_id?: string;
   type?: string;
-};
-
-export type UpdateChannelTypeOptions = Omit<CreateChannelOptions, 'name'> & {
-  created_at?: string;
-  updated_at?: string;
 };
 
 export type UpdateCommandOptions = {
@@ -1461,11 +1598,18 @@ export type ReactionFilters = QueryFilters<
 
 export type ChannelFilters = QueryFilters<
   ContainsOperator<CustomChannelData> & {
+    archived?: boolean;
+    'member.user.name'?:
+      | RequireOnlyOne<{
+          $autocomplete?: string;
+          $eq?: string;
+        }>
+      | string;
+
     members?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
       | PrimitiveFilter<string[]>;
-  } & {
     name?:
       | RequireOnlyOne<
           {
@@ -1473,13 +1617,11 @@ export type ChannelFilters = QueryFilters<
           } & QueryFilter<ChannelResponse['name']>
         >
       | PrimitiveFilter<ChannelResponse['name']>;
+    pinned?: boolean;
   } & {
       [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
         | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
         | PrimitiveFilter<ChannelResponse[Key]>;
-    } & {
-      archived?: boolean;
-      pinned?: boolean;
     }
 >;
 
@@ -1591,6 +1733,13 @@ export type ContainsOperator<CustomType = {}> = {
 
 export type MessageFilters = QueryFilters<
   ContainsOperator<CustomMessageData> & {
+    'attachments.type'?:
+      | RequireOnlyOne<{
+          $eq: PrimitiveFilter<Attachment['type']>;
+          $in: PrimitiveFilter<Attachment['type']>[];
+        }>
+      | PrimitiveFilter<Attachment['type']>;
+    'mentioned_users.id'?: RequireOnlyOne<{ $contains: PrimitiveFilter<UserResponse['id']> }>;
     text?:
       | RequireOnlyOne<
           {
@@ -1599,6 +1748,13 @@ export type MessageFilters = QueryFilters<
           } & QueryFilter<MessageResponse['text']>
         >
       | PrimitiveFilter<MessageResponse['text']>;
+    'user.id'?:
+      | RequireOnlyOne<
+          {
+            $autocomplete?: UserResponse['id'];
+          } & QueryFilter<UserResponse['id']>
+        >
+      | PrimitiveFilter<UserResponse['id']>;
   } & {
       [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
         | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
@@ -1693,6 +1849,9 @@ export type MemberFilters = QueryFilters<
         }>
       | UserResponse['id'];
     invite?: { $eq?: ChannelMemberResponse['status'] } | ChannelMemberResponse['status'];
+    is_moderator?:
+      | RequireOnlyOne<{ $eq?: ChannelMemberResponse['is_moderator'] }>
+      | ChannelMemberResponse['is_moderator'];
     joined?: { $eq?: boolean } | boolean;
     last_active?:
       | {
@@ -1711,6 +1870,9 @@ export type MemberFilters = QueryFilters<
           $q?: NonNullable<ChannelMemberResponse['user']>['name'];
         }>
       | PrimitiveFilter<NonNullable<ChannelMemberResponse['user']>['name']>;
+    notifications_muted?:
+      | RequireOnlyOne<{ $eq?: ChannelMemberResponse['notifications_muted'] }>
+      | ChannelMemberResponse['notifications_muted'];
     updated_at?:
       | {
           $eq?: ChannelMemberResponse['updated_at'];
@@ -1732,7 +1894,7 @@ export type MemberFilters = QueryFilters<
           $eq?: ChannelMemberResponse['user_id'];
           $in?: ChannelMemberResponse['user_id'][];
         }>
-      | PrimitiveFilter<NonNullable<ChannelMemberResponse['user']>['id'][]>;
+      | PrimitiveFilter<ChannelMemberResponse['user_id']>;
   } & {
     [Key in keyof ContainsOperator<CustomMemberData>]?:
       | RequireOnlyOne<QueryFilter<ContainsOperator<CustomMemberData>[Key]>>
@@ -1956,6 +2118,7 @@ export type Attachment = CustomAttachmentData & {
   original_height?: number;
   original_width?: number;
   pretext?: string;
+  stopped_sharing?: boolean;
   text?: string;
   thumb_url?: string;
   title?: string;
@@ -1990,15 +2153,11 @@ export type ChannelConfig = ChannelConfigFields &
     commands?: CommandVariants[];
   };
 
-export type ChannelConfigAutomod = '' | 'AI' | 'disabled' | 'simple';
+export type ChannelConfigAutomod = Automod;
 
-export type ChannelConfigAutomodBehavior = '' | 'block' | 'flag';
+export type ChannelConfigAutomodBehavior = AutomodBehavior;
 
-export type ChannelConfigAutomodThresholds = null | {
-  explicit?: { block?: number; flag?: number };
-  spam?: { block?: number; flag?: number };
-  toxic?: { block?: number; flag?: number };
-};
+export type ChannelConfigAutomodThresholds = null | Thresholds;
 
 export type ChannelConfigFields = {
   reminders: boolean;
@@ -2283,13 +2442,15 @@ export type EndpointName =
   | 'ListPushProviders'
   | 'CreatePoll';
 
-export type ExportChannelRequest = {
-  id: string;
-  type: string;
-  cid?: string;
-  messages_since?: Date;
-  messages_until?: Date;
-};
+export type ExportChannelRequest = (
+  | {
+      id: string;
+      type: string;
+    }
+  | {
+      cid: string;
+    }
+) & { messages_since?: Date; messages_until?: Date };
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
@@ -2628,7 +2789,10 @@ export type ReservedMessageFields =
   | 'updated_at'
   | 'user';
 
-export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] };
+export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
+  mentioned_users?: string[];
+  type?: MessageLabel;
+};
 
 export type User = CustomUserData & {
   id: string;
@@ -2953,6 +3117,7 @@ export type UpdatePollAPIResponse = {
 
 export type PollResponse = CustomPollData &
   PollEnrichData & {
+    cid: string;
     created_at: string;
     created_by: UserResponse | null;
     created_by_id: string;

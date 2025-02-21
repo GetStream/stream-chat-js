@@ -193,8 +193,8 @@ import {
   TokenOrProvider,
   TranslateResponse,
   UnBanUserOptions,
-  UpdateChannelOptions,
-  UpdateChannelResponse,
+  UpdateChannelTypeRequest,
+  UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
   UpdatedMessage,
@@ -2491,8 +2491,8 @@ export class StreamChat {
     return this.get<GetChannelTypeResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`);
   }
 
-  updateChannelType(channelType: string, data: UpdateChannelOptions) {
-    return this.put<UpdateChannelResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`, data);
+  updateChannelType(channelType: string, data: UpdateChannelTypeRequest) {
+    return this.put<UpdateChannelTypeResponse>(this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`, data);
   }
 
   deleteChannelType(channelType: string) {
