@@ -18,6 +18,7 @@ import {
   addFileToFormData,
   axiosParamsSerializer,
   chatCodes,
+  generateChannelTempCid,
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
@@ -127,6 +128,7 @@ import {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  NewMemberPayload,
   OGAttachment,
   OwnUserResponse,
   PartialMessageUpdate,
@@ -172,6 +174,7 @@ import {
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
@@ -217,6 +220,7 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
+import { ChannelManager, ChannelManagerEventHandlerOverrides, ChannelManagerOptions } from './channel_manager';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -272,6 +276,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
+  sdkIdentifier?: SdkIdentifier;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -598,6 +603,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     await Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
     return Promise.resolve();
+  };
+
+  /**
+   * Creates an instance of ChannelManager.
+   *
+   * @internal
+   *
+   * @param eventHandlerOverrides - the overrides for event handlers to be used
+   * @param options - the options used for the channel manager
+   */
+  createChannelManager = ({
+    eventHandlerOverrides = {},
+    options = {},
+  }: {
+    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides<StreamChatGenerics>;
+    options?: ChannelManagerOptions;
+  }) => {
+    return new ChannelManager({ client: this, eventHandlerOverrides, options });
   };
 
   /**
@@ -1936,10 +1959,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   getChannelByMembers = (channelType: string, custom: ChannelData<StreamChatGenerics>) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const membersStr = [...(custom.members || [])].sort().join(',');
-    const tempCid = `${channelType}:!members-${membersStr}`;
+    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload<StreamChatGenerics>) =>
+      typeof member === 'string' ? member : member.user_id ?? '',
+    );
+    const membersStr = memberIds.sort().join(',');
+    const tempCid = generateChannelTempCid(channelType, memberIds);
 
-    if (!membersStr) {
+    if (!tempCid) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
 
@@ -2893,11 +2919,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getUserAgent() {
-    return (
-      this.userAgent || `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${process.env.PKG_VERSION}`
-    );
+    if (this.userAgent) {
+      return this.userAgent;
+    }
+    const version = process.env.PKG_VERSION;
+    if (this.sdkIdentifier) {
+      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+    } else {
+      return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+    }
   }
 
+  /**
+   * @deprecated use sdkIdentifier instead
+   * @param userAgent
+   */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }

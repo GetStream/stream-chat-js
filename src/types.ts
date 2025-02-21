@@ -2,6 +2,7 @@ import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
+import type { Channel } from './channel';
 
 /**
  * Utility Types
@@ -3801,3 +3802,16 @@ export type VelocityFilterConfig = {
   rules: VelocityFilterConfigRule[];
   async?: boolean;
 };
+
+export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGenerics> = {
+  channels: Array<Channel<SCG>>;
+  channelToMove: Channel<SCG>;
+  sort: ChannelSort<SCG>;
+  /**
+   * If the index of the channel within `channels` list which is being moved upwards
+   * (`channelToMove`) is known, you can supply it to skip extra calculation.
+   */
+  channelToMoveIndexWithinChannels?: number;
+};
+
+export type SdkIdentifier = { name: 'react' | 'react-native' | 'angular'; version: string };

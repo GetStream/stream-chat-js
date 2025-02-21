@@ -594,7 +594,7 @@ describe('Client WSFallback', () => {
 	});
 });
 
-describe('Channel.queryChannels', async () => {
+describe('StreamChat.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
@@ -639,5 +639,41 @@ describe('Channel.queryChannels', async () => {
 			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
 		});
 		mock.restore();
+	});
+});
+
+describe('X-Stream-Client header', () => {
+	process.env.PKG_VERSION = '1.2.3';
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	it('server-side integration', () => {
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-node');
+	});
+
+	it('client-side integration', () => {
+		client.node = false;
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser');
+	});
+
+	it('SDK integration', () => {
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3');
+	});
+
+	it('setUserAgent is now deprecated', () => {
+		client.setUserAgent('deprecated');
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('deprecated');
 	});
 });

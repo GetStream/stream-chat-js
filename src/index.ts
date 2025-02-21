@@ -20,4 +20,5 @@ export type { ThreadState, ThreadReadState, ThreadRepliesPagination, ThreadUserR
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
+export * from './channel_manager';
 export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';
