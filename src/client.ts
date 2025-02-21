@@ -100,6 +100,7 @@ import {
   FlagUserResponse,
   GetBlockedUsersAPIResponse,
   GetCallTokenResponse,
+  GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
   GetImportResponse,
@@ -3419,25 +3420,44 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async createCampaign(params: CampaignData) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns`, { ...params });
+    return this.post<
+      {
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns`, { ...params });
   }
 
-  async getCampaign(id: string) {
+  async getCampaign(id: string, options?: GetCampaignOptions) {
     this.validateServerSideAuth();
-    return this.get<{ campaign: CampaignResponse } & APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
-    );
+    return this.get<
+      {
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
   }
 
   async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse } & APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`,
+    return this.post<
       {
-        scheduled_for: options?.scheduledFor,
-        stop_at: options?.stopAt,
-      },
-    );
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
+      scheduled_for: options?.scheduledFor,
+      stop_at: options?.stopAt,
+    });
   }
   /**
    * queryCampaigns - Query Campaigns
@@ -3470,7 +3490,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     this.validateServerSideAuth();
-    return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
+    return this.put<{
+      campaign: CampaignResponse;
+      users: {
+        next?: string;
+        prev?: string;
+      };
+    }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
   }
 
   /**
