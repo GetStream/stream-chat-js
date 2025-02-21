@@ -1012,8 +1012,11 @@ export type UpdateChannelOptions = {
   connection_id?: string;
   data?: Omit<ChannelResponse, 'id' | 'cid'>;
   demote_moderators?: string[];
+  grants?: null | Record<string, string[]>;
   invites?: string[];
   message?: MessageResponse;
+  permissions?: PermissionObject[];
+  read_events?: boolean;
   reject_invite?: boolean;
   remove_members?: string[];
   user?: UserResponse;
@@ -1461,11 +1464,18 @@ export type ReactionFilters = QueryFilters<
 
 export type ChannelFilters = QueryFilters<
   ContainsOperator<CustomChannelData> & {
+    archived?: boolean;
+    'member.user.name'?:
+      | RequireOnlyOne<{
+          $autocomplete?: string;
+          $eq?: string;
+        }>
+      | string;
+
     members?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
       | PrimitiveFilter<string[]>;
-  } & {
     name?:
       | RequireOnlyOne<
           {
@@ -1473,13 +1483,11 @@ export type ChannelFilters = QueryFilters<
           } & QueryFilter<ChannelResponse['name']>
         >
       | PrimitiveFilter<ChannelResponse['name']>;
+    pinned?: boolean;
   } & {
       [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
         | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
         | PrimitiveFilter<ChannelResponse[Key]>;
-    } & {
-      archived?: boolean;
-      pinned?: boolean;
     }
 >;
 
@@ -1591,6 +1599,13 @@ export type ContainsOperator<CustomType = {}> = {
 
 export type MessageFilters = QueryFilters<
   ContainsOperator<CustomMessageData> & {
+    'attachments.type'?:
+      | RequireOnlyOne<{
+          $eq: PrimitiveFilter<Attachment['type']>;
+          $in: PrimitiveFilter<Attachment['type']>[];
+        }>
+      | PrimitiveFilter<Attachment['type']>;
+    'mentioned_users.id'?: RequireOnlyOne<{ $contains: PrimitiveFilter<UserResponse['id']> }>;
     text?:
       | RequireOnlyOne<
           {
@@ -1599,6 +1614,13 @@ export type MessageFilters = QueryFilters<
           } & QueryFilter<MessageResponse['text']>
         >
       | PrimitiveFilter<MessageResponse['text']>;
+    'user.id'?:
+      | RequireOnlyOne<
+          {
+            $autocomplete?: UserResponse['id'];
+          } & QueryFilter<UserResponse['id']>
+        >
+      | PrimitiveFilter<UserResponse['id']>;
   } & {
       [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
         | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
@@ -1693,6 +1715,9 @@ export type MemberFilters = QueryFilters<
         }>
       | UserResponse['id'];
     invite?: { $eq?: ChannelMemberResponse['status'] } | ChannelMemberResponse['status'];
+    is_moderator?:
+      | RequireOnlyOne<{ $eq?: ChannelMemberResponse['is_moderator'] }>
+      | ChannelMemberResponse['is_moderator'];
     joined?: { $eq?: boolean } | boolean;
     last_active?:
       | {
@@ -1711,6 +1736,9 @@ export type MemberFilters = QueryFilters<
           $q?: NonNullable<ChannelMemberResponse['user']>['name'];
         }>
       | PrimitiveFilter<NonNullable<ChannelMemberResponse['user']>['name']>;
+    notifications_muted?:
+      | RequireOnlyOne<{ $eq?: ChannelMemberResponse['notifications_muted'] }>
+      | ChannelMemberResponse['notifications_muted'];
     updated_at?:
       | {
           $eq?: ChannelMemberResponse['updated_at'];
@@ -1732,7 +1760,7 @@ export type MemberFilters = QueryFilters<
           $eq?: ChannelMemberResponse['user_id'];
           $in?: ChannelMemberResponse['user_id'][];
         }>
-      | PrimitiveFilter<NonNullable<ChannelMemberResponse['user']>['id'][]>;
+      | PrimitiveFilter<ChannelMemberResponse['user_id']>;
   } & {
     [Key in keyof ContainsOperator<CustomMemberData>]?:
       | RequireOnlyOne<QueryFilter<ContainsOperator<CustomMemberData>[Key]>>
@@ -2283,13 +2311,15 @@ export type EndpointName =
   | 'ListPushProviders'
   | 'CreatePoll';
 
-export type ExportChannelRequest = {
-  id: string;
-  type: string;
-  cid?: string;
-  messages_since?: Date;
-  messages_until?: Date;
-};
+export type ExportChannelRequest = (
+  | {
+      id: string;
+      type: string;
+    }
+  | {
+      cid: string;
+    }
+) & { messages_since?: Date; messages_until?: Date };
 
 export type ExportChannelOptions = {
   clear_deleted_message_text?: boolean;
@@ -2628,7 +2658,10 @@ export type ReservedMessageFields =
   | 'updated_at'
   | 'user';
 
-export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] };
+export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
+  mentioned_users?: string[];
+  type?: MessageLabel;
+};
 
 export type User = CustomUserData & {
   id: string;
