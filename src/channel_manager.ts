@@ -67,12 +67,14 @@ export type ChannelManagerEventTypes =
   | 'channel.deleted'
   | 'channel.hidden'
   | 'channel.truncated'
-  | 'channel.visible';
+  | 'channel.visible'
+  | 'channel.updated';
 
 export type ChannelManagerEventHandlerNames =
   | 'channelDeletedHandler'
   | 'channelHiddenHandler'
   | 'channelTruncatedHandler'
+  | 'channelUpdatedHandler'
   | 'channelVisibleHandler'
   | 'newMessageHandler'
   | 'memberUpdatedHandler'
@@ -90,6 +92,7 @@ export const channelManagerEventToHandlerMapping: {
   'channel.deleted': 'channelDeletedHandler',
   'channel.hidden': 'channelHiddenHandler',
   'channel.truncated': 'channelTruncatedHandler',
+  'channel.updated': 'channelUpdatedHandler',
   'channel.visible': 'channelVisibleHandler',
   'message.new': 'newMessageHandler',
   'member.updated': 'memberUpdatedHandler',
