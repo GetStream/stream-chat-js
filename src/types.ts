@@ -3055,6 +3055,8 @@ export type CampaignStats = {
   stats_completed_at?: string;
   stats_messages_sent?: number;
   stats_started_at?: string;
+  stats_users_read?: number;
+  stats_users_sent?: number;
 };
 export type CampaignResponse = {
   created_at: string;
