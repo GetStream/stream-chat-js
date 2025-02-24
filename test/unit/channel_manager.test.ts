@@ -10,6 +10,8 @@ import {
   DEFAULT_CHANNEL_MANAGER_OPTIONS,
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+  DefaultGenerics,
+  Event,
 } from '../../src';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -349,7 +351,7 @@ describe('ChannelManager', () => {
 
       expect(spy.called).to.be.false;
     });
-  })
+  });
 
   describe('querying and pagination', () => {
     let clientQueryChannelsStub: sinon.SinonStub;
