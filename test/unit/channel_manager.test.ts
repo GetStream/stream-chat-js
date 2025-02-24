@@ -328,16 +328,18 @@ describe('ChannelManager', () => {
     expect(spy.callCount).to.be.equal(1);
   });
 
-  it('should do nothing on channel.updated by default', () => {
-    const spy = sinon.spy(() => {});
-    channelManager.state.subscribe(spy);
-    spy.resetHistory();
+  (['channel.updated', 'channel.truncated'] as const).forEach((eventType) => {
+    it(`should do nothing on ${eventType} by default`, () => {
+      const spy = sinon.spy(() => {});
+      channelManager.state.subscribe(spy);
+      spy.resetHistory();
 
-    const channel = channelsResponse[channelsResponse.length - 1].channel;
-    client.dispatchEvent({ type: 'channel.updated', channel_type: channel.type, channel_id: channel.id });
+      const channel = channelsResponse[channelsResponse.length - 1].channel;
+      client.dispatchEvent({ type: eventType, channel_type: channel.type, channel_id: channel.id });
 
-    expect(spy.called).to.be.false;
-  });
+      expect(spy.called).to.be.false;
+    });
+  })
 
   describe('querying and pagination', () => {
     let clientQueryChannelsStub: sinon.SinonStub;
