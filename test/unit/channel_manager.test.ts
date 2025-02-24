@@ -328,6 +328,16 @@ describe('ChannelManager', () => {
     expect(spy.callCount).to.be.equal(1);
   });
 
+  it('should call channel.truncated event handler override', () => {
+    const spy = sinon.spy(() => {});
+    channelManager.setEventHandlerOverrides({ channelTruncatedHandler: spy });
+    spy.resetHistory();
+
+    client.dispatchEvent({ type: 'channel.truncated' });
+
+    expect(spy.callCount).to.be.equal(1);
+  });
+
   (['channel.updated', 'channel.truncated'] as const).forEach((eventType) => {
     it(`should do nothing on ${eventType} by default`, () => {
       const spy = sinon.spy(() => {});
