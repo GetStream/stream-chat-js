@@ -1127,16 +1127,18 @@ export class Channel {
    *
    * @return {Promise<QueryChannelAPIResponse>} Returns a query response
    */
-  async query(options?: ChannelQueryOptions, messageSetToAddToIfDoesNotExist: MessageSetType = 'current') {
+  async query(options: ChannelQueryOptions = {}, messageSetToAddToIfDoesNotExist: MessageSetType = 'current') {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    if (
-      this.getClient()._isUsingServerAuth() &&
-      typeof options?.created_by_id !== 'string' &&
-      typeof options?.created_by?.id !== 'string'
-    ) {
-      throw new Error('Either `created_by` (with `id` property) or `created_by_id` are required');
+    const createdById =
+      options.created_by?.id ?? options.created_by_id ?? this._data?.created_by?.id ?? this._data?.created_by_id;
+
+    if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
+      this.getClient().logger(
+        'warn',
+        'Either `created_by` (with `id` property) or `created_by_id` are missing from both `Channel._data` and `options` parameter',
+      );
     }
 
     let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
