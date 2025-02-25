@@ -2634,7 +2634,7 @@ export class StreamChat {
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    const clonedMessage: Partial<UpdatedMessage> = { ...message };
+    const clonedMessage: Partial<UpdatedMessage & { __html: unknown }> = { ...message };
     delete clonedMessage.id;
 
     const reservedMessageFields: Array<ReservedMessageFields> = [
@@ -2649,13 +2649,14 @@ export class StreamChat {
       'type',
       'updated_at',
       'user',
+      '__html',
     ];
 
-    reservedMessageFields.forEach(function (item) {
-      if (clonedMessage[item]) {
-        delete clonedMessage[item];
+    for (const field of reservedMessageFields) {
+      if (typeof clonedMessage[field] !== 'undefined') {
+        delete clonedMessage[field];
       }
-    });
+    }
 
     if (userId != null) {
       if (isString(userId)) {

@@ -2787,7 +2787,8 @@ export type ReservedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'user';
+  | 'user'
+  | '__html';
 
 export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
   mentioned_users?: string[];
