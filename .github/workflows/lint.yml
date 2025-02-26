@@ -15,7 +15,7 @@ jobs:
 
       - uses: ./.github/actions/setup-node
 
-      - name: Commit message lint
+      - name: Commit Message Lint
         run: echo "${{ github.event.pull_request.title }}" | yarn commitlinter
 
       - name: Lint
