@@ -26,8 +26,6 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Release
         env:
-          GIT_AUTHOR_NAME: stream-ci-bot
-          GIT_COMMITTER_NAME: stream-ci-bot
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           # https://github.com/stream-ci-bot
           GH_TOKEN: ${{ secrets.DOCUSAURUS_GH_TOKEN }}
