@@ -3,13 +3,11 @@
   "compilerOptions": {
     "moduleResolution": "node10",
     "module": "CommonJS",
-    "strict": false,
+    "strict": false
   },
   "ts-node": {
     "transpileOnly": true,
-    "logError": true,
+    "logError": true
   },
-  "include": [
-    "./test/**/*"
-  ]
+  "include": ["./test/**/*"]
 }

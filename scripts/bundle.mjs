@@ -3,6 +3,7 @@
 import { resolve } from 'node:path';
 import * as esbuild from 'esbuild';
 import packageJson from '../package.json' with {'type': 'json'};
+import getPackageVersion from './get-package-version.mjs';
 
 // import.meta.dirname is not available before Node 20
 const __dirname = import.meta.dirname;
@@ -10,6 +11,8 @@ const __dirname = import.meta.dirname;
 // Those dependencies are distributed as ES modules, and cannot be externalized
 // in our CJS bundle. We convert them to CJS and bundle them instead.
 const bundledDeps = ['axios', 'form-data', 'isomorphic-ws', 'base64-js'];
+
+const version = getPackageVersion();
 
 const deps = Object.keys({
   ...packageJson.dependencies,
@@ -24,7 +27,7 @@ const commonBuildOptions = {
   target: 'ES2020',
   sourcemap: 'linked',
   define: {
-    'process.env.PKG_VERSION': JSON.stringify(packageJson.version),
+    'process.env.PKG_VERSION': JSON.stringify(version),
   },
 };
 

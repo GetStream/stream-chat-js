@@ -3,7 +3,5 @@
   "bail": true,
   "exit": true,
   "timeout": 20000,
-  "require": [
-    "ts-node/register"
-  ]
+  "require": ["ts-node/register"]
 }
