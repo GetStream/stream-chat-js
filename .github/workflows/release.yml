@@ -9,7 +9,7 @@ on:
 
 jobs:
   package_release:
-    name: Release From "${{ github.ref_name }}" Branch
+    name: Release from "${{ github.ref_name }}" branch
     runs-on: ubuntu-latest
     # GH does not allow to limit branches in the workflow_dispatch settings so this here is a safety measure
     if: ${{ inputs.dry_run || startsWith(github.ref_name, 'release') || startsWith(github.ref_name, 'master') }}
@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install Dependencies & Build
+      - name: Install dependencies
         run: yarn install --frozen-lockfile
       - name: Release
         env:
