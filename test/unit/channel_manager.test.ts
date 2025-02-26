@@ -10,6 +10,8 @@ import {
   DEFAULT_CHANNEL_MANAGER_OPTIONS,
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+  DefaultGenerics,
+  Event,
 } from '../../src';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -315,6 +317,39 @@ describe('ChannelManager', () => {
       expect(newMessageHandlerSpy.called).to.be.false;
       expect(newMessageHandlerOverrideSpy.called).to.be.true;
       expect(notificationAddedToChannelHandlerSpy.called).to.be.true;
+    });
+  });
+
+  it('should call channel.updated event handler override', () => {
+    const spy = sinon.spy(() => {});
+    channelManager.setEventHandlerOverrides({ channelUpdatedHandler: spy });
+    spy.resetHistory();
+
+    client.dispatchEvent({ type: 'channel.updated' });
+
+    expect(spy.callCount).to.be.equal(1);
+  });
+
+  it('should call channel.truncated event handler override', () => {
+    const spy = sinon.spy(() => {});
+    channelManager.setEventHandlerOverrides({ channelTruncatedHandler: spy });
+    spy.resetHistory();
+
+    client.dispatchEvent({ type: 'channel.truncated' });
+
+    expect(spy.callCount).to.be.equal(1);
+  });
+
+  (['channel.updated', 'channel.truncated'] as const).forEach((eventType) => {
+    it(`should do nothing on ${eventType} by default`, () => {
+      const spy = sinon.spy(() => {});
+      channelManager.state.subscribe(spy);
+      spy.resetHistory();
+
+      const channel = channelsResponse[channelsResponse.length - 1].channel;
+      client.dispatchEvent({ type: eventType, channel_type: channel.type, channel_id: channel.id });
+
+      expect(spy.called).to.be.false;
     });
   });
 
