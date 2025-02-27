@@ -1,3 +1,22 @@
+# Changelog
+
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+### [8.57.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.1...v8.57.1) (2025-02-27)
+
+
+### Features
+
+* add option to override channel.updated handler in ChannelManager ([#1471](https://github.com/GetStream/stream-chat-js/issues/1471)) ([9082084](https://github.com/GetStream/stream-chat-js/commit/9082084c2aa169ce557990640eb58a57f9dcb471))
+* expand campaign stats ([#1470](https://github.com/GetStream/stream-chat-js/issues/1470)) ([cc6404c](https://github.com/GetStream/stream-chat-js/commit/cc6404c8e8687754aed23b62133a737f1f6ad535))
+* support campaign user pagination ([#1462](https://github.com/GetStream/stream-chat-js/issues/1462)) ([c629018](https://github.com/GetStream/stream-chat-js/commit/c629018df77b8a956b4cf533b0c2bbeb701a03c8))
+* support new X-Stream-Client format ([#1469](https://github.com/GetStream/stream-chat-js/issues/1469)) ([fdb875b](https://github.com/GetStream/stream-chat-js/commit/fdb875b53b9ec38dc81a3afc5c00f3bc561ef06a))
+
+
+### Bug Fixes
+
+* return jsDelivr for v8.x ([392dade](https://github.com/GetStream/stream-chat-js/commit/392dade531f0c68f25c2b1ca624f4b645e4b7498))
+
 ## [8.57.0](https://github.com/GetStream/stream-chat-js/compare/v8.56.1...v8.57.0) (2025-02-26)
 
 ### Features
