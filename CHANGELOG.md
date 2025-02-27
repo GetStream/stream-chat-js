@@ -31,6 +31,13 @@ property in the formatted message output
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.2](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v8.57.2) (2025-02-27)
+
+
+### Bug Fixes
+
+* export promoteChannel ([#1474](https://github.com/GetStream/stream-chat-js/issues/1474)) ([f2ba914](https://github.com/GetStream/stream-chat-js/commit/f2ba9141fc5375e00706d653dc96f122896631f9))
+
 ### [8.57.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.1...v8.57.1) (2025-02-27)
 
 

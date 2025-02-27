@@ -22,4 +22,4 @@ export * from './token_manager';
 export * from './types';
 export * from './channel_manager';
 export * from './custom_types';
-export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';
+export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage, promoteChannel } from './utils';
