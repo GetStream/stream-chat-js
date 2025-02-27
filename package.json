@@ -124,7 +124,7 @@
     "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
-    "prepare": "yarn run build"
+    "prepack": "yarn run build"
   },
   "engines": {
     "node": ">=16"

@@ -8,6 +8,10 @@
       "name": "release-v8",
       "channel": "v8",
       "range": "8.x"
+    },
+    {
+      "name": "rc",
+      "prerelease": true
     }
   ],
   "plugins": [
@@ -16,8 +20,15 @@
       {
         "preset": "angular",
         "releaseRules": [
-          { "type": "chore", "scope": "deps", "release": "patch" },
-          { "type": "refactor", "release": "patch" }
+          {
+            "type": "chore",
+            "scope": "deps",
+            "release": "patch"
+          },
+          {
+            "type": "refactor",
+            "release": "patch"
+          }
         ]
       }
     ],
