@@ -36,12 +36,6 @@ npm install stream-chat
 yarn add stream-chat
 ```
 
-### jsDelivr
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/stream-chat"></script>
-```
-
 ## ✨ Getting Started
 
 ```ts
