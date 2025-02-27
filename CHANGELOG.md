@@ -1,3 +1,9 @@
+## [9.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.1...v9.0.0-rc.2) (2025-02-27)
+
+### Bug Fixes
+
+* increase package.json[engines.node] version ([6764bad](https://github.com/GetStream/stream-chat-js/commit/6764bad05990f113b66c311bed2967faaac4e11f))
+
 ## [9.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v9.0.0-rc.1) (2025-02-27)
 
 ### ⚠ BREAKING CHANGES
