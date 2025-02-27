@@ -1,3 +1,26 @@
+## [9.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v9.0.0-rc.1) (2025-02-27)
+
+### ⚠ BREAKING CHANGES
+
+* dropped jsDelivr bundle (#1468)
+* dropped `StreamChatGenerics`, use `Custom<Entity>Data` to extend your
+types
+* type `InviteOptions` has been renamed to `UpdateChannelOptions`
+* type `UpdateChannelOptions` has been renamed to
+`UpdateChannelTypeRequest`
+* type `ThreadResponseCustomData` has been renamed to `CustomThreadData`
+* type `MarkAllReadOptions` has been deleted in favour of type
+`MarkChannelsReadOptions`
+* type `QueryFilter` no longer supports `$ne` and `$nin` operators
+* type `ChannelMembership` has been deleted in favour of type
+`ChannelMemberResponse`
+* function `formatMessage` (`utils.ts`) no longer returns `__html`
+property in the formatted message output
+
+### Bug Fixes
+
+* replace StreamChatGenerics with module augmentation ([#1458](https://github.com/GetStream/stream-chat-js/issues/1458)) ([feb97da](https://github.com/GetStream/stream-chat-js/commit/feb97da08a5c4fa325156517111bb58402a1f7b8))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
