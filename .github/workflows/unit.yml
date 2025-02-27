@@ -1,4 +1,4 @@
-name: Unit Test
+name: Unit test
 on: [pull_request]
 
 concurrency:
@@ -13,5 +13,5 @@ jobs:
 
       - uses: ./.github/actions/setup-node
 
-      - name: Unit Tests with Node ${{ env.NODE_VERSION }}
+      - name: Unit tests with Node ${{ env.NODE_VERSION }}
         run: yarn run test-coverage
