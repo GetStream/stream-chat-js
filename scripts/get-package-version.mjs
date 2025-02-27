@@ -9,6 +9,7 @@ export default function getPackageVersion() {
   // During release, use the version being released
   // see .releaserc.json where the .version file is generated
   try {
+    console.info({ v: packageJson.version });
     version = readFileSync(resolve(import.meta.dirname, '../.version')).toString().trim();
   } catch {/* do nothing */}
 
