@@ -71,7 +71,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "NEXT_VERSION=${nextRelease.version} npm run build"
+        "prepareCmd": "echo 'NEXT_VERSION=${{nextRelease.version}}' >> $GITHUB_ENV"
       }
     ],
     [
