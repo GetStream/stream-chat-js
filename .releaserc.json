@@ -69,12 +69,6 @@
       }
     ],
     [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "echo \"${nextRelease.version}\" > .version"
-      }
-    ],
-    [
       "@semantic-release/changelog",
       {
         "changelogFile": "./CHANGELOG.md"

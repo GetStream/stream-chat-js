@@ -69,4 +69,3 @@ typings/
 .envrc
 
 test/typescript/data.*
-.version
