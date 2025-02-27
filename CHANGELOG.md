@@ -1,3 +1,9 @@
+## [9.0.0-rc.3](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.2...v9.0.0-rc.3) (2025-02-27)
+
+### Bug Fixes
+
+* export promoteChannel ([#1474](https://github.com/GetStream/stream-chat-js/issues/1474)) ([f2ba914](https://github.com/GetStream/stream-chat-js/commit/f2ba9141fc5375e00706d653dc96f122896631f9))
+
 ## [9.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.1...v9.0.0-rc.2) (2025-02-27)
 
 ### Bug Fixes
