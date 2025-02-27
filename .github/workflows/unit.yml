@@ -8,10 +8,15 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [16, 17, 18]
     steps:
       - uses: actions/checkout@v3
 
       - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node }}
 
-      - name: Unit Tests with Node ${{ env.NODE_VERSION }}
+      - name: Unit tests
         run: yarn run test-coverage

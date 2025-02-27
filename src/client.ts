@@ -3,7 +3,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import https from 'https';
-import type WebSocket from 'isomorphic-ws';
+import WebSocket from 'isomorphic-ws';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -1475,11 +1475,10 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       return await this.wsConnection.connect(
         this.options.enableWSFallback ? this.defaultWSTimeoutWithFallback : this.defaultWSTimeout,
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (err) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
+      if (this.options.enableWSFallback && isWSFailure(err) && isOnline()) {
         this.logger('info', 'client:connect() - WS failed, fallback to longpoll', { tags: ['connection', 'client'] });
         this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
 
@@ -1491,7 +1490,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
         return await this.wsFallback.connect();
       }
 
-      throw error;
+      throw err;
     }
   }
 
@@ -2923,23 +2922,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (this.userAgent) {
       return this.userAgent;
     }
-
     const version = process.env.PKG_VERSION;
-    const clientBundle = process.env.CLIENT_BUNDLE;
-
-    let userAgentString = '';
     if (this.sdkIdentifier) {
-      userAgentString = `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
     } else {
-      userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+      return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
-
-    const additionalOptions = ([
-      // reports which bundle is being picked from the exports
-      ['client_bundle', clientBundle],
-    ] as const).map(([key, value]) => `${key}=${value ?? ''}`);
-
-    return [userAgentString, ...additionalOptions].join('|');
   }
 
   /**

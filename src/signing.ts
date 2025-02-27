@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { encodeBase64, decodeBase64 } from './base64';
 import { UR } from './types';
@@ -14,12 +14,7 @@ import { UR } from './types';
  * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
  * @return {string} JWT Token
  */
-export function JWTUserToken(
-  apiSecret: jwt.Secret,
-  userId: string,
-  extraData: UR = {},
-  jwtOptions: jwt.SignOptions = {},
-) {
+export function JWTUserToken(apiSecret: Secret, userId: string, extraData: UR = {}, jwtOptions: SignOptions = {}) {
   if (typeof userId !== 'string') {
     throw new TypeError('userId should be a string');
   }
@@ -36,7 +31,7 @@ export function JWTUserToken(
     );
   }
 
-  const opts: jwt.SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
+  const opts: SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
 
   if (payload.iat) {
     opts.noTimestamp = false;
@@ -44,12 +39,12 @@ export function JWTUserToken(
   return jwt.sign(payload, apiSecret, opts);
 }
 
-export function JWTServerToken(apiSecret: jwt.Secret, jwtOptions: jwt.SignOptions = {}) {
+export function JWTServerToken(apiSecret: Secret, jwtOptions: SignOptions = {}) {
   const payload = {
     server: true,
   };
 
-  const opts: jwt.SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
+  const opts: SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
   return jwt.sign(payload, apiSecret, opts);
 }
 

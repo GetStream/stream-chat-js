@@ -81,17 +81,16 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
 
       this.consecutiveFailures = 0; // always reset in case of no error
       return res;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (err) {
       this.consecutiveFailures += 1;
 
-      if (retry && isErrorRetryable(error)) {
+      if (retry && isErrorRetryable(err)) {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
         return this._req<T>(params, config, retry);
       }
 
-      throw error;
+      throw err;
     }
   };
 
@@ -108,23 +107,22 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
             this.client.dispatchEvent(data.events[i]);
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (error: any) {
-        if (axios.isCancel(error)) {
+      } catch (err) {
+        if (axios.isCancel(err)) {
           this._log(`_poll() - axios canceled request`);
           return;
         }
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
-        if (isConnectionIDError(error)) {
+        if (isConnectionIDError(err)) {
           this._log(`_poll() - ConnectionID error, connecting without ID...`);
           this._setState(ConnectionState.Disconnected);
           this.connect(true);
           return;
         }
 
-        if (isAPIError(error) && !isErrorRetryable(error)) {
+        if (isAPIError(err) && !isErrorRetryable(err)) {
           this._setState(ConnectionState.Closed);
           return;
         }

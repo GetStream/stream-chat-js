@@ -3,22 +3,17 @@ description: Sets up Node and Build SDK
 
 inputs:
   node-version:
-    description: "Specify Node version"
     required: false
-    default: "22"
+    default: '16'
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Setup Node
       uses: actions/setup-node@v3
       with:
         node-version: ${{ inputs.node-version }}
         registry-url: https://registry.npmjs.org
-
-    - name: Set NODE_VERSION env
-      shell: bash
-      run: echo "NODE_VERSION=$(node --version)" >> $GITHUB_ENV
 
     - name: Cache Dependencies
       uses: actions/cache@v3

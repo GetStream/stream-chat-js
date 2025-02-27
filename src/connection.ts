@@ -113,8 +113,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       this.consecutiveFailures = 0;
 
       this._log(`connect() - Established ws connection with healthcheck: ${healthCheck}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (error) {
       this.isHealthy = false;
       this.consecutiveFailures += 1;
 
@@ -149,8 +148,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
         for (let i = 0; i <= timeout; i += interval) {
           try {
             return await this.connectionOpen;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } catch (error: any) {
+          } catch (error) {
             if (i === timeout) {
               throw new Error(
                 JSON.stringify({
@@ -300,21 +298,17 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
         }
         return response;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (err) {
       this.isConnecting = false;
-      this._log(`_connect() - Error - `, error);
+      this._log(`_connect() - Error - `, err);
       if (this.client.options.enableInsights) {
         this.client.insightMetrics.wsConsecutiveFailures++;
         this.client.insightMetrics.wsTotalFailures++;
 
-        const insights = buildWsFatalInsight(
-          (this as unknown) as StableWSConnection,
-          convertErrorToJson(error as Error),
-        );
+        const insights = buildWsFatalInsight((this as unknown) as StableWSConnection, convertErrorToJson(err as Error));
         postInsights?.('ws_fatal', insights);
       }
-      throw error;
+      throw err;
     }
   }
 
@@ -372,8 +366,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       this._log('_reconnect() - Finished recoverCallBack');
 
       this.consecutiveFailures = 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (error) {
       this.isHealthy = false;
       this.consecutiveFailures += 1;
       if (error.code === chatCodes.TOKEN_EXPIRED && !this.client.tokenManager.isStatic()) {
