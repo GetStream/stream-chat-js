@@ -1,8 +1,6 @@
 import type { StreamChat } from './client';
 import type {
   CreatePollData,
-  DefaultGenerics,
-  ExtendableGenerics,
   MessageResponse,
   PollResponse,
   PollSort,
@@ -13,21 +11,21 @@ import { Poll } from './poll';
 import { FormatMessageResponse } from './types';
 import { formatMessage } from './utils';
 
-export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
-  private client: StreamChat<SCG>;
+export class PollManager {
+  private client: StreamChat;
   // The pollCache contains only polls that have been created and sent as messages
   // (i.e only polls that are coupled with a message, can be voted on and require a
   // reactive state). It shall work as a basic look-up table for our SDK to be able
   // to quickly consume poll state that will be reactive even without the polls being
   // rendered within the UI.
-  private pollCache = new Map<string, Poll<SCG>>();
+  private pollCache = new Map<string, Poll>();
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client }: { client: StreamChat<SCG> }) {
+  constructor({ client }: { client: StreamChat }) {
     this.client = client;
   }
 
-  get data(): Map<string, Poll<SCG>> {
+  get data(): Map<string, Poll> {
     return this.pollCache;
   }
 
@@ -54,7 +52,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.clear();
   };
 
-  public createPoll = async (poll: CreatePollData<SCG>) => {
+  public createPoll = async (poll: CreatePollData) => {
     const { poll: createdPoll } = await this.client.createPoll(poll);
 
     return new Poll({ client: this.client, poll: createdPoll });
@@ -91,26 +89,23 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     };
   };
 
-  public hydratePollCache = (
-    messages: FormatMessageResponse<SCG>[] | MessageResponse<SCG>[],
-    overwriteState?: boolean,
-  ) => {
+  public hydratePollCache = (messages: FormatMessageResponse[] | MessageResponse[], overwriteState?: boolean) => {
     for (const message of messages) {
       if (!message.poll) {
         continue;
       }
-      const pollResponse = message.poll as PollResponse<SCG>;
+      const pollResponse = message.poll as PollResponse;
       this.setOrOverwriteInCache(pollResponse, overwriteState);
     }
   };
 
-  private setOrOverwriteInCache = (pollResponse: PollResponse<SCG>, overwriteState?: boolean) => {
+  private setOrOverwriteInCache = (pollResponse: PollResponse, overwriteState?: boolean) => {
     if (!this.client._cacheEnabled()) {
       return;
     }
     const pollFromCache = this.fromState(pollResponse.id);
     if (!pollFromCache) {
-      const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
+      const poll = new Poll({ client: this.client, poll: pollResponse });
       this.pollCache.set(poll.id, poll);
     } else if (overwriteState) {
       pollFromCache.reinitializeState(pollResponse);

@@ -2,20 +2,20 @@ import jwt from 'jsonwebtoken';
 
 import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
 import { isFunction } from './utils';
-import type { TokenOrProvider, ExtendableGenerics, DefaultGenerics, UserResponse } from './types';
+import type { TokenOrProvider, UserResponse } from './types';
 
 /**
  * TokenManager
  *
  * Handles all the operations around user token.
  */
-export class TokenManager<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class TokenManager {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
   secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: UserResponse<StreamChatGenerics>;
+  user?: UserResponse;
   /**
    * Constructor
    *
@@ -39,9 +39,9 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
    * Token provider should return a token string or a promise which resolves to string token.
    *
    * @param {TokenOrProvider} tokenOrProvider
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse<StreamChatGenerics>) => {
+  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -76,7 +76,7 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse<StreamChatGenerics>) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 

@@ -9,8 +9,9 @@ import {
   addConnectionEventListeners,
 } from './utils';
 import { buildWsFatalInsight, buildWsSuccessAfterFailureInsight, postInsights } from './insights';
-import { ConnectAPIResponse, ConnectionOpen, ExtendableGenerics, DefaultGenerics, UR, LogLevel } from './types';
+import { ConnectAPIResponse, ConnectionOpen, UR, LogLevel } from './types';
 import { StreamChat } from './client';
+import { APIError } from './errors';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent): res is WebSocket.CloseEvent =>
@@ -36,13 +37,13 @@ const isErrorEvent = (res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.Err
  * - state can be recovered by querying the channel again
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
-export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class StableWSConnection {
   // global from constructor
-  client: StreamChat<StreamChatGenerics>;
+  client: StreamChat;
 
   // local vars
   connectionID?: string;
-  connectionOpen?: ConnectAPIResponse<StreamChatGenerics>;
+  connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
   pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
@@ -57,12 +58,12 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
     reason?: Error & { code?: string | number; isWSFailure?: boolean; StatusCode?: string | number },
   ) => void;
   requestID: string | undefined;
-  resolvePromise?: (value: ConnectionOpen<StreamChatGenerics>) => void;
+  resolvePromise?: (value: ConnectionOpen) => void;
   totalFailures: number;
   ws?: WebSocket;
   wsID: number;
 
-  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
+  constructor({ client }: { client: StreamChat }) {
     /** StreamChat client */
     this.client = client;
     /** consecutive failures influence the duration of the timeout */
@@ -92,7 +93,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
     this.client.logger(level, 'connection:' + msg, { tags: ['connection'], ...extra });
   }
 
-  setClient(client: StreamChat<StreamChatGenerics>) {
+  setClient(client: StreamChat) {
     this.client = client;
   }
 
@@ -118,17 +119,19 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       this.isHealthy = false;
       this.consecutiveFailures += 1;
 
-      if (error.code === chatCodes.TOKEN_EXPIRED && !this.client.tokenManager.isStatic()) {
+      const e = error as APIError;
+
+      if (e.code === chatCodes.TOKEN_EXPIRED && !this.client.tokenManager.isStatic()) {
         this._log('connect() - WS failure due to expired token, so going to try to reload token and reconnect');
         this._reconnect({ refreshToken: true });
-      } else if (!error.isWSFailure) {
+      } else if (!e.isWSFailure) {
         // API rejected the connection and we should not retry
         throw new Error(
           JSON.stringify({
-            code: error.code,
-            StatusCode: error.StatusCode,
-            message: error.message,
-            isWSFailure: error.isWSFailure,
+            code: e.code,
+            StatusCode: e.StatusCode,
+            message: e.message,
+            isWSFailure: e.isWSFailure,
           }),
         );
       }
@@ -583,7 +586,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
   _setupConnectionPromise = () => {
     this.isResolved = false;
     /** a promise that is resolved once ws.open is called */
-    this.connectionOpen = new Promise<ConnectionOpen<StreamChatGenerics>>((resolve, reject) => {
+    this.connectionOpen = new Promise<ConnectionOpen>((resolve, reject) => {
       this.resolvePromise = resolve;
       this.rejectPromise = reject;
     });

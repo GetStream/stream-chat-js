@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import { StreamChat } from './client';
 import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import { ConnectionOpen, Event, UR, ExtendableGenerics, DefaultGenerics, LogLevel } from './types';
+import { ConnectionOpen, Event, UR, LogLevel } from './types';
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -12,14 +12,14 @@ export enum ConnectionState {
   Init = 'INIT',
 }
 
-export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  client: StreamChat<StreamChatGenerics>;
+export class WSConnectionFallback {
+  client: StreamChat;
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
   cancelToken?: CancelTokenSource;
 
-  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
+  constructor({ client }: { client: StreamChat }) {
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
@@ -100,7 +100,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{
-          events: Event<StreamChatGenerics>[];
+          events: Event[];
         }>({}, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
 
         if (data.events?.length) {
@@ -151,7 +151,7 @@ export class WSConnectionFallback<StreamChatGenerics extends ExtendableGenerics 
     this._setState(ConnectionState.Connecting);
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
-      const { event } = await this._req<{ event: ConnectionOpen<StreamChatGenerics> }>(
+      const { event } = await this._req<{ event: ConnectionOpen }>(
         { json: this.client._buildWSPayload() },
         { timeout: 8000 }, // 8s
         reconnect,
