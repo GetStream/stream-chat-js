@@ -18,12 +18,13 @@ jobs:
 
       - name: Get current tag
         id: previoustag
-        uses: WyriHaximus/github-action-get-previous-tag@v1
+        # skips pre-release tags (like rc.1, dev.1...)
+        run: |
+          echo "PREVIOUS_TAG=$(git tag --list --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)" >> $GITHUB_ENV
 
       - name: Ensure version number higher than current
         uses: actions/github-script@v6
         env:
-          PREVIOUS_TAG: ${{ steps.previoustag.outputs.tag }}
           DESTINATION_TAG: ${{ github.event.inputs.version }}
         with:
           script: |
