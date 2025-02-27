@@ -1,14 +1,18 @@
 import { execSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import packageJson from '../package.json' with { type: 'json' };
 
 // Get the latest version so that magic string __STREAM_CHAT_REACT_VERSION__ can be replaced with it in the source code (used for reporting purposes)
 export default function getPackageVersion() {
   let version;
   // During release, use the version being released
-  // see .releaserc.json where the `NEXT_VERSION` env variable is set
-  if (process.env.NEXT_VERSION) {
-    version = process.env.NEXT_VERSION;
-  } else {
+  // see .releaserc.json where the .version file is generated
+  try {
+    version = readFileSync(resolve(import.meta.dirname, '../.version')).toString().trim();
+  } catch {/* do nothing */}
+
+  if (typeof version !== 'string') {
     // Otherwise use the latest git tag
     try {
       version = execSync('git describe --tags --abbrev=0').toString().trim();
