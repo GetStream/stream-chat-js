@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.4](https://github.com/GetStream/stream-chat-js/compare/v8.57.3...v8.57.4) (2025-02-28)
+
+
+### Bug Fixes
+
+* add missing env variable in rollup config ([#1480](https://github.com/GetStream/stream-chat-js/issues/1480)) ([a935e9e](https://github.com/GetStream/stream-chat-js/commit/a935e9e79232da0df9d951119f48891da59d6281))
+
 ### [8.57.3](https://github.com/GetStream/stream-chat-js/compare/v8.57.2...v8.57.3) (2025-02-28)
 
 
