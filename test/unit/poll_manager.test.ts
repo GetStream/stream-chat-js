@@ -196,13 +196,18 @@ describe('PollManager', () => {
 
       let pollMessages: MessageResponse[] = [];
       for (let ci = 0; ci < 5; ci++) {
-        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        const { messages, pollMessages: onlyPollMessages } =
+          generateRandomMessagesWithPolls(5, `_${ci}`);
         pollMessages = pollMessages.concat(onlyPollMessages);
-        mockedChannelsQueryResponse.push(generateChannel({ channel: { id: uuidv4() }, messages }));
+        mockedChannelsQueryResponse.push(
+          generateChannel({ channel: { id: uuidv4() }, messages }),
+        );
       }
       const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+      mock
+        .expects('post')
+        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
       await client.queryChannels({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(5);
@@ -216,12 +221,13 @@ describe('PollManager', () => {
       let pollMessages: MessageResponse[] = [];
       const spy = sinon.spy(client.polls, 'hydratePollCache');
       for (let ci = 0; ci < 5; ci++) {
-        const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(
-          5,
-          `_prev_${ci}`,
-        );
+        const { messages: prevMessages, pollMessages: prevPollMessages } =
+          generateRandomMessagesWithPolls(5, `_prev_${ci}`);
         pollMessages = pollMessages.concat(prevPollMessages);
-        const channelResponse = generateChannel({ channel: { id: uuidv4() }, messages: prevMessages });
+        const channelResponse = generateChannel({
+          channel: { id: uuidv4() },
+          messages: prevMessages,
+        });
         channels.push(channelResponse);
         client.channel(channelResponse.channel.type, channelResponse.channel.id);
         client.polls.hydratePollCache(prevMessages, true);
@@ -229,20 +235,28 @@ describe('PollManager', () => {
 
       const mockedChannelsQueryResponse = [];
       for (let ci = 0; ci < 5; ci++) {
-        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        const { messages, pollMessages: onlyPollMessages } =
+          generateRandomMessagesWithPolls(5, `_${ci}`);
         pollMessages = pollMessages.concat(onlyPollMessages);
         const channelResponse = { ...channels[ci], messages };
         mockedChannelsQueryResponse.push(channelResponse);
       }
       const mock = sinon.mock(client);
-      mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+      mock
+        .expects('post')
+        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
       await client.queryChannels({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(10);
       for (let i = 0; i < 5; i++) {
         expect(spy.calledWith(mockedChannelsQueryResponse[i].messages, true)).to.be.true;
         expect(spy.calledWith(channels[i].messages, true)).to.be.true;
-        expect(spy.calledWith([...channels[i].messages, ...mockedChannelsQueryResponse[i].messages], true)).to.be.false;
+        expect(
+          spy.calledWith(
+            [...channels[i].messages, ...mockedChannelsQueryResponse[i].messages],
+            true,
+          ),
+        ).to.be.false;
       }
     });
 
@@ -264,7 +278,8 @@ describe('PollManager', () => {
 
     it('populates pollCache with only new messages on channel.query invocation', async () => {
       const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
-      const { messages: prevMessages, pollMessages: prevPollMessages } = generateRandomMessagesWithPolls(5, `_prev`);
+      const { messages: prevMessages, pollMessages: prevPollMessages } =
+        generateRandomMessagesWithPolls(5, `_prev`);
       channel.state.addMessagesSorted(prevMessages);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
@@ -276,7 +291,9 @@ describe('PollManager', () => {
       mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
       client.polls.hydratePollCache(prevMessages);
       await channel.query();
-      expect(client.polls.data.size).to.equal(prevPollMessages.length + pollMessages.length);
+      expect(client.polls.data.size).to.equal(
+        prevPollMessages.length + pollMessages.length,
+      );
       expect(spy.calledTwice).to.be.true;
       expect(spy.args[0][0]).to.deep.equal(prevMessages);
       expect(spy.args[1][0]).to.deep.equal(mockedChannelQueryResponse.messages);
@@ -288,7 +305,8 @@ describe('PollManager', () => {
 
       let pollMessages: MessageResponse[] = [];
       for (let ci = 0; ci < 2; ci++) {
-        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        const { messages, pollMessages: onlyPollMessages } =
+          generateRandomMessagesWithPolls(5, `_${ci}`);
         pollMessages = pollMessages.concat(onlyPollMessages);
         mockedChannelsQueryResponse.push({
           ...mockChannelQueryResponse,
@@ -300,7 +318,9 @@ describe('PollManager', () => {
 
       expect(client.polls.data.size).to.equal(pollMessages.length);
       // Map.prototype.keys() preserves the insertion order so we can do this
-      expect(Array.from(client.polls.data.keys())).to.deep.equal(pollMessages.map((m) => m.poll_id));
+      expect(Array.from(client.polls.data.keys())).to.deep.equal(
+        pollMessages.map((m) => m.poll_id),
+      );
     });
 
     it('prevents pollCache population if caching is disabled', async () => {
@@ -309,7 +329,8 @@ describe('PollManager', () => {
 
       let pollMessages: MessageResponse[] = [];
       for (let ci = 0; ci < 2; ci++) {
-        const { messages, pollMessages: onlyPollMessages } = generateRandomMessagesWithPolls(5, `_${ci}`);
+        const { messages, pollMessages: onlyPollMessages } =
+          generateRandomMessagesWithPolls(5, `_${ci}`);
         pollMessages = pollMessages.concat(onlyPollMessages);
         mockedChannelsQueryResponse.push({
           ...mockChannelQueryResponse,
@@ -329,7 +350,11 @@ describe('PollManager', () => {
         user: { id: 'bob' },
       });
 
-      const pollMessage = generatePollMessage('poll_from_event', {}, { user: { id: 'bob' } });
+      const pollMessage = generatePollMessage(
+        'poll_from_event',
+        {},
+        { user: { id: 'bob' } },
+      );
 
       client.dispatchEvent({
         type: 'message.new',
@@ -357,7 +382,9 @@ describe('PollManager', () => {
       pollManager.hydratePollCache(messages);
 
       expect(pollManager.data.size).to.equal(pollMessages.length);
-      expect(Array.from(pollManager.data.keys())).to.deep.equal(pollMessages.map((m) => m.poll_id));
+      expect(Array.from(pollManager.data.keys())).to.deep.equal(
+        pollMessages.map((m) => m.poll_id),
+      );
     });
 
     it('correctly upserts duplicate polls within the cache', () => {
@@ -374,12 +401,16 @@ describe('PollManager', () => {
       expect(Array.from(pollManager.data.keys())).to.deep.equal(
         [...pollMessages, duplicatePollMessage].map((m) => m.poll_id),
       );
-      expect(pollManager.fromState(duplicateId)?.data.name).to.equal(duplicatePollMessage.poll.name);
+      expect(pollManager.fromState(duplicateId)?.data.name).to.equal(
+        duplicatePollMessage.poll.name,
+      );
 
       // many duplicate messages
       const duplicates = [];
       for (let di = 0; di < 5; di++) {
-        const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d1_${di}` });
+        const newDuplicateMessage = generatePollMessage(duplicateId, {
+          name: `d1_${di}`,
+        });
         duplicates.push(newDuplicateMessage);
       }
 
@@ -403,7 +434,9 @@ describe('PollManager', () => {
 
       // many hydrate invocations
       for (let di = 0; di < 5; di++) {
-        const newDuplicateMessage = generatePollMessage(duplicateId, { name: `d2_${di}` });
+        const newDuplicateMessage = generatePollMessage(duplicateId, {
+          name: `d2_${di}`,
+        });
         pollManager.hydratePollCache([newDuplicateMessage], true);
       }
 
@@ -429,7 +462,10 @@ describe('PollManager', () => {
     it('should not register subscription handlers twice', () => {
       pollManager.registerSubscriptions();
 
-      const pollClosedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handlePollClosed');
+      const pollClosedStub = sinon.stub(
+        pollManager.fromState(pollId1) as Poll,
+        'handlePollClosed',
+      );
 
       client.dispatchEvent({
         type: 'poll.closed',
@@ -442,8 +478,14 @@ describe('PollManager', () => {
     it('should not call subscription handlers if unregisterSubscriptions has been called', () => {
       pollManager.unregisterSubscriptions();
 
-      const voteCastedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handleVoteCasted');
-      const pollClosedStub = sinon.stub(pollManager.fromState(pollId1) as Poll, 'handlePollClosed');
+      const voteCastedStub = sinon.stub(
+        pollManager.fromState(pollId1) as Poll,
+        'handleVoteCasted',
+      );
+      const pollClosedStub = sinon.stub(
+        pollManager.fromState(pollId1) as Poll,
+        'handlePollClosed',
+      );
 
       const poll = pollMessage1.poll as PollResponse;
 
@@ -488,8 +530,14 @@ describe('PollManager', () => {
 
     eventHandlerPairs.map(([eventType, handlerName]) => {
       it(`should invoke poll.${handlerName} within the cache on ${eventType}`, () => {
-        const stub1 = sinon.stub(pollManager.fromState(pollId1) as Poll, handlerName as keyof Poll);
-        const stub2 = sinon.stub(pollManager.fromState(pollId2) as Poll, handlerName as keyof Poll);
+        const stub1 = sinon.stub(
+          pollManager.fromState(pollId1) as Poll,
+          handlerName as keyof Poll,
+        );
+        const stub2 = sinon.stub(
+          pollManager.fromState(pollId2) as Poll,
+          handlerName as keyof Poll,
+        );
 
         const updatedPoll = pollMessage1.poll as PollResponse;
 
@@ -508,14 +556,21 @@ describe('PollManager', () => {
   describe('API', () => {
     const pollId1 = 'poll_1';
     const pollId2 = 'poll_2';
-    let stubbedQueryPolls: sinon.SinonStub<Parameters<StreamChat['queryPolls']>, ReturnType<StreamChat['queryPolls']>>;
-    let stubbedGetPoll: sinon.SinonStub<Parameters<StreamChat['getPoll']>, ReturnType<StreamChat['getPoll']>>;
+    let stubbedQueryPolls: sinon.SinonStub<
+      Parameters<StreamChat['queryPolls']>,
+      ReturnType<StreamChat['queryPolls']>
+    >;
+    let stubbedGetPoll: sinon.SinonStub<
+      Parameters<StreamChat['getPoll']>,
+      ReturnType<StreamChat['getPoll']>
+    >;
     const pollMessage1: PollResponse = generatePollMessage(pollId1);
     const pollMessage2: PollResponse = generatePollMessage(pollId2);
     beforeEach(() => {
-      stubbedQueryPolls = sinon
-        .stub(client, 'queryPolls')
-        .resolves({ polls: [pollMessage1.poll as PollResponse, pollMessage2.poll as PollResponse], duration: '10' });
+      stubbedQueryPolls = sinon.stub(client, 'queryPolls').resolves({
+        polls: [pollMessage1.poll as PollResponse, pollMessage2.poll as PollResponse],
+        duration: '10',
+      });
       stubbedGetPoll = sinon
         .stub(client, 'getPoll')
         .resolves({ poll: pollMessage1.poll as PollResponse, duration: '10' });
@@ -543,7 +598,9 @@ describe('PollManager', () => {
       });
     });
     it('should overwrite the state if polls from queryPolls are already present in the cache', async () => {
-      const duplicatePollMessage = generatePollMessage(pollId1, { title: 'SHOULD CHANGE' });
+      const duplicatePollMessage = generatePollMessage(pollId1, {
+        title: 'SHOULD CHANGE',
+      });
       pollManager.hydratePollCache([duplicatePollMessage]);
 
       const previousPollFromCache = pollManager.fromState(pollId1);
@@ -575,7 +632,9 @@ describe('PollManager', () => {
       expect(pollManager.fromState(pollId1)).to.equal(poll);
     });
     it('should overwrite the state if the poll returned from getPoll is present in the cache', async () => {
-      const duplicatePollMessage = generatePollMessage(pollId1, { title: 'SHOULD CHANGE' });
+      const duplicatePollMessage = generatePollMessage(pollId1, {
+        title: 'SHOULD CHANGE',
+      });
       pollManager.hydratePollCache([duplicatePollMessage]);
 
       const previousPollFromCache = pollManager.fromState(pollId1);

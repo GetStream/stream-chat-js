@@ -268,17 +268,26 @@ describe('Poll', () => {
 
 		const vote_counts_by_option = {
 			...originalState.vote_counts_by_option,
-			[castedVote.option_id]: originalState.vote_counts_by_option[castedVote.option_id] + 1,
+			[castedVote.option_id]:
+				originalState.vote_counts_by_option[castedVote.option_id] + 1,
 		};
 
 		const latest_votes_by_option = {
 			...originalState.latest_votes_by_option,
-			[castedVote.option_id]: [...originalState.latest_votes_by_option[castedVote.option_id], castedVote],
+			[castedVote.option_id]: [
+				...originalState.latest_votes_by_option[castedVote.option_id],
+				castedVote,
+			],
 		};
 
 		poll.handleVoteCasted({
 			type: 'poll.vote_casted',
-			poll: { ...pollResponse, latest_votes_by_option, vote_count, vote_counts_by_option },
+			poll: {
+				...pollResponse,
+				latest_votes_by_option,
+				vote_count,
+				vote_counts_by_option,
+			},
 			poll_vote: castedVote,
 		});
 
@@ -286,7 +295,10 @@ describe('Poll', () => {
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
 		expect(poll.data.latest_answers).to.eql(originalState.latest_answers);
 		expect(poll.data.latest_votes_by_option).to.eql(latest_votes_by_option);
-		expect(poll.data.maxVotedOptionIds).to.eql([...originalState.maxVotedOptionIds, castedVote.option_id]);
+		expect(poll.data.maxVotedOptionIds).to.eql([
+			...originalState.maxVotedOptionIds,
+			castedVote.option_id,
+		]);
 	});
 
 	it('should add own vote when handleVoteCasted is called', () => {
@@ -307,7 +319,8 @@ describe('Poll', () => {
 
 		const vote_counts_by_option = {
 			...originalState.vote_counts_by_option,
-			[castedVote.option_id]: originalState.vote_counts_by_option[castedVote.option_id] + 1,
+			[castedVote.option_id]:
+				originalState.vote_counts_by_option[castedVote.option_id] + 1,
 		};
 
 		const latest_votes_by_option = {
@@ -322,7 +335,12 @@ describe('Poll', () => {
 
 		poll.handleVoteCasted({
 			type: 'poll.vote_casted',
-			poll: { ...pollResponse, latest_votes_by_option, vote_count, vote_counts_by_option },
+			poll: {
+				...pollResponse,
+				latest_votes_by_option,
+				vote_count,
+				vote_counts_by_option,
+			},
 			poll_vote: castedVote,
 		});
 
@@ -355,7 +373,10 @@ describe('Poll', () => {
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
-		expect(poll.data.latest_answers).to.eql([castedVote, ...originalState.latest_answers]);
+		expect(poll.data.latest_answers).to.eql([
+			castedVote,
+			...originalState.latest_answers,
+		]);
 		expect(poll.data.latest_votes_by_option).to.eql(originalState.latest_votes_by_option);
 		expect(poll.data.maxVotedOptionIds).to.eql(originalState.maxVotedOptionIds);
 	});
@@ -383,7 +404,10 @@ describe('Poll', () => {
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
 		expect(poll.data.ownAnswer).to.eql(castedVote);
-		expect(poll.data.latest_answers).to.eql([castedVote, ...originalState.latest_answers]);
+		expect(poll.data.latest_answers).to.eql([
+			castedVote,
+			...originalState.latest_answers,
+		]);
 		expect(poll.data.latest_votes_by_option).to.eql(originalState.latest_votes_by_option);
 		expect(poll.data.maxVotedOptionIds).to.eql(originalState.maxVotedOptionIds);
 	});
@@ -403,12 +427,16 @@ describe('Poll', () => {
 
 		const vote_counts_by_option = {
 			...originalState.vote_counts_by_option,
-			[changedToOptionId]: (originalState.vote_counts_by_option[changedToOptionId] ?? 0) + 1,
+			[changedToOptionId]:
+				(originalState.vote_counts_by_option[changedToOptionId] ?? 0) + 1,
 		};
 
 		const latest_votes_by_option = {
 			...originalState.latest_votes_by_option,
-			[changedToOptionId]: [...originalState.latest_votes_by_option[changedToOptionId], castedVote],
+			[changedToOptionId]: [
+				...originalState.latest_votes_by_option[changedToOptionId],
+				castedVote,
+			],
 		};
 
 		poll.handleVoteChanged({
@@ -421,7 +449,10 @@ describe('Poll', () => {
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
 		expect(poll.data.latest_answers).to.eql(originalState.latest_answers);
 		expect(poll.data.latest_votes_by_option).to.eql(latest_votes_by_option);
-		expect(poll.data.maxVotedOptionIds).to.eql([...originalState.maxVotedOptionIds, changedToOptionId]);
+		expect(poll.data.maxVotedOptionIds).to.eql([
+			...originalState.maxVotedOptionIds,
+			changedToOptionId,
+		]);
 	});
 
 	it('should change own vote when handleVoteChanged is called', () => {
@@ -440,12 +471,16 @@ describe('Poll', () => {
 
 		const vote_counts_by_option = {
 			...originalState.vote_counts_by_option,
-			[changedToOptionId]: (originalState.vote_counts_by_option[changedToOptionId] ?? 0) + 1,
+			[changedToOptionId]:
+				(originalState.vote_counts_by_option[changedToOptionId] ?? 0) + 1,
 		};
 
 		const latest_votes_by_option = {
 			...originalState.latest_votes_by_option,
-			[changedToOptionId]: [...originalState.latest_votes_by_option[changedToOptionId], castedVote],
+			[changedToOptionId]: [
+				...originalState.latest_votes_by_option[changedToOptionId],
+				castedVote,
+			],
 		};
 
 		poll.handleVoteChanged({
@@ -461,7 +496,10 @@ describe('Poll', () => {
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
 		expect(poll.data.latest_answers).to.eql(originalState.latest_answers);
 		expect(poll.data.latest_votes_by_option).to.eql(latest_votes_by_option);
-		expect(poll.data.maxVotedOptionIds).to.eql([...originalState.maxVotedOptionIds, changedToOptionId]);
+		expect(poll.data.maxVotedOptionIds).to.eql([
+			...originalState.maxVotedOptionIds,
+			changedToOptionId,
+		]);
 	});
 
 	it('should change an answer when handleVoteChanged is called', () => {
@@ -481,7 +519,10 @@ describe('Poll', () => {
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
-		expect(poll.data.latest_answers).to.eql([changedAnswer, ...originalState.latest_answers]);
+		expect(poll.data.latest_answers).to.eql([
+			changedAnswer,
+			...originalState.latest_answers,
+		]);
 		expect(poll.data.latest_votes_by_option).to.eql(originalState.latest_votes_by_option);
 		expect(poll.data.maxVotedOptionIds).to.eql(originalState.maxVotedOptionIds);
 	});
@@ -517,14 +558,15 @@ describe('Poll', () => {
 		const originalState = poll.data;
 		const vote_counts_by_option = {
 			...originalState.vote_counts_by_option,
-			[user2Votes[1].option_id]: originalState.vote_counts_by_option[user2Votes[1].option_id] - 1,
+			[user2Votes[1].option_id]:
+				originalState.vote_counts_by_option[user2Votes[1].option_id] - 1,
 		};
 
 		const latest_votes_by_option = {
 			...originalState.latest_votes_by_option,
-			[user2Votes[1].option_id]: originalState.latest_votes_by_option[user2Votes[1].option_id].filter(
-				(v) => v.option_id !== user2Votes[1].option_id,
-			),
+			[user2Votes[1].option_id]: originalState.latest_votes_by_option[
+				user2Votes[1].option_id
+			].filter((v) => v.option_id !== user2Votes[1].option_id),
 		};
 
 		poll.handleVoteRemoved({
@@ -578,7 +620,9 @@ describe('Poll', () => {
 			poll_vote: { ...removedVote, user_id: client.userID },
 		});
 
-		expect(poll.data.ownVotesByOptionId).to.eql({ 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c': user1Votes[1] });
+		expect(poll.data.ownVotesByOptionId).to.eql({
+			'dc22dcd6-4fc8-4c92-92c2-bfd63245724c': user1Votes[1],
+		});
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
 		expect(poll.data.latest_answers).to.eql(originalState.latest_answers);
 		expect(poll.data.latest_votes_by_option).to.eql(latest_votes_by_option);
@@ -603,7 +647,9 @@ describe('Poll', () => {
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
 		expect(poll.data.ownAnswer).to.eql(originalState.ownAnswer);
-		expect(poll.data.latest_answers).to.eql(originalState.latest_answers.filter((a) => a.id !== removedAnswer.id));
+		expect(poll.data.latest_answers).to.eql(
+			originalState.latest_answers.filter((a) => a.id !== removedAnswer.id),
+		);
 		expect(poll.data.latest_votes_by_option).to.eql(originalState.latest_votes_by_option);
 		expect(poll.data.maxVotedOptionIds).to.eql(originalState.maxVotedOptionIds);
 	});
@@ -622,7 +668,9 @@ describe('Poll', () => {
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);
 		expect(poll.data.ownAnswer).to.be.undefined;
-		expect(poll.data.latest_answers).to.eql(originalState.latest_answers.filter((a) => a.id !== removedAnswer.id));
+		expect(poll.data.latest_answers).to.eql(
+			originalState.latest_answers.filter((a) => a.id !== removedAnswer.id),
+		);
 		expect(poll.data.latest_votes_by_option).to.eql(originalState.latest_votes_by_option);
 		expect(poll.data.maxVotedOptionIds).to.eql(originalState.maxVotedOptionIds);
 	});
@@ -644,13 +692,19 @@ describe('Poll', () => {
 
 		expect(getPollStub.calledWith(pollResponse.id)).to.be.true;
 		const { lastActivityAt: __, ...currentPollState } = poll.data;
-		const { lastActivityAt: _, ...expectedPollState } = { ...originalState, ...mockPollResponse };
+		const { lastActivityAt: _, ...expectedPollState } = {
+			...originalState,
+			...mockPollResponse,
+		};
 		expect(currentPollState).to.eql(expectedPollState);
 		getPollStub.restore();
 	});
 
 	it('should remove oldest vote before casting a new one if reached max votes allowed', async () => {
-		const poll = new Poll({ client, poll: { ...pollResponse, max_votes_allowed: user2Votes.length } });
+		const poll = new Poll({
+			client,
+			poll: { ...pollResponse, max_votes_allowed: user2Votes.length },
+		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteStub = sinon.stub(client, 'removePollVote');
@@ -660,14 +714,19 @@ describe('Poll', () => {
 
 		await poll.castVote(option_id, messageId);
 
-		expect(removePollVoteStub.calledWith(messageId, pollResponse.id, user1Votes[1].id)).to.be.true;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be.true;
+		expect(removePollVoteStub.calledWith(messageId, pollResponse.id, user1Votes[1].id)).to
+			.be.true;
+		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
+			.true;
 		removePollVoteStub.restore();
 		castPollVoteStub.restore();
 	});
 
 	it('should not remove oldest vote before casting a new one if not reached max votes allowed', async () => {
-		const poll = new Poll({ client, poll: { ...pollResponse, max_votes_allowed: user2Votes.length + 1 } });
+		const poll = new Poll({
+			client,
+			poll: { ...pollResponse, max_votes_allowed: user2Votes.length + 1 },
+		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteStub = sinon.stub(client, 'removePollVote');
@@ -678,13 +737,17 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteStub.called).to.be.false;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be.true;
+		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
+			.true;
 		removePollVoteStub.restore();
 		castPollVoteStub.restore();
 	});
 
 	it('should not remove oldest vote before casting a new one if max_votes_allowed is not defined', async () => {
-		const poll = new Poll({ client, poll: { ...pollResponse, max_votes_allowed: undefined } });
+		const poll = new Poll({
+			client,
+			poll: { ...pollResponse, max_votes_allowed: undefined },
+		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteStub = sinon.stub(client, 'removePollVote');
@@ -695,7 +758,8 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteStub.called).to.be.false;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be.true;
+		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
+			.true;
 		removePollVoteStub.restore();
 		castPollVoteStub.restore();
 	});

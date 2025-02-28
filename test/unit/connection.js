@@ -51,7 +51,9 @@ describe('connection', function () {
 			});
 			client.defaultWSTimeout = 20;
 			const tokenProvider = () => Promise.reject(new Error('network failure'));
-			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).to.be.rejectedWith(/tokenProvider failed/);
+			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).to.be.rejectedWith(
+				/tokenProvider failed/,
+			);
 		});
 	});
 

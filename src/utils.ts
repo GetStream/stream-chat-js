@@ -1,25 +1,25 @@
 import FormData from 'form-data';
-import {
+import type {
   AscDesc,
+  ChannelFilters,
+  ChannelQueryOptions,
+  ChannelSort,
+  ChannelSortBase,
+  FormatMessageResponse,
   Logger,
+  MessagePaginationOptions,
+  MessageResponse,
+  MessageSet,
   OwnUserBase,
   OwnUserResponse,
-  UserResponse,
-  MessageResponse,
-  FormatMessageResponse,
-  ReactionGroupResponse,
-  MessageSet,
-  MessagePaginationOptions,
-  ChannelQueryOptions,
-  QueryChannelAPIResponse,
-  ChannelSort,
-  ChannelFilters,
-  ChannelSortBase,
   PromoteChannelParams,
+  QueryChannelAPIResponse,
+  ReactionGroupResponse,
+  UserResponse,
 } from './types';
-import { StreamChat } from './client';
-import { Channel } from './channel';
-import { AxiosRequestConfig } from 'axios';
+import type { StreamChat } from './client';
+import type { Channel } from './channel';
+import type { AxiosRequestConfig } from 'axios';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -37,12 +37,11 @@ export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
 
 export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
-export function isFunction<T>(value: Function | T): value is Function {
+export function isFunction(value: unknown): value is (...args: unknown[]) => unknown {
   return (
-    value &&
-    (Object.prototype.toString.call(value) === '[object Function]' ||
-      'function' === typeof value ||
-      value instanceof Function)
+    typeof value === 'function' ||
+    value instanceof Function ||
+    Object.prototype.toString.call(value) === '[object Function]'
   );
 }
 
@@ -55,7 +54,8 @@ function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
   return (
     obj !== null &&
     typeof obj === 'object' &&
-    ((obj as NodeJS.ReadStream).readable || typeof (obj as NodeJS.ReadStream)._read === 'function')
+    ((obj as NodeJS.ReadStream).readable ||
+      typeof (obj as NodeJS.ReadStream)._read === 'function')
   );
 }
 
@@ -63,9 +63,9 @@ function isBuffer(obj: unknown): obj is Buffer {
   return (
     obj != null &&
     (obj as Buffer).constructor != null &&
-    // @ts-expect-error
+    // @ts-expect-error expected
     typeof obj.constructor.isBuffer === 'function' &&
-    // @ts-expect-error
+    // @ts-expect-error expected
     obj.constructor.isBuffer(obj)
   );
 }
@@ -74,7 +74,9 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
-export function isOwnUser(user?: OwnUserResponse | UserResponse): user is OwnUserResponse {
+export function isOwnUser(
+  user?: OwnUserResponse | UserResponse,
+): user is OwnUserResponse {
   return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
@@ -123,7 +125,9 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(sort: T | T[]) {
+export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
+  sort: T | T[],
+) {
   const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
@@ -234,11 +238,13 @@ export function isOnline() {
     typeof navigator !== 'undefined'
       ? navigator
       : typeof window !== 'undefined' && window.navigator
-      ? window.navigator
-      : undefined;
+        ? window.navigator
+        : undefined;
 
   if (!nav) {
-    console.warn('isOnline failed to access window.navigator and assume browser is online');
+    console.warn(
+      'isOnline failed to access window.navigator and assume browser is online',
+    );
     return true;
   }
 
@@ -290,7 +296,9 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  *
  * @param {MessageResponse} message `MessageResponse` object
  */
-export function formatMessage(message: MessageResponse | FormatMessageResponse): FormatMessageResponse {
+export function formatMessage(
+  message: MessageResponse | FormatMessageResponse,
+): FormatMessageResponse {
   return {
     ...message,
     // parse the dates
@@ -382,7 +390,9 @@ export const findIndexInSortedArray = <T, L>({
     const step = sortDirection === 'ascending' ? -1 : +1;
     for (
       let i = left + step;
-      0 <= i && i < sortedArray.length && selectValueToCompare(sortedArray[i]) === comparableNeedle;
+      0 <= i &&
+      i < sortedArray.length &&
+      selectValueToCompare(sortedArray[i]) === comparableNeedle;
       i += step
     ) {
       if (selectKey(sortedArray[i]) === needleKey) {
@@ -407,7 +417,9 @@ export function addToMessageList<T extends FormatMessageResponse>(
   // if created_at has changed, message should be filtered and re-inserted in correct order
   // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
   if (timestampChanged) {
-    newMessages = newMessages.filter((message) => !(message.id && newMessage.id === message.id));
+    newMessages = newMessages.filter(
+      (message) => !(message.id && newMessage.id === message.id),
+    );
   }
 
   // for empty list just concat and return unless it's an update or deletion
@@ -601,12 +613,16 @@ const get = <T>(obj: T, path: string): unknown =>
   }, obj);
 
 // works exactly the same as lodash.uniqBy
-export const uniqBy = <T>(array: T[] | unknown, iteratee: ((item: T) => unknown) | keyof T): T[] => {
+export const uniqBy = <T>(
+  array: T[] | unknown,
+  iteratee: ((item: T) => unknown) | keyof T,
+): T[] => {
   if (!Array.isArray(array)) return [];
 
   const seen = new Set<unknown>();
   return array.filter((item) => {
-    const key = typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
+    const key =
+      typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -669,12 +685,15 @@ const messagePaginationCreatedAtAround = ({
   // expect ASC order (from oldest to newest)
   const wholePageHasNewerMessages =
     !!firstPageMsg?.created_at && new Date(firstPageMsg.created_at) > createdAtAroundDate;
-  const wholePageHasOlderMessages = !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
+  const wholePageHasOlderMessages =
+    !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
 
   const requestedPageSizeNotMet =
-    requestedPageSize > parentSet.messages.length && requestedPageSize > returnedPage.length;
+    requestedPageSize > parentSet.messages.length &&
+    requestedPageSize > returnedPage.length;
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    (requestedPageSize > parentSet.messages.length ||
+      parentSet.messages.length >= returnedPage.length) &&
     requestedPageSize > returnedPage.length;
 
   if (wholePageHasNewerMessages) {
@@ -702,7 +721,10 @@ const messagePaginationCreatedAtAround = ({
     updateHasPrev = firstPageMsgIsFirstInSet;
     updateHasNext = lastPageMsgIsLastInSet;
     const midPointByCount = Math.floor(returnedPage.length / 2);
-    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(returnedPage, createdAtAroundDate);
+    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(
+      returnedPage,
+      createdAtAroundDate,
+    );
 
     if (midPointByCreationDate !== -1) {
       hasPrev = midPointByCount <= midPointByCreationDate;
@@ -738,7 +760,8 @@ const messagePaginationIdAround = ({
 
   const midPoint = Math.floor(returnedPage.length / 2);
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    (requestedPageSize > parentSet.messages.length ||
+      parentSet.messages.length >= returnedPage.length) &&
     requestedPageSize > returnedPage.length;
 
   if (noMoreMessages) {
@@ -828,7 +851,10 @@ const messagePaginationLinear = ({
 
 export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
   if (params.parentSet.messages.length < params.returnedPage.length) {
-    params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
+    params.logger?.(
+      'error',
+      'Corrupted message set state: parent set size < returned page size',
+    );
     return params.parentSet.pagination;
   }
 
@@ -845,7 +871,10 @@ export const messageSetPagination = (params: MessagePaginationUpdatedParams) => 
  * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
  * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
  */
-const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<string, Promise<QueryChannelAPIResponse> | undefined> = {};
+const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
+  string,
+  Promise<QueryChannelAPIResponse> | undefined
+> = {};
 
 type GetChannelParams = {
   client: StreamChat;
@@ -865,7 +894,14 @@ type GetChannelParams = {
  * @param id
  * @param channel
  */
-export const getAndWatchChannel = async ({ channel, client, id, members, options, type }: GetChannelParams) => {
+export const getAndWatchChannel = async ({
+  channel,
+  client,
+  id,
+  members,
+  options,
+  type,
+}: GetChannelParams) => {
   if (!channel && !type) {
     throw new Error('Channel or channel type have to be provided to query a channel.');
   }
@@ -878,11 +914,13 @@ export const getAndWatchChannel = async ({ channel, client, id, members, options
   const originalCid = channelToWatch.id
     ? channelToWatch.cid
     : members && members.length
-    ? generateChannelTempCid(channelToWatch.type, members)
-    : undefined;
+      ? generateChannelTempCid(channelToWatch.type, members)
+      : undefined;
 
   if (!originalCid) {
-    throw new Error('Channel ID or channel members array have to be provided to query a channel.');
+    throw new Error(
+      'Channel ID or channel members array have to be provided to query a channel.',
+    );
   }
 
   const queryPromise = WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid];
@@ -1055,7 +1093,8 @@ export const promoteChannel = ({
 }: PromoteChannelParams) => {
   // get index of channel to move up
   const targetChannelIndex =
-    channelToMoveIndexWithinChannels ?? channels.findIndex((channel) => channel.cid === channelToMove.cid);
+    channelToMoveIndexWithinChannels ??
+    channels.findIndex((channel) => channel.cid === channelToMove.cid);
 
   const targetChannelExistsWithinList = targetChannelIndex >= 0;
   const targetChannelAlreadyAtTheTop = targetChannelIndex === 0;
@@ -1085,7 +1124,11 @@ export const promoteChannel = ({
   }
 
   // re-insert it at the new place (to specific index if pinned channels are considered)
-  newChannels.splice(typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0, 0, channelToMove);
+  newChannels.splice(
+    typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0,
+    0,
+    channelToMove,
+  );
 
   return newChannels;
 };

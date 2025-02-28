@@ -1,6 +1,6 @@
-import jwt from 'jsonwebtoken';
+import type jwt from 'jsonwebtoken';
 
-import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
+import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
 import { isFunction } from './utils';
 import type { TokenOrProvider, UserResponse } from './types';
 
@@ -85,7 +85,11 @@ export class TokenManager {
       throw new Error('User token can not be empty');
     }
 
-    if (tokenOrProvider && typeof tokenOrProvider !== 'string' && !isFunction(tokenOrProvider)) {
+    if (
+      tokenOrProvider &&
+      typeof tokenOrProvider !== 'string' &&
+      !isFunction(tokenOrProvider)
+    ) {
       throw new Error('user token should either be a string or a function');
     }
 
@@ -94,8 +98,13 @@ export class TokenManager {
       if (user.anon && tokenOrProvider === '') return;
 
       const tokenUserId = UserFromToken(tokenOrProvider);
-      if (tokenOrProvider != null && (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)) {
-        throw new Error('userToken does not have a user_id or is not matching with user.id');
+      if (
+        tokenOrProvider != null &&
+        (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)
+      ) {
+        throw new Error(
+          'userToken does not have a user_id or is not matching with user.id',
+        );
       }
     }
   };
