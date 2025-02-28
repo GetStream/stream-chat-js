@@ -79,6 +79,7 @@ import {
   DeleteCommandResponse,
   DeleteUserOptions,
   Device,
+  DeviceIdentifier,
   EndpointName,
   ErrorFromResponse,
   Event,
@@ -277,6 +278,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
+  deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -2924,7 +2926,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     }
     const version = process.env.PKG_VERSION;
     if (this.sdkIdentifier) {
-      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+      const { os, model } = this.deviceIdentifier ?? {};
+      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}${
+        os ? `|os=${os}` : ''
+      }${
+        model ? `|device_model=${model}` : ''
+      }`;
     } else {
       return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
