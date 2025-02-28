@@ -642,7 +642,7 @@ describe('StreamChat.queryChannels', async () => {
 	});
 });
 
-describe.only('X-Stream-Client header', () => {
+describe('X-Stream-Client header', () => {
 	process.env.PKG_VERSION = '1.2.3';
 	let client;
 
@@ -676,6 +676,14 @@ describe.only('X-Stream-Client header', () => {
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
+	});
+
+	it('SDK integration with process.env.CLIENT_BUNDLE', () => {
+		process.env.CLIENT_BUNDLE = 'browser';
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser');
 	});
 
 	it('setUserAgent is now deprecated', () => {

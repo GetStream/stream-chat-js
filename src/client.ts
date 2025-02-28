@@ -2924,15 +2924,27 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     if (this.userAgent) {
       return this.userAgent;
     }
+
     const version = process.env.PKG_VERSION;
+    const clientBundle = process.env.CLIENT_BUNDLE;
+
+    let userAgentString = '';
     if (this.sdkIdentifier) {
-      const { os, model } = this.deviceIdentifier ?? {};
-      return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}${
-        os ? `|os=${os}` : ''
-      }${model ? `|device_model=${model}` : ''}`;
+      userAgentString = `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
     } else {
-      return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+      userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
+
+    const { os, model } = this.deviceIdentifier ?? {};
+
+    return ([
+      // reports the device OS, if provided
+      ['os', os],
+      // reports the device model, if provided
+      ['device_model', model],
+      // reports which bundle is being picked from the exports
+      ['client_bundle', clientBundle],
+    ] as const).reduce((acc, [key, value]) => (value ? acc.concat(`|${key}=${value ?? ''}`) : acc), userAgentString);
   }
 
   /**
