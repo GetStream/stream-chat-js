@@ -1,7 +1,14 @@
 import type { StreamChat } from './client';
-import type { Event, ChannelOptions, ChannelStateOptions, ChannelFilters, ChannelSort } from './types';
-import { StateStore, ValueOrPatch, isPatch } from './store';
-import { Channel } from './channel';
+import type {
+  ChannelFilters,
+  ChannelOptions,
+  ChannelSort,
+  ChannelStateOptions,
+  Event,
+} from './types';
+import type { ValueOrPatch } from './store';
+import { isPatch, StateStore } from './store';
+import type { Channel } from './channel';
 import {
   extractSortValue,
   findLastPinnedChannelIndex,
@@ -42,7 +49,9 @@ export type GenericEventHandlerType<T extends unknown[]> = (
   ...args: T
 ) => void | (() => void) | ((...args: T) => Promise<void>) | Promise<void>;
 export type EventHandlerType = GenericEventHandlerType<[Event]>;
-export type EventHandlerOverrideType = GenericEventHandlerType<[ChannelSetterType, Event]>;
+export type EventHandlerOverrideType = GenericEventHandlerType<
+  [ChannelSetterType, Event]
+>;
 
 export type ChannelManagerEventTypes =
   | 'notification.added_to_channel'
@@ -183,7 +192,9 @@ export class ChannelManager {
   public setChannels = (valueOrFactory: ChannelSetterParameterType) => {
     this.state.next((current) => {
       const { channels: currentChannels } = current;
-      const newChannels = isPatch(valueOrFactory) ? valueOrFactory(currentChannels) : valueOrFactory;
+      const newChannels = isPatch(valueOrFactory)
+        ? valueOrFactory(currentChannels)
+        : valueOrFactory;
 
       // If the references between the two values are the same, just return the
       // current state; otherwise trigger a state change.
@@ -194,7 +205,9 @@ export class ChannelManager {
     });
   };
 
-  public setEventHandlerOverrides = (eventHandlerOverrides: ChannelManagerEventHandlerOverrides = {}) => {
+  public setEventHandlerOverrides = (
+    eventHandlerOverrides: ChannelManagerEventHandlerOverrides = {},
+  ) => {
     const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
       Partial<ChannelManagerEventHandlerOverrides>
     >((acc, [key, value]) => {
@@ -203,7 +216,9 @@ export class ChannelManager {
       }
       return acc;
     }, {});
-    this.eventHandlerOverrides = new Map(Object.entries<EventHandlerOverrideType>(truthyEventHandlerOverrides));
+    this.eventHandlerOverrides = new Map(
+      Object.entries<EventHandlerOverrideType>(truthyEventHandlerOverrides),
+    );
   };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
@@ -216,7 +231,10 @@ export class ChannelManager {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) => {
-    const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+    const { offset, limit } = {
+      ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+      ...options,
+    };
     const {
       pagination: { isLoading },
     } = this.state.getLatestValue();
@@ -239,7 +257,12 @@ export class ChannelManager {
         },
       }));
 
-      const channels = await this.client.queryChannels(filters, sort, options, stateOptions);
+      const channels = await this.client.queryChannels(
+        filters,
+        sort,
+        options,
+        stateOptions,
+      );
       const newOffset = offset + (channels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
       const { pagination } = this.state.getLatestValue();
@@ -273,11 +296,19 @@ export class ChannelManager {
     }
 
     try {
-      const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+      const { offset, limit } = {
+        ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+        ...options,
+      };
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
-      const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
+      const nextChannels = await this.client.queryChannels(
+        filters,
+        sort,
+        options,
+        this.stateOptions,
+      );
       const { channels } = this.state.getLatestValue();
       const newOffset = offset + (nextChannels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
@@ -305,7 +336,12 @@ export class ChannelManager {
   private notificationAddedToChannelHandler = async (event: Event) => {
     const { id, type, members } = event?.channel ?? {};
 
-    if (!type || !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.added_to_channel']) {
+    if (
+      !type ||
+      !this.options.allowNotLoadedChannelPromotionForEvent?.[
+        'notification.added_to_channel'
+      ]
+    ) {
       return;
     }
 
@@ -345,7 +381,9 @@ export class ChannelManager {
     }
 
     const newChannels = [...channels];
-    const channelIndex = newChannels.findIndex((channel) => channel.cid === (event.cid || event.channel?.cid));
+    const channelIndex = newChannels.findIndex(
+      (channel) => channel.cid === (event.cid || event.channel?.cid),
+    );
 
     if (channelIndex < 0) {
       return;
@@ -391,7 +429,8 @@ export class ChannelManager {
       // list order is locked
       this.options.lockChannelOrder ||
       // target channel is not within the loaded list and loading from cache is disallowed
-      (!targetChannelExistsWithinList && !this.options.allowNotLoadedChannelPromotionForEvent?.['message.new'])
+      (!targetChannelExistsWithinList &&
+        !this.options.allowNotLoadedChannelPromotionForEvent?.['message.new'])
     ) {
       return;
     }
@@ -500,7 +539,11 @@ export class ChannelManager {
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const pinnedAtSort = extractSortValue({ atIndex: 0, sort, targetKey: 'pinned_at' });
 
-    if (!channels || (!considerPinnedChannels && !considerArchivedChannels) || this.options.lockChannelOrder) {
+    if (
+      !channels ||
+      (!considerPinnedChannels && !considerArchivedChannels) ||
+      this.options.lockChannelOrder
+    ) {
       return;
     }
 
@@ -535,7 +578,8 @@ export class ChannelManager {
     if (pinnedAtSort === 1 || (pinnedAtSort === -1 && !isTargetChannelPinned)) {
       lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
     }
-    const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
+    const newTargetChannelIndex =
+      typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
 
     // skip state update if the position of the channel does not change
     if (channels[newTargetChannelIndex] === targetChannel) {
@@ -547,7 +591,8 @@ export class ChannelManager {
   };
 
   private subscriptionOrOverride = (event: Event) => {
-    const handlerName = channelManagerEventToHandlerMapping[event.type as ChannelManagerEventTypes];
+    const handlerName =
+      channelManagerEventToHandlerMapping[event.type as ChannelManagerEventTypes];
     const defaultEventHandler = this.eventHandlers.get(handlerName);
     const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
     if (eventHandlerOverride && typeof eventHandlerOverride === 'function') {
@@ -567,7 +612,9 @@ export class ChannelManager {
     }
 
     for (const eventType of Object.keys(channelManagerEventToHandlerMapping)) {
-      this.unsubscribeFunctions.add(this.client.on(eventType, this.subscriptionOrOverride).unsubscribe);
+      this.unsubscribeFunctions.add(
+        this.client.on(eventType, this.subscriptionOrOverride).unsubscribe,
+      );
     }
   };
 

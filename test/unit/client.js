@@ -50,7 +50,9 @@ describe('StreamChat getInstance', () => {
 		await client1.connectUser({ id: 'vishal' }, 'token');
 		const client2 = StreamChat.getInstance('key2');
 
-		await expect(client2.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(/connectUser was called twice/);
+		await expect(client2.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
+			/connectUser was called twice/,
+		);
 	});
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
@@ -189,11 +191,17 @@ describe('Client active channels cache', () => {
 		client.wsPromise = Promise.resolve();
 	};
 	beforeEach(() => {
-		client.activeChannels = { vish: { state: { unreadCount: 1 } }, vish2: { state: { unreadCount: 2 } } };
+		client.activeChannels = {
+			vish: { state: { unreadCount: 1 } },
+			vish2: { state: { unreadCount: 2 } },
+		};
 	});
 
 	const countUnreadChannels = (channels) =>
-		Object.values(channels).reduce((prevSum, currSum) => prevSum + currSum.state.unreadCount, 0);
+		Object.values(channels).reduce(
+			(prevSum, currSum) => prevSum + currSum.state.unreadCount,
+			0,
+		);
 
 	it('should mark all active channels as read on notification.mark_read event if event.unread_channels is 0', function () {
 		client.dispatchEvent({
@@ -271,7 +279,9 @@ describe('Client connectUser', () => {
 
 	it('should throw error if connectUser called twice on the client with different user', async () => {
 		await client.connectUser({ id: 'vishal' }, 'token');
-		await expect(client.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(/connectUser was called twice/);
+		await expect(client.connectUser({ id: 'Amin' }, 'token')).to.be.rejectedWith(
+			/connectUser was called twice/,
+		);
 	});
 
 	it('should work for multiple call for the same user', async () => {
@@ -359,9 +369,15 @@ describe('Client deleteUsers', () => {
 
 		client.post = () => Promise.resolve();
 
-		await expect(client.deleteUsers(['_'], { conversations: 'hard' })).to.eventually.equal();
-		await expect(client.deleteUsers(['_'], { conversations: 'soft' })).to.eventually.equal();
-		await expect(client.deleteUsers(['_'], { conversations: 'pruning' })).to.be.rejectedWith();
+		await expect(
+			client.deleteUsers(['_'], { conversations: 'hard' }),
+		).to.eventually.equal();
+		await expect(
+			client.deleteUsers(['_'], { conversations: 'soft' }),
+		).to.eventually.equal();
+		await expect(
+			client.deleteUsers(['_'], { conversations: 'pruning' }),
+		).to.be.rejectedWith();
 		await expect(client.deleteUsers(['_'], { conversations: '' })).to.be.rejectedWith();
 	});
 
@@ -372,7 +388,9 @@ describe('Client deleteUsers', () => {
 
 		await expect(client.deleteUsers(['_'], { messages: 'hard' })).to.eventually.equal();
 		await expect(client.deleteUsers(['_'], { messages: 'soft' })).to.eventually.equal();
-		await expect(client.deleteUsers(['_'], { messages: 'pruning' })).to.eventually.equal();
+		await expect(
+			client.deleteUsers(['_'], { messages: 'pruning' }),
+		).to.eventually.equal();
 		await expect(client.deleteUsers(['_'], { messages: '' })).to.be.rejectedWith();
 	});
 
@@ -491,7 +509,9 @@ describe('Client setLocalDevice', async () => {
 		client.wsConnection.isHealthy = true;
 		client.wsConnection.connectionID = 'ID';
 
-		expect(() => client.setLocalDevice({ id: 'id3', push_provider: 'firebase' })).to.throw();
+		expect(() =>
+			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
+		).to.throw();
 	});
 });
 
@@ -547,8 +567,18 @@ describe('Client WSFallback', () => {
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		await client.disconnectUser();
-		expect(health).to.be.eql({ type: 'health.check', connection_id: 'new_id', received_at: eventDate });
-		expect(client.dispatchEvent.calledWithMatch({ type: 'transport.changed', mode: 'longpoll' })).to.be.true;
+		expect(health).to.be.eql({
+			type: 'health.check',
+			connection_id: 'new_id',
+			received_at: eventDate,
+		});
+
+		expect(
+			client.dispatchEvent.calledWithMatch({
+				type: 'transport.changed',
+				mode: 'longpoll',
+			}),
+		).to.be.true;
 		expect(
 			client.dispatchEvent.calledWithMatch({
 				type: 'health.check',
@@ -583,7 +613,10 @@ describe('Client WSFallback', () => {
 
 	it('should reuse the fallback if already created', async () => {
 		client.options.enableWSFallback = true;
-		const fallback = { isHealthy: () => false, connect: sinon.stub().returns({ connection_id: 'id' }) };
+		const fallback = {
+			isHealthy: () => false,
+			connect: sinon.stub().returns({ connection_id: 'id' }),
+		};
 		client.wsFallback = fallback;
 		sinon.stub(utils, 'isOnline').returns(false);
 
@@ -600,7 +633,10 @@ describe('StreamChat.queryChannels', async () => {
 		client._cacheEnabled = () => false;
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
 		}));
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
@@ -613,14 +649,20 @@ describe('StreamChat.queryChannels', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
 		}));
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
 		await client.queryChannels();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: true });
+			expect(channel.state.messageSets[0].pagination).to.eql({
+				hasNext: true,
+				hasPrev: true,
+			});
 		});
 		mock.restore();
 	});
@@ -629,14 +671,20 @@ describe('StreamChat.queryChannels', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 },
+				generateMsg,
+			),
 		}));
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await client.queryChannels();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
+			expect(channel.state.messageSets[0].pagination).to.eql({
+				hasNext: true,
+				hasPrev: false,
+			});
 		});
 		mock.restore();
 	});
@@ -670,14 +718,18 @@ describe('X-Stream-Client header', () => {
 		client.node = false;
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser|client_bundle=browser-esm');
+		expect(userAgent).to.be.equal(
+			'stream-chat-js-v1.2.3-browser|client_bundle=browser-esm',
+		);
 	});
 
 	it('SDK integration', () => {
 		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser-esm');
+		expect(userAgent).to.be.equal(
+			'stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser-esm',
+		);
 	});
 
 	it('SDK integration with deviceIdentifier', () => {

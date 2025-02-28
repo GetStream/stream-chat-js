@@ -1,4 +1,4 @@
-import { ChannelState, StreamChat, Channel } from '../../../src';
+import { StreamChat } from '../../../src';
 import { v4 as uuidv4 } from 'uuid';
 
 export const getClientWithUser = async (user) => {
