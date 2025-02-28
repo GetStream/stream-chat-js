@@ -3,20 +3,19 @@ export type ValueOrPatch<T> = T | Patch<T>;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
 export type Unsubscribe = () => void;
 
-export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> => {
-  return typeof value === 'function';
-};
+export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> =>
+  typeof value === 'function';
 
 export class StateStore<T extends Record<string, unknown>> {
   private handlerSet = new Set<Handler<T>>();
-
-  private static logCount = 5;
 
   constructor(private value: T) {}
 
   public next = (newValueOrPatch: ValueOrPatch<T>): void => {
     // newValue (or patch output) should never be mutated previous value
-    const newValue = isPatch(newValueOrPatch) ? newValueOrPatch(this.value) : newValueOrPatch;
+    const newValue = isPatch(newValueOrPatch)
+      ? newValueOrPatch(this.value)
+      : newValueOrPatch;
 
     // do not notify subscribers if the value hasn't changed
     if (newValue === this.value) return;
@@ -27,7 +26,8 @@ export class StateStore<T extends Record<string, unknown>> {
     this.handlerSet.forEach((handler) => handler(this.value, oldValue));
   };
 
-  public partialNext = (partial: Partial<T>): void => this.next((current) => ({ ...current, ...partial }));
+  public partialNext = (partial: Partial<T>): void =>
+    this.next((current) => ({ ...current, ...partial }));
 
   public getLatestValue = (): T => this.value;
 
@@ -39,7 +39,9 @@ export class StateStore<T extends Record<string, unknown>> {
     };
   };
 
-  public subscribeWithSelector = <O extends Readonly<Record<string, unknown>> | Readonly<unknown[]>>(
+  public subscribeWithSelector = <
+    O extends Readonly<Record<string, unknown>> | Readonly<unknown[]>,
+  >(
     selector: (nextValue: T) => O,
     handler: Handler<O>,
   ) => {
@@ -51,15 +53,7 @@ export class StateStore<T extends Record<string, unknown>> {
 
       let hasUpdatedValues = !selectedValues;
 
-      if (Array.isArray(newlySelectedValues) && StateStore.logCount > 0) {
-        console.warn(
-          '[StreamChat]: The API of our StateStore has changed. Instead of returning an array in the selector, please return a named object of properties.',
-        );
-        StateStore.logCount--;
-      }
-
       for (const key in selectedValues) {
-        // @ts-ignore TODO: remove array support (Readonly<unknown[]>)
         if (selectedValues[key] === newlySelectedValues[key]) continue;
         hasUpdatedValues = true;
         break;

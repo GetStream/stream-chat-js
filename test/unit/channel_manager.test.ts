@@ -33,7 +33,9 @@ describe('ChannelManager', () => {
       generateChannel({ channel: { id: 'channel3' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     channelManager.state.partialNext({ channels, initialized: true });
   });
 
@@ -73,10 +75,18 @@ describe('ChannelManager', () => {
           'notification.message_new': false,
         },
       };
-      const newChannelManager = client.createChannelManager({ eventHandlerOverrides, options });
+      const newChannelManager = client.createChannelManager({
+        eventHandlerOverrides,
+        options,
+      });
 
-      expect(Object.fromEntries((newChannelManager as any).eventHandlerOverrides)).to.deep.equal(eventHandlerOverrides);
-      expect((newChannelManager as any).options).to.deep.equal({ ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options });
+      expect(
+        Object.fromEntries((newChannelManager as any).eventHandlerOverrides),
+      ).to.deep.equal(eventHandlerOverrides);
+      expect((newChannelManager as any).options).to.deep.equal({
+        ...DEFAULT_CHANNEL_MANAGER_OPTIONS,
+        ...options,
+      });
     });
 
     it('should properly set the default event handlers', () => {
@@ -107,17 +117,24 @@ describe('ChannelManager', () => {
 
   describe('setters', () => {
     it('should properly set eventHandlerOverrides and filter out falsy values', () => {
-      const eventHandlerOverrides = { newMessageHandler: () => {}, channelDeletedHandler: () => {} };
+      const eventHandlerOverrides = {
+        newMessageHandler: () => {},
+        channelDeletedHandler: () => {},
+      };
 
       channelManager.setEventHandlerOverrides(eventHandlerOverrides);
-      expect(Object.fromEntries((channelManager as any).eventHandlerOverrides)).to.deep.equal(eventHandlerOverrides);
+      expect(
+        Object.fromEntries((channelManager as any).eventHandlerOverrides),
+      ).to.deep.equal(eventHandlerOverrides);
 
       channelManager.setEventHandlerOverrides({
         ...eventHandlerOverrides,
         notificationRemovedFromChannelHandler: undefined,
         channelHiddenHandler: undefined,
       });
-      expect(Object.fromEntries((channelManager as any).eventHandlerOverrides)).to.deep.equal(eventHandlerOverrides);
+      expect(
+        Object.fromEntries((channelManager as any).eventHandlerOverrides),
+      ).to.deep.equal(eventHandlerOverrides);
     });
 
     it('should properly set options', () => {
@@ -186,7 +203,11 @@ describe('ChannelManager', () => {
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
-        expect(newChannels.map((c) => c.id)).to.deep.equal(['channel3', 'channel2', 'channel1']);
+        expect(newChannels.map((c) => c.id)).to.deep.equal([
+          'channel3',
+          'channel2',
+          'channel1',
+        ]);
       });
 
       it('should maintain referential integrity if the same channels are passed', () => {
@@ -217,16 +238,23 @@ describe('ChannelManager', () => {
     it('should only invoke event handlers if registerSubscriptions has been called', () => {
       const newChannelManager = client.createChannelManager({});
 
-      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
-        'notificationAddedToChannelHandler',
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get(
+        'newMessageHandler',
       );
+      const originalNotificationAddedToChannelHandler = (
+        newChannelManager as any
+      ).eventHandlers.get('notificationAddedToChannelHandler');
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
-      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(
+        originalNotificationAddedToChannelHandler,
+      );
       const clientOnSpy = sinon.spy(client, 'on');
 
-      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'newMessageHandler',
+        newMessageHandlerSpy,
+      );
       (newChannelManager as any).eventHandlers.set(
         'notificationAddedToChannelHandler',
         notificationAddedToChannelHandlerSpy,
@@ -257,7 +285,9 @@ describe('ChannelManager', () => {
       newChannelManager.registerSubscriptions();
       newChannelManager.registerSubscriptions();
 
-      expect(clientOnSpy.callCount).to.equal(Object.keys(channelManagerEventToHandlerMapping).length);
+      expect(clientOnSpy.callCount).to.equal(
+        Object.keys(channelManagerEventToHandlerMapping).length,
+      );
       Object.keys(channelManagerEventToHandlerMapping).forEach((eventType) => {
         expect(clientOnSpy.calledWith(eventType)).to.be.true;
       });
@@ -266,15 +296,22 @@ describe('ChannelManager', () => {
     it('should unregister subscriptions if unregisterSubscriptions is called', () => {
       const newChannelManager = client.createChannelManager({});
 
-      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
-        'notificationAddedToChannelHandler',
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get(
+        'newMessageHandler',
       );
+      const originalNotificationAddedToChannelHandler = (
+        newChannelManager as any
+      ).eventHandlers.get('notificationAddedToChannelHandler');
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
-      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(
+        originalNotificationAddedToChannelHandler,
+      );
 
-      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'newMessageHandler',
+        newMessageHandlerSpy,
+      );
       (newChannelManager as any).eventHandlers.set(
         'notificationAddedToChannelHandler',
         notificationAddedToChannelHandlerSpy,
@@ -293,23 +330,32 @@ describe('ChannelManager', () => {
     it('should call overrides for event handlers if they exist', () => {
       const newChannelManager = client.createChannelManager({});
 
-      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get('newMessageHandler');
-      const originalNotificationAddedToChannelHandler = (newChannelManager as any).eventHandlers.get(
-        'notificationAddedToChannelHandler',
+      const originalNewMessageHandler = (newChannelManager as any).eventHandlers.get(
+        'newMessageHandler',
       );
+      const originalNotificationAddedToChannelHandler = (
+        newChannelManager as any
+      ).eventHandlers.get('notificationAddedToChannelHandler');
 
       const newMessageHandlerSpy = sinon.spy(originalNewMessageHandler);
-      const notificationAddedToChannelHandlerSpy = sinon.spy(originalNotificationAddedToChannelHandler);
+      const notificationAddedToChannelHandlerSpy = sinon.spy(
+        originalNotificationAddedToChannelHandler,
+      );
       const newMessageHandlerOverrideSpy = sinon.spy(() => {});
 
-      (newChannelManager as any).eventHandlers.set('newMessageHandler', newMessageHandlerSpy);
+      (newChannelManager as any).eventHandlers.set(
+        'newMessageHandler',
+        newMessageHandlerSpy,
+      );
       (newChannelManager as any).eventHandlers.set(
         'notificationAddedToChannelHandler',
         notificationAddedToChannelHandlerSpy,
       );
 
       newChannelManager.registerSubscriptions();
-      newChannelManager.setEventHandlerOverrides({ newMessageHandler: newMessageHandlerOverrideSpy });
+      newChannelManager.setEventHandlerOverrides({
+        newMessageHandler: newMessageHandlerOverrideSpy,
+      });
 
       client.dispatchEvent({ type: 'message.new' });
       client.dispatchEvent({ type: 'notification.added_to_channel' });
@@ -347,7 +393,11 @@ describe('ChannelManager', () => {
       spy.resetHistory();
 
       const channel = channelsResponse[channelsResponse.length - 1].channel;
-      client.dispatchEvent({ type: eventType, channel_type: channel.type, channel_id: channel.id });
+      client.dispatchEvent({
+        type: eventType,
+        channel_type: channel.type,
+        channel_id: channel.id,
+      });
 
       expect(spy.called).to.be.false;
     });
@@ -367,12 +417,16 @@ describe('ChannelManager', () => {
       ];
       mockChannelPages = channelQueryResponses.map((channelQueryResponse) => {
         client.hydrateActiveChannels(channelQueryResponse);
-        return channelQueryResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+        return channelQueryResponse.map((c) =>
+          client.channel(c.channel.type, c.channel.id),
+        );
       });
-      clientQueryChannelsStub = sinon.stub(client, 'queryChannels').callsFake((_filters, _sort, options) => {
-        const offset = options?.offset ?? 0;
-        return Promise.resolve(mockChannelPages[Math.floor(offset / 10)]);
-      });
+      clientQueryChannelsStub = sinon
+        .stub(client, 'queryChannels')
+        .callsFake((_filters, _sort, options) => {
+          const offset = options?.offset ?? 0;
+          return Promise.resolve(mockChannelPages[Math.floor(offset / 10)]);
+        });
     });
 
     afterEach(() => {
@@ -396,13 +450,19 @@ describe('ChannelManager', () => {
       });
 
       it('should not query more than once from the same manager for 2 different queries', async () => {
-        await Promise.all([channelManager.queryChannels({}), channelManager.queryChannels({})]);
+        await Promise.all([
+          channelManager.queryChannels({}),
+          channelManager.queryChannels({}),
+        ]);
         expect(clientQueryChannelsStub.calledOnce).to.be.true;
       });
 
       it('should query more than once if channelManager.options.abortInFlightQuery is true', async () => {
         channelManager.setOptions({ abortInFlightQuery: true });
-        await Promise.all([channelManager.queryChannels({}), channelManager.queryChannels({})]);
+        await Promise.all([
+          channelManager.queryChannels({}),
+          channelManager.queryChannels({}),
+        ]);
         expect(clientQueryChannelsStub.callCount).to.equal(2);
       });
 
@@ -452,7 +512,11 @@ describe('ChannelManager', () => {
         );
         stateChangeSpy.resetHistory();
 
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
 
         const { channels } = channelManager.state.getLatestValue();
 
@@ -483,7 +547,11 @@ describe('ChannelManager', () => {
 
       it('should properly update hasNext and offset if the first returned page is less than the limit', async () => {
         clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
 
         const {
           channels,
@@ -559,7 +627,11 @@ describe('ChannelManager', () => {
       });
 
       it('should properly set the new pagination parameters and update the offset after loading next', async () => {
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
 
         const stateChangeSpy = sinon.spy();
         channelManager.state.subscribeWithSelector(
@@ -599,7 +671,11 @@ describe('ChannelManager', () => {
       });
 
       it('should properly paginate even if state.channels gets modified in the meantime', async () => {
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[2].slice(0, 5), ...prevState.channels],
@@ -643,7 +719,11 @@ describe('ChannelManager', () => {
       });
 
       it('should properly deduplicate when paginating if channels from the next page have been promoted', async () => {
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[1].slice(0, 5), ...prevState.channels],
@@ -687,7 +767,11 @@ describe('ChannelManager', () => {
       });
 
       it('should properly deduplicate when paginating if channels latter pages have been promoted and reached', async () => {
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[2].slice(0, 3), ...prevState.channels],
@@ -703,7 +787,8 @@ describe('ChannelManager', () => {
 
         await channelManager.loadNext();
 
-        const { channels: channelsAfterFirstPagination } = channelManager.state.getLatestValue();
+        const { channels: channelsAfterFirstPagination } =
+          channelManager.state.getLatestValue();
         expect(channelsAfterFirstPagination.length).to.equal(23);
 
         await channelManager.loadNext();
@@ -749,7 +834,11 @@ describe('ChannelManager', () => {
         const { channels: initialChannels } = channelManager.state.getLatestValue();
         expect(initialChannels.length).to.equal(0);
 
-        await channelManager.queryChannels({ filterA: true }, { asc: 1 }, { limit: 10, offset: 0 });
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 10, offset: 0 },
+        );
         await channelManager.loadNext();
 
         const {
@@ -791,8 +880,14 @@ describe('ChannelManager', () => {
       setChannelsStub = sinon.stub(channelManager, 'setChannels');
       isChannelPinnedStub = sinon.stub(Utils, 'isChannelPinned');
       isChannelArchivedStub = sinon.stub(Utils, 'isChannelArchived');
-      shouldConsiderArchivedChannelsStub = sinon.stub(Utils, 'shouldConsiderArchivedChannels');
-      shouldConsiderPinnedChannelsStub = sinon.stub(Utils, 'shouldConsiderPinnedChannels');
+      shouldConsiderArchivedChannelsStub = sinon.stub(
+        Utils,
+        'shouldConsiderArchivedChannels',
+      );
+      shouldConsiderPinnedChannelsStub = sinon.stub(
+        Utils,
+        'shouldConsiderPinnedChannels',
+      );
       getAndWatchChannelStub = sinon.stub(Utils, 'getAndWatchChannel');
       findLastPinnedChannelIndexStub = sinon.stub(Utils, 'findLastPinnedChannelIndex');
       extractSortValueStub = sinon.stub(Utils, 'extractSortValue');
@@ -811,7 +906,13 @@ describe('ChannelManager', () => {
         channelToRemove = channelsResponse[1].channel;
       });
 
-      (['channel.deleted', 'channel.hidden', 'notification.removed_from_channel'] as const).forEach((eventType) => {
+      (
+        [
+          'channel.deleted',
+          'channel.hidden',
+          'notification.removed_from_channel',
+        ] as const
+      ).forEach((eventType) => {
         it('should return early if channels is undefined', () => {
           channelManager.state.partialNext({ channels: undefined });
 
@@ -825,14 +926,18 @@ describe('ChannelManager', () => {
           client.dispatchEvent({ type: eventType, cid: channelToRemove.cid });
 
           expect(setChannelsStub.calledOnce).to.be.true;
-          expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
+          expect(
+            setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+          ).to.deep.equal(['channel1', 'channel3']);
         });
 
         it('should remove the channel when event.channel?.cid matches', () => {
           client.dispatchEvent({ type: eventType, channel: channelToRemove });
 
           expect(setChannelsStub.calledOnce).to.be.true;
-          expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal(['channel1', 'channel3']);
+          expect(
+            setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+          ).to.deep.equal(['channel1', 'channel3']);
         });
 
         it('should not modify the list if no channels match', () => {
@@ -851,7 +956,11 @@ describe('ChannelManager', () => {
       it('should not update the state early if channels are not defined', () => {
         channelManager.state.partialNext({ channels: undefined });
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         expect(setChannelsStub.called).to.be.false;
       });
@@ -861,7 +970,11 @@ describe('ChannelManager', () => {
         isChannelPinnedStub.returns(true);
         shouldConsiderPinnedChannelsStub.returns(true);
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -879,7 +992,11 @@ describe('ChannelManager', () => {
         isChannelArchivedStub.returns(true);
         shouldConsiderArchivedChannelsStub.returns(true);
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -897,7 +1014,11 @@ describe('ChannelManager', () => {
         isChannelArchivedStub.returns(false);
         shouldConsiderArchivedChannelsStub.returns(true);
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -910,7 +1031,11 @@ describe('ChannelManager', () => {
         const { channels: prevChannels } = channelManager.state.getLatestValue();
         channelManager.setOptions({ lockChannelOrder: true });
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -936,7 +1061,11 @@ describe('ChannelManager', () => {
           },
         });
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel4' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel4',
+        });
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -953,7 +1082,11 @@ describe('ChannelManager', () => {
         shouldConsiderArchivedChannelsStub.returns(false);
         shouldConsiderPinnedChannelsStub.returns(false);
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel4' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel4',
+        });
 
         const {
           pagination: { sort },
@@ -970,7 +1103,9 @@ describe('ChannelManager', () => {
           channelToMoveIndexWithinChannels: -1,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(
+          Utils.promoteChannel(promoteChannelArgs),
+        );
       });
 
       it('should move the channel upwards if all conditions allow it', () => {
@@ -979,7 +1114,11 @@ describe('ChannelManager', () => {
         shouldConsiderArchivedChannelsStub.returns(false);
         shouldConsiderPinnedChannelsStub.returns(false);
 
-        client.dispatchEvent({ type: 'message.new', channel_type: 'messaging', channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
 
         const {
           pagination: { sort },
@@ -995,7 +1134,9 @@ describe('ChannelManager', () => {
           channelToMoveIndexWithinChannels: 1,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(
+          Utils.promoteChannel(promoteChannelArgs),
+        );
       });
     });
 
@@ -1011,7 +1152,10 @@ describe('ChannelManager', () => {
       });
 
       it('should not update the state if the event has no id and type', async () => {
-        client.dispatchEvent({ type: 'notification.message_new', channel: ({} as unknown) as ChannelResponse });
+        client.dispatchEvent({
+          type: 'notification.message_new',
+          channel: {} as unknown as ChannelResponse,
+        });
 
         await clock.runAllAsync();
 
@@ -1021,17 +1165,26 @@ describe('ChannelManager', () => {
 
       it('should execute getAndWatchChannel if id and type are provided', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
 
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
-        expect(getAndWatchChannelStub.calledWith({ client, id: 'channel4', type: 'messaging' })).to.be.true;
+        expect(
+          getAndWatchChannelStub.calledWith({
+            client,
+            id: 'channel4',
+            type: 'messaging',
+          }),
+        ).to.be.true;
       });
 
       it('should not update the state if channel is archived and filters do not allow it', async () => {
@@ -1044,7 +1197,7 @@ describe('ChannelManager', () => {
 
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1063,7 +1216,7 @@ describe('ChannelManager', () => {
 
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1074,7 +1227,10 @@ describe('ChannelManager', () => {
 
       it('should not update the state if allowNotLoadedChannelPromotionForEvent["notification.message_new"] is false', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         channelManager.setOptions({
           allowNotLoadedChannelPromotionForEvent: {
@@ -1086,7 +1242,7 @@ describe('ChannelManager', () => {
         });
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1099,11 +1255,14 @@ describe('ChannelManager', () => {
 
       it('should move channel when all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1117,18 +1276,27 @@ describe('ChannelManager', () => {
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
         expect(promoteChannelSpy.calledOnce).to.be.true;
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(promoteChannelArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
+        expect(promoteChannelArgs).to.deep.equal({
+          channels,
+          channelToMove: newChannel,
+          sort,
+        });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(
+          Utils.promoteChannel(promoteChannelArgs),
+        );
       });
 
       it('should not add duplicate channels for multiple event invocations', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
 
         const event = {
           type: 'notification.message_new',
-          channel: ({ type: 'messaging', id: 'channel4' } as unknown) as ChannelResponse,
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
         } as const;
         // call the event 3 times
         client.dispatchEvent(event);
@@ -1167,7 +1335,10 @@ describe('ChannelManager', () => {
       });
 
       it('should not update the state if the event has no id and type', async () => {
-        client.dispatchEvent({ type: 'channel.visible', channel: ({} as unknown) as ChannelResponse });
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel: {} as unknown as ChannelResponse,
+        });
 
         await clock.runAllAsync();
 
@@ -1177,7 +1348,11 @@ describe('ChannelManager', () => {
 
       it('should not update the state if channels is undefined', async () => {
         channelManager.state.partialNext({ channels: undefined });
-        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel_id: 'channel4',
+          channel_type: 'messaging',
+        });
 
         await clock.runAllAsync();
 
@@ -1193,7 +1368,11 @@ describe('ChannelManager', () => {
           pagination: { ...prevState.pagination, filters: { archived: false } },
         }));
 
-        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel_id: 'channel4',
+          channel_type: 'messaging',
+        });
 
         await clock.runAllAsync();
 
@@ -1209,7 +1388,11 @@ describe('ChannelManager', () => {
           pagination: { ...prevState.pagination, filters: { archived: true } },
         }));
 
-        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel_id: 'channel4',
+          channel_type: 'messaging',
+        });
 
         await clock.runAllAsync();
 
@@ -1219,9 +1402,16 @@ describe('ChannelManager', () => {
 
       it('should add the channel to the list if all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
-        client.dispatchEvent({ type: 'channel.visible', channel_id: 'channel4', channel_type: 'messaging' });
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel_id: 'channel4',
+          channel_type: 'messaging',
+        });
 
         await clock.runAllAsync();
 
@@ -1234,8 +1424,14 @@ describe('ChannelManager', () => {
         expect(getAndWatchChannelStub.calledOnce).to.be.true;
         expect(promoteChannelSpy.calledOnce).to.be.true;
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(promoteChannelArgs).to.deep.equal({ channels, channelToMove: newChannel, sort });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
+        expect(promoteChannelArgs).to.deep.equal({
+          channels,
+          channelToMove: newChannel,
+          sort,
+        });
+        expect(setChannelsStub.args[0][0]).to.deep.equal(
+          Utils.promoteChannel(promoteChannelArgs),
+        );
       });
     });
 
@@ -1267,12 +1463,20 @@ describe('ChannelManager', () => {
         });
         expect(setChannelsStub.calledOnce).to.be.false;
 
-        client.dispatchEvent({ type: 'member.updated', channel_id: 'channel2', channel_type: 'messaging', member: {} });
+        client.dispatchEvent({
+          type: 'member.updated',
+          channel_id: 'channel2',
+          channel_type: 'messaging',
+          member: {},
+        });
         expect(setChannelsStub.calledOnce).to.be.false;
       });
 
       it('should not update state if channel_type or channel_id is not present', () => {
-        client.dispatchEvent({ type: 'member.updated', member: { user: { id: 'user123' } } });
+        client.dispatchEvent({
+          type: 'member.updated',
+          member: { user: { id: 'user123' } },
+        });
         expect(setChannelsStub.calledOnce).to.be.false;
         client.dispatchEvent({
           type: 'member.updated',
@@ -1280,7 +1484,11 @@ describe('ChannelManager', () => {
           channel_type: 'messaging',
         });
         expect(setChannelsStub.calledOnce).to.be.false;
-        client.dispatchEvent({ type: 'member.updated', member: { user: { id: 'user123' } }, channel_id: 'channel2' });
+        client.dispatchEvent({
+          type: 'member.updated',
+          member: { user: { id: 'user123' } },
+          channel_id: 'channel2',
+        });
         expect(setChannelsStub.calledOnce).to.be.false;
       });
 
@@ -1333,11 +1541,9 @@ describe('ChannelManager', () => {
         dispatchMemberUpdatedEvent();
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal([
-          'channel2',
-          'channel1',
-          'channel3',
-        ]);
+        expect(
+          setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+        ).to.deep.equal(['channel2', 'channel1', 'channel3']);
       });
 
       it('should pin channel at the correct position when pinnedAtSort is 1', () => {
@@ -1348,11 +1554,9 @@ describe('ChannelManager', () => {
         dispatchMemberUpdatedEvent('channel3');
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal([
-          'channel1',
-          'channel3',
-          'channel2',
-        ]);
+        expect(
+          setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+        ).to.deep.equal(['channel1', 'channel3', 'channel2']);
       });
 
       it('should pin channel at the correct position when pinnedAtSort is -1 and the target is not pinned', () => {
@@ -1363,11 +1567,9 @@ describe('ChannelManager', () => {
         dispatchMemberUpdatedEvent('channel3');
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal([
-          'channel1',
-          'channel3',
-          'channel2',
-        ]);
+        expect(
+          setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+        ).to.deep.equal(['channel1', 'channel3', 'channel2']);
       });
 
       it('should pin channel at the correct position when pinnedAtSort is -1 and the target is pinned', () => {
@@ -1378,11 +1580,9 @@ describe('ChannelManager', () => {
         dispatchMemberUpdatedEvent('channel3');
 
         expect(setChannelsStub.calledOnce).to.be.true;
-        expect(setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id)).to.deep.equal([
-          'channel3',
-          'channel1',
-          'channel2',
-        ]);
+        expect(
+          setChannelsStub.args[0][0].map((c: ChannelResponse) => c.id),
+        ).to.deep.equal(['channel3', 'channel1', 'channel2']);
       });
 
       it('should not update state if position of target channel does not change', () => {
@@ -1417,7 +1617,7 @@ describe('ChannelManager', () => {
 
         client.dispatchEvent({
           type: 'notification.added_to_channel',
-          channel: ({ id: '123' } as unknown) as ChannelResponse,
+          channel: { id: '123' } as unknown as ChannelResponse,
         });
         await clock.runAllAsync();
         expect(setChannelsStub.calledOnce).to.be.false;
@@ -1425,7 +1625,10 @@ describe('ChannelManager', () => {
 
       it('should not update state if allowNotLoadedChannelPromotionForEvent["notification.added_to_channel"] is false', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         channelManager.setOptions({
           allowNotLoadedChannelPromotionForEvent: {
@@ -1437,11 +1640,11 @@ describe('ChannelManager', () => {
         });
         client.dispatchEvent({
           type: 'notification.added_to_channel',
-          channel: ({
+          channel: {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown) as ChannelResponse,
+          } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1452,15 +1655,18 @@ describe('ChannelManager', () => {
 
       it('should call getAndWatchChannel with correct parameters', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         client.dispatchEvent({
           type: 'notification.added_to_channel',
-          channel: ({
+          channel: {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown) as ChannelResponse,
+          } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1476,15 +1682,18 @@ describe('ChannelManager', () => {
 
       it('should move the channel upwards when criteria is met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        const newChannel = client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id);
+        const newChannel = client.channel(
+          newChannelResponse.channel.type,
+          newChannelResponse.channel.id,
+        );
         getAndWatchChannelStub.resolves(newChannel);
         client.dispatchEvent({
           type: 'notification.added_to_channel',
-          channel: ({
+          channel: {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown) as ChannelResponse,
+          } as unknown as ChannelResponse,
         });
 
         await clock.runAllAsync();
@@ -1502,7 +1711,9 @@ describe('ChannelManager', () => {
           channelToMove: newChannel,
           sort,
         });
-        expect(setChannelsStub.args[0][0]).to.deep.equal(Utils.promoteChannel(promoteChannelArgs));
+        expect(setChannelsStub.args[0][0]).to.deep.equal(
+          Utils.promoteChannel(promoteChannelArgs),
+        );
       });
     });
   });

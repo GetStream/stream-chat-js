@@ -328,10 +328,12 @@ describe('BaseSearchSource and implementations', () => {
 
 			beforeEach(() => {
 				// Stub executeQuery on the prototype before creating the instance to avoid effect of binding in constructor
-				executeQueryStub = sinon.stub(BaseSearchSource.prototype, 'executeQuery').resolves({
-					items,
-					next: null,
-				});
+				executeQueryStub = sinon
+					.stub(BaseSearchSource.prototype, 'executeQuery')
+					.resolves({
+						items,
+						next: null,
+					});
 
 				searchSource = new TestSearchSource();
 			});

@@ -55,7 +55,9 @@ await client.upsertUser({
 });
 
 // create a channel
-const channel = client.channel('messaging', 'test-channel', { created_by_id: 'vishal-1' });
+const channel = client.channel('messaging', 'test-channel', {
+  created_by_id: 'vishal-1',
+});
 await channel.create();
 
 // send message
@@ -84,10 +86,16 @@ declare module 'stream-chat' {
 // index.ts
 
 // property `profile_picture` is code-completed and expects type `string | undefined`
-await client.partialUpdateUser({ id: 'vishal-1', set: { profile_picture: 'https://random.picture/1.jpg' } });
+await client.partialUpdateUser({
+  id: 'vishal-1',
+  set: { profile_picture: 'https://random.picture/1.jpg' },
+});
 
 // property `custom_property` is code-completed and expects type `number | undefined`
-const { message } = await channel.sendMessage({ text: 'This is another test message', custom_property: 255 });
+const { message } = await channel.sendMessage({
+  text: 'This is another test message',
+  custom_property: 255,
+});
 
 message.custom_property; // in the response object as well
 ```

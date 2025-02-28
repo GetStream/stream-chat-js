@@ -12,7 +12,9 @@ export default function getPackageVersion() {
       version = execSync('git describe --tags --abbrev=0').toString().trim();
     } catch (error) {
       console.error(error);
-      console.warn('Could not get latest version from git tags, falling back to package.json');
+      console.warn(
+        'Could not get latest version from git tags, falling back to package.json',
+      );
       version = packageJson.version;
     }
   }

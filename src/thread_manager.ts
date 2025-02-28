@@ -66,10 +66,13 @@ export class ThreadManager {
       return this.threadsByIdGetterCache.threadsById;
     }
 
-    const threadsById = threads.reduce<Record<string, Thread>>((newThreadsById, thread) => {
-      newThreadsById[thread.id] = thread;
-      return newThreadsById;
-    }, {});
+    const threadsById = threads.reduce<Record<string, Thread>>(
+      (newThreadsById, thread) => {
+        newThreadsById[thread.id] = thread;
+        return newThreadsById;
+      },
+      {},
+    );
 
     this.threadsByIdGetterCache.threads = threads;
     this.threadsByIdGetterCache.threadsById = threadsById;
@@ -102,7 +105,8 @@ export class ThreadManager {
 
   private subscribeUnreadThreadsCountChange = () => {
     // initiate
-    const { unread_threads: unreadThreadCount = 0 } = (this.client.user as OwnUserResponse) ?? {};
+    const { unread_threads: unreadThreadCount = 0 } =
+      (this.client.user as OwnUserResponse) ?? {};
     this.state.partialNext({ unreadThreadCount });
 
     const unsubscribeFunctions = [
@@ -139,7 +143,9 @@ export class ThreadManager {
         const { threads: prevThreads = [] } = prev ?? {};
         // Thread instance was removed if there's no thread with the given id at all,
         // or it was replaced with a new instance
-        const removedThreads = prevThreads.filter((thread) => thread !== this.threadsById[thread.id]);
+        const removedThreads = prevThreads.filter(
+          (thread) => thread !== this.threadsById[thread.id],
+        );
 
         nextThreads.forEach((thread) => thread.registerSubscriptions());
         removedThreads.forEach((thread) => thread.unregisterSubscriptions());
@@ -193,8 +199,10 @@ export class ThreadManager {
       { trailing: true },
     );
 
-    const unsubscribeConnectionRecovered = this.client.on('connection.recovered', throttledHandleConnectionRecovered)
-      .unsubscribe;
+    const unsubscribeConnectionRecovered = this.client.on(
+      'connection.recovered',
+      throttledHandleConnectionRecovered,
+    ).unsubscribe;
 
     return () => {
       unsubscribeConnectionDropped();
@@ -203,13 +211,16 @@ export class ThreadManager {
   };
 
   public unregisterSubscriptions = () => {
-    this.state.getLatestValue().threads.forEach((thread) => thread.unregisterSubscriptions());
+    this.state
+      .getLatestValue()
+      .threads.forEach((thread) => thread.unregisterSubscriptions());
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
   };
 
   public reload = async ({ force = false } = {}) => {
-    const { threads, unseenThreadIds, isThreadOrderStale, pagination, ready } = this.state.getLatestValue();
+    const { threads, unseenThreadIds, isThreadOrderStale, pagination, ready } =
+      this.state.getLatestValue();
     if (pagination.isLoading) return;
     if (!force && ready && !unseenThreadIds.length && !isThreadOrderStale) return;
     const limit = threads.length + unseenThreadIds.length;
@@ -268,15 +279,14 @@ export class ThreadManager {
     }
   };
 
-  public queryThreads = (options: QueryThreadsOptions = {}) => {
-    return this.client.queryThreads({
+  public queryThreads = (options: QueryThreadsOptions = {}) =>
+    this.client.queryThreads({
       limit: 25,
       participant_limit: 10,
       reply_limit: 10,
       watch: true,
       ...options,
     });
-  };
 
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
     const { pagination } = this.state.getLatestValue();
@@ -293,7 +303,9 @@ export class ThreadManager {
 
       this.state.next((current) => ({
         ...current,
-        threads: response.threads.length ? current.threads.concat(response.threads) : current.threads,
+        threads: response.threads.length
+          ? current.threads.concat(response.threads)
+          : current.threads,
         pagination: {
           ...current.pagination,
           nextCursor: response.next ?? null,

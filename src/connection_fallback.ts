@@ -1,8 +1,14 @@
-import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
-import { StreamChat } from './client';
-import { addConnectionEventListeners, removeConnectionEventListeners, retryInterval, sleep } from './utils';
+import type { AxiosRequestConfig, CancelTokenSource } from 'axios';
+import axios from 'axios';
+import type { StreamChat } from './client';
+import {
+  addConnectionEventListeners,
+  removeConnectionEventListeners,
+  retryInterval,
+  sleep,
+} from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import { ConnectionOpen, Event, UR, LogLevel } from './types';
+import type { ConnectionOpen, Event, LogLevel, UR } from './types';
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -28,14 +34,20 @@ export class WSConnectionFallback {
   }
 
   _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
-    this.client.logger(level, 'WSConnectionFallback:' + msg, { tags: ['connection_fallback', 'connection'], ...extra });
+    this.client.logger(level, 'WSConnectionFallback:' + msg, {
+      tags: ['connection_fallback', 'connection'],
+      ...extra,
+    });
   }
 
   _setState(state: ConnectionState) {
     this._log(`_setState() - ${state}`);
 
     // transition from connecting => connected
-    if (this.state === ConnectionState.Connecting && state === ConnectionState.Connected) {
+    if (
+      this.state === ConnectionState.Connecting &&
+      state === ConnectionState.Connected
+    ) {
       this.client.dispatchEvent({ type: 'connection.changed', online: true });
     }
 
@@ -63,7 +75,11 @@ export class WSConnectionFallback {
   };
 
   /** @private */
-  _req = async <T = UR>(params: UR, config: AxiosRequestConfig, retry: boolean): Promise<T> => {
+  _req = async <T = UR>(
+    params: UR,
+    config: AxiosRequestConfig,
+    retry: boolean,
+  ): Promise<T> => {
     if (!this.cancelToken && !params.close) {
       this.cancelToken = axios.CancelToken.source();
     }
@@ -159,7 +175,7 @@ export class WSConnectionFallback {
 
       this._setState(ConnectionState.Connected);
       this.connectionID = event.connection_id;
-      // @ts-expect-error
+      // @ts-expect-error type mismatch
       this.client.dispatchEvent(event);
       this._poll();
       if (reconnect) {
@@ -175,9 +191,7 @@ export class WSConnectionFallback {
   /**
    * isHealthy checks if there is a connectionID and connection is in Connected state
    */
-  isHealthy = () => {
-    return !!this.connectionID && this.state === ConnectionState.Connected;
-  };
+  isHealthy = () => !!this.connectionID && this.state === ConnectionState.Connected;
 
   disconnect = async (timeout = 2000) => {
     removeConnectionEventListeners(this._onlineStatusChanged);
