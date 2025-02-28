@@ -2944,7 +2944,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ['device_model', model],
       // reports which bundle is being picked from the exports
       ['client_bundle', clientBundle],
-    ] as const).reduce((acc, [key, value]) => (value ? acc.concat(`|${key}=${value ?? ''}`) : acc), userAgentString);
+    ] as const).reduce(
+      (withArguments, [key, value]) =>
+        value && value.length > 0 ? withArguments.concat(`|${key}=${value}`) : withArguments,
+      userAgentString,
+    );
   }
 
   /**
