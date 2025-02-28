@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.3](https://github.com/GetStream/stream-chat-js/compare/v8.57.2...v8.57.3) (2025-02-28)
+
+
+### Bug Fixes
+
+* add extra user agent fields resolvable by react native ([#1477](https://github.com/GetStream/stream-chat-js/issues/1477)) ([4232150](https://github.com/GetStream/stream-chat-js/commit/42321500096491252211b57e3d238cfe920a0777))
+
 ### [8.57.2](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v8.57.2) (2025-02-27)
 
 
