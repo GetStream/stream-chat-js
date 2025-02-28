@@ -3816,4 +3816,14 @@ export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGeneric
   channelToMoveIndexWithinChannels?: number;
 };
 
-export type SdkIdentifier = { name: 'react' | 'react-native' | 'angular'; version: string };
+/**
+ * An identifier containing information about the downstream SDK using stream-chat. It
+ * is used to resolve the user agent.
+ */
+export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular'; version: string };
+
+/**
+ * An identifier containing information about the downstream device using stream-chat, if
+ * available. Is used by the react-native SDKs to enrich the user agent further.
+ */
+export type DeviceIdentifier = { os: string; model?: string };
