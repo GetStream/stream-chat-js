@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -18,6 +17,8 @@ import {
   THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
+
+import { describe, it, beforeEach, expect, afterEach } from 'vitest';
 
 const TEST_USER_ID = 'observer';
 

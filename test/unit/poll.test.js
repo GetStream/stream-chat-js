@@ -1,6 +1,7 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import { Poll, StreamChat } from '../../src';
+
+import { describe, it, afterEach, expect } from 'vitest';
 
 const pollId = 'WD4SBRJvLoGwB4oAoCQGM';
 

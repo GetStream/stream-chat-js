@@ -1,6 +1,6 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
+import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 
 import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
@@ -373,16 +373,14 @@ describe('getAndWatchChannel', () => {
     await client.queryChannels({});
     await expect(
       getAndWatchChannel({ client, id: 'test-id', members: [] }),
-    ).to.be.rejectedWith(
-      'Channel or channel type have to be provided to query a channel.',
-    );
+    ).rejects.toThrow('Channel or channel type have to be provided to query a channel.');
   });
 
   it('should throw an error if neither channel ID nor members array is provided', async () => {
     await client.queryChannels({});
     await expect(
       getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] }),
-    ).to.be.rejectedWith(
+    ).rejects.toThrow(
       'Channel ID or channel members array have to be provided to query a channel.',
     );
   });

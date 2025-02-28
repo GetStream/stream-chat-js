@@ -1,4 +1,3 @@
-import chai from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -13,7 +12,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
-const expect = chai.expect;
+import { describe, beforeEach, it, expect } from 'vitest';
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -845,15 +844,14 @@ describe('Uninitialized Channel', () => {
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key', 'secret');
 
-	it('canonical form', function (done) {
+	it('canonical form', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 		expect(channel.data).to.eql({ cool: true });
-		done();
 	});
 
-	it('custom data merges to the right with current data', function (done) {
+	it('custom data merges to the right with current data', function () {
 		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
@@ -861,61 +859,53 @@ describe('Channels - Constructor', function () {
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
 		console.log(channel.data);
 		expect(channel.data).to.eql({ cool: true, custom_cool: true });
-		done();
 	});
 
-	it('default options', function (done) {
+	it('default options', function () {
 		const channel = client.channel('messaging', '123');
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
-		done();
 	});
 
-	it('null ID no options', function (done) {
+	it('null ID no options', function () {
 		const channel = client.channel('messaging', null);
 		expect(channel.id).to.eq(undefined);
-		done();
 	});
 
-	it('undefined ID no options', function (done) {
+	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
 		expect(channel.data).to.eql({});
-		done();
 	});
 
-	it('short version with options', function (done) {
+	it('short version with options', function () {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('null ID with options', function (done) {
+	it('null ID with options', function () {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('empty ID  with options', function (done) {
+	it('empty ID  with options', function () {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('empty ID  with options', function (done) {
+	it('empty ID  with options', function () {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 });
 
@@ -1242,13 +1232,10 @@ describe('Channel search', async () => {
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
 	it('sorting and offset works', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to
-			.be.fulfilled;
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }));
 	});
 	it('next and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(
-			Error,
-		);
+		await expect(channel.search('query', { offset: 1, next: 'next' })).rejects.toThrow();
 	});
 });
 

@@ -1,5 +1,6 @@
-import { expect } from 'chai';
 import { CheckSignature } from '../../src';
+
+import { describe, it, expect } from 'vitest';
 
 const MOCK_SECRET = 'porewqKAFDSAKZssecretsercretfads';
 const MOCK_TEXT = 'text';

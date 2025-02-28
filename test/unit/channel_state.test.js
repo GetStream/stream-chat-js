@@ -1,4 +1,3 @@
-import chai from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -10,7 +9,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import { ChannelState, StreamChat, Channel } from '../../src';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 
-const expect = chai.expect;
+import { describe, beforeEach, it, expect } from 'vitest';
 
 describe('ChannelState addMessagesSorted', function () {
 	it('empty state add single messages', async function () {

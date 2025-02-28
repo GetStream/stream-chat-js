@@ -1,7 +1,6 @@
-import chai from 'chai';
 import { isErrorResponse } from '../../src/errors';
 
-const expect = chai.expect;
+import { describe, it, expect } from 'vitest';
 
 describe('error response', () => {
 	it('is response with no status attribute', () => {

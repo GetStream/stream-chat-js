@@ -1,11 +1,7 @@
-import chai from 'chai';
-import chaiAsPromised from 'chai-as-promised';
-
 import { ClientState } from '../../src/client_state';
 import { StreamChat } from '../../src';
 
-const expect = chai.expect;
-chai.use(chaiAsPromised);
+import { describe, beforeEach, it, expect } from 'vitest';
 
 describe('ClientState', () => {
 	let state;

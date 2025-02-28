@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import {
 	BaseSearchSource,
@@ -9,6 +8,8 @@ import {
 } from '../../src/search_controller';
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('SearchController', () => {
 	let searchController;

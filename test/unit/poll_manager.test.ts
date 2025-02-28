@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -15,6 +14,8 @@ import {
   PollResponse,
   StreamChat,
 } from '../../src';
+
+import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 
 const TEST_USER_ID = 'observer';
 
