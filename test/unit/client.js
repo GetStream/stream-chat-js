@@ -676,7 +676,7 @@ describe.only('X-Stream-Client header', () => {
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
-	})
+	});
 
 	it('setUserAgent is now deprecated', () => {
 		client.setUserAgent('deprecated');

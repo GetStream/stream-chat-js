@@ -3826,4 +3826,4 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  * An identifier containing information about the downstream device using stream-chat, if
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
-export type DeviceIdentifier = { os: string; model?: string }
+export type DeviceIdentifier = { os: string; model?: string };

@@ -2929,9 +2929,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       const { os, model } = this.deviceIdentifier ?? {};
       return `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}${
         os ? `|os=${os}` : ''
-      }${
-        model ? `|device_model=${model}` : ''
-      }`;
+      }${model ? `|device_model=${model}` : ''}`;
     } else {
       return `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
