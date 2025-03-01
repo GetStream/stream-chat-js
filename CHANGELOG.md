@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.5](https://github.com/GetStream/stream-chat-js/compare/v8.57.4...v8.57.5) (2025-03-01)
+
+
+### Bug Fixes
+
+* properly encode user agent on WS connection ([#1482](https://github.com/GetStream/stream-chat-js/issues/1482)) ([58b538b](https://github.com/GetStream/stream-chat-js/commit/58b538b5380000cfcf2abeb369b5ef6a0acf3913))
+
 ### [8.57.4](https://github.com/GetStream/stream-chat-js/compare/v8.57.3...v8.57.4) (2025-02-28)
 
 
