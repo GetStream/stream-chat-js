@@ -78,12 +78,12 @@ describe('connection', function () {
 		});
 
 		it('should properly encode X-Stream-Client', () => {
-			const userAgent = 'agent|val=foo bar'
-			client.userAgent = userAgent
+			const userAgent = 'agent|val=foo bar';
+			client.userAgent = userAgent;
 			const url = ws._buildUrl();
 
-			expect(url).to.contain(encodeURIComponent(userAgent))
-		})
+			expect(url).to.contain(encodeURIComponent(userAgent));
+		});
 
 		it('should not include device if not there', function () {
 			ws.client.options.device = undefined;
