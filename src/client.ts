@@ -78,6 +78,7 @@ import {
   DeleteCommandResponse,
   DeleteUserOptions,
   Device,
+  DeviceIdentifier,
   EndpointName,
   ErrorFromResponse,
   Event,
@@ -274,6 +275,7 @@ export class StreamChat {
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
+  deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -2870,12 +2872,20 @@ export class StreamChat {
       userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
     }
 
-    const additionalOptions = ([
+    const { os, model } = this.deviceIdentifier ?? {};
+
+    return ([
+      // reports the device OS, if provided
+      ['os', os],
+      // reports the device model, if provided
+      ['device_model', model],
       // reports which bundle is being picked from the exports
       ['client_bundle', clientBundle],
-    ] as const).map(([key, value]) => `${key}=${value ?? ''}`);
-
-    return [userAgentString, ...additionalOptions].join('|');
+    ] as const).reduce(
+      (withArguments, [key, value]) =>
+        value && value.length > 0 ? withArguments.concat(`|${key}=${value}`) : withArguments,
+      userAgentString,
+    );
   }
 
   /**

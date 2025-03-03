@@ -37,6 +37,27 @@ property in the formatted message output
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.5](https://github.com/GetStream/stream-chat-js/compare/v8.57.4...v8.57.5) (2025-03-01)
+
+
+### Bug Fixes
+
+* properly encode user agent on WS connection ([#1482](https://github.com/GetStream/stream-chat-js/issues/1482)) ([58b538b](https://github.com/GetStream/stream-chat-js/commit/58b538b5380000cfcf2abeb369b5ef6a0acf3913))
+
+### [8.57.4](https://github.com/GetStream/stream-chat-js/compare/v8.57.3...v8.57.4) (2025-02-28)
+
+
+### Bug Fixes
+
+* add missing env variable in rollup config ([#1480](https://github.com/GetStream/stream-chat-js/issues/1480)) ([a935e9e](https://github.com/GetStream/stream-chat-js/commit/a935e9e79232da0df9d951119f48891da59d6281))
+
+### [8.57.3](https://github.com/GetStream/stream-chat-js/compare/v8.57.2...v8.57.3) (2025-02-28)
+
+
+### Bug Fixes
+
+* add extra user agent fields resolvable by react native ([#1477](https://github.com/GetStream/stream-chat-js/issues/1477)) ([4232150](https://github.com/GetStream/stream-chat-js/commit/42321500096491252211b57e3d238cfe920a0777))
+
 ### [8.57.2](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v8.57.2) (2025-02-27)
 
 

@@ -664,11 +664,27 @@ describe('X-Stream-Client header', () => {
 		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser|client_bundle=browser-esm');
 	});
 
-	it('SDK integration', () => {
+	it('SDK integration without deviceIdentifier', () => {
 		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser-esm');
+	});
+
+	it('SDK integration with deviceIdentifier', () => {
+		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
+	});
+
+	it('SDK integration with process.env.CLIENT_BUNDLE', () => {
+		process.env.CLIENT_BUNDLE = 'browser';
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser');
 	});
 
 	it('setUserAgent is now deprecated', () => {

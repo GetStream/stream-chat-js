@@ -194,7 +194,9 @@ export class StableWSConnection {
 
     return `${this.client.wsBaseURL}/connect?json=${qs}&api_key=${
       this.client.key
-    }&authorization=${token}&stream-auth-type=${this.client.getAuthType()}&X-Stream-Client=${this.client.getUserAgent()}`;
+    }&authorization=${token}&stream-auth-type=${this.client.getAuthType()}&X-Stream-Client=${encodeURIComponent(
+      this.client.getUserAgent(),
+    )}`;
   };
 
   /**
