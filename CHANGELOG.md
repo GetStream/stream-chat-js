@@ -1,3 +1,38 @@
+## [9.0.0-rc.3](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.2...v9.0.0-rc.3) (2025-02-27)
+
+### Bug Fixes
+
+* export promoteChannel ([#1474](https://github.com/GetStream/stream-chat-js/issues/1474)) ([f2ba914](https://github.com/GetStream/stream-chat-js/commit/f2ba9141fc5375e00706d653dc96f122896631f9))
+
+## [9.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.1...v9.0.0-rc.2) (2025-02-27)
+
+### Bug Fixes
+
+* increase package.json[engines.node] version ([6764bad](https://github.com/GetStream/stream-chat-js/commit/6764bad05990f113b66c311bed2967faaac4e11f))
+
+## [9.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v9.0.0-rc.1) (2025-02-27)
+
+### ⚠ BREAKING CHANGES
+
+* dropped jsDelivr bundle (#1468)
+* dropped `StreamChatGenerics`, use `Custom<Entity>Data` to extend your
+types
+* type `InviteOptions` has been renamed to `UpdateChannelOptions`
+* type `UpdateChannelOptions` has been renamed to
+`UpdateChannelTypeRequest`
+* type `ThreadResponseCustomData` has been renamed to `CustomThreadData`
+* type `MarkAllReadOptions` has been deleted in favour of type
+`MarkChannelsReadOptions`
+* type `QueryFilter` no longer supports `$ne` and `$nin` operators
+* type `ChannelMembership` has been deleted in favour of type
+`ChannelMemberResponse`
+* function `formatMessage` (`utils.ts`) no longer returns `__html`
+property in the formatted message output
+
+### Bug Fixes
+
+* replace StreamChatGenerics with module augmentation ([#1458](https://github.com/GetStream/stream-chat-js/issues/1458)) ([feb97da](https://github.com/GetStream/stream-chat-js/commit/feb97da08a5c4fa325156517111bb58402a1f7b8))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
@@ -53,10 +88,6 @@ All notable changes to this project will be documented in this file. See [standa
 * expand campaign stats ([#1470](https://github.com/GetStream/stream-chat-js/issues/1470)) ([cc6404c](https://github.com/GetStream/stream-chat-js/commit/cc6404c8e8687754aed23b62133a737f1f6ad535))
 * support campaign user pagination ([#1462](https://github.com/GetStream/stream-chat-js/issues/1462)) ([c629018](https://github.com/GetStream/stream-chat-js/commit/c629018df77b8a956b4cf533b0c2bbeb701a03c8))
 * support new X-Stream-Client format ([#1469](https://github.com/GetStream/stream-chat-js/issues/1469)) ([fdb875b](https://github.com/GetStream/stream-chat-js/commit/fdb875b53b9ec38dc81a3afc5c00f3bc561ef06a))
-
-# Changelog
-
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
 ### [8.56.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.0...v8.56.1) (2025-02-13)
 

@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "node10",
+    "module": "CommonJS",
+    "strict": false
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "logError": true
+  },
+  "include": ["./test/**/*"]
+}
