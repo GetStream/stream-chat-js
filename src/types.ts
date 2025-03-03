@@ -56,10 +56,10 @@ export type UnknownType = UR; // alias to avoid breaking change
 export type Unpacked<T> = T extends (infer U)[]
   ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
   : T extends (...args: any[]) => infer U
-  ? U
-  : T extends Promise<infer U>
-  ? U
-  : T;
+    ? U
+    : T extends Promise<infer U>
+      ? U
+      : T;
 
 /**
  * Response Types
@@ -1469,13 +1469,13 @@ export type MessageFlagsFilters = QueryFilters<
         >
       | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
   } & {
-      [Key in keyof Omit<
-        MessageFlagsFiltersOptions,
-        'channel_cid' | 'user_id' | 'is_reviewed'
-      >]:
-        | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
-        | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
-    }
+    [Key in keyof Omit<
+      MessageFlagsFiltersOptions,
+      'channel_cid' | 'user_id' | 'is_reviewed'
+    >]:
+      | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
+      | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
+  }
 >;
 
 export type FlagsFiltersOptions = {
@@ -1585,13 +1585,13 @@ export type FlagReportsFilters = QueryFilters<
         >
       | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
   } & {
-      [Key in keyof Omit<
-        FlagReportsFiltersOptions,
-        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
-      >]:
-        | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
-        | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
-    }
+    [Key in keyof Omit<
+      FlagReportsFiltersOptions,
+      'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+    >]:
+      | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
+      | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+  }
 >;
 
 export type BannedUsersFilterOptions = {
@@ -1618,10 +1618,10 @@ export type BannedUsersFilters = QueryFilters<
         >
       | PrimitiveFilter<BannedUsersFilterOptions['reason']>;
   } & {
-      [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
-        | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
-        | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
-    }
+    [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
+      | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
+      | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
+  }
 >;
 
 export type ReactionFilters = QueryFilters<
@@ -1668,10 +1668,10 @@ export type ChannelFilters = QueryFilters<
       | PrimitiveFilter<ChannelResponse['name']>;
     pinned?: boolean;
   } & {
-      [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
-        | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
-        | PrimitiveFilter<ChannelResponse[Key]>;
-    }
+    [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
+      | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
+      | PrimitiveFilter<ChannelResponse[Key]>;
+  }
 >;
 
 export type QueryPollsParams = {
@@ -1838,10 +1838,10 @@ export type MessageFilters = QueryFilters<
         >
       | PrimitiveFilter<UserResponse['id']>;
   } & {
-      [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
-        | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
-        | PrimitiveFilter<MessageResponse[Key]>;
-    }
+    [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
+      | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
+      | PrimitiveFilter<MessageResponse[Key]>;
+  }
 >;
 
 export type MessageOptions = {
@@ -1850,29 +1850,26 @@ export type MessageOptions = {
 
 export type PrimitiveFilter<ObjectType> = ObjectType | null;
 
-export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends
-  | string
-  | number
-  | boolean
-  ? {
-      $eq?: PrimitiveFilter<ObjectType>;
-      $exists?: boolean;
-      $gt?: PrimitiveFilter<ObjectType>;
-      $gte?: PrimitiveFilter<ObjectType>;
-      $in?: PrimitiveFilter<ObjectType>[];
-      $lt?: PrimitiveFilter<ObjectType>;
-      $lte?: PrimitiveFilter<ObjectType>;
-    }
-  : {
-      $eq?: PrimitiveFilter<ObjectType>;
-      $exists?: boolean;
-      $in?: PrimitiveFilter<ObjectType>[];
-    };
+export type QueryFilter<ObjectType = string> =
+  NonNullable<ObjectType> extends string | number | boolean
+    ? {
+        $eq?: PrimitiveFilter<ObjectType>;
+        $exists?: boolean;
+        $gt?: PrimitiveFilter<ObjectType>;
+        $gte?: PrimitiveFilter<ObjectType>;
+        $in?: PrimitiveFilter<ObjectType>[];
+        $lt?: PrimitiveFilter<ObjectType>;
+        $lte?: PrimitiveFilter<ObjectType>;
+      }
+    : {
+        $eq?: PrimitiveFilter<ObjectType>;
+        $exists?: boolean;
+        $in?: PrimitiveFilter<ObjectType>[];
+      };
 
 export type QueryFilters<Operators = {}> = {
   [Key in keyof Operators]?: Operators[Key];
-} &
-  QueryLogicalOperators<Operators>;
+} & QueryLogicalOperators<Operators>;
 
 export type QueryLogicalOperators<Operators> = {
   $and?: ArrayOneOrMore<QueryFilters<Operators>>;
@@ -1912,13 +1909,13 @@ export type UserFilters = QueryFilters<
         >
       | PrimitiveFilter<UserResponse['username']>;
   } & {
-      [Key in keyof Omit<
-        UserResponse,
-        'id' | 'name' | 'teams' | 'username' | keyof CustomUserData
-      >]?:
-        | RequireOnlyOne<QueryFilter<UserResponse[Key]>>
-        | PrimitiveFilter<UserResponse[Key]>;
-    }
+    [Key in keyof Omit<
+      UserResponse,
+      'id' | 'name' | 'teams' | 'username' | keyof CustomUserData
+    >]?:
+      | RequireOnlyOne<QueryFilter<UserResponse[Key]>>
+      | PrimitiveFilter<UserResponse[Key]>;
+  }
 >;
 
 export type InviteStatus = 'pending' | 'accepted' | 'rejected';
