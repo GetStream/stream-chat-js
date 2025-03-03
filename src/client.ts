@@ -2705,6 +2705,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       'type',
       'updated_at',
       'user',
+      'pinned_at',
       '__html',
     ];
 

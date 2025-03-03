@@ -388,9 +388,14 @@ describe('Client deleteUsers', () => {
 	});
 });
 
-describe('updateMessage should ensure sanity of `mentioned_users`', () => {
+describe('updateMessage should maintain data integrity', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
 	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
-		const client = await getClientWithUser();
 		client.post = (url, config) => {
 			expect(typeof config.message.mentioned_users[0]).to.be.equal('string');
 			expect(config.message.mentioned_users[0]).to.be.equal('uthred');
@@ -414,7 +419,6 @@ describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 	});
 
 	it('should allow empty mentioned_users', async () => {
-		const client = await getClientWithUser();
 		client.post = (url, config) => {
 			expect(config.message.mentioned_users[0]).to.be.equal(undefined);
 		};
@@ -435,6 +439,29 @@ describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 				mentioned_users: undefined,
 			}),
 		);
+	});
+
+	it('should remove reserved and volatile fields before running the update', async () => {
+		const postSpy = sinon.stub(client, 'post');
+		const updatedMessage = generateMsg({
+			text: 'test message',
+			pinned_at: new Date().toISOString(),
+			mentioned_users: undefined,
+		});
+
+		await client.updateMessage(updatedMessage);
+
+		const messageInQuery = {
+			attachments: updatedMessage.attachments,
+			mentioned_users: updatedMessage.mentioned_users,
+			reaction_counts: updatedMessage.reaction_counts,
+			reaction_scores: updatedMessage.reaction_scores,
+			silent: updatedMessage.silent,
+			status: updatedMessage.status,
+			text: updatedMessage.text,
+		};
+
+		expect(postSpy.args[0][1].message).to.deep.equal(messageInQuery);
 	});
 });
 
