@@ -643,9 +643,18 @@ describe('StreamChat.queryChannels', async () => {
 });
 
 describe('X-Stream-Client header', () => {
-	process.env.PKG_VERSION = '1.2.3';
-	process.env.CLIENT_BUNDLE = 'browser-esm';
 	let client;
+
+	before(() => {
+		process.env.PKG_VERSION = '1.2.3';
+		process.env.CLIENT_BUNDLE = 'browser-esm';
+	});
+
+	after(() => {
+		// clean up
+		process.env.PKG_VERSION = undefined;
+		process.env.CLIENT_BUNDLE = undefined;
+	});
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -664,7 +673,7 @@ describe('X-Stream-Client header', () => {
 		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser|client_bundle=browser-esm');
 	});
 
-	it('SDK integration without deviceIdentifier', () => {
+	it('SDK integration', () => {
 		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
 		const userAgent = client.getUserAgent();
 
@@ -676,15 +685,9 @@ describe('X-Stream-Client header', () => {
 		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
 		const userAgent = client.getUserAgent();
 
-		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
-	});
-
-	it('SDK integration with process.env.CLIENT_BUNDLE', () => {
-		process.env.CLIENT_BUNDLE = 'browser';
-		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
-		const userAgent = client.getUserAgent();
-
-		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser');
+		expect(userAgent).to.be.equal(
+			'stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4|client_bundle=browser-esm',
+		);
 	});
 
 	it('setUserAgent is now deprecated', () => {
