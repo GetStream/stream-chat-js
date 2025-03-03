@@ -459,7 +459,7 @@ describe('updateMessage should maintain data integrity', () => {
 			silent: updatedMessage.silent,
 			status: updatedMessage.status,
 			text: updatedMessage.text,
-		}
+		};
 
 		expect(postSpy.args[0][1].message).to.deep.equal(messageInQuery);
 	});
