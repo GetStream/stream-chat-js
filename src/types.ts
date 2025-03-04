@@ -842,6 +842,7 @@ export type UpdateUsersAPIResponse = APIResponse & {
 };
 
 export type UserResponse = User & {
+  image?: string;
   banned?: boolean;
   blocked_user_ids?: string[];
   created_at?: string;
