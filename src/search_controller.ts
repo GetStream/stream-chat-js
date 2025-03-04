@@ -1,4 +1,5 @@
-import { debounce, DebouncedFunc } from './utils';
+import type { DebouncedFunc } from './utils';
+import { debounce } from './utils';
 import { StateStore } from './store';
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
@@ -151,7 +152,13 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   async executeQuery(newSearchString?: string) {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
-    if (!this.isActive || this.isLoading || (!this.hasNext && !hasNewSearchQuery) || !searchString) return;
+    if (
+      !this.isActive ||
+      this.isLoading ||
+      (!this.hasNext && !hasNewSearchQuery) ||
+      !searchString
+    )
+      return;
 
     if (hasNewSearchQuery) {
       this.state.next({
@@ -215,7 +222,10 @@ export class UserSearchSource extends BaseSearchSource<UserResponse> {
 
   protected async query(searchQuery: string) {
     const filters = {
-      $or: [{ id: { $autocomplete: searchQuery } }, { name: { $autocomplete: searchQuery } }],
+      $or: [
+        { id: { $autocomplete: searchQuery } },
+        { name: { $autocomplete: searchQuery } },
+      ],
       ...this.filters,
     } as UserFilters;
     const sort = { id: 1, ...this.sort } as UserSort;
@@ -298,7 +308,11 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
       sort,
     } as SearchOptions;
 
-    const { next, results } = await this.client.search(channelFilters, messageFilters, options);
+    const { next, results } = await this.client.search(
+      channelFilters,
+      messageFilters,
+      options,
+    );
     const items = results.map(({ message }) => message);
 
     const cids = Array.from(
@@ -330,7 +344,11 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
   }
 }
 
-export type DefaultSearchSources = [UserSearchSource, ChannelSearchSource, MessageSearchSource];
+export type DefaultSearchSources = [
+  UserSearchSource,
+  ChannelSearchSource,
+  MessageSearchSource,
+];
 
 export type SearchControllerState = {
   isActive: boolean;
@@ -402,7 +420,8 @@ export class SearchController {
     });
   };
 
-  getSource = (sourceType: SearchSource['type']) => this.sources.find((s) => s.type === sourceType);
+  getSource = (sourceType: SearchSource['type']) =>
+    this.sources.find((s) => s.type === sourceType);
 
   removeSource = (sourceType: SearchSource['type']) => {
     const newSources = this.sources.filter((s) => s.type !== sourceType);
@@ -434,7 +453,9 @@ export class SearchController {
 
   activate = () => {
     if (!this.activeSources.length) {
-      const sourcesToActivate = this.config.keepSingleActiveSource ? this.sources.slice(0, 1) : this.sources;
+      const sourcesToActivate = this.config.keepSingleActiveSource
+        ? this.sources.slice(0, 1)
+        : this.sources;
       sourcesToActivate.forEach((s) => s.activate());
     }
     if (this.isActive) return;
@@ -455,7 +476,9 @@ export class SearchController {
 
   clear = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
+    this.sources.forEach((source) =>
+      source.state.next({ ...source.initialState, isActive: source.isActive }),
+    );
     this.state.next((current) => ({
       ...current,
       isActive: true,
@@ -466,7 +489,9 @@ export class SearchController {
 
   exit = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
+    this.sources.forEach((source) =>
+      source.state.next({ ...source.initialState, isActive: source.isActive }),
+    );
     this.state.next((current) => ({
       ...current,
       isActive: false,

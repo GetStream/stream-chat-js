@@ -2,7 +2,7 @@
 
 import { resolve } from 'node:path';
 import * as esbuild from 'esbuild';
-import packageJson from '../package.json' with {'type': 'json'};
+import packageJson from '../package.json' with { type: 'json' };
 import getPackageVersion from './get-package-version.mjs';
 
 // import.meta.dirname is not available before Node 20
