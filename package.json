@@ -59,6 +59,8 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.7.1",
+    "@commitlint/config-conventional": "^19.7.1",
     "@eslint/js": "^9.21.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
@@ -72,7 +74,7 @@
     "eslint": "^9.21.0",
     "eslint-plugin-import": "^2.31.0",
     "globals": "^16.0.0",
-    "husky": "^4.3.8",
+    "husky": "^9.1.7",
     "lint-staged": "^15.2.2",
     "nyc": "^15.1.0",
     "prettier": "^3.5.2",
@@ -102,7 +104,8 @@
     "test-coverage": "nyc yarn test-unit",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
-    "prepack": "yarn run build"
+    "prepack": "yarn run build",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=18"
