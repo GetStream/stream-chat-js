@@ -1,3 +1,9 @@
+## [9.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.4...v9.0.0-rc.5) (2025-03-05)
+
+### Bug Fixes
+
+* multiple module augmentation fails in Angular ([#1488](https://github.com/GetStream/stream-chat-js/issues/1488)) ([7f8a9a0](https://github.com/GetStream/stream-chat-js/commit/7f8a9a08ca14b3c26e1515ab1a9d80f7287570ee))
+
 ## [9.0.0-rc.4](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.3...v9.0.0-rc.4) (2025-03-05)
 
 ### Bug Fixes
