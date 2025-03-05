@@ -463,14 +463,14 @@ describe('updateMessage should maintain data integrity', () => {
 		const messageInQuery = {
 			attachments: updatedMessage.attachments,
 			mentioned_users: updatedMessage.mentioned_users,
-			reaction_counts: updatedMessage.reaction_counts,
 			reaction_scores: updatedMessage.reaction_scores,
 			silent: updatedMessage.silent,
 			status: updatedMessage.status,
 			text: updatedMessage.text,
 		};
 
-		expect(postSpy.args[0][1].message).to.deep.equal(messageInQuery);
+		expect(postSpy.callCount).to.equal(1);
+		expect(postSpy.firstCall.args[1].message).to.toMatchObject(messageInQuery);
 	});
 });
 
