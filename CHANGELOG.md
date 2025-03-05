@@ -37,6 +37,13 @@ property in the formatted message output
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.6](https://github.com/GetStream/stream-chat-js/compare/v8.57.5...v8.57.6) (2025-03-03)
+
+
+### Bug Fixes
+
+* remove pinned_at from the updateMessage api ([#1484](https://github.com/GetStream/stream-chat-js/issues/1484)) ([7b73cac](https://github.com/GetStream/stream-chat-js/commit/7b73cac6ab3c3c0812f1605024f3d73fad189cca))
+
 ### [8.57.5](https://github.com/GetStream/stream-chat-js/compare/v8.57.4...v8.57.5) (2025-03-01)
 
 

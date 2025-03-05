@@ -2896,6 +2896,7 @@ export type ReservedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
+  | 'pinned_at'
   | 'user'
   | '__html';
 

@@ -2864,6 +2864,7 @@ export class StreamChat {
       'type',
       'updated_at',
       'user',
+      'pinned_at',
       '__html',
     ];
 
