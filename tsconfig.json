@@ -18,7 +18,9 @@
     "allowJs": true,
     "skipLibCheck": true,
     "noEmitOnError": true,
-    "importHelpers": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist/types",
 
     "lib": ["ES2020", "DOM"],
     "moduleResolution": "bundler",

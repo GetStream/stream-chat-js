@@ -8,6 +8,8 @@ import getPackageVersion from './get-package-version.mjs';
 // import.meta.dirname is not available before Node 20
 const __dirname = import.meta.dirname;
 
+const watchModeEnabled = process.argv.includes('--watch') || process.argv.includes('-w');
+
 // Those dependencies are distributed as ES modules, and cannot be externalized
 // in our CJS bundle. We convert them to CJS and bundle them instead.
 const bundledDeps = ['axios', 'form-data', 'isomorphic-ws', 'base64-js'];
@@ -69,8 +71,14 @@ const bundles = [
       'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
   },
-]
-  .flat()
-  .map((config) => esbuild.build(config));
+].flat();
 
-await Promise.all(bundles);
+if (watchModeEnabled) {
+  const contexts = await Promise.all(bundles.map((config) => esbuild.context(config)));
+
+  await Promise.all(contexts.map((context) => context.watch()));
+
+  console.log('ESBuild is watching for changes...');
+} else {
+  await Promise.all(bundles.map((config) => esbuild.build(config)));
+}
