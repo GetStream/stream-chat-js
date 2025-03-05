@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { encodeBase64, decodeBase64 } from './base64';
-import { UR } from './types';
+import { decodeBase64, encodeBase64 } from './base64';
+import type { UR } from './types';
 
 /**
  * Creates the JWT token that can be used for a UserSession
@@ -36,7 +36,10 @@ export function JWTUserToken(
     );
   }
 
-  const opts: jwt.SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
+  const opts: jwt.SignOptions = Object.assign(
+    { algorithm: 'HS256', noTimestamp: true },
+    jwtOptions,
+  );
 
   if (payload.iat) {
     opts.noTimestamp = false;
@@ -49,7 +52,10 @@ export function JWTServerToken(apiSecret: jwt.Secret, jwtOptions: jwt.SignOption
     server: true,
   };
 
-  const opts: jwt.SignOptions = Object.assign({ algorithm: 'HS256', noTimestamp: true }, jwtOptions);
+  const opts: jwt.SignOptions = Object.assign(
+    { algorithm: 'HS256', noTimestamp: true },
+    jwtOptions,
+  );
   return jwt.sign(payload, apiSecret, opts);
 }
 

@@ -1,5 +1,5 @@
-import { Channel } from './channel';
-import {
+import type { Channel } from './channel';
+import type {
   ChannelMemberResponse,
   Event,
   FormatMessageResponse,
@@ -78,7 +78,10 @@ export class ChannelState {
      * be pushed on to message list.
      */
     this.isUpToDate = true;
-    this.last_message_at = channel?.state?.last_message_at != null ? new Date(channel.state.last_message_at) : null;
+    this.last_message_at =
+      channel?.state?.last_message_at != null
+        ? new Date(channel.state.last_message_at)
+        : null;
   }
 
   get messages() {
@@ -104,7 +107,10 @@ export class ChannelState {
   }
 
   get messagePagination() {
-    return this.messageSets.find((s) => s.isCurrent)?.pagination || DEFAULT_MESSAGE_SET_PAGINATION;
+    return (
+      this.messageSets.find((s) => s.isCurrent)?.pagination ||
+      DEFAULT_MESSAGE_SET_PAGINATION
+    );
   }
 
   /**
@@ -182,7 +188,9 @@ export class ChannelState {
            * handle updates to user, we can use the reference map, to determine which
            * channels need to be updated with updated user object.
            */
-          this._channel.getClient().state.updateUserReference(message.user, this._channel.cid);
+          this._channel
+            .getClient()
+            .state.updateUserReference(message.user, this._channel.cid);
         }
 
         if (initializing && message.id && this.threads[message.id]) {
@@ -280,11 +288,19 @@ export class ChannelState {
     this.pinnedMessages = result;
   }
 
-  addReaction(reaction: ReactionResponse, message?: MessageResponse, enforce_unique?: boolean) {
+  addReaction(
+    reaction: ReactionResponse,
+    message?: MessageResponse,
+    enforce_unique?: boolean,
+  ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforce_unique);
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
+        msg.own_reactions,
+        reaction,
+        enforce_unique,
+      );
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
@@ -309,9 +325,14 @@ export class ChannelState {
     return ownReactions;
   }
 
-  _removeOwnReactionFromMessage(ownReactions: ReactionResponse[] | null | undefined, reaction: ReactionResponse) {
+  _removeOwnReactionFromMessage(
+    ownReactions: ReactionResponse[] | null | undefined,
+    reaction: ReactionResponse,
+  ) {
     if (ownReactions) {
-      return ownReactions.filter((item) => item.user_id !== reaction.user_id || item.type !== reaction.type);
+      return ownReactions.filter(
+        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
+      );
     }
     return ownReactions;
   }
@@ -320,25 +341,37 @@ export class ChannelState {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(msg.own_reactions, reaction);
+      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
+        msg.own_reactions,
+        reaction,
+      );
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
   }
 
-  _updateQuotedMessageReferences({ message, remove }: { message: MessageResponse; remove?: boolean }) {
+  _updateQuotedMessageReferences({
+    message,
+    remove,
+  }: {
+    message: MessageResponse;
+    remove?: boolean;
+  }) {
     const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
-      (({
+      ({
         ...m,
         created_at: m.created_at.toISOString(),
         pinned_at: m.pinned_at?.toISOString(),
         updated_at: m.updated_at?.toISOString(),
-      } as unknown) as MessageResponse);
+      }) as unknown as MessageResponse;
 
     const update = (messages: FormatMessageResponse[]) => {
       const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
-          acc.push({ ...parseMessage(msg), quoted_message: remove ? { ...message, attachments: [] } : message });
+          acc.push({
+            ...parseMessage(msg),
+            quoted_message: remove ? { ...message, attachments: [] } : message,
+          });
         }
         return acc;
       }, []);
@@ -369,7 +402,9 @@ export class ChannelState {
       pinned?: boolean;
       show_in_channel?: boolean;
     },
-    updateFunc: (msg: ReturnType<ChannelState['formatMessage']>) => ReturnType<ChannelState['formatMessage']>,
+    updateFunc: (
+      msg: ReturnType<ChannelState['formatMessage']>,
+    ) => ReturnType<ChannelState['formatMessage']>,
   ) {
     const { parent_id, show_in_channel, pinned } = message;
 
@@ -385,7 +420,9 @@ export class ChannelState {
     if ((!show_in_channel && !parent_id) || show_in_channel) {
       const messageSetIndex = this.findMessageSetIndex(message);
       if (messageSetIndex !== -1) {
-        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex((msg) => msg.id === message.id);
+        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex(
+          (msg) => msg.id === message.id,
+        );
         if (msgIndex !== -1) {
           this.messageSets[messageSetIndex].messages[msgIndex] = updateFunc(
             this.messageSets[messageSetIndex].messages[msgIndex],
@@ -430,7 +467,13 @@ export class ChannelState {
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = true,
   ) {
-    return addToMessageList(messages, message, timestampChanged, sortBy, addIfDoesNotExist);
+    return addToMessageList(
+      messages,
+      message,
+      timestampChanged,
+      sortBy,
+      addIfDoesNotExist,
+    );
   }
 
   /**
@@ -440,7 +483,11 @@ export class ChannelState {
    *
    * @return {boolean} Returns if the message was removed
    */
-  removeMessage(messageToRemove: { id: string; messageSetIndex?: number; parent_id?: string }) {
+  removeMessage(messageToRemove: {
+    id: string;
+    messageSetIndex?: number;
+    parent_id?: string;
+  }) {
     let isRemoved = false;
     if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
@@ -451,7 +498,8 @@ export class ChannelState {
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const messageSetIndex = messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
+      const messageSetIndex =
+        messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
       if (messageSetIndex !== -1) {
         const { removed, result: messages } = this.removeMessageFromArray(
           this.messageSets[messageSetIndex].messages,
@@ -469,7 +517,9 @@ export class ChannelState {
     msgArray: Array<ReturnType<ChannelState['formatMessage']>>,
     msg: { id: string; parent_id?: string },
   ) => {
-    const result = msgArray.filter((message) => !(!!message.id && !!msg.id && message.id === msg.id));
+    const result = msgArray.filter(
+      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
+    );
 
     return { removed: result.length < msgArray.length, result };
   };
@@ -480,7 +530,10 @@ export class ChannelState {
    * @param {UserResponse} user
    */
   updateUserMessages = (user: UserResponse) => {
-    const _updateUserMessages = (messages: Array<ReturnType<ChannelState['formatMessage']>>, user: UserResponse) => {
+    const _updateUserMessages = (
+      messages: Array<ReturnType<ChannelState['formatMessage']>>,
+      user: UserResponse,
+    ) => {
       for (let i = 0; i < messages.length; i++) {
         const m = messages[i];
         if (m.user?.id === user.id) {
@@ -521,7 +574,7 @@ export class ChannelState {
            * In case of hard delete, we need to strip down all text, html,
            * attachments and all the custom properties on message
            */
-          messages[i] = ({
+          messages[i] = {
             cid: m.cid,
             created_at: m.created_at,
             deleted_at: user.deleted_at,
@@ -536,7 +589,7 @@ export class ChannelState {
             type: 'deleted',
             updated_at: m.updated_at,
             user: m.user,
-          } as unknown) as ReturnType<ChannelState['formatMessage']>;
+          } as unknown as ReturnType<ChannelState['formatMessage']>;
         } else {
           messages[i] = {
             ...m,
@@ -547,7 +600,9 @@ export class ChannelState {
       }
     };
 
-    this.messageSets.forEach((set) => _deleteUserMessages(set.messages, user, hardDelete));
+    this.messageSets.forEach((set) =>
+      _deleteUserMessages(set.messages, user, hardDelete),
+    );
 
     for (const parentId in this.threads) {
       _deleteUserMessages(this.threads[parentId], user, hardDelete);
@@ -561,7 +616,9 @@ export class ChannelState {
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.latestMessages.filter((message) => message.type !== 'error');
+    const filteredMessages = this.latestMessages.filter(
+      (message) => message.type !== 'error',
+    );
 
     this.latestMessages = filteredMessages;
   }
@@ -594,7 +651,14 @@ export class ChannelState {
   }
 
   initMessages() {
-    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true, pagination: DEFAULT_MESSAGE_SET_PAGINATION }];
+    this.messageSets = [
+      {
+        messages: [],
+        isLatest: true,
+        isCurrent: true,
+        pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+      },
+    ];
   }
 
   /**
@@ -604,7 +668,11 @@ export class ChannelState {
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
    * @param {number} limit The page size if the message has to be queried from the server
    */
-  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string, limit = 25) {
+  async loadMessageIntoState(
+    messageId: string | 'latest',
+    parentMessageId?: string,
+    limit = 25,
+  ) {
     let messageSetIndex: number;
     let switchedToMessageSet = false;
     let loadedMessageThread = false;
@@ -621,12 +689,17 @@ export class ChannelState {
       this.switchToMessageSet(messageSetIndex);
       switchedToMessageSet = true;
     }
-    loadedMessageThread = !parentMessageId || !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
+    loadedMessageThread =
+      !parentMessageId ||
+      !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
     if (switchedToMessageSet && loadedMessageThread) {
       return;
     }
     if (!switchedToMessageSet) {
-      await this._channel.query({ messages: { id_around: messageIdToFind, limit } }, 'new');
+      await this._channel.query(
+        { messages: { id_around: messageIdToFind, limit } },
+        'new',
+      );
     }
     if (!loadedMessageThread && parentMessageId) {
       await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
@@ -670,12 +743,17 @@ export class ChannelState {
     this.messageSets[index].isCurrent = true;
   }
 
-  private areMessageSetsOverlap(messages1: Array<{ id: string }>, messages2: Array<{ id: string }>) {
+  private areMessageSetsOverlap(
+    messages1: Array<{ id: string }>,
+    messages2: Array<{ id: string }>,
+  ) {
     return messages1.some((m1) => messages2.find((m2) => m1.id === m2.id));
   }
 
   private findMessageSetIndex(message: { id?: string }) {
-    return this.messageSets.findIndex((set) => !!set.messages.find((m) => m.id === message.id));
+    return this.messageSets.findIndex(
+      (set) => !!set.messages.find((m) => m.id === message.id),
+    );
   }
 
   private findTargetMessageSet(
@@ -683,12 +761,15 @@ export class ChannelState {
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    let messagesToAdd: (MessageResponse | ReturnType<ChannelState['formatMessage']>)[] = newMessages;
+    let messagesToAdd: (MessageResponse | ReturnType<ChannelState['formatMessage']>)[] =
+      newMessages;
     let targetMessageSetIndex!: number;
     if (addIfDoesNotExist) {
       const overlappingMessageSetIndices = this.messageSets
         .map((_, i) => i)
-        .filter((i) => this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages));
+        .filter((i) =>
+          this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages),
+        );
       switch (messageSetToAddToIfDoesNotExist) {
         case 'new':
           if (overlappingMessageSetIndices.length > 0) {
@@ -716,13 +797,18 @@ export class ChannelState {
       // when merging the target set will be the first one from the overlapping message sets
       const mergeTargetMessageSetIndex = overlappingMessageSetIndices.splice(0, 1)[0];
       const mergeSourceMessageSetIndices = [...overlappingMessageSetIndices];
-      if (mergeTargetMessageSetIndex !== undefined && mergeTargetMessageSetIndex !== targetMessageSetIndex) {
+      if (
+        mergeTargetMessageSetIndex !== undefined &&
+        mergeTargetMessageSetIndex !== targetMessageSetIndex
+      ) {
         mergeSourceMessageSetIndices.push(targetMessageSetIndex);
       }
       // merge message sets
       if (mergeSourceMessageSetIndices.length > 0) {
         const target = this.messageSets[mergeTargetMessageSetIndex];
-        const sources = this.messageSets.filter((_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1);
+        const sources = this.messageSets.filter(
+          (_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1,
+        );
         sources.forEach((messageSet) => {
           target.isLatest = target.isLatest || messageSet.isLatest;
           target.isCurrent = target.isCurrent || messageSet.isCurrent;
@@ -731,7 +817,8 @@ export class ChannelState {
               ? messageSet.pagination.hasPrev
               : target.pagination.hasPrev;
           target.pagination.hasNext =
-            target.messages.slice(-1)[0].created_at < messageSet.messages.slice(-1)[0].created_at
+            target.messages.slice(-1)[0].created_at <
+            messageSet.messages.slice(-1)[0].created_at
               ? messageSet.pagination.hasNext
               : target.pagination.hasNext;
           messagesToAdd = [...messagesToAdd, ...messageSet.messages];

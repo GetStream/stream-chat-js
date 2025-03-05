@@ -1,20 +1,20 @@
-import { EVENT_MAP } from './events';
+import type { EVENT_MAP } from './events';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
 import type { Role } from './permissions';
 import type {
-  CustomChannelData,
-  CustomMemberData,
-  CustomThreadData,
-  CustomEventData,
-  CustomMessageData,
-  CustomUserData,
-  CustomReactionData,
   CustomAttachmentData,
+  CustomChannelData,
   CustomCommandData,
+  CustomEventData,
+  CustomMemberData,
+  CustomMessageData,
   CustomPollData,
   CustomPollOptionData,
+  CustomReactionData,
+  CustomThreadData,
+  CustomUserData,
 } from './custom_types';
 
 /**
@@ -56,10 +56,10 @@ export type UnknownType = UR; // alias to avoid breaking change
 export type Unpacked<T> = T extends (infer U)[]
   ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
   : T extends (...args: any[]) => infer U
-  ? U
-  : T extends Promise<infer U>
-  ? U
-  : T;
+    ? U
+    : T extends Promise<infer U>
+      ? U
+      : T;
 
 /**
  * Response Types
@@ -441,7 +441,7 @@ export type FlagMessageResponse = APIResponse & {
     user: UserResponse;
     approved_at?: string;
     channel_cid?: string;
-    details?: Object; // Any JSON
+    details?: object; // Any JSON
     message_user_id?: string;
     rejected_at?: string;
     reviewed_at?: string;
@@ -458,7 +458,7 @@ export type FlagUserResponse = APIResponse & {
     updated_at: string;
     user: UserResponse;
     approved_at?: string;
-    details?: Object; // Any JSON
+    details?: object; // Any JSON
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -893,11 +893,14 @@ export type FlagReportsPaginationOptions = {
 };
 
 export type ReviewFlagReportOptions = {
-  review_details?: Object;
+  review_details?: object;
   user_id?: string;
 };
 
-export type BannedUsersPaginationOptions = Omit<PaginationOptions, 'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'> & {
+export type BannedUsersPaginationOptions = Omit<
+  PaginationOptions,
+  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
+> & {
   exclude_expired_bans?: boolean;
 };
 
@@ -994,9 +997,13 @@ export type DeactivateUsersOptions = {
   mark_messages_deleted?: boolean;
 };
 
-export type NewMemberPayload = CustomMemberData & Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
+export type NewMemberPayload = CustomMemberData &
+  Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
-export type Thresholds = Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>;
+export type Thresholds = Record<
+  'explicit' | 'spam' | 'toxic',
+  Partial<{ block: number; flag: number }>
+>;
 
 export type BlockListOptions = {
   behavior: BlocklistBehavior;
@@ -1445,21 +1452,30 @@ export type MessageFlagsFiltersOptions = {
 export type MessageFlagsFilters = QueryFilters<
   {
     channel_cid?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
   } & {
     team?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<MessageFlagsFiltersOptions['team']>;
   } & {
     user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
   } & {
-      [Key in keyof Omit<MessageFlagsFiltersOptions, 'channel_cid' | 'user_id' | 'is_reviewed'>]:
-        | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
-        | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
-    }
+    [Key in keyof Omit<
+      MessageFlagsFiltersOptions,
+      'channel_cid' | 'user_id' | 'is_reviewed'
+    >]:
+      | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
+      | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
+  }
 >;
 
 export type FlagsFiltersOptions = {
@@ -1478,19 +1494,27 @@ export type FlagsFilters = QueryFilters<
       | PrimitiveFilter<FlagsFiltersOptions['user_id']>;
   } & {
     message_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagsFiltersOptions['message_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagsFiltersOptions['message_id']>;
   } & {
     message_user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagsFiltersOptions['message_user_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagsFiltersOptions['message_user_id']>;
   } & {
     channel_cid?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagsFiltersOptions['channel_cid']>;
   } & {
     reporter_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['reporter_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagsFiltersOptions['reporter_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagsFiltersOptions['reporter_id']>;
   } & {
     team?:
@@ -1514,42 +1538,60 @@ export type FlagReportsFiltersOptions = {
 export type FlagReportsFilters = QueryFilters<
   {
     report_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
   } & {
     review_result?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
   } & {
     reviewed_by?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
   } & {
     user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
   } & {
     message_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
   } & {
     message_user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['message_user_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['message_user_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['message_user_id']>;
   } & {
     channel_cid?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
   } & {
     team?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
   } & {
-      [Key in keyof Omit<
-        FlagReportsFiltersOptions,
-        'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
-      >]: RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>> | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
-    }
+    [Key in keyof Omit<
+      FlagReportsFiltersOptions,
+      'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
+    >]:
+      | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
+      | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
+  }
 >;
 
 export type BannedUsersFilterOptions = {
@@ -1563,7 +1605,9 @@ export type BannedUsersFilterOptions = {
 export type BannedUsersFilters = QueryFilters<
   {
     channel_cid?:
-      | RequireOnlyOne<Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<BannedUsersFilterOptions['channel_cid']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<BannedUsersFilterOptions['channel_cid']>;
   } & {
     reason?:
@@ -1574,10 +1618,10 @@ export type BannedUsersFilters = QueryFilters<
         >
       | PrimitiveFilter<BannedUsersFilterOptions['reason']>;
   } & {
-      [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
-        | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
-        | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
-    }
+    [Key in keyof Omit<BannedUsersFilterOptions, 'channel_cid' | 'reason'>]:
+      | RequireOnlyOne<QueryFilter<BannedUsersFilterOptions[Key]>>
+      | PrimitiveFilter<BannedUsersFilterOptions[Key]>;
+  }
 >;
 
 export type ReactionFilters = QueryFilters<
@@ -1591,7 +1635,12 @@ export type ReactionFilters = QueryFilters<
       | PrimitiveFilter<ReactionResponse['type']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['created_at']>;
   }
 >;
@@ -1619,10 +1668,10 @@ export type ChannelFilters = QueryFilters<
       | PrimitiveFilter<ChannelResponse['name']>;
     pinned?: boolean;
   } & {
-      [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
-        | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
-        | PrimitiveFilter<ChannelResponse[Key]>;
-    }
+    [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
+      | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
+      | PrimitiveFilter<ChannelResponse[Key]>;
+  }
 >;
 
 export type QueryPollsParams = {
@@ -1643,7 +1692,9 @@ export type QueryVotesOptions = Pager;
 
 export type QueryPollsFilters = QueryFilters<
   {
-    id?: RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>> | PrimitiveFilter<PollResponse['id']>;
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<PollResponse['id']>;
   } & {
     user_id?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
@@ -1654,7 +1705,12 @@ export type QueryPollsFilters = QueryFilters<
       | PrimitiveFilter<PollResponse['is_closed']>;
   } & {
     max_votes_allowed?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['max_votes_allowed']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['max_votes_allowed']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['max_votes_allowed']>;
   } & {
     allow_answers?:
@@ -1662,7 +1718,9 @@ export type QueryPollsFilters = QueryFilters<
       | PrimitiveFilter<PollResponse['allow_answers']>;
   } & {
     allow_user_suggested_options?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['allow_user_suggested_options']>, '$eq'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<PollResponse['allow_user_suggested_options']>, '$eq'>
+        >
       | PrimitiveFilter<PollResponse['allow_user_suggested_options']>;
   } & {
     voting_visibility?:
@@ -1670,7 +1728,12 @@ export type QueryPollsFilters = QueryFilters<
       | PrimitiveFilter<PollResponse['voting_visibility']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['created_at']>;
   } & {
     created_by_id?:
@@ -1678,7 +1741,12 @@ export type QueryPollsFilters = QueryFilters<
       | PrimitiveFilter<PollResponse['created_by_id']>;
   } & {
     updated_at?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['updated_at']>;
   } & {
     name?:
@@ -1689,7 +1757,9 @@ export type QueryPollsFilters = QueryFilters<
 
 export type QueryVotesFilters = QueryFilters<
   {
-    id?: RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>> | PrimitiveFilter<PollResponse['id']>;
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<PollResponse['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<PollResponse['id']>;
   } & {
     option_id?:
       | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['option_id']>, '$eq' | '$in'>>
@@ -1704,7 +1774,12 @@ export type QueryVotesFilters = QueryFilters<
       | PrimitiveFilter<VotesFiltersOptions['user_id']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['created_at']>;
   } & {
     created_by_id?:
@@ -1712,7 +1787,12 @@ export type QueryVotesFilters = QueryFilters<
       | PrimitiveFilter<PollResponse['created_by_id']>;
   } & {
     updated_at?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<PollResponse['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<PollResponse['updated_at']>;
   }
 >;
@@ -1739,7 +1819,9 @@ export type MessageFilters = QueryFilters<
           $in: PrimitiveFilter<Attachment['type']>[];
         }>
       | PrimitiveFilter<Attachment['type']>;
-    'mentioned_users.id'?: RequireOnlyOne<{ $contains: PrimitiveFilter<UserResponse['id']> }>;
+    'mentioned_users.id'?: RequireOnlyOne<{
+      $contains: PrimitiveFilter<UserResponse['id']>;
+    }>;
     text?:
       | RequireOnlyOne<
           {
@@ -1756,10 +1838,10 @@ export type MessageFilters = QueryFilters<
         >
       | PrimitiveFilter<UserResponse['id']>;
   } & {
-      [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
-        | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
-        | PrimitiveFilter<MessageResponse[Key]>;
-    }
+    [Key in keyof Omit<MessageResponse, 'text' | keyof CustomMessageData>]?:
+      | RequireOnlyOne<QueryFilter<MessageResponse[Key]>>
+      | PrimitiveFilter<MessageResponse[Key]>;
+  }
 >;
 
 export type MessageOptions = {
@@ -1768,26 +1850,26 @@ export type MessageOptions = {
 
 export type PrimitiveFilter<ObjectType> = ObjectType | null;
 
-export type QueryFilter<ObjectType = string> = NonNullable<ObjectType> extends string | number | boolean
-  ? {
-      $eq?: PrimitiveFilter<ObjectType>;
-      $exists?: boolean;
-      $gt?: PrimitiveFilter<ObjectType>;
-      $gte?: PrimitiveFilter<ObjectType>;
-      $in?: PrimitiveFilter<ObjectType>[];
-      $lt?: PrimitiveFilter<ObjectType>;
-      $lte?: PrimitiveFilter<ObjectType>;
-    }
-  : {
-      $eq?: PrimitiveFilter<ObjectType>;
-      $exists?: boolean;
-      $in?: PrimitiveFilter<ObjectType>[];
-    };
+export type QueryFilter<ObjectType = string> =
+  NonNullable<ObjectType> extends string | number | boolean
+    ? {
+        $eq?: PrimitiveFilter<ObjectType>;
+        $exists?: boolean;
+        $gt?: PrimitiveFilter<ObjectType>;
+        $gte?: PrimitiveFilter<ObjectType>;
+        $in?: PrimitiveFilter<ObjectType>[];
+        $lt?: PrimitiveFilter<ObjectType>;
+        $lte?: PrimitiveFilter<ObjectType>;
+      }
+    : {
+        $eq?: PrimitiveFilter<ObjectType>;
+        $exists?: boolean;
+        $in?: PrimitiveFilter<ObjectType>[];
+      };
 
 export type QueryFilters<Operators = {}> = {
   [Key in keyof Operators]?: Operators[Key];
-} &
-  QueryLogicalOperators<Operators>;
+} & QueryLogicalOperators<Operators>;
 
 export type QueryLogicalOperators<Operators> = {
   $and?: ArrayOneOrMore<QueryFilters<Operators>>;
@@ -1798,10 +1880,14 @@ export type QueryLogicalOperators<Operators> = {
 export type UserFilters = QueryFilters<
   ContainsOperator<CustomUserData> & {
     id?:
-      | RequireOnlyOne<{ $autocomplete?: UserResponse['id'] } & QueryFilter<UserResponse['id']>>
+      | RequireOnlyOne<
+          { $autocomplete?: UserResponse['id'] } & QueryFilter<UserResponse['id']>
+        >
       | PrimitiveFilter<UserResponse['id']>;
     name?:
-      | RequireOnlyOne<{ $autocomplete?: UserResponse['name'] } & QueryFilter<UserResponse['name']>>
+      | RequireOnlyOne<
+          { $autocomplete?: UserResponse['name'] } & QueryFilter<UserResponse['name']>
+        >
       | PrimitiveFilter<UserResponse['name']>;
     notifications_muted?:
       | RequireOnlyOne<{
@@ -1816,13 +1902,20 @@ export type UserFilters = QueryFilters<
         }>
       | PrimitiveFilter<UserResponse['teams']>;
     username?:
-      | RequireOnlyOne<{ $autocomplete?: UserResponse['username'] } & QueryFilter<UserResponse['username']>>
+      | RequireOnlyOne<
+          { $autocomplete?: UserResponse['username'] } & QueryFilter<
+            UserResponse['username']
+          >
+        >
       | PrimitiveFilter<UserResponse['username']>;
   } & {
-      [Key in keyof Omit<UserResponse, 'id' | 'name' | 'teams' | 'username' | keyof CustomUserData>]?:
-        | RequireOnlyOne<QueryFilter<UserResponse[Key]>>
-        | PrimitiveFilter<UserResponse[Key]>;
-    }
+    [Key in keyof Omit<
+      UserResponse,
+      'id' | 'name' | 'teams' | 'username' | keyof CustomUserData
+    >]?:
+      | RequireOnlyOne<QueryFilter<UserResponse[Key]>>
+      | PrimitiveFilter<UserResponse[Key]>;
+  }
 >;
 
 export type InviteStatus = 'pending' | 'accepted' | 'rejected';
@@ -1831,7 +1924,9 @@ export type InviteStatus = 'pending' | 'accepted' | 'rejected';
 export type MemberFilters = QueryFilters<
   {
     banned?: { $eq?: ChannelMemberResponse['banned'] } | ChannelMemberResponse['banned'];
-    channel_role?: { $eq?: ChannelMemberResponse['channel_role'] } | ChannelMemberResponse['channel_role'];
+    channel_role?:
+      | { $eq?: ChannelMemberResponse['channel_role'] }
+      | ChannelMemberResponse['channel_role'];
     cid?: { $eq?: ChannelResponse['cid'] } | ChannelResponse['cid'];
     created_at?:
       | {
@@ -1940,7 +2035,11 @@ export type UserSort = Sort<UserResponse> | Array<Sort<UserResponse>>;
 
 export type MemberSort =
   | Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>
-  | Array<Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>>;
+  | Array<
+      Sort<
+        Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>
+      >
+    >;
 
 export type SearchMessageSortBase = Sort<CustomMessageData> & {
   attachments?: AscDesc;
@@ -2524,7 +2623,11 @@ export type LiteralStringForUnion = string & {};
 
 export type LogLevel = 'info' | 'error' | 'warn';
 
-export type Logger = (logLevel: LogLevel, message: string, extraData?: Record<string, unknown>) => void;
+export type Logger = (
+  logLevel: LogLevel,
+  message: string,
+  extraData?: Record<string, unknown>,
+) => void;
 
 export type Message = Partial<MessageBase> & {
   mentioned_users?: string[];
@@ -2549,7 +2652,13 @@ export type MessageBase = CustomMessageData & {
   user_id?: string;
 };
 
-export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
+export type MessageLabel =
+  | 'deleted'
+  | 'ephemeral'
+  | 'error'
+  | 'regular'
+  | 'reply'
+  | 'system';
 
 export type SendMessageOptions = {
   force_moderation?: boolean;
@@ -3253,22 +3362,31 @@ export type CastVoteAPIResponse = {
 export type QueryMessageHistoryFilters = QueryFilters<
   {
     message_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<MessageHistoryEntry['message_id']>;
   } & {
     user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>
+        >
       | PrimitiveFilter<MessageHistoryEntry['message_updated_by_id']>;
   } & {
     created_at?:
       | RequireOnlyOne<
-          Pick<QueryFilter<MessageHistoryEntry['message_updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>
+          Pick<
+            QueryFilter<MessageHistoryEntry['message_updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
         >
       | PrimitiveFilter<MessageHistoryEntry['message_updated_at']>;
   }
 >;
 
-export type QueryMessageHistorySort = QueryMessageHistorySortBase | Array<QueryMessageHistorySortBase>;
+export type QueryMessageHistorySort =
+  | QueryMessageHistorySortBase
+  | Array<QueryMessageHistorySortBase>;
 
 export type QueryMessageHistorySortBase = {
   message_updated_at?: AscDesc;
@@ -3409,7 +3527,12 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
   } & {
     completed_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['completed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ReviewQueueItem['completed_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<ReviewQueueItem['completed_at']>;
   } & {
     config_key?:
@@ -3421,7 +3544,12 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['entity_type']>;
   } & {
     created_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ReviewQueueItem['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<ReviewQueueItem['created_at']>;
   } & {
     id?:
@@ -3435,7 +3563,12 @@ export type ReviewQueueFilters = QueryFilters<
     reviewed?: boolean;
   } & {
     reviewed_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['reviewed_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ReviewQueueItem['reviewed_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
   } & {
     status?:
@@ -3443,7 +3576,12 @@ export type ReviewQueueFilters = QueryFilters<
       | PrimitiveFilter<ReviewQueueItem['status']>;
   } & {
     updated_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ReviewQueueItem['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
       | PrimitiveFilter<ReviewQueueItem['updated_at']>;
   } & {
     has_image?: boolean;
@@ -3571,7 +3709,13 @@ export type AIState =
   | 'AI_STATE_GENERATING'
   | (string & {});
 
-export type ModerationActionType = 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+export type ModerationActionType =
+  | 'flag'
+  | 'shadow'
+  | 'remove'
+  | 'bounce'
+  | 'bounce_flag'
+  | 'bounce_remove';
 
 export type AutomodRule = {
   action: ModerationActionType;
@@ -3695,7 +3839,10 @@ export type PromoteChannelParams = {
  * An identifier containing information about the downstream SDK using stream-chat. It
  * is used to resolve the user agent.
  */
-export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular'; version: string };
+export type SdkIdentifier = {
+  name: 'react' | 'react-native' | 'expo' | 'angular';
+  version: string;
+};
 
 /**
  * An identifier containing information about the downstream device using stream-chat, if

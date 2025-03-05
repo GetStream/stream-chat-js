@@ -9,7 +9,11 @@ const multiTenancySecret = process.env.MULTITENANCY_API_SECRET;
 const multiTenancyKey = process.env.MULTITENANCY_API_KEY;
 
 module.exports = {
-	createMultiTenancyUsers: async function createMultiTenancyUsers(userIDs, teams = [], additionalInfo) {
+	createMultiTenancyUsers: async function createMultiTenancyUsers(
+		userIDs,
+		teams = [],
+		additionalInfo,
+	) {
 		const serverClient = await this.getMultiTenancyServerTestClient();
 		const users = [];
 		for (const userID of userIDs) {
@@ -41,28 +45,32 @@ module.exports = {
 		await channel.create();
 		return channel;
 	},
-	createTestChannelForUser: async function createTestChannelForUser(id, userID, options = {}) {
+	createTestChannelForUser: async function createTestChannelForUser(
+		id,
+		userID,
+		options = {},
+	) {
 		const client = await this.getTestClientForUser(userID, options);
 		const channel = client.channel('messaging', id, { members: [userID] });
 		await channel.create();
 		return channel;
 	},
-	createTestMultiTenancyChannelForUser: async function createTestMultiTenancyChannelForUser(
-		id,
-		userID,
-		team,
-		options = {},
-	) {
-		const client = await this.getMultiTenancyTestClientForUser(userID, options);
-		const channel = client.channel('messaging', id, { members: [userID], team });
-		await channel.create();
-		return channel;
-	},
+	createTestMultiTenancyChannelForUser:
+		async function createTestMultiTenancyChannelForUser(id, userID, team, options = {}) {
+			const client = await this.getMultiTenancyTestClientForUser(userID, options);
+			const channel = client.channel('messaging', id, { members: [userID], team });
+			await channel.create();
+			return channel;
+		},
 	getMultiTenancyTestClient: async function getMultiTenancyTestClient(serverSide) {
-		const client = new StreamChat(multiTenancyKey, serverSide ? multiTenancySecret : null, {
-			timeout: 8000,
-			allowServerSideConnect: true,
-		});
+		const client = new StreamChat(
+			multiTenancyKey,
+			serverSide ? multiTenancySecret : null,
+			{
+				timeout: 8000,
+				allowServerSideConnect: true,
+			},
+		);
 		if (serverSide) {
 			await client.updateAppSettings({
 				multi_tenant_enabled: true,
@@ -70,9 +78,15 @@ module.exports = {
 		}
 		return client;
 	},
-	getMultiTenancyTestClientForUser: async function getMultiTenancyTestClientForUser(userID, options = {}) {
+	getMultiTenancyTestClientForUser: async function getMultiTenancyTestClientForUser(
+		userID,
+		options = {},
+	) {
 		const client = await this.getMultiTenancyTestClient(false);
-		const health = await client.connectUser({ id: userID, ...options }, this.createMultiTenancyUserToken(userID));
+		const health = await client.connectUser(
+			{ id: userID, ...options },
+			this.createMultiTenancyUserToken(userID),
+		);
 		client.health = health;
 		return client;
 	},
@@ -90,7 +104,10 @@ module.exports = {
 	},
 	getTestClientForUser: async function getTestClientForUser(userID, options = {}) {
 		const client = this.getTestClient(false);
-		const health = await client.connectUser({ id: userID, ...options }, this.createUserToken(userID));
+		const health = await client.connectUser(
+			{ id: userID, ...options },
+			this.createUserToken(userID),
+		);
 		client.health = health;
 		return client;
 	},

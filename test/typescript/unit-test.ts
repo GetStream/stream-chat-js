@@ -186,7 +186,13 @@ clientRes = client.post<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.patch<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.delete<X>('https://chat.stream-io-api.com/', { id: 2 });
 
-const file: Promise<SendFileAPIResponse> = client.sendFile('aa', 'bb', 'text.jpg', 'image/jpg', { id: 'james' });
+const file: Promise<SendFileAPIResponse> = client.sendFile(
+  'aa',
+  'bb',
+  'text.jpg',
+  'image/jpg',
+  { id: 'james' },
+);
 
 const type: EventTypes = 'user.updated';
 const event: Event<StreamTypes> = {
@@ -224,15 +230,20 @@ channels.then((response) => {
   const cid: string = response[0].cid;
 });
 
-const channel: Channel<StreamTypes> = client.channel('messaging', 'channelName', { color: 'green' });
+const channel: Channel<StreamTypes> = client.channel('messaging', 'channelName', {
+  color: 'green',
+});
 const channelState: ChannelState<StreamTypes> = channel.state;
 const chUser1: ChannelMemberResponse<StreamTypes> = channelState.members.someUser12433222;
-const chUser2: ChannelMemberResponse<StreamTypes> = channelState.members.someUser124332221;
+const chUser2: ChannelMemberResponse<StreamTypes> =
+  channelState.members.someUser124332221;
 
 const chUser3: UserResponse<StreamTypes> = channelState.read.someUserId.user;
 const typing: Event<StreamTypes> = channelState.typing['someUserId'];
 
-const acceptInvite: Promise<UpdateChannelAPIResponse<StreamTypes>> = channel.acceptInvite({});
+const acceptInvite: Promise<UpdateChannelAPIResponse<StreamTypes>> = channel.acceptInvite(
+  {},
+);
 
 voidReturn = channel.on(eventHandler);
 voidReturn = channel.off(eventHandler);
@@ -242,11 +253,39 @@ voidReturn = channel.off('message.new', eventHandler);
 channel.sendMessage({ text: 'text' }); // send a msg without id
 
 const permissions = [
-  new Permission('Admin users can perform any action', MaxPriority, AnyResource, AnyRole, false, Allow),
-  new Permission('Anonymous users are not allowed', 500, AnyResource, ['anonymous'], false, Deny),
-  new Permission('Users can modify their own messages', 400, AnyResource, ['user'], true, Allow),
+  new Permission(
+    'Admin users can perform any action',
+    MaxPriority,
+    AnyResource,
+    AnyRole,
+    false,
+    Allow,
+  ),
+  new Permission(
+    'Anonymous users are not allowed',
+    500,
+    AnyResource,
+    ['anonymous'],
+    false,
+    Deny,
+  ),
+  new Permission(
+    'Users can modify their own messages',
+    400,
+    AnyResource,
+    ['user'],
+    true,
+    Allow,
+  ),
   new Permission('Users can create channels', 300, AnyResource, ['user'], false, Allow),
-  new Permission('Channel Members', 200, ['ReadChannel', 'CreateMessage'], ['channel_member'], false, Allow),
+  new Permission(
+    'Channel Members',
+    200,
+    ['ReadChannel', 'CreateMessage'],
+    ['channel_member'],
+    false,
+    Allow,
+  ),
   new Permission('Discard all', 100, AnyResource, AnyRole, false, Deny),
 ];
 

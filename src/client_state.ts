@@ -1,5 +1,5 @@
-import { UserResponse } from './types';
-import { StreamChat } from './client';
+import type { UserResponse } from './types';
+import type { StreamChat } from './client';
 
 /**
  * ClientState - A container class for the client state.

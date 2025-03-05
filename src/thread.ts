@@ -1,5 +1,10 @@
 import { StateStore } from './store';
-import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
+import {
+  addToMessageList,
+  findIndexInSortedArray,
+  formatMessage,
+  throttle,
+} from './utils';
 import type {
   AscDesc,
   EventTypes,
@@ -109,16 +114,31 @@ export class Thread {
   private unsubscribeFunctions: Set<() => void> = new Set();
   private failedRepliesMap: Map<string, FormatMessageResponse> = new Map();
 
-  constructor({ client, threadData }: { client: StreamChat; threadData: ThreadResponse }) {
+  constructor({
+    client,
+    threadData,
+  }: {
+    client: StreamChat;
+    threadData: ThreadResponse;
+  }) {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
       name: threadData.channel.name,
     });
-    channel._hydrateMembers({ members: threadData.channel.members ?? [], overrideCurrentState: false });
+    channel._hydrateMembers({
+      members: threadData.channel.members ?? [],
+      overrideCurrentState: false,
+    });
 
     // For when read object is undefined and due to that unreadMessageCount for
     // the current user isn't being incremented on message.new
     const placeholderReadResponse: ReadResponse[] = client.userID
-      ? [{ user: { id: client.userID }, unread_messages: 0, last_read: new Date().toISOString() }]
+      ? [
+          {
+            user: { id: client.userID },
+            unread_messages: 0,
+            last_read: new Date().toISOString(),
+          },
+        ]
       : [];
 
     this.state = new StateStore<ThreadState>({
@@ -135,7 +155,9 @@ export class Thread {
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
       read: formatReadState(
-        !threadData.read || threadData.read.length === 0 ? placeholderReadResponse : threadData.read,
+        !threadData.read || threadData.read.length === 0
+          ? placeholderReadResponse
+          : threadData.read,
       ),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
@@ -236,8 +258,8 @@ export class Thread {
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
   };
 
-  private subscribeThreadUpdated = () => {
-    return this.client.on('thread.updated', (event) => {
+  private subscribeThreadUpdated = () =>
+    this.client.on('thread.updated', (event) => {
       if (!event.thread || event.thread.parent_message_id !== this.id) {
         return;
       }
@@ -252,10 +274,9 @@ export class Thread {
         custom: constructCustomDataObject(threadData),
       });
     }).unsubscribe;
-  };
 
-  private subscribeMarkActiveThreadRead = () => {
-    return this.state.subscribeWithSelector(
+  private subscribeMarkActiveThreadRead = () =>
+    this.state.subscribeWithSelector(
       (nextValue) => ({
         active: nextValue.active,
         unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
@@ -265,7 +286,6 @@ export class Thread {
         this.throttledMarkAsRead();
       },
     );
-  };
 
   private subscribeReloadActiveStaleThread = () =>
     this.state.subscribeWithSelector(
@@ -281,7 +301,11 @@ export class Thread {
     this.client.on('user.watching.stop', (event) => {
       const { channel } = this.state.getLatestValue();
 
-      if (!this.client.userID || this.client.userID !== event.user?.id || event.channel?.cid !== channel.cid) {
+      if (
+        !this.client.userID ||
+        this.client.userID !== event.user?.id ||
+        event.channel?.cid !== channel.cid
+      ) {
         return;
       }
 
@@ -386,7 +410,12 @@ export class Thread {
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const eventTypes: EventTypes[] = ['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'];
+    const eventTypes: EventTypes[] = [
+      'message.updated',
+      'reaction.new',
+      'reaction.deleted',
+      'reaction.updated',
+    ];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -489,23 +518,24 @@ export class Thread {
     return await this.channel.markRead({ thread_id: this.id });
   };
 
-  private throttledMarkAsRead = throttle(() => this.markAsRead(), MARK_AS_READ_THROTTLE_TIMEOUT, { trailing: true });
+  private throttledMarkAsRead = throttle(
+    () => this.markAsRead(),
+    MARK_AS_READ_THROTTLE_TIMEOUT,
+    { trailing: true },
+  );
 
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,
     sort = DEFAULT_SORT,
     ...otherOptions
-  }: QueryRepliesOptions = {}) => {
-    return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
-  };
+  }: QueryRepliesOptions = {}) =>
+    this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
 
-  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
-    return this.loadPage(limit);
-  };
+  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
+    this.loadPage(limit);
 
-  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
-    return this.loadPage(-limit);
-  };
+  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
+    this.loadPage(-limit);
 
   private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
@@ -569,16 +599,22 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
     return state;
   }, {});
 
-const repliesPaginationFromInitialThread = (thread: ThreadResponse): ThreadRepliesPagination => {
-  const latestRepliesContainsAllReplies = thread.latest_replies.length === thread.reply_count;
+const repliesPaginationFromInitialThread = (
+  thread: ThreadResponse,
+): ThreadRepliesPagination => {
+  const latestRepliesContainsAllReplies =
+    thread.latest_replies.length === thread.reply_count;
 
   return {
     nextCursor: null,
-    prevCursor: latestRepliesContainsAllReplies ? null : thread.latest_replies.at(0)?.id ?? null,
+    prevCursor: latestRepliesContainsAllReplies
+      ? null
+      : (thread.latest_replies.at(0)?.id ?? null),
     isLoadingNext: false,
     isLoadingPrev: false,
   };
 };
 
-const ownUnreadCountSelector = (currentUserId: string | undefined) => (state: ThreadState) =>
-  (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
+const ownUnreadCountSelector =
+  (currentUserId: string | undefined) => (state: ThreadState) =>
+    (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;

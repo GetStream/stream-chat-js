@@ -1,9 +1,16 @@
 import { ChannelState } from './channel_state';
-import { generateChannelTempCid, logChatPromiseExecution, messageSetPagination, normalizeQuerySort } from './utils';
-import { StreamChat } from './client';
+import {
+  generateChannelTempCid,
+  logChatPromiseExecution,
+  messageSetPagination,
+  normalizeQuerySort,
+} from './utils';
+import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
+  AIState,
   APIResponse,
+  AscDesc,
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
@@ -30,6 +37,7 @@ import type {
   MemberSort,
   Message,
   MessageFilters,
+  MessageOptions,
   MessagePaginationOptions,
   MessageResponse,
   MessageSetType,
@@ -38,8 +46,12 @@ import type {
   PartialUpdateChannel,
   PartialUpdateChannelAPIResponse,
   PartialUpdateMember,
+  PartialUpdateMemberAPIResponse,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
+  PollVoteData,
+  PushPreference,
+  QueryChannelAPIResponse,
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
@@ -48,19 +60,12 @@ import type {
   SearchOptions,
   SearchPayload,
   SendMessageAPIResponse,
+  SendMessageOptions,
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
-  UserResponse,
-  QueryChannelAPIResponse,
-  PollVoteData,
-  SendMessageOptions,
-  AscDesc,
-  PartialUpdateMemberAPIResponse,
-  AIState,
-  MessageOptions,
-  PushPreference,
   UpdateChannelOptions,
+  UserResponse,
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
@@ -109,7 +114,12 @@ export class Channel {
    *
    * @return {Channel} Returns a new uninitialized channel
    */
-  constructor(client: StreamChat, type: string, id: string | undefined, data: ChannelData) {
+  constructor(
+    client: StreamChat,
+    type: string,
+    id: string | undefined,
+    data: ChannelData,
+  ) {
     const validTypeRe = /^[\w_-]+$/;
     const validIDRe = /^[\w!_-]+$/;
 
@@ -174,10 +184,13 @@ export class Channel {
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
   async sendMessage(message: Message, options?: SendMessageOptions) {
-    return await this.getClient().post<SendMessageAPIResponse>(this._channelURL() + '/message', {
-      message,
-      ...options,
-    });
+    return await this.getClient().post<SendMessageAPIResponse>(
+      this._channelURL() + '/message',
+      {
+        message,
+        ...options,
+      },
+    );
   }
 
   sendFile(
@@ -186,11 +199,28 @@ export class Channel {
     contentType?: string,
     user?: UserResponse,
   ) {
-    return this.getClient().sendFile(`${this._channelURL()}/file`, uri, name, contentType, user);
+    return this.getClient().sendFile(
+      `${this._channelURL()}/file`,
+      uri,
+      name,
+      contentType,
+      user,
+    );
   }
 
-  sendImage(uri: string | NodeJS.ReadableStream | File, name?: string, contentType?: string, user?: UserResponse) {
-    return this.getClient().sendFile(`${this._channelURL()}/image`, uri, name, contentType, user);
+  sendImage(
+    uri: string | NodeJS.ReadableStream | File,
+    name?: string,
+    contentType?: string,
+    user?: UserResponse,
+  ) {
+    return this.getClient().sendFile(
+      `${this._channelURL()}/image`,
+      uri,
+      name,
+      contentType,
+      user,
+    );
   }
 
   deleteFile(url: string) {
@@ -240,7 +270,9 @@ export class Channel {
     const payload: SearchPayload = {
       filter_conditions: { cid: this.cid } as ChannelFilters,
       ...options,
-      sort: options.sort ? normalizeQuerySort<SearchMessageSortBase>(options.sort) : undefined,
+      sort: options.sort
+        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
+        : undefined,
     };
     if (typeof query === 'string') {
       payload.query = query;
@@ -252,9 +284,12 @@ export class Channel {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    return await this.getClient().get<SearchAPIResponse>(this.getClient().baseURL + '/search', {
-      payload,
-    });
+    return await this.getClient().get<SearchAPIResponse>(
+      this.getClient().baseURL + '/search',
+      {
+        payload,
+      },
+    );
   }
 
   /**
@@ -267,7 +302,11 @@ export class Channel {
    *
    * @return {Promise<ChannelMemberAPIResponse>} Query Members response
    */
-  async queryMembers(filterConditions: MemberFilters, sort: MemberSort = [], options: QueryMembersOptions = {}) {
+  async queryMembers(
+    filterConditions: MemberFilters,
+    sort: MemberSort = [],
+    options: QueryMembersOptions = {},
+  ) {
     let id: string | undefined;
     const type = this.type;
     let members: string[] | ChannelMemberResponse[] | undefined;
@@ -277,16 +316,19 @@ export class Channel {
       members = this.data.members;
     }
     // Return a list of members
-    return await this.getClient().get<ChannelMemberAPIResponse>(this.getClient().baseURL + '/members', {
-      payload: {
-        type,
-        id,
-        members,
-        sort: normalizeQuerySort(sort),
-        filter_conditions: filterConditions,
-        ...options,
+    return await this.getClient().get<ChannelMemberAPIResponse>(
+      this.getClient().baseURL + '/members',
+      {
+        payload: {
+          type,
+          id,
+          members,
+          sort: normalizeQuerySort(sort),
+          filter_conditions: filterConditions,
+          ...options,
+        },
       },
-    });
+    );
   }
 
   /**
@@ -349,7 +391,9 @@ export class Channel {
   deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
-      throw Error('Deleting a reaction requires specifying both the message and reaction type');
+      throw Error(
+        'Deleting a reaction requires specifying both the message and reaction type',
+      );
     }
 
     const url =
@@ -378,7 +422,10 @@ export class Channel {
   ) {
     // Strip out reserved names that will result in API errors.
     // TODO: this needs to be typed better
-    const reserved: Exclude<keyof (ChannelResponse & ChannelData), keyof CustomChannelData>[] = [
+    const reserved: Exclude<
+      keyof (ChannelResponse & ChannelData),
+      keyof CustomChannelData
+    >[] = [
       'config',
       'cid',
       'created_by',
@@ -410,11 +457,20 @@ export class Channel {
    * @return {Promise<PartialUpdateChannelAPIResponse>}
    */
   async updatePartial(update: PartialUpdateChannel) {
-    const data = await this.getClient().patch<PartialUpdateChannelAPIResponse>(this._channelURL(), update);
+    const data = await this.getClient().patch<PartialUpdateChannelAPIResponse>(
+      this._channelURL(),
+      update,
+    );
 
     const areCapabilitiesChanged =
       [...(data.channel.own_capabilities || [])].sort().join() !==
-      [...(Array.isArray(this.data?.own_capabilities) ? (this.data?.own_capabilities as string[]) : [])].sort().join();
+      [
+        ...(Array.isArray(this.data?.own_capabilities)
+          ? (this.data?.own_capabilities as string[])
+          : []),
+      ]
+        .sort()
+        .join();
     this.data = data.channel;
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (areCapabilitiesChanged) {
@@ -434,9 +490,12 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async enableSlowMode(coolDownInterval: number) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(this._channelURL(), {
-      cooldown: coolDownInterval,
-    });
+    const data = await this.getClient().post<UpdateChannelAPIResponse>(
+      this._channelURL(),
+      {
+        cooldown: coolDownInterval,
+      },
+    );
     this.data = data.channel;
     return data;
   }
@@ -447,9 +506,12 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async disableSlowMode() {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(this._channelURL(), {
-      cooldown: 0,
-    });
+    const data = await this.getClient().post<UpdateChannelAPIResponse>(
+      this._channelURL(),
+      {
+        cooldown: 0,
+      },
+    );
     this.data = data.channel;
     return data;
   }
@@ -473,7 +535,10 @@ export class Channel {
    * @return {Promise<TruncateChannelAPIResponse>} The server response
    */
   async truncate(options: TruncateOptions = {}) {
-    return await this.getClient().post<TruncateChannelAPIResponse>(this._channelURL() + '/truncate', options);
+    return await this.getClient().post<TruncateChannelAPIResponse>(
+      this._channelURL() + '/truncate',
+      options,
+    );
   }
 
   /**
@@ -506,7 +571,11 @@ export class Channel {
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async addMembers(members: string[] | Array<NewMemberPayload>, message?: Message, options: ChannelUpdateOptions = {}) {
+  async addMembers(
+    members: string[] | Array<NewMemberPayload>,
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
     return await this._update({ add_members: members, message, ...options });
   }
 
@@ -518,7 +587,11 @@ export class Channel {
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async addModerators(members: string[], message?: Message, options: ChannelUpdateOptions = {}) {
+  async addModerators(
+    members: string[],
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
     return await this._update({ add_moderators: members, message, ...options });
   }
 
@@ -562,7 +635,11 @@ export class Channel {
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async removeMembers(members: string[], message?: Message, options: ChannelUpdateOptions = {}) {
+  async removeMembers(
+    members: string[],
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
     return await this._update({ remove_members: members, message, ...options });
   }
 
@@ -574,7 +651,11 @@ export class Channel {
    * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async demoteModerators(members: string[], message?: Message, options: ChannelUpdateOptions = {}) {
+  async demoteModerators(
+    members: string[],
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
     return await this._update({ demote_moderators: members, message, ...options });
   }
 
@@ -584,8 +665,11 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    * TODO: introduce new type instead of Object in the next major update
    */
-  async _update(payload: Object) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(this._channelURL(), payload);
+  async _update(payload: object) {
+    const data = await this.getClient().post<UpdateChannelAPIResponse>(
+      this._channelURL(),
+      payload,
+    );
     this.data = data.channel;
     return data;
   }
@@ -603,10 +687,13 @@ export class Channel {
    *
    */
   async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<MuteChannelAPIResponse>(this.getClient().baseURL + '/moderation/mute/channel', {
-      channel_cid: this.cid,
-      ...opts,
-    });
+    return await this.getClient().post<MuteChannelAPIResponse>(
+      this.getClient().baseURL + '/moderation/mute/channel',
+      {
+        channel_cid: this.cid,
+        ...opts,
+      },
+    );
   }
 
   /**
@@ -618,10 +705,13 @@ export class Channel {
    * await channel.unmute({user_id: userId});
    */
   async unmute(opts: { user_id?: string } = {}) {
-    return await this.getClient().post<APIResponse>(this.getClient().baseURL + '/moderation/unmute/channel', {
-      channel_cid: this.cid,
-      ...opts,
-    });
+    return await this.getClient().post<APIResponse>(
+      this.getClient().baseURL + '/moderation/unmute/channel',
+      {
+        channel_cid: this.cid,
+        ...opts,
+      },
+    );
   }
 
   /**
@@ -774,7 +864,11 @@ export class Channel {
    * @param state - The new state of the AI process (e.g., thinking, generating).
    * @param options - Optional parameters, such as `ai_message`, to include additional details in the event.
    */
-  async updateAIState(messageId: string, state: AIState, options: { ai_message?: string } = {}) {
+  async updateAIState(
+    messageId: string,
+    state: AIState,
+    options: { ai_message?: string } = {},
+  ) {
     await this.sendEvent({
       ...options,
       type: 'ai_indicator.update',
@@ -926,10 +1020,14 @@ export class Channel {
     this.initialized = true;
     this.data = state.channel;
 
-    this._client.logger('info', `channel:watch() - started watching channel ${this.cid}`, {
-      tags: ['channel'],
-      channel: this,
-    });
+    this._client.logger(
+      'info',
+      `channel:watch() - started watching channel ${this.cid}`,
+      {
+        tags: ['channel'],
+        channel: this,
+      },
+    );
     return state;
   }
 
@@ -939,12 +1037,19 @@ export class Channel {
    * @return {Promise<APIResponse>} The server response
    */
   async stopWatching() {
-    const response = await this.getClient().post<APIResponse>(this._channelURL() + '/stop-watching', {});
+    const response = await this.getClient().post<APIResponse>(
+      this._channelURL() + '/stop-watching',
+      {},
+    );
 
-    this._client.logger('info', `channel:watch() - stopped watching channel ${this.cid}`, {
-      tags: ['channel'],
-      channel: this,
-    });
+    this._client.logger(
+      'info',
+      `channel:watch() - stopped watching channel ${this.cid}`,
+      {
+        tags: ['channel'],
+        channel: this,
+      },
+    );
 
     return response;
   }
@@ -993,12 +1098,15 @@ export class Channel {
     options: PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string },
     sort: PinnedMessagesSort = [],
   ) {
-    return await this.getClient().get<GetRepliesAPIResponse>(this._channelURL() + '/pinned_messages', {
-      payload: {
-        ...options,
-        sort: normalizeQuerySort(sort),
+    return await this.getClient().get<GetRepliesAPIResponse>(
+      this._channelURL() + '/pinned_messages',
+      {
+        payload: {
+          ...options,
+          sort: normalizeQuerySort(sort),
+        },
       },
-    });
+    );
   }
 
   /**
@@ -1026,9 +1134,12 @@ export class Channel {
    * @return {Promise<GetMultipleMessagesAPIResponse>} Server response
    */
   getMessagesById(messageIds: string[]) {
-    return this.getClient().get<GetMultipleMessagesAPIResponse>(this._channelURL() + '/messages', {
-      ids: messageIds.join(','),
-    });
+    return this.getClient().get<GetMultipleMessagesAPIResponse>(
+      this._channelURL() + '/messages',
+      {
+        ids: messageIds.join(','),
+      },
+    );
   }
 
   /**
@@ -1047,10 +1158,14 @@ export class Channel {
     if (message.silent) return false;
     if (message.parent_id && !message.show_in_channel) return false;
     if (message.user?.id === this.getClient().userID) return false;
-    if (message.user?.id && this.getClient().userMuteStatus(message.user.id)) return false;
+    if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
+      return false;
 
     // Return false if channel doesn't allow read events.
-    if (Array.isArray(this.data?.own_capabilities) && !this.data?.own_capabilities.includes('read-events')) {
+    if (
+      Array.isArray(this.data?.own_capabilities) &&
+      !this.data?.own_capabilities.includes('read-events')
+    ) {
       return false;
     }
 
@@ -1127,12 +1242,18 @@ export class Channel {
    *
    * @return {Promise<QueryChannelAPIResponse>} Returns a query response
    */
-  async query(options: ChannelQueryOptions = {}, messageSetToAddToIfDoesNotExist: MessageSetType = 'current') {
+  async query(
+    options: ChannelQueryOptions = {},
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+  ) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
     const createdById =
-      options.created_by?.id ?? options.created_by_id ?? this._data?.created_by?.id ?? this._data?.created_by_id;
+      options.created_by?.id ??
+      options.created_by_id ??
+      this._data?.created_by?.id ??
+      this._data?.created_by_id;
 
     if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
       this.getClient().logger(
@@ -1146,11 +1267,14 @@ export class Channel {
       queryURL += `/${encodeURIComponent(this.id)}`;
     }
 
-    const state = await this.getClient().post<QueryChannelAPIResponse>(queryURL + '/query', {
-      data: this._data,
-      state: true,
-      ...options,
-    });
+    const state = await this.getClient().post<QueryChannelAPIResponse>(
+      queryURL + '/query',
+      {
+        data: this._data,
+        state: true,
+        ...options,
+      },
+    );
 
     // update the channel id if it was missing
     if (!this.id) {
@@ -1169,7 +1293,10 @@ export class Channel {
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (!(this.cid in this.getClient().activeChannels) && this.getClient()._cacheEnabled()) {
+      if (
+        !(this.cid in this.getClient().activeChannels) &&
+        this.getClient()._cacheEnabled()
+      ) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }
@@ -1183,7 +1310,8 @@ export class Channel {
       ...messageSetPagination({
         parentSet: messageSet,
         messagePaginationOptions: options?.messages,
-        requestedPageSize: options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+        requestedPageSize:
+          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
         returnedPage: state.messages,
         logger: this.getClient().logger,
       }),
@@ -1193,7 +1321,13 @@ export class Channel {
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
-      [...(this.data && Array.isArray(this.data?.own_capabilities) ? this.data.own_capabilities : [])].sort().join();
+      [
+        ...(this.data && Array.isArray(this.data?.own_capabilities)
+          ? this.data.own_capabilities
+          : []),
+      ]
+        .sort()
+        .join();
     this.data = state.channel;
     this.offlineMode = false;
 
@@ -1313,7 +1447,10 @@ export class Channel {
    * @returns {Promise<CreateCallResponse>}
    */
   async createCall(options: CreateCallOptions) {
-    return await this.getClient().post<CreateCallResponse>(this._channelURL() + '/call', options);
+    return await this.getClient().post<CreateCallResponse>(
+      this._channelURL() + '/call',
+      options,
+    );
   }
 
   /**
@@ -1342,25 +1479,36 @@ export class Channel {
    */
   on(eventType: EventTypes, callback: EventHandler): { unsubscribe: () => void };
   on(callback: EventHandler): { unsubscribe: () => void };
-  on(callbackOrString: EventHandler | EventTypes, callbackOrNothing?: EventHandler): { unsubscribe: () => void } {
+  on(
+    callbackOrString: EventHandler | EventTypes,
+    callbackOrNothing?: EventHandler,
+  ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
-    this._client.logger('info', `Attaching listener for ${key} event on channel ${this.cid}`, {
-      tags: ['event', 'channel'],
-      channel: this,
-    });
+    this._client.logger(
+      'info',
+      `Attaching listener for ${key} event on channel ${this.cid}`,
+      {
+        tags: ['event', 'channel'],
+        channel: this,
+      },
+    );
 
     this.listeners[key].push(callback);
 
     return {
       unsubscribe: () => {
-        this._client.logger('info', `Removing listener for ${key} event from channel ${this.cid}`, {
-          tags: ['event', 'channel'],
-          channel: this,
-        });
+        this._client.logger(
+          'info',
+          `Removing listener for ${key} event from channel ${this.cid}`,
+          {
+            tags: ['event', 'channel'],
+            channel: this,
+          },
+        );
 
         this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
       },
@@ -1373,22 +1521,29 @@ export class Channel {
    */
   off(eventType: EventTypes, callback: EventHandler): void;
   off(callback: EventHandler): void;
-  off(callbackOrString: EventHandler | EventTypes, callbackOrNothing?: EventHandler): void {
+  off(
+    callbackOrString: EventHandler | EventTypes,
+    callbackOrNothing?: EventHandler,
+  ): void {
     const key = callbackOrNothing ? (callbackOrString as string) : 'all';
     const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
     if (!(key in this.listeners)) {
       this.listeners[key] = [];
     }
 
-    this._client.logger('info', `Removing listener for ${key} event from channel ${this.cid}`, {
-      tags: ['event', 'channel'],
-      channel: this,
-    });
+    this._client.logger(
+      'info',
+      `Removing listener for ${key} event from channel ${this.cid}`,
+      {
+        tags: ['event', 'channel'],
+        channel: this,
+      },
+    );
     this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   _handleChannelEvent(event: Event) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
     this._client.logger(
       'info',
@@ -1453,7 +1608,8 @@ export class Channel {
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
           const ownMessage = event.user?.id === this.getClient().user?.id;
-          const isThreadMessage = event.message.parent_id && !event.message.show_in_channel;
+          const isThreadMessage =
+            event.message.parent_id && !event.message.show_in_channel;
 
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
@@ -1506,12 +1662,14 @@ export class Channel {
 
           channelState.messageSets.forEach((messageSet, messageSetIndex) => {
             messageSet.messages.forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt) channelState.removeMessage({ id, messageSetIndex });
+              if (truncatedAt > +createdAt)
+                channelState.removeMessage({ id, messageSetIndex });
             });
           });
 
           channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt) channelState.removePinnedMessage({ id } as MessageResponse);
+            if (truncatedAt > +createdAt)
+              channelState.removePinnedMessage({ id } as MessageResponse);
           });
         } else {
           channelState.clearMessages();
@@ -1575,14 +1733,17 @@ export class Channel {
       }
       case 'channel.updated':
         if (event.channel) {
-          const isFrozenChanged = event.channel?.frozen !== undefined && event.channel.frozen !== channel.data?.frozen;
+          const isFrozenChanged =
+            event.channel?.frozen !== undefined &&
+            event.channel.frozen !== channel.data?.frozen;
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
           channel.data = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
-            own_capabilities: event.channel?.own_capabilities ?? channel.data?.own_capabilities,
+            own_capabilities:
+              event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
         }
         break;
@@ -1639,6 +1800,7 @@ export class Channel {
   }
 
   _callChannelListeners = (event: Event) => {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
     // gather and call the listeners
     const listeners = [];
@@ -1670,15 +1832,21 @@ export class Channel {
   };
 
   _checkInitialized() {
-    if (!this.initialized && !this.offlineMode && !this.getClient()._isUsingServerAuth()) {
+    if (
+      !this.initialized &&
+      !this.offlineMode &&
+      !this.getClient()._isUsingServerAuth()
+    ) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
     }
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
-  _initializeState(state: ChannelAPIResponse, messageSetToAddToIfDoesNotExist: MessageSetType = 'latest') {
+  _initializeState(
+    state: ChannelAPIResponse,
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
+  ) {
     const { state: clientState, user, userID } = this.getClient();
 
     // add the members and users
@@ -1698,7 +1866,13 @@ export class Channel {
     if (!this.state.messages) {
       this.state.initMessages();
     }
-    const { messageSet } = this.state.addMessagesSorted(messages, false, true, true, messageSetToAddToIfDoesNotExist);
+    const { messageSet } = this.state.addMessagesSorted(
+      messages,
+      false,
+      true,
+      true,
+      messageSetToAddToIfDoesNotExist,
+    );
 
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
@@ -1778,12 +1952,15 @@ export class Channel {
      */
     overrideCurrentState?: boolean;
   }) {
-    const newMembersById = members.reduce<ChannelState['members']>((membersById, member) => {
-      if (member.user) {
-        membersById[member.user.id] = member;
-      }
-      return membersById;
-    }, {});
+    const newMembersById = members.reduce<ChannelState['members']>(
+      (membersById, member) => {
+        if (member.user) {
+          membersById[member.user.id] = member;
+        }
+        return membersById;
+      },
+      {},
+    );
 
     if (overrideCurrentState) {
       this.state.members = newMembersById;
@@ -1796,10 +1973,14 @@ export class Channel {
   }
 
   _disconnect() {
-    this._client.logger('info', `channel:disconnect() - Disconnecting the channel ${this.cid}`, {
-      tags: ['connection', 'channel'],
-      channel: this,
-    });
+    this._client.logger(
+      'info',
+      `channel:disconnect() - Disconnecting the channel ${this.cid}`,
+      {
+        tags: ['connection', 'channel'],
+        channel: this,
+      },
+    );
 
     this.disconnected = true;
     this.state.setIsUpToDate(false);
