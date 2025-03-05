@@ -20,13 +20,12 @@ runs:
       shell: bash
       run: echo "NODE_VERSION=$(node --version)" >> $GITHUB_ENV
 
-    - name: Cache Dependencies
+    - name: Cache dependencies
       uses: actions/cache@v3
       with:
         path: ./node_modules
-        key: ${{ runner.os }}-${{ inputs.node-version }}-modules-${{ hashFiles('**/yarn.lock') }}
-        restore-keys: ${{ runner.os }}-${{ inputs.node-version }}-modules-
+        key: ${{ runner.os }}-${{ env.NODE_VERSION }}-modules-${{ hashFiles('./yarn.lock') }}
 
-    - name: Install Dependencies & Build
-      run: yarn install --frozen-lockfile --ignore-engines
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
       shell: bash
