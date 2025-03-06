@@ -1,27 +1,25 @@
 import FormData from 'form-data';
-import {
+import type {
   AscDesc,
-  ExtendableGenerics,
-  DefaultGenerics,
+  ChannelFilters,
+  ChannelQueryOptions,
+  ChannelSort,
+  ChannelSortBase,
+  FormatMessageResponse,
   Logger,
+  MessagePaginationOptions,
+  MessageResponse,
+  MessageSet,
   OwnUserBase,
   OwnUserResponse,
-  UserResponse,
-  MessageResponse,
-  FormatMessageResponse,
-  ReactionGroupResponse,
-  MessageSet,
-  MessagePaginationOptions,
-  ChannelQueryOptions,
-  QueryChannelAPIResponse,
-  ChannelSort,
-  ChannelFilters,
-  ChannelSortBase,
   PromoteChannelParams,
+  QueryChannelAPIResponse,
+  ReactionGroupResponse,
+  UserResponse,
 } from './types';
-import { StreamChat } from './client';
-import { Channel } from './channel';
-import { AxiosRequestConfig } from 'axios';
+import type { StreamChat } from './client';
+import type { Channel } from './channel';
+import type { AxiosRequestConfig } from 'axios';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -39,12 +37,11 @@ export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
 
 export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
-export function isFunction<T>(value: Function | T): value is Function {
+export function isFunction(value: unknown): value is (...args: unknown[]) => unknown {
   return (
-    value &&
-    (Object.prototype.toString.call(value) === '[object Function]' ||
-      'function' === typeof value ||
-      value instanceof Function)
+    typeof value === 'function' ||
+    value instanceof Function ||
+    Object.prototype.toString.call(value) === '[object Function]'
   );
 }
 
@@ -57,7 +54,8 @@ function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
   return (
     obj !== null &&
     typeof obj === 'object' &&
-    ((obj as NodeJS.ReadStream).readable || typeof (obj as NodeJS.ReadStream)._read === 'function')
+    ((obj as NodeJS.ReadStream).readable ||
+      typeof (obj as NodeJS.ReadStream)._read === 'function')
   );
 }
 
@@ -65,9 +63,9 @@ function isBuffer(obj: unknown): obj is Buffer {
   return (
     obj != null &&
     (obj as Buffer).constructor != null &&
-    // @ts-expect-error
+    // @ts-expect-error expected
     typeof obj.constructor.isBuffer === 'function' &&
-    // @ts-expect-error
+    // @ts-expect-error expected
     obj.constructor.isBuffer(obj)
   );
 }
@@ -76,10 +74,10 @@ function isFileWebAPI(uri: unknown): uri is File {
   return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
 }
 
-export function isOwnUser<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  user?: OwnUserResponse<StreamChatGenerics> | UserResponse<StreamChatGenerics>,
-): user is OwnUserResponse<StreamChatGenerics> {
-  return (user as OwnUserResponse<StreamChatGenerics>)?.total_unread_count !== undefined;
+export function isOwnUser(
+  user?: OwnUserResponse | UserResponse,
+): user is OwnUserResponse {
+  return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
 function isBlobWebAPI(uri: unknown): uri is Blob {
@@ -127,7 +125,9 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(sort: T | T[]) {
+export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
+  sort: T | T[],
+) {
   const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
@@ -238,11 +238,13 @@ export function isOnline() {
     typeof navigator !== 'undefined'
       ? navigator
       : typeof window !== 'undefined' && window.navigator
-      ? window.navigator
-      : undefined;
+        ? window.navigator
+        : undefined;
 
   if (!nav) {
-    console.warn('isOnline failed to access window.navigator and assume browser is online');
+    console.warn(
+      'isOnline failed to access window.navigator and assume browser is online',
+    );
     return true;
   }
 
@@ -292,17 +294,13 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * Takes the message object, parses the dates, sets `__html`
  * and sets the status to `received` if missing; returns a new message object.
  *
- * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
+ * @param {MessageResponse} message `MessageResponse` object
  */
-export function formatMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  message: MessageResponse<StreamChatGenerics> | FormatMessageResponse<StreamChatGenerics>,
-): FormatMessageResponse<StreamChatGenerics> {
+export function formatMessage(
+  message: MessageResponse | FormatMessageResponse,
+): FormatMessageResponse {
   return {
     ...message,
-    /**
-     * @deprecated please use `html`
-     */
-    __html: message.html,
     // parse the dates
     pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
     created_at: message.created_at ? new Date(message.created_at) : new Date(),
@@ -392,7 +390,9 @@ export const findIndexInSortedArray = <T, L>({
     const step = sortDirection === 'ascending' ? -1 : +1;
     for (
       let i = left + step;
-      0 <= i && i < sortedArray.length && selectValueToCompare(sortedArray[i]) === comparableNeedle;
+      0 <= i &&
+      i < sortedArray.length &&
+      selectValueToCompare(sortedArray[i]) === comparableNeedle;
       i += step
     ) {
       if (selectKey(sortedArray[i]) === needleKey) {
@@ -417,7 +417,9 @@ export function addToMessageList<T extends FormatMessageResponse>(
   // if created_at has changed, message should be filtered and re-inserted in correct order
   // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
   if (timestampChanged) {
-    newMessages = newMessages.filter((message) => !(message.id && newMessage.id === message.id));
+    newMessages = newMessages.filter(
+      (message) => !(message.id && newMessage.id === message.id),
+    );
   }
 
   // for empty list just concat and return unless it's an update or deletion
@@ -611,22 +613,26 @@ const get = <T>(obj: T, path: string): unknown =>
   }, obj);
 
 // works exactly the same as lodash.uniqBy
-export const uniqBy = <T>(array: T[] | unknown, iteratee: ((item: T) => unknown) | keyof T): T[] => {
+export const uniqBy = <T>(
+  array: T[] | unknown,
+  iteratee: ((item: T) => unknown) | keyof T,
+): T[] => {
   if (!Array.isArray(array)) return [];
 
   const seen = new Set<unknown>();
   return array.filter((item) => {
-    const key = typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
+    const key =
+      typeof iteratee === 'function' ? iteratee(item) : get(item, iteratee as string);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 };
 
-type MessagePaginationUpdatedParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+type MessagePaginationUpdatedParams = {
   parentSet: MessageSet;
   requestedPageSize: number;
-  returnedPage: MessageResponse<StreamChatGenerics>[];
+  returnedPage: MessageResponse[];
   logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
@@ -661,12 +667,12 @@ export function binarySearchByDateEqualOrNearestGreater(
   return left;
 }
 
-const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationCreatedAtAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
   if (!messagePaginationOptions?.created_at_around) return newPagination;
   let hasPrev;
@@ -679,12 +685,15 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
   // expect ASC order (from oldest to newest)
   const wholePageHasNewerMessages =
     !!firstPageMsg?.created_at && new Date(firstPageMsg.created_at) > createdAtAroundDate;
-  const wholePageHasOlderMessages = !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
+  const wholePageHasOlderMessages =
+    !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
 
   const requestedPageSizeNotMet =
-    requestedPageSize > parentSet.messages.length && requestedPageSize > returnedPage.length;
+    requestedPageSize > parentSet.messages.length &&
+    requestedPageSize > returnedPage.length;
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    (requestedPageSize > parentSet.messages.length ||
+      parentSet.messages.length >= returnedPage.length) &&
     requestedPageSize > returnedPage.length;
 
   if (wholePageHasNewerMessages) {
@@ -712,7 +721,10 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
     updateHasPrev = firstPageMsgIsFirstInSet;
     updateHasNext = lastPageMsgIsLastInSet;
     const midPointByCount = Math.floor(returnedPage.length / 2);
-    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(returnedPage, createdAtAroundDate);
+    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(
+      returnedPage,
+      createdAtAroundDate,
+    );
 
     if (midPointByCreationDate !== -1) {
       hasPrev = midPointByCount <= midPointByCreationDate;
@@ -726,12 +738,12 @@ const messagePaginationCreatedAtAround = <StreamChatGenerics extends ExtendableG
   return newPagination;
 };
 
-const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationIdAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
   const { id_around } = messagePaginationOptions || {};
   if (!id_around) return newPagination;
@@ -748,7 +760,8 @@ const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics
 
   const midPoint = Math.floor(returnedPage.length / 2);
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length || parentSet.messages.length >= returnedPage.length) &&
+    (requestedPageSize > parentSet.messages.length ||
+      parentSet.messages.length >= returnedPage.length) &&
     requestedPageSize > returnedPage.length;
 
   if (noMoreMessages) {
@@ -779,12 +792,12 @@ const messagePaginationIdAround = <StreamChatGenerics extends ExtendableGenerics
   return newPagination;
 };
 
-const messagePaginationLinear = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+const messagePaginationLinear = ({
   parentSet,
   requestedPageSize,
   returnedPage,
   messagePaginationOptions,
-}: MessagePaginationUpdatedParams<StreamChatGenerics>) => {
+}: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
 
   let hasPrev;
@@ -836,11 +849,12 @@ const messagePaginationLinear = <StreamChatGenerics extends ExtendableGenerics =
   return newPagination;
 };
 
-export const messageSetPagination = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  params: MessagePaginationUpdatedParams<StreamChatGenerics>,
-) => {
+export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
   if (params.parentSet.messages.length < params.returnedPage.length) {
-    params.logger?.('error', 'Corrupted message set state: parent set size < returned page size');
+    params.logger?.(
+      'error',
+      'Corrupted message set state: parent set size < returned page size',
+    );
     return params.parentSet.pagination;
   }
 
@@ -857,14 +871,17 @@ export const messageSetPagination = <StreamChatGenerics extends ExtendableGeneri
  * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
  * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
  */
-const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<string, Promise<QueryChannelAPIResponse> | undefined> = {};
+const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
+  string,
+  Promise<QueryChannelAPIResponse> | undefined
+> = {};
 
-type GetChannelParams<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  client: StreamChat<StreamChatGenerics>;
-  channel?: Channel<StreamChatGenerics>;
+type GetChannelParams = {
+  client: StreamChat;
+  channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions<StreamChatGenerics>;
+  options?: ChannelQueryOptions;
   type?: string;
 };
 /**
@@ -877,14 +894,14 @@ type GetChannelParams<StreamChatGenerics extends ExtendableGenerics = DefaultGen
  * @param id
  * @param channel
  */
-export const getAndWatchChannel = async <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const getAndWatchChannel = async ({
   channel,
   client,
   id,
   members,
   options,
   type,
-}: GetChannelParams<StreamChatGenerics>) => {
+}: GetChannelParams) => {
   if (!channel && !type) {
     throw new Error('Channel or channel type have to be provided to query a channel.');
   }
@@ -897,11 +914,13 @@ export const getAndWatchChannel = async <StreamChatGenerics extends ExtendableGe
   const originalCid = channelToWatch.id
     ? channelToWatch.cid
     : members && members.length
-    ? generateChannelTempCid(channelToWatch.type, members)
-    : undefined;
+      ? generateChannelTempCid(channelToWatch.type, members)
+      : undefined;
 
   if (!originalCid) {
-    throw new Error('Channel ID or channel members array have to be provided to query a channel.');
+    throw new Error(
+      'Channel ID or channel members array have to be provided to query a channel.',
+    );
   }
 
   const queryPromise = WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL[originalCid];
@@ -938,9 +957,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
  * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
  * @param channel
  */
-export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  channel: Channel<StreamChatGenerics>,
-) => {
+export const isChannelPinned = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -952,9 +969,7 @@ export const isChannelPinned = <StreamChatGenerics extends ExtendableGenerics = 
  * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
  * @param channel
  */
-export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  channel: Channel<StreamChatGenerics>,
-) => {
+export const isChannelArchived = (channel: Channel) => {
   if (!channel) return false;
 
   const member = channel.state.membership;
@@ -967,9 +982,7 @@ export const isChannelArchived = <StreamChatGenerics extends ExtendableGenerics 
  * on filters. Will return true only if filters.archived exists and is a boolean value.
  * @param filters
  */
-export const shouldConsiderArchivedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  filters: ChannelFilters<StreamChatGenerics>,
-) => {
+export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
@@ -983,17 +996,17 @@ export const shouldConsiderArchivedChannels = <StreamChatGenerics extends Extend
  * @param sort - the sort value - both array and object notations are accepted
  * @param targetKey - the target key which needs to exist for the sort at a certain index
  */
-export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const extractSortValue = ({
   atIndex,
   sort,
   targetKey,
 }: {
   atIndex: number;
-  targetKey: keyof ChannelSortBase<StreamChatGenerics>;
-  sort?: ChannelSort<StreamChatGenerics>;
+  targetKey: keyof ChannelSortBase;
+  sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-  let option: null | ChannelSortBase<StreamChatGenerics> = null;
+  let option: null | ChannelSortBase = null;
 
   if (Array.isArray(sort)) {
     option = sort[atIndex] ?? null;
@@ -1021,9 +1034,7 @@ export const extractSortValue = <StreamChatGenerics extends ExtendableGenerics =
 /**
  * Returns true only if `{ pinned_at: -1 }` or `{ pinned_at: 1 }` option is first within the `sort` array.
  */
-export const shouldConsiderPinnedChannels = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-  sort: ChannelSort<StreamChatGenerics>,
-) => {
+export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
   const value = findPinnedAtSortOrder({ sort });
 
   if (typeof value !== 'number') return false;
@@ -1036,11 +1047,7 @@ export const shouldConsiderPinnedChannels = <StreamChatGenerics extends Extendab
  * an array sort value type has the first value be an object containing pinned_at.
  * @param sort
  */
-export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
-  sort,
-}: {
-  sort: ChannelSort<StreamChatGenerics>;
-}) =>
+export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   extractSortValue({
     atIndex: 0,
     sort,
@@ -1053,11 +1060,7 @@ export const findPinnedAtSortOrder = <StreamChatGenerics extends ExtendableGener
  * start of the array.
  * @param channels
  */
-export const findLastPinnedChannelIndex = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
-  channels,
-}: {
-  channels: Channel<StreamChatGenerics>[];
-}) => {
+export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
   let lastPinnedChannelIndex: number | null = null;
 
   for (const channel of channels) {
@@ -1082,15 +1085,16 @@ export const findLastPinnedChannelIndex = <StreamChatGenerics extends Extendable
  * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
  * @param sort - the sort value used to check for pinned channels
  */
-export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>({
+export const promoteChannel = ({
   channels,
   channelToMove,
   channelToMoveIndexWithinChannels,
   sort,
-}: PromoteChannelParams<StreamChatGenerics>) => {
+}: PromoteChannelParams) => {
   // get index of channel to move up
   const targetChannelIndex =
-    channelToMoveIndexWithinChannels ?? channels.findIndex((channel) => channel.cid === channelToMove.cid);
+    channelToMoveIndexWithinChannels ??
+    channels.findIndex((channel) => channel.cid === channelToMove.cid);
 
   const targetChannelExistsWithinList = targetChannelIndex >= 0;
   const targetChannelAlreadyAtTheTop = targetChannelIndex === 0;
@@ -1099,7 +1103,7 @@ export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = D
   // receive messages and are not pinned should move upwards but only under the last pinned channel
   // in the list
   const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
-  const isTargetChannelPinned = isChannelPinned<StreamChatGenerics>(channelToMove);
+  const isTargetChannelPinned = isChannelPinned(channelToMove);
 
   if (targetChannelAlreadyAtTheTop || (considerPinnedChannels && isTargetChannelPinned)) {
     return channels;
@@ -1120,7 +1124,11 @@ export const promoteChannel = <StreamChatGenerics extends ExtendableGenerics = D
   }
 
   // re-insert it at the new place (to specific index if pinned channels are considered)
-  newChannels.splice(typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0, 0, channelToMove);
+  newChannels.splice(
+    typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0,
+    0,
+    channelToMove,
+  );
 
   return newChannels;
 };

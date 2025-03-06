@@ -1,17 +1,17 @@
 {
-  "useTabs": false,
-  "printWidth": 120,
-  "tabWidth": 2,
+  "arrowParens": "always",
+  "jsxSingleQuote": true,
+  "printWidth": 90,
   "singleQuote": true,
+  "tabWidth": 2,
   "trailingComma": "all",
-  "jsxBracketSameLine": false,
+  "useTabs": false,
   "semi": true,
   "overrides": [
     {
       "files": "*.js",
       "options": {
-        "useTabs": true,
-        "tabWidth": 4
+        "useTabs": true
       }
     }
   ]

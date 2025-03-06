@@ -17,7 +17,10 @@ function isMapStringCallback<T, U>(
 // source - https://github.com/beatgammit/base64-js/blob/master/test/convert.js#L72
 function map<T, U>(array: T[], callback: MapGenericCallback<T, U>): U[];
 function map<U>(string: string, callback: MapStringCallback<U>): U[];
-function map<T, U>(arrayOrString: string | T[], callback: MapGenericCallback<T, U> | MapStringCallback<U>): U[] {
+function map<T, U>(
+  arrayOrString: string | T[],
+  callback: MapGenericCallback<T, U> | MapStringCallback<U>,
+): U[] {
   const res = [];
 
   if (isString(arrayOrString) && isMapStringCallback(arrayOrString, callback)) {
@@ -67,6 +70,7 @@ export const decodeBase64 = (s: string): string => {
     b = (b << 6) + c;
     l += 6;
     while (l >= 8) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       ((a = (b >>> (l -= 8)) & 0xff) || x < L - 2) && (r += w(a));
     }
   }

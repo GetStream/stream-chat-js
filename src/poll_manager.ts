@@ -1,8 +1,6 @@
 import type { StreamChat } from './client';
 import type {
   CreatePollData,
-  DefaultGenerics,
-  ExtendableGenerics,
   MessageResponse,
   PollResponse,
   PollSort,
@@ -10,30 +8,28 @@ import type {
   QueryPollsOptions,
 } from './types';
 import { Poll } from './poll';
-import { FormatMessageResponse } from './types';
+import type { FormatMessageResponse } from './types';
 import { formatMessage } from './utils';
 
-export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
-  private client: StreamChat<SCG>;
+export class PollManager {
+  private client: StreamChat;
   // The pollCache contains only polls that have been created and sent as messages
   // (i.e only polls that are coupled with a message, can be voted on and require a
   // reactive state). It shall work as a basic look-up table for our SDK to be able
   // to quickly consume poll state that will be reactive even without the polls being
   // rendered within the UI.
-  private pollCache = new Map<string, Poll<SCG>>();
+  private pollCache = new Map<string, Poll>();
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ client }: { client: StreamChat<SCG> }) {
+  constructor({ client }: { client: StreamChat }) {
     this.client = client;
   }
 
-  get data(): Map<string, Poll<SCG>> {
+  get data(): Map<string, Poll> {
     return this.pollCache;
   }
 
-  public fromState = (id: string) => {
-    return this.pollCache.get(id);
-  };
+  public fromState = (id: string) => this.pollCache.get(id);
 
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
@@ -54,7 +50,7 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.clear();
   };
 
-  public createPoll = async (poll: CreatePollData<SCG>) => {
+  public createPoll = async (poll: CreatePollData) => {
     const { poll: createdPoll } = await this.client.createPoll(poll);
 
     return new Poll({ client: this.client, poll: createdPoll });
@@ -76,7 +72,11 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.fromState(id);
   };
 
-  public queryPolls = async (filter: QueryPollsFilters, sort: PollSort = [], options: QueryPollsOptions = {}) => {
+  public queryPolls = async (
+    filter: QueryPollsFilters,
+    sort: PollSort = [],
+    options: QueryPollsOptions = {},
+  ) => {
     const { polls, next } = await this.client.queryPolls(filter, sort, options);
 
     const pollInstances = polls.map((poll) => {
@@ -92,78 +92,75 @@ export class PollManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public hydratePollCache = (
-    messages: FormatMessageResponse<SCG>[] | MessageResponse<SCG>[],
+    messages: FormatMessageResponse[] | MessageResponse[],
     overwriteState?: boolean,
   ) => {
     for (const message of messages) {
       if (!message.poll) {
         continue;
       }
-      const pollResponse = message.poll as PollResponse<SCG>;
+      const pollResponse = message.poll as PollResponse;
       this.setOrOverwriteInCache(pollResponse, overwriteState);
     }
   };
 
-  private setOrOverwriteInCache = (pollResponse: PollResponse<SCG>, overwriteState?: boolean) => {
+  private setOrOverwriteInCache = (
+    pollResponse: PollResponse,
+    overwriteState?: boolean,
+  ) => {
     if (!this.client._cacheEnabled()) {
       return;
     }
     const pollFromCache = this.fromState(pollResponse.id);
     if (!pollFromCache) {
-      const poll = new Poll<SCG>({ client: this.client, poll: pollResponse });
+      const poll = new Poll({ client: this.client, poll: pollResponse });
       this.pollCache.set(poll.id, poll);
     } else if (overwriteState) {
       pollFromCache.reinitializeState(pollResponse);
     }
   };
 
-  private subscribePollUpdated = () => {
-    return this.client.on('poll.updated', (event) => {
+  private subscribePollUpdated = () =>
+    this.client.on('poll.updated', (event) => {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handlePollUpdated(event);
       }
     }).unsubscribe;
-  };
 
-  private subscribePollClosed = () => {
-    return this.client.on('poll.closed', (event) => {
+  private subscribePollClosed = () =>
+    this.client.on('poll.closed', (event) => {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handlePollClosed(event);
       }
     }).unsubscribe;
-  };
 
-  private subscribeVoteCasted = () => {
-    return this.client.on('poll.vote_casted', (event) => {
+  private subscribeVoteCasted = () =>
+    this.client.on('poll.vote_casted', (event) => {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handleVoteCasted(event);
       }
     }).unsubscribe;
-  };
 
-  private subscribeVoteChanged = () => {
-    return this.client.on('poll.vote_changed', (event) => {
+  private subscribeVoteChanged = () =>
+    this.client.on('poll.vote_changed', (event) => {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handleVoteChanged(event);
       }
     }).unsubscribe;
-  };
 
-  private subscribeVoteRemoved = () => {
-    return this.client.on('poll.vote_removed', (event) => {
+  private subscribeVoteRemoved = () =>
+    this.client.on('poll.vote_removed', (event) => {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handleVoteRemoved(event);
       }
     }).unsubscribe;
-  };
 
-  private subscribeMessageNew = () => {
-    return this.client.on('message.new', (event) => {
+  private subscribeMessageNew = () =>
+    this.client.on('message.new', (event) => {
       const { message } = event;
       if (message) {
         const formattedMessage = formatMessage(message);
         this.hydratePollCache([formattedMessage]);
       }
     }).unsubscribe;
-  };
 }
