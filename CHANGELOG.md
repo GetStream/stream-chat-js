@@ -1,3 +1,9 @@
+## [9.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.5...v9.0.0-rc.6) (2025-03-06)
+
+### Bug Fixes
+
+* add image property to UserResponse type ([#1486](https://github.com/GetStream/stream-chat-js/issues/1486)) ([2a57b7f](https://github.com/GetStream/stream-chat-js/commit/2a57b7f965e6b422d32990321a464519485fec1d))
+
 ## [9.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.4...v9.0.0-rc.5) (2025-03-05)
 
 ### Bug Fixes
