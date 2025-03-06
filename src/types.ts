@@ -841,12 +841,15 @@ export type UpdateUsersAPIResponse = APIResponse & {
   users: { [key: string]: UserResponse };
 };
 
-export type UserResponse = User & {
+export type UserResponse = CustomUserData & {
+  id: string;
+  anon?: boolean;
   banned?: boolean;
   blocked_user_ids?: string[];
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
+  image?: string;
   language?: TranslationLanguages | '';
   last_active?: string;
   name?: string;
@@ -855,8 +858,11 @@ export type UserResponse = User & {
   privacy_settings?: PrivacySettings;
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
+  role?: string;
   shadow_banned?: boolean;
+  teams?: string[];
   updated_at?: string;
+  username?: string;
 };
 
 export type PrivacySettings = {
@@ -2905,14 +2911,10 @@ export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> &
   type?: MessageLabel;
 };
 
-export type User = CustomUserData & {
-  id: string;
-  anon?: boolean;
-  name?: string;
-  role?: string;
-  teams?: string[];
-  username?: string;
-};
+/**
+ * @description type alias for UserResponse
+ */
+export type User = UserResponse;
 
 export type TaskResponse = {
   task_id: string;
