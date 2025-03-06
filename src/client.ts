@@ -214,6 +214,11 @@ import {
   UserResponse,
   UserSort,
   VoteSort,
+  CreateReminderOptions,
+  UpdateReminderOptions,
+  QueryRemindersOptions,
+  ReminderResponse,
+  QueryRemindersResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -4044,5 +4049,68 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       reviewed_by,
       ...options,
     });
+  }
+
+  /**
+   * createReminder - Creates a reminder for a message
+   * 
+   * @param {string} messageId The ID of the message to create reminder for
+   * @param {CreateReminderOptions} options The options for creating the reminder
+   * @returns {Promise<ReminderResponse>}
+   */
+  async createReminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+    messageId: string,
+    options: CreateReminderOptions = {}
+  ): Promise<ReminderResponse<StreamChatGenerics>> {
+    return await this.post<ReminderResponse<StreamChatGenerics>>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      options
+    );
+  }
+
+  /**
+   * updateReminder - Updates an existing reminder for a message
+   * 
+   * @param {string} messageId The ID of the message whose reminder to update
+   * @param {UpdateReminderOptions} options The options for updating the reminder
+   * @returns {Promise<ReminderResponse>}
+   */
+  async updateReminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+    messageId: string,
+    options: UpdateReminderOptions = {}
+  ): Promise<ReminderResponse<StreamChatGenerics>> {
+    return await this.patch<ReminderResponse<StreamChatGenerics>>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      options
+    );
+  }
+
+  /**
+   * deleteReminder - Deletes a reminder for a message
+   * 
+   * @param {string} messageId The ID of the message whose reminder to delete
+   * @param {string} [userId] Optional user ID, required for server-side operations
+   * @returns {Promise<APIResponse>}
+   */
+  async deleteReminder(messageId: string, userId?: string): Promise<APIResponse> {
+    return await this.delete<APIResponse>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      userId ? { user_id: userId } : {}
+    );
+  }
+
+  /**
+   * queryReminders - Queries reminders based on given filters
+   * 
+   * @param {QueryRemindersOptions} options The options for querying reminders
+   * @returns {Promise<QueryRemindersResponse>}
+   */
+  async queryReminders<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
+    options: QueryRemindersOptions = {}
+  ): Promise<QueryRemindersResponse<StreamChatGenerics>> {
+    return await this.post<QueryRemindersResponse<StreamChatGenerics>>(
+      `${this.baseURL}/reminders/query`,
+      options
+    );
   }
 }
