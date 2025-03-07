@@ -1395,7 +1395,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     });
   }
 
-
   /**
    * on - Listen to events on this channel.
    *
