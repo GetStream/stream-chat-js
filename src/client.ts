@@ -1181,20 +1181,17 @@ export class StreamChat {
     });
   }
 
-  errorFromResponse(
-    response: AxiosResponse<APIErrorResponse>,
-  ): ErrorFromResponse<APIErrorResponse> {
-    let err: ErrorFromResponse<APIErrorResponse>;
-    err = new ErrorFromResponse(`StreamChat error HTTP code: ${response.status}`);
-    if (response.data && response.data.code) {
-      err = new Error(
-        `StreamChat error code ${response.data.code}: ${response.data.message}`,
-      );
-      err.code = response.data.code;
-    }
-    err.response = response;
-    err.status = response.status;
-    return err;
+  errorFromResponse(response: AxiosResponse<APIErrorResponse>) {
+    const message =
+      typeof response.data.code !== 'undefined'
+        ? `StreamChat error code ${response.data.code}: ${response.data.message}`
+        : `StreamChat error HTTP code: ${response.status}`;
+
+    return new ErrorFromResponse<APIErrorResponse>(message, {
+      code: response.data.code ?? null,
+      response,
+      status: response.status,
+    });
   }
 
   handleResponse<T>(response: AxiosResponse<T>) {

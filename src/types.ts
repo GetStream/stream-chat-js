@@ -3197,18 +3197,36 @@ type ErrorResponseDetails = {
 };
 
 export type APIErrorResponse = {
-  code: number;
   duration: string;
   message: string;
   more_info: string;
   StatusCode: number;
+  code?: number;
   details?: ErrorResponseDetails;
 };
 
 export class ErrorFromResponse<T> extends Error {
-  code?: number;
-  response?: AxiosResponse<T>;
-  status?: number;
+  public code: number | null;
+  public status: number;
+  public response: AxiosResponse<T>;
+
+  constructor(
+    message: string,
+    {
+      code,
+      status,
+      response,
+    }: {
+      code: ErrorFromResponse<T>['code'];
+      response: ErrorFromResponse<T>['response'];
+      status: ErrorFromResponse<T>['status'];
+    },
+  ) {
+    super(message);
+    this.code = code;
+    this.response = response;
+    this.status = status;
+  }
 }
 
 export type QueryPollsResponse = {
