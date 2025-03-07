@@ -1364,7 +1364,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    * @return {Promise<CreateDraftResponse<StreamChatGenerics>>} Response containing the created draft
    */
   async createDraft(message: DraftMessagePayload<StreamChatGenerics>) {
-    const data: { message: DraftMessagePayload<StreamChatGenerics>; parent_id?: string } = {
+    return await this.getClient().post<CreateDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
+      message,
+    });
       message,
     };
 
