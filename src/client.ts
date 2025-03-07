@@ -214,6 +214,7 @@ import {
   UserResponse,
   UserSort,
   VoteSort,
+  DraftResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -4044,5 +4045,28 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       reviewed_by,
       ...options,
     });
+  }
+
+  /**
+   * queryDrafts - Queries drafts for the current user
+   *
+   * @param {object} [options] Query options
+   * @param {object} [options.filter] Filters for the query
+   * @param {number} [options.limit] Limit the number of results
+   * @param {string} [options.next] Pagination parameter
+   *
+   * @return {Promise<APIResponse & { drafts: DraftResponse<StreamChatGenerics>[]; next?: string }>} Response containing the drafts
+   */
+  async queryDrafts(
+    options: {
+      filter?: Record<string, unknown>;
+      limit?: number;
+      next?: string;
+    } = {},
+  ) {
+    return await this.post<APIResponse & { drafts: DraftResponse<StreamChatGenerics>[]; next?: string }>(
+      this.baseURL + '/drafts/query',
+      options,
+    );
   }
 }
