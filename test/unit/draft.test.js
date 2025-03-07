@@ -4,7 +4,7 @@ import { StreamChat } from '../../src';
 import { generateChannel } from './test-utils/generateChannel';
 import { v4 as uuidv4 } from 'uuid';
 
-describe.only('Draft Messages', () => {
+describe('Draft Messages', () => {
 	let client;
 	let channel;
 	const apiKey = 'test-api-key';

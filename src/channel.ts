@@ -1367,47 +1367,34 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     return await this.getClient().post<CreateDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
       message,
     });
-      message,
-    };
-
-    return await this.getClient().post<CreateDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', data);
   }
 
   /**
    * deleteDraft - Deletes a draft message from a channel
    *
-   * @param {string} channelType The channel type
-   * @param {string} channelID The channel ID
-   * @param {string} [parentID] Optional parent message ID for drafts in threads
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
    *
    * @return {Promise<APIResponse>} API response
    */
-  async deleteDraft(parentID?: string) {
-    const params: { parent_id?: string } = {};
-
-    if (parentID) {
-      params.parent_id = parentID;
-    }
-
-    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', params);
+  async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', { parent_id });
   }
 
   /**
    * getDraft - Retrieves a draft message from a channel
    *
-   * @param {string} [parentID] Optional parent message ID for drafts in threads
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
    *
    * @return {Promise<GetDraftResponse<StreamChatGenerics>>} Response containing the draft
    */
-  async getDraft(parentID?: string) {
-    const params: { parent_id?: string } = {};
-
-    if (parentID) {
-      params.parent_id = parentID;
-    }
-
-    return await this.getClient().get<GetDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', params);
+  async getDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().get<GetDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
+      parent_id,
+    });
   }
+
 
   /**
    * on - Listen to events on this channel.
