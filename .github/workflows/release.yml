@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     # GH does not allow to limit branches in the workflow_dispatch settings so this here is a safety measure
     if: ${{ inputs.dry_run || github.ref_name == 'rc' || startsWith(github.ref_name, 'release') || startsWith(github.ref_name, 'master') }}
+    env:
+      HUSKY: 0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +28,6 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           # https://github.com/stream-ci-bot
           GITHUB_TOKEN: ${{ secrets.DOCUSAURUS_GH_TOKEN }}
-          HUSKY: 0
         run: >
           yarn semantic-release
           ${{ inputs.dry_run && '--dry-run' || '' }}

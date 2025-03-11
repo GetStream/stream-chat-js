@@ -102,8 +102,7 @@
     "test-coverage": "nyc yarn test-unit",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
-    "prepack": "yarn run build",
-    "prepare": "husky"
+    "prepare": "husky; yarn run build"
   },
   "engines": {
     "node": ">=18"
