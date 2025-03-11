@@ -1,3 +1,14 @@
+## [9.0.0-rc.7](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.6...v9.0.0-rc.7) (2025-03-11)
+
+### ⚠ BREAKING CHANGES
+
+* `ErrorFromResponse` class constructor now requires
+second parameter (`status`, `response` and optionally `code`)
+
+### Bug Fixes
+
+* adjust ErrorFromResponse error class ([#1491](https://github.com/GetStream/stream-chat-js/issues/1491)) ([ff32bd2](https://github.com/GetStream/stream-chat-js/commit/ff32bd26c90c85b2e6200a65ba7dd7852952517f))
+
 ## [9.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.5...v9.0.0-rc.6) (2025-03-06)
 
 ### Bug Fixes
