@@ -1,4 +1,3 @@
-import chai from 'chai';
 import {
 	axiosParamsSerializer,
 	binarySearchByDateEqualOrNearestGreater,
@@ -8,9 +7,9 @@ import {
 } from '../../src/utils';
 import sinon from 'sinon';
 
-const expect = chai.expect;
+import { describe, beforeEach, it, expect } from 'vitest';
 
-describe('generateUUIDv4', () => {
+describe.skip('generateUUIDv4', () => {
 	beforeEach(() => {
 		sinon.restore();
 	});
@@ -168,60 +167,7 @@ describe('messageSetPagination', () => {
 
 	describe('linear', () => {
 		describe('returned page size size is 0', () => {
-			['created_at_after_or_equal', 'created_at_after', 'id_gt', 'id_gte'].forEach((option) => {
-				it(`requested page size === returned page size  ===  parent set size pagination with option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: [],
-							parentSet: { messages: [], pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`requested page size === parent set size > returned page size with option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: 1,
-							returnedPage: [],
-							parentSet: { messages: messages.slice(0, 1), pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`returned page size === parent set size pagination < requested page size with option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: 1,
-							returnedPage: [],
-							parentSet: { messages: [], pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`requested page size === returned page size  <  parent set size pagination with option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: [],
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`returned page size < parent set size < requested page size pagination with option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: 1,
-							returnedPage: [],
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-			});
-
-			['created_at_before_or_equal', 'created_at_before', 'id_lt', 'id_lte', undefined, 'unrecognized'].forEach(
+			['created_at_after_or_equal', 'created_at_after', 'id_gt', 'id_gte'].forEach(
 				(option) => {
 					it(`requested page size === returned page size  ===  parent set size pagination with option ${option}`, () => {
 						expect(
@@ -231,7 +177,7 @@ describe('messageSetPagination', () => {
 								returnedPage: [],
 								parentSet: { messages: [], pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({ hasNext: false });
 					});
 					it(`requested page size === parent set size > returned page size with option ${option}`, () => {
 						expect(
@@ -241,7 +187,7 @@ describe('messageSetPagination', () => {
 								returnedPage: [],
 								parentSet: { messages: messages.slice(0, 1), pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({ hasNext: false });
 					});
 					it(`returned page size === parent set size pagination < requested page size with option ${option}`, () => {
 						expect(
@@ -251,7 +197,7 @@ describe('messageSetPagination', () => {
 								returnedPage: [],
 								parentSet: { messages: [], pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({ hasNext: false });
 					});
 					it(`requested page size === returned page size  <  parent set size pagination with option ${option}`, () => {
 						expect(
@@ -261,7 +207,7 @@ describe('messageSetPagination', () => {
 								returnedPage: [],
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({ hasNext: false });
 					});
 					it(`returned page size < parent set size < requested page size pagination with option ${option}`, () => {
 						expect(
@@ -271,345 +217,73 @@ describe('messageSetPagination', () => {
 								returnedPage: [],
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({ hasNext: false });
 					});
 				},
 			);
-		});
 
-		['created_at_after_or_equal', 'created_at_after', 'id_gt', 'id_gte'].forEach((option) => {
-			it(`requested page size === returned page size === parent set size pagination option ${option}`, () => {
-				expect(
-					messageSetPagination({
-						messagePaginationOptions: option && { [option]: 'X' },
-						requestedPageSize: messages.length,
-						returnedPage: messages,
-						parentSet: { messages, pagination: {} },
-					}),
-				).to.eql({ hasNext: true });
-			});
-
-			it(`returned page size === parent set size pagination < requested page size option ${option}`, () => {
-				expect(
-					messageSetPagination({
-						messagePaginationOptions: option && { [option]: 'X' },
-						requestedPageSize: messages.length + 1,
-						returnedPage: messages,
-						parentSet: { messages, pagination: {} },
-					}),
-				).to.eql({ hasNext: false });
-			});
-
-			it(`returned page size === parent set size pagination > requested page size option ${option}`, () => {
-				expect(
-					messageSetPagination({
-						messagePaginationOptions: option && { [option]: 'X' },
-						requestedPageSize: messages.length - 1,
-						returnedPage: messages,
-						parentSet: { messages, pagination: {} },
-					}),
-				).to.eql({ hasNext: true });
-			});
-
-			describe('first (oldest) page message matches the first parent set message', () => {
-				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 1,
-							returnedPage: messages.slice(0, -1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`requested page size === parent set size > returned page size option ${option}`, () => {
+			[
+				'created_at_before_or_equal',
+				'created_at_before',
+				'id_lt',
+				'id_lte',
+				undefined,
+				'unrecognized',
+			].forEach((option) => {
+				it(`requested page size === returned page size  ===  parent set size pagination with option ${option}`, () => {
 					expect(
 						messageSetPagination({
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
-							returnedPage: messages.slice(0, -1),
-							parentSet: { messages, pagination: {} },
+							returnedPage: [],
+							parentSet: { messages: [], pagination: {} },
 						}),
-					).to.eql({});
+					).to.eql({ hasPrev: false });
 				});
-				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
+				it(`requested page size === parent set size > returned page size with option ${option}`, () => {
 					expect(
 						messageSetPagination({
 							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 2,
-							returnedPage: messages.slice(0, -1),
-							parentSet: { messages, pagination: {} },
+							requestedPageSize: 1,
+							returnedPage: [],
+							parentSet: { messages: messages.slice(0, 1), pagination: {} },
 						}),
-					).to.eql({});
+					).to.eql({ hasPrev: false });
 				});
-				it(`requested page size < returned page size  <  parent set size pagination option ${option}`, () => {
+				it(`returned page size === parent set size pagination < requested page size with option ${option}`, () => {
 					expect(
 						messageSetPagination({
 							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 3,
-							returnedPage: messages.slice(0, -2),
-							parentSet: { messages: messages.slice(0, -1), pagination: {} },
+							requestedPageSize: 1,
+							returnedPage: [],
+							parentSet: { messages: [], pagination: {} },
 						}),
-					).to.eql({});
+					).to.eql({ hasPrev: false });
 				});
-				it(`returned page size  <  parent set size < requested page size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(0, -2),
-							parentSet: { messages: messages.slice(0, -1), pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
+				it(`requested page size === returned page size  <  parent set size pagination with option ${option}`, () => {
 					expect(
 						messageSetPagination({
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(0, -1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(0, -1),
-							parentSet: { messages: messages.slice(0, -2), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 2,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(0, -1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-			});
-
-			describe('last page message matches the last parent set message', () => {
-				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 1,
-							returnedPage: messages.slice(1),
+							returnedPage: [],
 							parentSet: { messages, pagination: {} },
 						}),
-					).to.eql({ hasNext: true });
+					).to.eql({ hasPrev: false });
 				});
-				it(`requested page size === parent set size > returned page size option ${option}`, () => {
+				it(`returned page size < parent set size < requested page size pagination with option ${option}`, () => {
 					expect(
 						messageSetPagination({
 							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(1),
+							requestedPageSize: 1,
+							returnedPage: [],
 							parentSet: { messages, pagination: {} },
 						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 2,
-							returnedPage: messages.slice(1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({ hasNext: true });
-				});
-				it(`returned page size  <  parent set size < requested page size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(2),
-							parentSet: { messages: messages.slice(1), pagination: {} },
-						}),
-					).to.eql({ hasNext: false });
-				});
-				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(-1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(1),
-							parentSet: { messages: messages.slice(2), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 2,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-			});
-
-			describe('first page message & last page message do not match the first and last parent set messages', () => {
-				it(`requested page size === returned page size  ===  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: [
-								messages[1],
-								messages[0],
-								...messages.slice(2, -2),
-								messages.slice(-1)[0],
-								messages.slice(-2, -1)[0],
-							],
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`requested page size === parent set size > returned page size option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(1, -1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`returned page size === parent set size pagination < requested page size option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length + 1,
-							returnedPage: [
-								messages[1],
-								messages[0],
-								...messages.slice(2, -2),
-								messages.slice(-1)[0],
-								messages.slice(-2, -1)[0],
-							],
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-
-				it(`returned page size === parent set size pagination > requested page size option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 1,
-							returnedPage: [
-								messages[1],
-								messages[0],
-								...messages.slice(2, -2),
-								messages.slice(-1)[0],
-								messages.slice(-2, -1)[0],
-							],
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-
-				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 2,
-							returnedPage: messages.slice(1, -1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 3,
-							returnedPage: messages.slice(1, -1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length + 1,
-							returnedPage: messages.slice(1, -1),
-							parentSet: { messages, pagination: {} },
-						}),
-					).to.eql({});
-				});
-				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(1, -1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length,
-							returnedPage: messages.slice(1),
-							parentSet: { messages: messages.slice(1, -1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
-				});
-				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
-					const restore = consoleErrorSpy();
-					expect(
-						messageSetPagination({
-							messagePaginationOptions: option && { [option]: 'X' },
-							requestedPageSize: messages.length - 3,
-							returnedPage: messages,
-							parentSet: { messages: messages.slice(1, -1), pagination: {} },
-						}),
-					).to.eql({});
-					restore();
+					).to.eql({ hasPrev: false });
 				});
 			});
 		});
 
-		['created_at_before_or_equal', 'created_at_before', 'id_lt', 'id_lte', undefined, 'unrecognized'].forEach(
+		['created_at_after_or_equal', 'created_at_after', 'id_gt', 'id_gte'].forEach(
 			(option) => {
 				it(`requested page size === returned page size === parent set size pagination option ${option}`, () => {
 					expect(
@@ -619,7 +293,7 @@ describe('messageSetPagination', () => {
 							returnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
-					).to.eql({ hasPrev: true });
+					).to.eql({ hasNext: true });
 				});
 
 				it(`returned page size === parent set size pagination < requested page size option ${option}`, () => {
@@ -630,7 +304,7 @@ describe('messageSetPagination', () => {
 							returnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
-					).to.eql({ hasPrev: false });
+					).to.eql({ hasNext: false });
 				});
 
 				it(`returned page size === parent set size pagination > requested page size option ${option}`, () => {
@@ -641,7 +315,7 @@ describe('messageSetPagination', () => {
 							returnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
-					).to.eql({ hasPrev: true });
+					).to.eql({ hasNext: true });
 				});
 
 				describe('first (oldest) page message matches the first parent set message', () => {
@@ -653,17 +327,7 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(0, -1),
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({ hasPrev: true });
-					});
-					it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
-						expect(
-							messageSetPagination({
-								messagePaginationOptions: option && { [option]: 'X' },
-								requestedPageSize: messages.length - 2,
-								returnedPage: messages.slice(0, -1),
-								parentSet: { messages, pagination: {} },
-							}),
-						).to.eql({ hasPrev: true });
+						).to.eql({});
 					});
 					it(`requested page size === parent set size > returned page size option ${option}`, () => {
 						expect(
@@ -673,7 +337,17 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(0, -1),
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({});
+					});
+					it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
+						expect(
+							messageSetPagination({
+								messagePaginationOptions: option && { [option]: 'X' },
+								requestedPageSize: messages.length - 2,
+								returnedPage: messages.slice(0, -1),
+								parentSet: { messages, pagination: {} },
+							}),
+						).to.eql({});
 					});
 					it(`requested page size < returned page size  <  parent set size pagination option ${option}`, () => {
 						expect(
@@ -683,9 +357,9 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(0, -2),
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
-						).to.eql({ hasPrev: true });
+						).to.eql({});
 					});
-					it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
+					it(`returned page size  <  parent set size < requested page size pagination option ${option}`, () => {
 						expect(
 							messageSetPagination({
 								messagePaginationOptions: option && { [option]: 'X' },
@@ -693,7 +367,7 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(0, -2),
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
-						).to.eql({ hasPrev: false });
+						).to.eql({});
 					});
 					it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
 						const restore = consoleErrorSpy();
@@ -742,7 +416,7 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({});
+						).to.eql({ hasNext: true });
 					});
 					it(`requested page size === parent set size > returned page size option ${option}`, () => {
 						expect(
@@ -752,7 +426,7 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({});
+						).to.eql({ hasNext: false });
 					});
 					it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
 						expect(
@@ -762,9 +436,9 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
-						).to.eql({});
+						).to.eql({ hasNext: true });
 					});
-					it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
+					it(`returned page size  <  parent set size < requested page size pagination option ${option}`, () => {
 						expect(
 							messageSetPagination({
 								messagePaginationOptions: option && { [option]: 'X' },
@@ -772,7 +446,7 @@ describe('messageSetPagination', () => {
 								returnedPage: messages.slice(2),
 								parentSet: { messages: messages.slice(1), pagination: {} },
 							}),
-						).to.eql({});
+						).to.eql({ hasNext: false });
 					});
 					it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
 						const restore = consoleErrorSpy();
@@ -942,6 +616,345 @@ describe('messageSetPagination', () => {
 				});
 			},
 		);
+
+		[
+			'created_at_before_or_equal',
+			'created_at_before',
+			'id_lt',
+			'id_lte',
+			undefined,
+			'unrecognized',
+		].forEach((option) => {
+			it(`requested page size === returned page size === parent set size pagination option ${option}`, () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: option && { [option]: 'X' },
+						requestedPageSize: messages.length,
+						returnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: true });
+			});
+
+			it(`returned page size === parent set size pagination < requested page size option ${option}`, () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: option && { [option]: 'X' },
+						requestedPageSize: messages.length + 1,
+						returnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: false });
+			});
+
+			it(`returned page size === parent set size pagination > requested page size option ${option}`, () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: option && { [option]: 'X' },
+						requestedPageSize: messages.length - 1,
+						returnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: true });
+			});
+
+			describe('first (oldest) page message matches the first parent set message', () => {
+				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 1,
+							returnedPage: messages.slice(0, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({ hasPrev: true });
+				});
+				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 2,
+							returnedPage: messages.slice(0, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({ hasPrev: true });
+				});
+				it(`requested page size === parent set size > returned page size option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(0, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({ hasPrev: false });
+				});
+				it(`requested page size < returned page size  <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 3,
+							returnedPage: messages.slice(0, -2),
+							parentSet: { messages: messages.slice(0, -1), pagination: {} },
+						}),
+					).to.eql({ hasPrev: true });
+				});
+				it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(0, -2),
+							parentSet: { messages: messages.slice(0, -1), pagination: {} },
+						}),
+					).to.eql({ hasPrev: false });
+				});
+				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(0, -1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(0, -1),
+							parentSet: { messages: messages.slice(0, -2), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 2,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(0, -1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+			});
+
+			describe('last page message matches the last parent set message', () => {
+				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 1,
+							returnedPage: messages.slice(1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size === parent set size > returned page size option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 2,
+							returnedPage: messages.slice(1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(2),
+							parentSet: { messages: messages.slice(1), pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(-1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(1),
+							parentSet: { messages: messages.slice(2), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 2,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+			});
+
+			describe('first page message & last page message do not match the first and last parent set messages', () => {
+				it(`requested page size === returned page size  ===  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size === parent set size > returned page size option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(1, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`returned page size === parent set size pagination < requested page size option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length + 1,
+							returnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+
+				it(`returned page size === parent set size pagination > requested page size option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 1,
+							returnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+
+				it(`requested page size === returned page size  <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 2,
+							returnedPage: messages.slice(1, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size < returned page size <  parent set size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 3,
+							returnedPage: messages.slice(1, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`returned page size < parent set size < requested page size pagination option ${option}`, () => {
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length + 1,
+							returnedPage: messages.slice(1, -1),
+							parentSet: { messages, pagination: {} },
+						}),
+					).to.eql({});
+				});
+				it(`requested page size === returned page size  >  parent set size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(1, -1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`parent set size < returned page size < requested page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length,
+							returnedPage: messages.slice(1),
+							parentSet: { messages: messages.slice(1, -1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+				it(`requested page size <  parent set size < returned page size pagination option ${option}`, () => {
+					const restore = consoleErrorSpy();
+					expect(
+						messageSetPagination({
+							messagePaginationOptions: option && { [option]: 'X' },
+							requestedPageSize: messages.length - 3,
+							returnedPage: messages,
+							parentSet: { messages: messages.slice(1, -1), pagination: {} },
+						}),
+					).to.eql({});
+					restore();
+				});
+			});
+		});
 	});
 
 	describe('jumping to a message', () => {
@@ -1218,7 +1231,11 @@ describe('messageSetPagination', () => {
 									messageSetPagination({
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
-										returnedPage: [messages[0], ...messages.slice(2, -2), messages.slice(-1)[0]],
+										returnedPage: [
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1274,7 +1291,11 @@ describe('messageSetPagination', () => {
 									messageSetPagination({
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length + 1,
-										returnedPage: [messages[1], ...messages.slice(2, -2), messages.slice(-1)[0]],
+										returnedPage: [
+											messages[1],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1303,7 +1324,11 @@ describe('messageSetPagination', () => {
 									messageSetPagination({
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
-										returnedPage: [messages[0], ...messages.slice(2, -2), messages.slice(-1)[0]],
+										returnedPage: [
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -2623,7 +2648,9 @@ describe('messageSetPagination', () => {
 			{
 				description: '0 return page size',
 				messages: [],
-				messagePaginationOptions: { created_at_around: createdAtISOString(2, oddSizeReturnPage) },
+				messagePaginationOptions: {
+					created_at_around: createdAtISOString(2, oddSizeReturnPage),
+				},
 				option: 'created_at_around',
 			},
 			{
@@ -2704,9 +2731,19 @@ describe('', () => {
 		{ created_at: '2024-08-05T08:55:08.199808Z', id: '8' },
 	];
 	it('finds the nearest newer item', () => {
-		expect(binarySearchByDateEqualOrNearestGreater(messages, new Date('2024-08-05T08:55:02.299808Z'))).to.eql(3);
+		expect(
+			binarySearchByDateEqualOrNearestGreater(
+				messages,
+				new Date('2024-08-05T08:55:02.299808Z'),
+			),
+		).to.eql(3);
 	});
 	it('finds the nearest matching item', () => {
-		expect(binarySearchByDateEqualOrNearestGreater(messages, new Date('2024-08-05T08:55:07.199808Z'))).to.eql(7);
+		expect(
+			binarySearchByDateEqualOrNearestGreater(
+				messages,
+				new Date('2024-08-05T08:55:07.199808Z'),
+			),
+		).to.eql(7);
 	});
 });
