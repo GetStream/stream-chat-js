@@ -122,6 +122,7 @@ export class Thread {
     threadData: ThreadResponse;
   }) {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
+      // @ts-expect-error name is a "custom" property
       name: threadData.channel.name,
     });
     channel._hydrateMembers({

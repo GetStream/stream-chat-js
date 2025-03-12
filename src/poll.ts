@@ -208,7 +208,7 @@ export class Poll {
         ];
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
-        if (event.poll.enforce_unique_votes) {
+        if (event.poll.enforce_unique_vote) {
           ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
           ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<

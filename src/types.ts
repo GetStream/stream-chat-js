@@ -267,8 +267,10 @@ export type ChannelResponse = CustomChannelData & {
   frozen: boolean;
   id: string;
   type: string;
+  blocked?: boolean;
   auto_translation_enabled?: boolean;
-  auto_translation_language?: TranslationLanguages | '';
+  auto_translation_language?: TranslationLanguages;
+  hide_messages_before?: string;
   config?: ChannelConfigWithInfo;
   cooldown?: number;
   created_at?: string;
@@ -282,7 +284,7 @@ export type ChannelResponse = CustomChannelData & {
   member_count?: number;
   members?: ChannelMemberResponse[];
   muted?: boolean;
-  name?: string; // FIXME: I believe this property should live in CustomChannelData
+  mute_expires_at?: string;
   own_capabilities?: string[];
   team?: string;
   truncated_at?: string;
@@ -1668,10 +1670,10 @@ export type ChannelFilters = QueryFilters<
     name?:
       | RequireOnlyOne<
           {
-            $autocomplete?: ChannelResponse['name'];
-          } & QueryFilter<ChannelResponse['name']>
+            $autocomplete?: string;
+          } & QueryFilter<string>
         >
-      | PrimitiveFilter<ChannelResponse['name']>;
+      | PrimitiveFilter<string>;
     pinned?: boolean;
   } & {
     [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
@@ -2294,13 +2296,13 @@ export type ChannelConfigWithInfo = ChannelConfigFields &
     commands?: CommandResponse[];
   };
 
-export type ChannelData = CustomChannelData & {
-  blocked?: boolean;
-  created_by?: UserResponse | null;
-  created_by_id?: UserResponse['id'];
-  members?: string[] | Array<NewMemberPayload>;
-  name?: string;
-};
+export type ChannelData = CustomChannelData &
+  Partial<{
+    blocked: boolean;
+    created_by: UserResponse | null;
+    created_by_id: UserResponse['id'];
+    members: string[] | Array<NewMemberPayload>;
+  }>;
 
 export type ChannelMute = {
   user: UserResponse;
@@ -2831,7 +2833,6 @@ export type TokenOrProvider = null | string | TokenProvider | undefined;
 export type TokenProvider = () => Promise<string>;
 
 export type TranslationLanguages =
-  | ''
   | 'af'
   | 'am'
   | 'ar'
@@ -2887,7 +2888,8 @@ export type TranslationLanguages =
   | 'ur'
   | 'vi'
   | 'zh'
-  | 'zh-TW';
+  | 'zh-TW'
+  | (string & {});
 
 export type TypingStartEvent = Event;
 
@@ -3248,7 +3250,6 @@ export type UpdatePollAPIResponse = {
 
 export type PollResponse = CustomPollData &
   PollEnrichData & {
-    cid: string;
     created_at: string;
     created_by: UserResponse | null;
     created_by_id: string;
@@ -3261,7 +3262,6 @@ export type PollResponse = CustomPollData &
     allow_answers?: boolean;
     allow_user_suggested_options?: boolean;
     description?: string;
-    enforce_unique_votes?: boolean;
     is_closed?: boolean;
     voting_visibility?: VotingVisibility;
   };
