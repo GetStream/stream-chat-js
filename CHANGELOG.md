@@ -1,3 +1,10 @@
+## [9.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.7...v9.0.0-rc.8) (2025-03-12)
+
+### Bug Fixes
+
+* adjust ChannelResponse, ChannelData & PollResponse ([#1493](https://github.com/GetStream/stream-chat-js/issues/1493)) ([39091c7](https://github.com/GetStream/stream-chat-js/commit/39091c7ee9b5a601809aca9773b87b3c95181709))
+* omit name from CustomChannelData for ChannelFilters ([#1494](https://github.com/GetStream/stream-chat-js/issues/1494)) ([d7030c2](https://github.com/GetStream/stream-chat-js/commit/d7030c2957013f213de30a49bb70a47008be2d87))
+
 ## [9.0.0-rc.7](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.6...v9.0.0-rc.7) (2025-03-11)
 
 ### ⚠ BREAKING CHANGES
