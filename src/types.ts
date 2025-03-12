@@ -1654,7 +1654,7 @@ export type ReactionFilters = QueryFilters<
 >;
 
 export type ChannelFilters = QueryFilters<
-  ContainsOperator<CustomChannelData> & {
+  ContainsOperator<Omit<CustomChannelData, 'name'>> & {
     archived?: boolean;
     'member.user.name'?:
       | RequireOnlyOne<{
