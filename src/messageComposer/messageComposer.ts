@@ -75,11 +75,11 @@ export class MessageComposer {
   threadId: string | null;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ channel, composition, config = {}, threadId }: MessageComposerOptions) {
+  constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
     // todo: solve ts-ignore
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config);
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
     const message =
       composition && (isMessageDraft(composition) ? composition.message : composition);
     this.attachmentManager = new AttachmentManager({ channel, message });
