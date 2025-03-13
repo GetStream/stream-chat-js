@@ -388,9 +388,14 @@ describe('Client deleteUsers', () => {
 	});
 });
 
-describe('updateMessage should ensure sanity of `mentioned_users`', () => {
+describe('updateMessage should maintain data integrity', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
 	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
-		const client = await getClientWithUser();
 		client.post = (url, config) => {
 			expect(typeof config.message.mentioned_users[0]).to.be.equal('string');
 			expect(config.message.mentioned_users[0]).to.be.equal('uthred');
@@ -414,7 +419,6 @@ describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 	});
 
 	it('should allow empty mentioned_users', async () => {
-		const client = await getClientWithUser();
 		client.post = (url, config) => {
 			expect(config.message.mentioned_users[0]).to.be.equal(undefined);
 		};
@@ -435,6 +439,29 @@ describe('updateMessage should ensure sanity of `mentioned_users`', () => {
 				mentioned_users: undefined,
 			}),
 		);
+	});
+
+	it('should remove reserved and volatile fields before running the update', async () => {
+		const postSpy = sinon.stub(client, 'post');
+		const updatedMessage = generateMsg({
+			text: 'test message',
+			pinned_at: new Date().toISOString(),
+			mentioned_users: undefined,
+		});
+
+		await client.updateMessage(updatedMessage);
+
+		const messageInQuery = {
+			attachments: updatedMessage.attachments,
+			mentioned_users: updatedMessage.mentioned_users,
+			reaction_counts: updatedMessage.reaction_counts,
+			reaction_scores: updatedMessage.reaction_scores,
+			silent: updatedMessage.silent,
+			status: updatedMessage.status,
+			text: updatedMessage.text,
+		};
+
+		expect(postSpy.args[0][1].message).to.deep.equal(messageInQuery);
 	});
 });
 
@@ -594,7 +621,7 @@ describe('Client WSFallback', () => {
 	});
 });
 
-describe('Channel.queryChannels', async () => {
+describe('StreamChat.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
@@ -639,5 +666,57 @@ describe('Channel.queryChannels', async () => {
 			expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: true, hasPrev: false });
 		});
 		mock.restore();
+	});
+});
+
+describe('X-Stream-Client header', () => {
+	process.env.PKG_VERSION = '1.2.3';
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	it('server-side integration', () => {
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-node');
+	});
+
+	it('client-side integration', () => {
+		client.node = false;
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-browser');
+	});
+
+	it('SDK integration without deviceIdentifier', () => {
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3');
+	});
+
+	it('SDK integration with deviceIdentifier', () => {
+		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
+	});
+
+	it('SDK integration with process.env.CLIENT_BUNDLE', () => {
+		process.env.CLIENT_BUNDLE = 'browser';
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-react-v2.3.4-llc-v1.2.3|client_bundle=browser');
+	});
+
+	it('setUserAgent is now deprecated', () => {
+		client.setUserAgent('deprecated');
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('deprecated');
 	});
 });

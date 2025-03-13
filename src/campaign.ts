@@ -1,5 +1,5 @@
 import { StreamChat } from './client';
-import { CampaignData, DefaultGenerics, ExtendableGenerics } from './types';
+import { CampaignData, DefaultGenerics, ExtendableGenerics, GetCampaignOptions } from './types';
 
 export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
   id: string | null;
@@ -65,9 +65,9 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return this.client.stopCampaign(this.id as string);
   }
 
-  async get() {
+  async get(options?: GetCampaignOptions) {
     this.verifyCampaignId();
 
-    return this.client.getCampaign(this.id as string);
+    return this.client.getCampaign(this.id as string, options);
   }
 }

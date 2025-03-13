@@ -2,6 +2,7 @@ import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { StableWSConnection } from './connection';
 import { EVENT_MAP } from './events';
 import { Role } from './permissions';
+import type { Channel } from './channel';
 
 /**
  * Utility Types
@@ -2231,6 +2232,7 @@ export type OGAttachment = {
 export type BlockList = {
   name: string;
   words: string[];
+  team?: string;
   type?: string;
   validate?: boolean;
 };
@@ -2646,6 +2648,7 @@ export type MessageBase<
   pinned_at?: string | null;
   poll_id?: string;
   quoted_message_id?: string;
+  restricted_visibility?: string[];
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
@@ -2896,6 +2899,7 @@ export type ReservedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
+  | 'pinned_at'
   | 'user'
   | '__html';
 
@@ -3000,6 +3004,10 @@ export type QuerySegmentTargetsFilter = {
 };
 export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
 
+export type GetCampaignOptions = {
+  users?: { limit?: number; next?: string; prev?: string };
+};
+
 export type CampaignSort = {
   field: string;
   direction?: number;
@@ -3010,6 +3018,7 @@ export type CampaignQueryOptions = {
   next?: string;
   prev?: string;
   sort?: CampaignSort;
+  user_limit?: number;
 };
 
 export type SegmentQueryOptions = CampaignQueryOptions;
@@ -3050,6 +3059,8 @@ export type CampaignStats = {
   stats_completed_at?: string;
   stats_messages_sent?: number;
   stats_started_at?: string;
+  stats_users_read?: number;
+  stats_users_sent?: number;
 };
 export type CampaignResponse = {
   created_at: string;
@@ -3570,6 +3581,14 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     has_video?: boolean;
   } & {
+    has_media?: boolean;
+  } & {
+    language?: RequireOnlyOne<{
+      $contains?: string;
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
     teams?:
       | RequireOnlyOne<{
           $contains?: PrimitiveFilter<string>;
@@ -3577,6 +3596,39 @@ export type ReviewQueueFilters = QueryFilters<
           $in?: PrimitiveFilter<string>;
         }>
       | PrimitiveFilter<string>;
+  } & {
+    user_report_reason?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    recommended_action?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    flagged_user_id?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    category?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    label?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    reporter_type?: RequireOnlyOne<{
+      $eq?: 'automod' | 'user' | 'moderator' | 'admin' | 'velocity_filter';
+    }>;
+  } & {
+    reporter_id?: RequireOnlyOne<{
+      $eq?: string;
+      $in?: string[];
+    }>;
+  } & {
+    date_range?: RequireOnlyOne<{
+      $eq?: string; // Format: "date1_date2"
+    }>;
   }
 >;
 
@@ -3756,3 +3808,26 @@ export type VelocityFilterConfig = {
   rules: VelocityFilterConfigRule[];
   async?: boolean;
 };
+
+export type PromoteChannelParams<SCG extends ExtendableGenerics = DefaultGenerics> = {
+  channels: Array<Channel<SCG>>;
+  channelToMove: Channel<SCG>;
+  sort: ChannelSort<SCG>;
+  /**
+   * If the index of the channel within `channels` list which is being moved upwards
+   * (`channelToMove`) is known, you can supply it to skip extra calculation.
+   */
+  channelToMoveIndexWithinChannels?: number;
+};
+
+/**
+ * An identifier containing information about the downstream SDK using stream-chat. It
+ * is used to resolve the user agent.
+ */
+export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular'; version: string };
+
+/**
+ * An identifier containing information about the downstream device using stream-chat, if
+ * available. Is used by the react-native SDKs to enrich the user agent further.
+ */
+export type DeviceIdentifier = { os: string; model?: string };

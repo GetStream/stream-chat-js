@@ -11,6 +11,7 @@ export * from './moderation';
 export * from './permissions';
 export * from './poll';
 export * from './poll_manager';
+export * from './search_controller';
 export * from './segment';
 export * from './signing';
 export * from './store';
@@ -19,4 +20,5 @@ export type { ThreadState, ThreadReadState, ThreadRepliesPagination, ThreadUserR
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
-export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage } from './utils';
+export * from './channel_manager';
+export { isOwnUser, chatCodes, logChatPromiseExecution, formatMessage, promoteChannel } from './utils';

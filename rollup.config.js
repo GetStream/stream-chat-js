@@ -50,6 +50,7 @@ const normalBundle = {
 	external: externalPackages.concat(['https', 'jsonwebtoken', 'crypto']),
 	plugins: [
 		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.CLIENT_BUNDLE': JSON.stringify('') }),
 		external(),
 		nodeResolve({ extensions }),
 		babel(babelConfig),
@@ -74,6 +75,7 @@ const browserBundle = {
 	external: externalPackages,
 	plugins: [
 		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.CLIENT_BUNDLE': JSON.stringify('') }),
 		browserIgnore,
 		external(),
 		nodeResolve({ extensions }),
@@ -94,6 +96,7 @@ const fullBrowserBundle = {
 	],
 	plugins: [
 		replace({ preventAssignment: true, 'process.env.PKG_VERSION': JSON.stringify(pkg.version) }),
+		replace({ preventAssignment: true, 'process.env.CLIENT_BUNDLE': JSON.stringify('') }),
 		browserIgnore,
 		external(),
 		nodeResolve({ extensions, browser: true }),

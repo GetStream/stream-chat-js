@@ -18,6 +18,7 @@ import {
   addFileToFormData,
   axiosParamsSerializer,
   chatCodes,
+  generateChannelTempCid,
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
@@ -78,6 +79,7 @@ import {
   DeleteCommandResponse,
   DeleteUserOptions,
   Device,
+  DeviceIdentifier,
   EndpointName,
   ErrorFromResponse,
   Event,
@@ -99,6 +101,7 @@ import {
   FlagUserResponse,
   GetBlockedUsersAPIResponse,
   GetCallTokenResponse,
+  GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
   GetImportResponse,
@@ -126,6 +129,7 @@ import {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
+  NewMemberPayload,
   OGAttachment,
   OwnUserResponse,
   PartialMessageUpdate,
@@ -171,6 +175,7 @@ import {
   ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
@@ -216,6 +221,7 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
+import { ChannelManager, ChannelManagerEventHandlerOverrides, ChannelManagerOptions } from './channel_manager';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -271,6 +277,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
+  sdkIdentifier?: SdkIdentifier;
+  deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -597,6 +605,24 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     await Promise.all([this.wsConnection?.disconnect(timeout), this.wsFallback?.disconnect(timeout)]);
     return Promise.resolve();
+  };
+
+  /**
+   * Creates an instance of ChannelManager.
+   *
+   * @internal
+   *
+   * @param eventHandlerOverrides - the overrides for event handlers to be used
+   * @param options - the options used for the channel manager
+   */
+  createChannelManager = ({
+    eventHandlerOverrides = {},
+    options = {},
+  }: {
+    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides<StreamChatGenerics>;
+    options?: ChannelManagerOptions;
+  }) => {
+    return new ChannelManager({ client: this, eventHandlerOverrides, options });
   };
 
   /**
@@ -1690,7 +1716,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
             logger: this.logger,
           }),
         };
-        this.polls.hydratePollCache(updatedMessagesSet.messages, true);
+        this.polls.hydratePollCache(channelState.messages, true);
       }
 
       channels.push(c);
@@ -1935,10 +1961,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   getChannelByMembers = (channelType: string, custom: ChannelData<StreamChatGenerics>) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const membersStr = [...(custom.members || [])].sort().join(',');
-    const tempCid = `${channelType}:!members-${membersStr}`;
+    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload<StreamChatGenerics>) =>
+      typeof member === 'string' ? member : member.user_id ?? '',
+    );
+    const membersStr = memberIds.sort().join(',');
+    const tempCid = generateChannelTempCid(channelType, memberIds);
 
-    if (!membersStr) {
+    if (!tempCid) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
 
@@ -2676,6 +2705,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       'type',
       'updated_at',
       'user',
+      'pinned_at',
       '__html',
     ];
 
@@ -2892,11 +2922,40 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   getUserAgent() {
-    return (
-      this.userAgent || `stream-chat-javascript-client-${this.node ? 'node' : 'browser'}-${process.env.PKG_VERSION}`
+    if (this.userAgent) {
+      return this.userAgent;
+    }
+
+    const version = process.env.PKG_VERSION;
+    const clientBundle = process.env.CLIENT_BUNDLE;
+
+    let userAgentString = '';
+    if (this.sdkIdentifier) {
+      userAgentString = `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
+    } else {
+      userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+    }
+
+    const { os, model } = this.deviceIdentifier ?? {};
+
+    return ([
+      // reports the device OS, if provided
+      ['os', os],
+      // reports the device model, if provided
+      ['device_model', model],
+      // reports which bundle is being picked from the exports
+      ['client_bundle', clientBundle],
+    ] as const).reduce(
+      (withArguments, [key, value]) =>
+        value && value.length > 0 ? withArguments.concat(`|${key}=${value}`) : withArguments,
+      userAgentString,
     );
   }
 
+  /**
+   * @deprecated use sdkIdentifier instead
+   * @param userAgent
+   */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
@@ -3101,26 +3160,73 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     });
   }
 
+  /**
+   * Creates a new block list
+   *
+   * @param {BlockList} blockList - The block list to create
+   * @param {string} blockList.name - The name of the block list
+   * @param {string[]} blockList.words - List of words to block
+   * @param {string} [blockList.team] - Team ID the block list belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
   createBlockList(blockList: BlockList) {
     return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
 
-  listBlockLists() {
-    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`);
+  /**
+   * Lists all block lists
+   *
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID to filter block lists by
+   *
+   * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
+   */
+  listBlockLists(data?: { team?: string }) {
+    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(`${this.baseURL}/blocklists`, data);
   }
 
-  getBlockList(name: string) {
+  /**
+   * Gets a specific block list
+   *
+   * @param {string} name - The name of the block list to retrieve
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
+   */
+  getBlockList(name: string, data?: { team?: string }) {
     return this.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
+      data,
     );
   }
 
-  updateBlockList(name: string, data: { words: string[] }) {
+  /**
+   * Updates an existing block list
+   *
+   * @param {string} name - The name of the block list to update
+   * @param {Object} data - The update data
+   * @param {string[]} data.words - New list of words to block
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
+  updateBlockList(name: string, data: { words: string[]; team?: string }) {
     return this.put<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
-  deleteBlockList(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`);
+  /**
+   * Deletes a block list
+   *
+   * @param {string} name - The name of the block list to delete
+   * @param {Object} [data] - Query parameters
+   * @param {string} [data.team] - Team ID that blocklist belongs to
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
+  deleteBlockList(name: string, data?: { team?: string }) {
+    return this.delete<APIResponse>(`${this.baseURL}/blocklists/${encodeURIComponent(name)}`, data);
   }
 
   exportChannels(request: Array<ExportChannelRequest>, options: ExportChannelOptions = {}) {
@@ -3336,25 +3442,44 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async createCampaign(params: CampaignData) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse } & APIResponse>(this.baseURL + `/campaigns`, { ...params });
+    return this.post<
+      {
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns`, { ...params });
   }
 
-  async getCampaign(id: string) {
+  async getCampaign(id: string, options?: GetCampaignOptions) {
     this.validateServerSideAuth();
-    return this.get<{ campaign: CampaignResponse } & APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
-    );
+    return this.get<
+      {
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
   }
 
   async startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse } & APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`,
+    return this.post<
       {
-        scheduled_for: options?.scheduledFor,
-        stop_at: options?.stopAt,
-      },
-    );
+        campaign: CampaignResponse;
+        users: {
+          next?: string;
+          prev?: string;
+        };
+      } & APIResponse
+    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
+      scheduled_for: options?.scheduledFor,
+      stop_at: options?.stopAt,
+    });
   }
   /**
    * queryCampaigns - Query Campaigns
@@ -3387,7 +3512,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    */
   async updateCampaign(id: string, params: Partial<CampaignData>) {
     this.validateServerSideAuth();
-    return this.put<{ campaign: CampaignResponse }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
+    return this.put<{
+      campaign: CampaignResponse;
+      users: {
+        next?: string;
+        prev?: string;
+      };
+    }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
   }
 
   /**

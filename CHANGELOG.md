@@ -2,6 +2,117 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [8.57.6](https://github.com/GetStream/stream-chat-js/compare/v8.57.5...v8.57.6) (2025-03-03)
+
+
+### Bug Fixes
+
+* remove pinned_at from the updateMessage api ([#1484](https://github.com/GetStream/stream-chat-js/issues/1484)) ([7b73cac](https://github.com/GetStream/stream-chat-js/commit/7b73cac6ab3c3c0812f1605024f3d73fad189cca))
+
+### [8.57.5](https://github.com/GetStream/stream-chat-js/compare/v8.57.4...v8.57.5) (2025-03-01)
+
+
+### Bug Fixes
+
+* properly encode user agent on WS connection ([#1482](https://github.com/GetStream/stream-chat-js/issues/1482)) ([58b538b](https://github.com/GetStream/stream-chat-js/commit/58b538b5380000cfcf2abeb369b5ef6a0acf3913))
+
+### [8.57.4](https://github.com/GetStream/stream-chat-js/compare/v8.57.3...v8.57.4) (2025-02-28)
+
+
+### Bug Fixes
+
+* add missing env variable in rollup config ([#1480](https://github.com/GetStream/stream-chat-js/issues/1480)) ([a935e9e](https://github.com/GetStream/stream-chat-js/commit/a935e9e79232da0df9d951119f48891da59d6281))
+
+### [8.57.3](https://github.com/GetStream/stream-chat-js/compare/v8.57.2...v8.57.3) (2025-02-28)
+
+
+### Bug Fixes
+
+* add extra user agent fields resolvable by react native ([#1477](https://github.com/GetStream/stream-chat-js/issues/1477)) ([4232150](https://github.com/GetStream/stream-chat-js/commit/42321500096491252211b57e3d238cfe920a0777))
+
+### [8.57.2](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v8.57.2) (2025-02-27)
+
+
+### Bug Fixes
+
+* export promoteChannel ([#1474](https://github.com/GetStream/stream-chat-js/issues/1474)) ([f2ba914](https://github.com/GetStream/stream-chat-js/commit/f2ba9141fc5375e00706d653dc96f122896631f9))
+
+### [8.57.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.1...v8.57.1) (2025-02-27)
+
+
+### Features
+
+* add option to override channel.updated handler in ChannelManager ([#1471](https://github.com/GetStream/stream-chat-js/issues/1471)) ([9082084](https://github.com/GetStream/stream-chat-js/commit/9082084c2aa169ce557990640eb58a57f9dcb471))
+* expand campaign stats ([#1470](https://github.com/GetStream/stream-chat-js/issues/1470)) ([cc6404c](https://github.com/GetStream/stream-chat-js/commit/cc6404c8e8687754aed23b62133a737f1f6ad535))
+* support campaign user pagination ([#1462](https://github.com/GetStream/stream-chat-js/issues/1462)) ([c629018](https://github.com/GetStream/stream-chat-js/commit/c629018df77b8a956b4cf533b0c2bbeb701a03c8))
+* support new X-Stream-Client format ([#1469](https://github.com/GetStream/stream-chat-js/issues/1469)) ([fdb875b](https://github.com/GetStream/stream-chat-js/commit/fdb875b53b9ec38dc81a3afc5c00f3bc561ef06a))
+
+
+### Bug Fixes
+
+* return jsDelivr for v8.x ([392dade](https://github.com/GetStream/stream-chat-js/commit/392dade531f0c68f25c2b1ca624f4b645e4b7498))
+
+## [8.57.0](https://github.com/GetStream/stream-chat-js/compare/v8.56.1...v8.57.0) (2025-02-26)
+
+### Features
+
+* add option to override channel.updated handler in ChannelManager ([#1471](https://github.com/GetStream/stream-chat-js/issues/1471)) ([9082084](https://github.com/GetStream/stream-chat-js/commit/9082084c2aa169ce557990640eb58a57f9dcb471))
+* expand campaign stats ([#1470](https://github.com/GetStream/stream-chat-js/issues/1470)) ([cc6404c](https://github.com/GetStream/stream-chat-js/commit/cc6404c8e8687754aed23b62133a737f1f6ad535))
+* support campaign user pagination ([#1462](https://github.com/GetStream/stream-chat-js/issues/1462)) ([c629018](https://github.com/GetStream/stream-chat-js/commit/c629018df77b8a956b4cf533b0c2bbeb701a03c8))
+* support new X-Stream-Client format ([#1469](https://github.com/GetStream/stream-chat-js/issues/1469)) ([fdb875b](https://github.com/GetStream/stream-chat-js/commit/fdb875b53b9ec38dc81a3afc5c00f3bc561ef06a))
+
+# Changelog
+
+All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+### [8.56.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.0...v8.56.1) (2025-02-13)
+
+
+### Bug Fixes
+
+* premature channels state consumption in ChannelManager ([#1466](https://github.com/GetStream/stream-chat-js/issues/1466)) ([ab24bf8](https://github.com/GetStream/stream-chat-js/commit/ab24bf8bc5c0ba7dab3b972cfcc2ed829471fa04))
+
+## [8.56.0](https://github.com/GetStream/stream-chat-js/compare/v8.55.0...v8.56.0) (2025-02-11)
+
+
+### Features
+
+* reactive channel list ([#1460](https://github.com/GetStream/stream-chat-js/issues/1460)) ([e6a78bf](https://github.com/GetStream/stream-chat-js/commit/e6a78bfc8a2465e7e67a0e982108b38e4ce07b3a))
+
+## [8.55.0](https://github.com/GetStream/stream-chat-js/compare/v8.54.1...v8.55.0) (2025-01-31)
+
+
+### Features
+
+* add SearchController ([#1434](https://github.com/GetStream/stream-chat-js/issues/1434)) ([7f09a35](https://github.com/GetStream/stream-chat-js/commit/7f09a3509f6a4c204dc1795e564c2e1d75e38be8))
+
+### [8.54.1](https://github.com/GetStream/stream-chat-js/compare/v8.54.0...v8.54.1) (2025-01-30)
+
+
+### Bug Fixes
+
+* add missing types for review queue filter ([#1449](https://github.com/GetStream/stream-chat-js/issues/1449)) ([b2a01bf](https://github.com/GetStream/stream-chat-js/commit/b2a01bf1e0869bb9f3368e32dc2ce55c26eb9c34))
+* improper poll state overwrite ([#1456](https://github.com/GetStream/stream-chat-js/issues/1456)) ([4384085](https://github.com/GetStream/stream-chat-js/commit/4384085be45281c0df104bdf6f18f25dd51c98b4))
+
+## [8.54.0](https://github.com/GetStream/stream-chat-js/compare/v8.53.0...v8.54.0) (2025-01-29)
+
+
+### Features
+
+* multitenant blocklist support ([#1450](https://github.com/GetStream/stream-chat-js/issues/1450)) ([e06d1bb](https://github.com/GetStream/stream-chat-js/commit/e06d1bbe019d36376e570077cfae02b5485e1350))
+
+## [8.53.0](https://github.com/GetStream/stream-chat-js/compare/v8.52.3...v8.53.0) (2025-01-28)
+
+
+### Features
+
+* push preferences ([#1431](https://github.com/GetStream/stream-chat-js/issues/1431)) ([c9861fd](https://github.com/GetStream/stream-chat-js/commit/c9861fd8f73be2446029368d98b88433d77a3443))
+
+
+### Bug Fixes
+
+* make initial message pagination state pesimistic ([#1444](https://github.com/GetStream/stream-chat-js/issues/1444)) ([24c94a4](https://github.com/GetStream/stream-chat-js/commit/24c94a41f1c25e6e6b6f871c8b87949ac54e8e8d))
+
 ### [8.52.3](https://github.com/GetStream/stream-chat-js/compare/v8.52.2...v8.52.3) (2025-01-24)
 
 
