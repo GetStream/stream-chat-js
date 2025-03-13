@@ -305,8 +305,8 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
 
-	describe('draft.*', () => {
-		it('creates local draft on draft.updated', () => {
+	describe('draftMessage.*', () => {
+		it('creates local draftMessage on draftMessage.updated', () => {
 			const draft = generateMessageDraft({ channel });
 			expect(channel.state.messageDraft).to.be.undefined;
 			channel._handleChannelEvent({
@@ -319,7 +319,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.messageDraft).to.eql(draft);
 		});
 
-		it('updates local draft on draft.updated', () => {
+		it('updates local draftMessage on draftMessage.updated', () => {
 			channel.state.messageDraft = generateMessageDraft({ channel });
 
 			const draft = generateMessageDraft({ channel });
@@ -333,7 +333,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.messageDraft).to.eql(draft);
 		});
 
-		it('does not create local draft on draft.updated for thread drafts', () => {
+		it('does not create local draftMessage on draftMessage.updated for thread drafts', () => {
 			const parent_message = generateMsg();
 			const draftMsg = generateMsg({ parent_id: parent_message.id });
 			const draft = generateMessageDraft({
@@ -353,7 +353,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.messageDraft).to.be.undefined;
 		});
 
-		it('removes local draft on draft.deleted', () => {
+		it('removes local draftMessage on draftMessage.deleted', () => {
 			channel.state.messageDraft = generateMessageDraft({ channel });
 
 			channel._handleChannelEvent({
@@ -1456,7 +1456,7 @@ describe('Channel.query', async () => {
 		mock.restore();
 	});
 
-	it('should store draft', async () => {
+	it('should store draftMessage', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const draft = generateMessageDraft({ channel });

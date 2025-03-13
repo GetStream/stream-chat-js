@@ -18,6 +18,12 @@ import type {
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
+import {
+  createCommandsMiddleware,
+  createMentionsMiddleware,
+  MessageComposer,
+  TextComposerMiddleware
+} from './messageComposer';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
@@ -70,23 +76,24 @@ const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
 // TODO: remove this once we move to API v2
 export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
+  active_participant_count: true,
   channel: true,
   channel_cid: true,
   created_at: true,
+  created_by: true,
   created_by_user_id: true,
+  deleted_at: true,
+  draft: true,
+  last_message_at: true,
+  latest_replies: true,
+  parent_message: true,
   parent_message_id: true,
+  participant_count: true,
+  read: true,
+  reply_count: true,
+  thread_participants: true,
   title: true,
   updated_at: true,
-  latest_replies: true,
-  active_participant_count: true,
-  deleted_at: true,
-  last_message_at: true,
-  participant_count: true,
-  reply_count: true,
-  read: true,
-  thread_participants: true,
-  created_by: true,
-  parent_message: true,
 };
 
 // TODO: remove this once we move to API v2
@@ -113,6 +120,7 @@ export class Thread {
   private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private failedRepliesMap: Map<string, FormatMessageResponse> = new Map();
+  private _messageComposer: MessageComposer;
 
   constructor({
     client,
@@ -169,6 +177,28 @@ export class Thread {
 
     this.id = threadData.parent_message_id;
     this.client = client;
+
+    this._messageComposer = new MessageComposer({
+      channel,
+      composition: threadData.draft,
+      threadId: threadData.parent_message_id,
+    });
+
+    this._messageComposer.textComposer.use([
+      createCommandsMiddleware(channel),
+      createMentionsMiddleware(client),
+    ] as TextComposerMiddleware[]);
+  }
+
+  get messageComposer() {
+    return this._messageComposer;
+  }
+
+  set messageComposer(messageComposer: MessageComposer) {
+    if (this.messageComposer) {
+      this.messageComposer.unregisterSubscriptions();
+    }
+    this._messageComposer = messageComposer;
   }
 
   get channel() {
@@ -217,13 +247,15 @@ export class Thread {
     }
 
     const {
+      createdAt,
+      custom,
+
+      deletedAt,
+      parentMessage,
+      participants,
       read,
       replyCount,
       replies,
-      parentMessage,
-      participants,
-      createdAt,
-      deletedAt,
       updatedAt,
     } = thread.state.getLatestValue();
 
@@ -231,13 +263,14 @@ export class Thread {
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
     this.state.partialNext({
+      createdAt,
+      custom,
+      deletedAt,
+      parentMessage,
+      participants,
       read,
       replyCount,
       replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
-      parentMessage,
-      participants,
-      createdAt,
-      deletedAt,
       updatedAt,
       isStateStale: false,
     });

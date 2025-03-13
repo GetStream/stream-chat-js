@@ -9,6 +9,7 @@ import type {
   Logger,
   MessagePaginationOptions,
   MessageResponse,
+  MessageResponseBase,
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
@@ -297,7 +298,10 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param {MessageResponse} message `MessageResponse` object
  */
 export function formatMessage(
-  message: MessageResponse | FormatMessageResponse,
+  message:
+    | MessageResponse
+    | FormatMessageResponse
+    | MessageResponseBase,
 ): FormatMessageResponse {
   return {
     ...message,

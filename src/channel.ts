@@ -73,6 +73,12 @@ import type {
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
+import type { TextComposerMiddleware } from './messageComposer';
+import {
+  createCommandsMiddleware,
+  createMentionsMiddleware,
+  MessageComposer,
+} from './messageComposer';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -107,6 +113,7 @@ export class Channel {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: PushPreference;
+  private _messageComposer: MessageComposer;
 
   /**
    * constructor - Create a channel
@@ -150,6 +157,12 @@ export class Channel {
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
+
+    this._messageComposer = new MessageComposer({ channel: this });
+    this._messageComposer.textComposer.use([
+      createCommandsMiddleware(this),
+      createMentionsMiddleware(client),
+    ] as TextComposerMiddleware[]);
   }
 
   /**
@@ -172,6 +185,17 @@ export class Channel {
   getConfig() {
     const client = this.getClient();
     return client.configs[this.cid];
+  }
+
+  get messageComposer() {
+    return this._messageComposer;
+  }
+
+  set messageComposer(messageComposer: MessageComposer) {
+    if (this.messageComposer) {
+      this.messageComposer.unregisterSubscriptions();
+    }
+    this._messageComposer = messageComposer;
   }
 
   /**
@@ -198,7 +222,7 @@ export class Channel {
   }
 
   /**
-   * draftMessage - create a message draft for the channel or a message thread
+   * draftMessage - create a message draftMessage for the channel or a message thread
    *
    * @param {DraftMessagePayload} message The DraftMessage object
    * @return {Promise<CreateDraftResponse>} The Server Response
@@ -1350,6 +1374,8 @@ export class Channel {
 
     this.getClient().polls.hydratePollCache(state.messages, true);
 
+    this.messageComposer.initState({ composition: state.draft });
+
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
       [
@@ -1623,12 +1649,22 @@ export class Channel {
         }
         break;
       case 'draft.updated':
-        if (event.draft && !(event.draft as DraftResponse).parent_id) {
+        if (
+          this.getClient().options.drafts &&
+          event.draft &&
+          !(event.draft as DraftResponse).parent_id
+        ) {
           channelState.messageDraft = event.draft as DraftResponse;
         }
         break;
       case 'draft.deleted':
-        channelState.messageDraft = undefined;
+        if (
+          this.getClient().options.drafts &&
+          event.draft &&
+          !(event.draft as DraftResponse).parent_id
+        ) {
+          channelState.messageDraft = null;
+        }
         break;
       case 'message.deleted':
         if (event.message) {
