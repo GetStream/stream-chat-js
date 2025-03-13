@@ -191,13 +191,6 @@ export class Channel {
     return this._messageComposer;
   }
 
-  set messageComposer(messageComposer: MessageComposer) {
-    if (this.messageComposer) {
-      this.messageComposer.unregisterSubscriptions();
-    }
-    this._messageComposer = messageComposer;
-  }
-
   /**
    * sendMessage - Send a message to this channel
    *

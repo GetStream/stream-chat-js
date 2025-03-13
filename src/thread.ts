@@ -194,13 +194,6 @@ export class Thread {
     return this._messageComposer;
   }
 
-  set messageComposer(messageComposer: MessageComposer) {
-    if (this.messageComposer) {
-      this.messageComposer.unregisterSubscriptions();
-    }
-    this._messageComposer = messageComposer;
-  }
-
   get channel() {
     return this.state.getLatestValue().channel;
   }
