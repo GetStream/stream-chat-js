@@ -1367,7 +1367,9 @@ export class Channel {
 
     this.getClient().polls.hydratePollCache(state.messages, true);
 
-    this.messageComposer.initState({ composition: state.draft });
+    if (state.draft) {
+      this.messageComposer.initState({ composition: state.draft });
+    }
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==

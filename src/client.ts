@@ -1826,7 +1826,10 @@ export class StreamChat {
         };
         this.polls.hydratePollCache(channelState.messages, true);
       }
-      c.messageComposer.initState({ composition: channelState.draft });
+
+      if (channelState.draft) {
+        c.messageComposer.initState({ composition: channelState.draft });
+      }
 
       channels.push(c);
     }

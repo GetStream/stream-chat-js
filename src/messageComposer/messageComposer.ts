@@ -40,7 +40,7 @@ export type MessageComposerOptions = {
 };
 
 const isMessageDraft = (composition: unknown): composition is DraftResponse =>
-  !!(composition as { message?: DraftMessage }).message;
+  !!(composition as { message?: DraftMessage })?.message;
 
 const initState = (
   composition?: DraftResponse | MessageResponse | FormatMessageResponse,
