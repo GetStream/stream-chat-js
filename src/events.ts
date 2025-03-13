@@ -8,6 +8,8 @@ export const EVENT_MAP = {
   'channel.unmuted': true,
   'channel.updated': true,
   'channel.visible': true,
+  'draft.deleted': true,
+  'draft.updated': true,
   'health.check': true,
   'member.added': true,
   'member.removed': true,

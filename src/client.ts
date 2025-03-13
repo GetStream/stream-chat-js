@@ -233,6 +233,7 @@ export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
   _user?: OwnUserResponse | UserResponse;
+  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
     [key: string]: Channel;
   };
@@ -791,7 +792,8 @@ export class StreamChat {
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    return await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    return await this.appSettingsPromise;
   }
 
   /**
@@ -1796,6 +1798,9 @@ export class StreamChat {
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
+      if (channelState.draft) {
+        c.state.messageDraft = channelState.draft;
+      }
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
@@ -1820,6 +1825,10 @@ export class StreamChat {
           }),
         };
         this.polls.hydratePollCache(channelState.messages, true);
+      }
+
+      if (channelState.draft) {
+        c.messageComposer.initState({ composition: channelState.draft });
       }
 
       channels.push(c);

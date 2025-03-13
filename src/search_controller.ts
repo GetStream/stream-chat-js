@@ -18,7 +18,7 @@ import type {
 } from './types';
 
 export type SearchSourceType = 'channels' | 'users' | 'messages' | (string & {});
-export type QueryReturnValue<T> = { items: T[]; next?: string };
+export type QueryReturnValue<T> = { items: T[]; next?: string | null };
 export type DebounceOptions = {
   debounceMs: number;
 };
@@ -35,7 +35,7 @@ export interface SearchSource<T = any> {
   readonly isLoading: boolean;
   readonly items: T[] | undefined;
   readonly lastQueryError: Error | undefined;
-  readonly next: string | undefined;
+  readonly next: string | undefined | null;
   readonly offset: number | undefined;
   resetState(): void;
   search(text?: string): void;
@@ -54,7 +54,7 @@ export type SearchSourceState<T = any> = {
   items: T[] | undefined;
   searchQuery: string;
   lastQueryError?: Error;
-  next?: string;
+  next?: string | null;
   offset?: number;
 };
 
@@ -177,7 +177,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
       if (!results) return;
       const { items, next } = results;
 
-      if (next) {
+      if (next || next === null) {
         stateUpdate.next = next;
         stateUpdate.hasNext = !!next;
       } else {

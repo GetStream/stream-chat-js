@@ -80,6 +80,10 @@ export class ThreadManager {
     return threadsById;
   }
 
+  public addThread = (thread: Thread) => {
+    this.threadsByIdGetterCache.threadsById[thread.id] = thread;
+  };
+
   public resetState = () => {
     this.state.next(THREAD_MANAGER_INITIAL_STATE);
   };

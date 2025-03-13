@@ -311,6 +311,7 @@ export type ChannelAPIResponse = {
   members: ChannelMemberResponse[];
   messages: MessageResponse[];
   pinned_messages: MessageResponse[];
+  draft?: DraftResponse;
   hidden?: boolean;
   membership?: ChannelMemberResponse | null;
   pending_messages?: PendingMessageResponse[];
@@ -497,6 +498,7 @@ export interface ThreadResponse extends CustomThreadData {
   active_participant_count?: number;
   created_by?: UserResponse;
   deleted_at?: string;
+  draft?: DraftResponse;
   last_message_at?: string;
   participant_count?: number;
   read?: Array<ReadResponse>;
@@ -634,6 +636,24 @@ export type MuteChannelAPIResponse = APIResponse & {
   own_user: OwnUserResponse;
   channel_mutes?: ChannelMute[];
   mute?: MuteResponse;
+};
+
+export type DraftResponse = {
+  channel_cid: string;
+  created_at: string;
+  message: DraftMessage;
+  channel?: ChannelResponse;
+  parent_id?: string;
+  parent_message?: MessageResponseBase;
+  quoted_message?: MessageResponseBase;
+};
+
+export type CreateDraftResponse = APIResponse & {
+  draft: DraftResponse;
+};
+
+export type GetDraftResponse = APIResponse & {
+  draft: DraftResponse;
 };
 
 export type MessageResponse = MessageResponseBase & {
@@ -1310,6 +1330,10 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * that also relies on WS events will break these functionalities, so please use carefully.
    */
   disableCache?: boolean;
+  /**
+   * When enabled, message and thread reply drafts will be stored on the Stream server. This allows drafts to persist across devices and sessions.
+   */
+  drafts?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
@@ -1395,6 +1419,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -2641,6 +2666,25 @@ export type Message = Partial<MessageBase> & {
   mentioned_users?: string[];
 };
 
+export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
+  Partial<Pick<DraftMessage, 'id'>>;
+
+export type DraftMessage = {
+  id: string;
+  text: string;
+  attachments?: Attachment[];
+  custom?: {}; // fixme: is this really required?
+  html?: string;
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  poll_id?: string;
+  quoted_message_id?: string;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};
+
 export type MessageBase = CustomMessageData & {
   id: string;
   attachments?: Attachment[];
@@ -2670,6 +2714,7 @@ export type MessageLabel =
 
 export type SendMessageOptions = {
   force_moderation?: boolean;
+  // @deprecated use `pending` instead
   is_pending_message?: boolean;
   keep_channel_hidden?: boolean;
   pending?: boolean;
