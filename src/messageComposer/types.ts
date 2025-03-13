@@ -1,25 +1,17 @@
-import type {
-  Attachment,
-  CommandResponse,
-  DefaultGenerics,
-  ExtendableGenerics,
-  FileUploadConfig, UR,
-  UserResponse
-} from '../types';
-import { SearchSource } from '../search_controller';
+import type { Attachment, FileUploadConfig, UR, UserResponse } from '../types';
+import type { SearchSource } from '../search_controller';
 
-
-export type LocalAttachment<SCG extends ExtendableGenerics = DefaultGenerics> =
-  | AnyLocalAttachment<SCG>
-  | LocalUploadAttachment<SCG>
+export type LocalAttachment =
+  | AnyLocalAttachment
+  | LocalUploadAttachment
   | LocalUploadAttachmentSeed;
 
-export type LocalUploadAttachment<SCG extends ExtendableGenerics = DefaultGenerics> =
-  | LocalFileAttachment<SCG>
-  | LocalImageAttachment<SCG>
-  | LocalAudioAttachment<SCG>
-  | LocalVideoAttachment<SCG>
-  | LocalVoiceRecordingAttachment<SCG>;
+export type LocalUploadAttachment =
+  | LocalFileAttachment
+  | LocalImageAttachment
+  | LocalAudioAttachment
+  | LocalVideoAttachment
+  | LocalVoiceRecordingAttachment;
 
 export type LocalUploadAttachmentSeed = LocalAttachmentCast<
   {
@@ -28,45 +20,47 @@ export type LocalUploadAttachmentSeed = LocalAttachmentCast<
   LocalAttachmentUploadMetadata
 >;
 
-export type LocalVoiceRecordingAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<VoiceRecordingAttachment<SCG>, LocalAttachmentUploadMetadata & CustomLocalMetadata>;
+export type LocalVoiceRecordingAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<
+    VoiceRecordingAttachment,
+    LocalAttachmentUploadMetadata & CustomLocalMetadata
+  >;
 
-export type LocalAudioAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<AudioAttachment<SCG>, LocalAttachmentUploadMetadata & CustomLocalMetadata>;
+export type LocalAudioAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<
+    AudioAttachment,
+    LocalAttachmentUploadMetadata & CustomLocalMetadata
+  >;
 
-export type LocalVideoAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<VideoAttachment<SCG>, LocalAttachmentUploadMetadata & CustomLocalMetadata>;
+export type LocalVideoAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<
+    VideoAttachment,
+    LocalAttachmentUploadMetadata & CustomLocalMetadata
+  >;
 
-export type LocalImageAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<ImageAttachment<SCG>, LocalImageAttachmentUploadMetadata & CustomLocalMetadata>;
+export type LocalImageAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<
+    ImageAttachment,
+    LocalImageAttachmentUploadMetadata & CustomLocalMetadata
+  >;
 
-export type LocalFileAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<FileAttachment<SCG>, LocalAttachmentUploadMetadata & CustomLocalMetadata>;
+export type LocalFileAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<
+    FileAttachment,
+    LocalAttachmentUploadMetadata & CustomLocalMetadata
+  >;
 
-export type AnyLocalAttachment<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  CustomLocalMetadata = Record<string, unknown>
-> = LocalAttachmentCast<Attachment<SCG>, LocalAttachmentMetadata<CustomLocalMetadata>>;
+export type AnyLocalAttachment<CustomLocalMetadata = Record<string, unknown>> =
+  LocalAttachmentCast<Attachment, LocalAttachmentMetadata<CustomLocalMetadata>>;
 
 export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
   localMetadata: L & BaseLocalAttachmentMetadata;
 };
 
-export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> = CustomLocalMetadata &
-  BaseLocalAttachmentMetadata &
-  LocalImageAttachmentUploadMetadata;
+export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
+  CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
 
-export type VoiceRecordingAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachment<SCG> & {
+export type VoiceRecordingAttachment = Attachment & {
   asset_url: string;
   type: 'voiceRecording';
   duration?: number;
@@ -76,7 +70,7 @@ export type VoiceRecordingAttachment<SCG extends ExtendableGenerics = DefaultGen
   waveform_data?: Array<number>;
 };
 
-type FileAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachment<SCG> & {
+type FileAttachment = Attachment & {
   type: 'file';
   asset_url?: string;
   file_size?: number;
@@ -84,7 +78,7 @@ type FileAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachme
   title?: string;
 };
 
-export type AudioAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachment<SCG> & {
+export type AudioAttachment = Attachment & {
   type: 'audio';
   asset_url?: string;
   file_size?: number;
@@ -92,7 +86,7 @@ export type AudioAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = 
   title?: string;
 };
 
-export type VideoAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachment<SCG> & {
+export type VideoAttachment = Attachment & {
   type: 'video';
   asset_url?: string;
   file_size?: number;
@@ -101,7 +95,7 @@ export type VideoAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = 
   title?: string;
 };
 
-type ImageAttachment<SCG extends ExtendableGenerics = DefaultGenerics> = Attachment<SCG> & {
+type ImageAttachment = Attachment & {
   type: 'image';
   fallback?: string;
   image_url?: string;
@@ -125,16 +119,19 @@ export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata &
 
 export type AttachmentLoadingState = 'uploading' | 'finished' | 'failed' | 'blocked';
 
-export type UploadPermissionCheckResult = { uploadBlocked: boolean; reason?: keyof FileUploadConfig };
+export type UploadPermissionCheckResult = {
+  uploadBlocked: boolean;
+  reason?: keyof FileUploadConfig;
+};
 
 export type FileLike = File | Blob;
 
 type Id = string;
-export type MentionedUserMap<SCG extends ExtendableGenerics = DefaultGenerics> = Map<Id, UserResponse<SCG>>;
+export type MentionedUserMap = Map<Id, UserResponse>;
 export type TextSelection = { end: number; start: number };
 export type TextComposerSuggestion<T = UR> = T & {
   id: string;
-}
+};
 
 export type Suggestions = {
   query: string;
@@ -142,8 +139,8 @@ export type Suggestions = {
   trigger: string;
 };
 
-export type TextComposerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  mentionedUsers: UserResponse<SCG>[];
+export type TextComposerState = {
+  mentionedUsers: UserResponse[];
   selection: TextSelection;
   text: string;
   suggestions?: Suggestions;

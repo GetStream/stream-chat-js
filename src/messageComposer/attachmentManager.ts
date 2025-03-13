@@ -7,10 +7,13 @@ import {
   isImageFile,
   isLocalImageAttachment,
 } from './fileUtils';
-import { Channel } from '../channel';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
-import { API_MAX_FILES_ALLOWED_PER_MESSAGE, DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
+import {
+  API_MAX_FILES_ALLOWED_PER_MESSAGE,
+  DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
+} from '../constants';
+import type { Channel } from '../channel';
 import type {
   FileLike,
   LocalAttachment,
@@ -25,9 +28,7 @@ import type {
 import type {
   Attachment,
   ChannelResponse,
-  DefaultGenerics,
   DraftMessage,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessageResponse,
   MessageResponseBase,
@@ -35,19 +36,19 @@ import type {
 } from '../types';
 import { mergeWith } from '../utils/mergeWith';
 
-type LocalNotImageAttachment<SCG extends ExtendableGenerics = DefaultGenerics> =
-  | LocalFileAttachment<SCG>
-  | LocalAudioAttachment<SCG>
-  | LocalVideoAttachment<SCG>
-  | LocalVoiceRecordingAttachment<SCG>;
+type LocalNotImageAttachment =
+  | LocalFileAttachment
+  | LocalAudioAttachment
+  | LocalVideoAttachment
+  | LocalVoiceRecordingAttachment;
 
-export type AttachmentManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  attachments: LocalAttachment<SCG>[];
+export type AttachmentManagerState = {
+  attachments: LocalAttachment[];
   hasUploadPermission: boolean;
 };
 
-export type AttachmentManagerOptions<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channel: Channel<SCG>;
+export type AttachmentManagerOptions = {
+  channel: Channel;
   /**
    * Function that allows to prevent uploading files based on the functions output.
    * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
@@ -55,44 +56,48 @@ export type AttachmentManagerOptions<SCG extends ExtendableGenerics = DefaultGen
   fileUploadFilter?: (file: FileLike) => boolean;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage?: number;
-  message?: DraftMessage<SCG> | MessageResponseBase<SCG> | MessageResponse<SCG> | FormatMessageResponse<SCG>;
+  message?: DraftMessage | MessageResponseBase | MessageResponse | FormatMessageResponse;
 };
 
-const initState = <SCG extends ExtendableGenerics = DefaultGenerics>({
+const initState = ({
   channel,
   message,
 }: {
-  channel: Channel<SCG>;
-  message?: DraftMessage<SCG> | MessageResponseBase<SCG> | FormatMessageResponse<SCG>;
-}): AttachmentManagerState<SCG> => {
-  return {
-    attachments: (message?.attachments ?? [])
-      ?.filter(({ og_scrape_url }) => !og_scrape_url)
-      .map(
-        (att) =>
-          ({
-            ...att,
-            localMetadata: { id: generateUUIDv4() },
-          } as LocalAttachment<SCG>),
-      ),
-    hasUploadPermission: !!(channel.data?.own_capabilities as ChannelResponse<SCG>['own_capabilities'])?.includes(
-      'upload-file',
-    ), // todo: in the future move to Channel's reactive permissions state
-  };
-};
+  channel: Channel;
+  message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
+}): AttachmentManagerState => ({
+  attachments: (message?.attachments ?? [])
+    ?.filter(({ og_scrape_url }) => !og_scrape_url)
+    .map(
+      (att) =>
+        ({
+          ...att,
+          localMetadata: { id: generateUUIDv4() },
+        }) as LocalAttachment,
+    ),
+  hasUploadPermission: !!(
+    channel.data?.own_capabilities as ChannelResponse['own_capabilities']
+  )?.includes('upload-file'), // todo: in the future move to Channel's reactive permissions state
+});
 
-export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics> {
-  state: StateStore<AttachmentManagerState<SCG>>;
+export class AttachmentManager {
+  state: StateStore<AttachmentManagerState>;
   fileUploadFilter: ((file: FileLike) => boolean) | null;
   maxNumberOfFilesPerMessage: number;
-  private channel: Channel<SCG>;
+  private channel: Channel;
 
-  constructor({ channel, fileUploadFilter, maxNumberOfFilesPerMessage, message }: AttachmentManagerOptions<SCG>) {
+  constructor({
+    channel,
+    fileUploadFilter,
+    maxNumberOfFilesPerMessage,
+    message,
+  }: AttachmentManagerOptions) {
     this.channel = channel;
     // note: removed prop multipleUploads (Whether to allow multiple attachment uploads) as it is a duplicate
-    this.maxNumberOfFilesPerMessage = maxNumberOfFilesPerMessage ?? API_MAX_FILES_ALLOWED_PER_MESSAGE;
+    this.maxNumberOfFilesPerMessage =
+      maxNumberOfFilesPerMessage ?? API_MAX_FILES_ALLOWED_PER_MESSAGE;
     this.fileUploadFilter = fileUploadFilter || null;
-    this.state = new StateStore<AttachmentManagerState<SCG>>(initState({ channel, message }));
+    this.state = new StateStore<AttachmentManagerState>(initState({ channel, message }));
   }
 
   get attachments() {
@@ -105,13 +110,15 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
 
   get successfulUploadsCount() {
     return Object.values(this.attachments).filter(
-      ({ localMetadata }) => localMetadata.uploadState && localMetadata.uploadState !== 'failed',
+      ({ localMetadata }) =>
+        localMetadata.uploadState && localMetadata.uploadState !== 'failed',
     ).length;
   }
 
   get failedUploadsCount() {
     return Object.values(this.attachments).filter(
-      ({ localMetadata }) => localMetadata.uploadState && localMetadata.uploadState === 'failed',
+      ({ localMetadata }) =>
+        localMetadata.uploadState && localMetadata.uploadState === 'failed',
     ).length;
   }
 
@@ -123,22 +130,24 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
     return this.hasUploadPermission && this.availableUploadSlots > 0;
   }
 
-  initState = ({ message }: { message?: DraftMessage<SCG> | MessageResponseBase<SCG> } = {}) => {
+  initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
     this.state.next(initState({ channel: this.channel, message }));
   };
 
-  getAttachmentIndex = (localId: string) => {
-    return this.attachments.findIndex(
-      (attachment) => attachment.localMetadata.id && localId === attachment.localMetadata?.id,
+  getAttachmentIndex = (localId: string) =>
+    this.attachments.findIndex(
+      (attachment) =>
+        attachment.localMetadata.id && localId === attachment.localMetadata?.id,
     );
-  };
 
-  upsertAttachments = (attachmentsToUpsert: LocalAttachment<SCG>[]) => {
+  upsertAttachments = (attachmentsToUpsert: LocalAttachment[]) => {
     if (!attachmentsToUpsert.length) return;
     const stateAttachments = this.attachments;
     const attachments = [...this.attachments];
     attachmentsToUpsert.forEach((upsertedAttachment) => {
-      const attachmentIndex = this.getAttachmentIndex(upsertedAttachment.localMetadata.id);
+      const attachmentIndex = this.getAttachmentIndex(
+        upsertedAttachment.localMetadata.id,
+      );
 
       if (attachmentIndex === -1) {
         attachments.push(upsertedAttachment);
@@ -146,7 +155,10 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
         attachments.splice(
           attachmentIndex,
           1,
-          mergeWith<LocalAttachment<SCG>>(stateAttachments[attachmentIndex] ?? {}, upsertedAttachment),
+          mergeWith<LocalAttachment>(
+            stateAttachments[attachmentIndex] ?? {},
+            upsertedAttachment,
+          ),
         );
       }
     });
@@ -156,16 +168,22 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
 
   removeAttachments = (localAttachmentIds: string[]) => {
     this.state.partialNext({
-      attachments: this.attachments.filter((att) => !localAttachmentIds.includes(att.localMetadata?.id)),
+      attachments: this.attachments.filter(
+        (att) => !localAttachmentIds.includes(att.localMetadata?.id),
+      ),
     });
   };
 
   private filterFileUploads = (fileLikes: FileList | FileLike[]) => {
     const iterableFiles = Array.from(fileLikes);
-    return this.fileUploadFilter ? iterableFiles.filter(this.fileUploadFilter) : iterableFiles;
+    return this.fileUploadFilter
+      ? iterableFiles.filter(this.fileUploadFilter)
+      : iterableFiles;
   };
 
-  getUploadConfigCheck = async (fileLike: FileLike): Promise<UploadPermissionCheckResult> => {
+  getUploadConfigCheck = async (
+    fileLike: FileLike,
+  ): Promise<UploadPermissionCheckResult> => {
     const client = this.channel.getClient();
     let appSettings;
     if (!client.appSettingsPromise) {
@@ -191,14 +209,18 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
     if (isFile(fileLike)) {
       if (
         allowed_file_extensions?.length &&
-        !allowed_file_extensions.some((ext) => fileLike.name.toLowerCase().endsWith(ext.toLowerCase()))
+        !allowed_file_extensions.some((ext) =>
+          fileLike.name.toLowerCase().endsWith(ext.toLowerCase()),
+        )
       ) {
         return { uploadBlocked: true, reason: 'allowed_file_extensions' };
       }
 
       if (
         blocked_file_extensions?.length &&
-        blocked_file_extensions.some((ext) => fileLike.name.toLowerCase().endsWith(ext.toLowerCase()))
+        blocked_file_extensions.some((ext) =>
+          fileLike.name.toLowerCase().endsWith(ext.toLowerCase()),
+        )
       ) {
         return { uploadBlocked: true, reason: 'blocked_file_extensions' };
       }
@@ -206,14 +228,18 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
 
     if (
       allowed_mime_types?.length &&
-      !allowed_mime_types.some((type) => type.toLowerCase() === fileLike.type?.toLowerCase())
+      !allowed_mime_types.some(
+        (type) => type.toLowerCase() === fileLike.type?.toLowerCase(),
+      )
     ) {
       return { uploadBlocked: true, reason: 'allowed_mime_types' };
     }
 
     if (
       blocked_mime_types?.length &&
-      blocked_mime_types.some((type) => type.toLowerCase() === fileLike.type?.toLowerCase())
+      blocked_mime_types.some(
+        (type) => type.toLowerCase() === fileLike.type?.toLowerCase(),
+      )
     ) {
       return { uploadBlocked: true, reason: 'blocked_mime_types' };
     }
@@ -225,22 +251,22 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
     return { uploadBlocked: false };
   };
 
-  makeLocalUploadAttachmentSeed = async (fileLike: FileLike): Promise<LocalUploadAttachmentSeed> => {
-    return {
-      type: getAttachmentTypeFromMimeType(fileLike.type),
-      localMetadata: {
-        file: isBlobButNotFile(fileLike)
-          ? createFileFromBlobs({
-              blobsArray: [fileLike],
-              fileName: generateFileName(fileLike.type),
-              mimeType: fileLike.type,
-            })
-          : fileLike,
-        id: generateUUIDv4(),
-        uploadPermissionCheck: await this.getUploadConfigCheck(fileLike),
-      },
-    };
-  };
+  makeLocalUploadAttachmentSeed = async (
+    fileLike: FileLike,
+  ): Promise<LocalUploadAttachmentSeed> => ({
+    type: getAttachmentTypeFromMimeType(fileLike.type),
+    localMetadata: {
+      file: isBlobButNotFile(fileLike)
+        ? createFileFromBlobs({
+            blobsArray: [fileLike],
+            fileName: generateFileName(fileLike.type),
+            mimeType: fileLike.type,
+          })
+        : fileLike,
+      id: generateUUIDv4(),
+      uploadPermissionCheck: await this.getUploadConfigCheck(fileLike),
+    },
+  });
 
   /**
    * todo: docs how to customize the image and file upload by overriding do
@@ -249,8 +275,8 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
    * const messageComposer = new MessageComposer({attachmentManager, channel })
    */
 
-  doUploadRequest = (fileLike: FileLike) => {
-    return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
+  doUploadRequest = (fileLike: FileLike) =>
+    this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
       isFile(fileLike)
         ? fileLike
         : createFileFromBlobs({
@@ -259,9 +285,8 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
             mimeType: fileLike.type,
           }),
     );
-  };
 
-  uploadAttachment = async (attachment: LocalAttachment<SCG>) => {
+  uploadAttachment = async (attachment: LocalAttachment) => {
     if (!attachment.localMetadata?.file || !attachment.localMetadata.id) return;
 
     const { file } = attachment.localMetadata;
@@ -273,23 +298,25 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
       attachment.type = getAttachmentTypeFromMimeType(file.type);
     }
 
-    (attachment as Attachment<SCG>).file_size = file.size;
+    (attachment as Attachment).file_size = file.size;
     const isImage = isImageFile(file);
     if (isImage) {
-      (attachment as LocalImageAttachment<SCG>).localMetadata.previewUri = URL.createObjectURL?.(file);
+      (attachment as LocalImageAttachment).localMetadata.previewUri =
+        URL.createObjectURL?.(file);
       if (file instanceof File) {
-        (attachment as LocalImageAttachment<SCG>).fallback = file.name;
+        (attachment as LocalImageAttachment).fallback = file.name;
       }
     } else {
-      (attachment as LocalNotImageAttachment<SCG>).mime_type = file.type;
+      (attachment as LocalNotImageAttachment).mime_type = file.type;
       if (file instanceof File) {
-        (attachment as LocalNotImageAttachment<SCG>).title = file.name;
+        (attachment as LocalNotImageAttachment).title = file.name;
       }
     }
 
     // substitute for checkUploadPermissions
     if (typeof attachment.localMetadata.uploadPermissionCheck === 'undefined') {
-      attachment.localMetadata.uploadPermissionCheck = await this.getUploadConfigCheck(file);
+      attachment.localMetadata.uploadPermissionCheck =
+        await this.getUploadConfigCheck(file);
     }
     if (attachment.localMetadata.uploadPermissionCheck.uploadBlocked) {
       attachment.localMetadata.uploadState = 'blocked';
@@ -320,7 +347,7 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
         finalError = Object.assign(finalError, error);
       }
 
-      const failedAttachment: LocalAttachment<SCG> = {
+      const failedAttachment: LocalAttachment = {
         ...attachment,
         localMetadata: {
           ...attachment.localMetadata,
@@ -342,7 +369,7 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
       return;
     }
 
-    const uploadedAttachment: LocalAttachment<SCG> = {
+    const uploadedAttachment: LocalAttachment = {
       ...attachment,
       localMetadata: {
         ...attachment.localMetadata,
@@ -357,10 +384,10 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
       }
       uploadedAttachment.image_url = response.file;
     } else {
-      (uploadedAttachment as LocalNotImageAttachment<SCG>).asset_url = response.file;
+      (uploadedAttachment as LocalNotImageAttachment).asset_url = response.file;
     }
     if (response.thumb_url) {
-      (uploadedAttachment as LocalNotImageAttachment<SCG>).thumb_url = response.thumb_url;
+      (uploadedAttachment as LocalNotImageAttachment).thumb_url = response.thumb_url;
     }
 
     this.upsertAttachments([uploadedAttachment]);
@@ -368,13 +395,12 @@ export class AttachmentManager<SCG extends ExtendableGenerics = DefaultGenerics>
     return uploadedAttachment;
   };
 
-  uploadFiles = (files: FileList | File[] | Blob[]) => {
-    return Promise.all(
+  uploadFiles = (files: FileList | File[] | Blob[]) =>
+    Promise.all(
       this.filterFileUploads(files)
         .slice(0, this.availableUploadSlots)
-        .map(async (fileLike) => {
-          return this.uploadAttachment(await this.makeLocalUploadAttachmentSeed(fileLike));
-        }),
+        .map(async (fileLike) =>
+          this.uploadAttachment(await this.makeLocalUploadAttachmentSeed(fileLike)),
+        ),
     );
-  };
 }

@@ -1,15 +1,13 @@
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { AttachmentManager } from './attachmentManager';
 import { TextComposer } from './textComposer';
-import { Channel } from '../channel';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
+import type { Channel } from '../channel';
 import type {
-  DefaultGenerics,
   DraftMessage,
   DraftResponse,
   EventTypes,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessageResponse,
   MessageResponseBase,
@@ -21,10 +19,10 @@ import { mergeWith } from '../utils/mergeWith';
   1/ decide whether lastChange timestamp is necessary
  */
 
-export type MessageComposerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type MessageComposerState = {
   id: string;
   lastChange: Date | null;
-  quotedMessage: FormatMessageResponse<SCG> | null;
+  quotedMessage: FormatMessageResponse | null;
 };
 
 export type MessageComposerConfig = {
@@ -34,26 +32,25 @@ export type MessageComposerConfig = {
   urlPreviewEnabled?: boolean;
 };
 
-export type MessageComposerOptions<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channel: Channel<SCG>;
-  composition?: DraftResponse<SCG> | MessageResponse<SCG> | FormatMessageResponse<SCG>;
+export type MessageComposerOptions = {
+  channel: Channel;
+  composition?: DraftResponse | MessageResponse | FormatMessageResponse;
   config?: Partial<MessageComposerConfig>;
   threadId?: string;
 };
 
-const isMessageDraft = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  composition: DraftResponse<SCG> | MessageResponse<SCG> | FormatMessageResponse<SCG>,
-): composition is DraftResponse<SCG> => !!composition.message;
+const isMessageDraft = (composition: unknown): composition is DraftResponse =>
+  !!(composition as { message?: DraftMessage }).message;
 
-const initState = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  composition?: DraftResponse<SCG> | MessageResponse<SCG> | FormatMessageResponse<SCG>,
-): MessageComposerState<SCG> =>
+const initState = (
+  composition?: DraftResponse | MessageResponse | FormatMessageResponse,
+): MessageComposerState =>
   composition
     ? {
         id: isMessageDraft(composition) ? composition.message.id : composition.id,
         lastChange: new Date(),
         quotedMessage: composition.quoted_message
-          ? formatMessage(composition.quoted_message as MessageResponseBase<SCG>)
+          ? formatMessage(composition.quoted_message as MessageResponseBase)
           : null,
       }
     : {
@@ -67,28 +64,31 @@ const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   urlPreviewEnabled: false,
 };
 
-export class MessageComposer<SCG extends ExtendableGenerics = DefaultGenerics> {
-  channel: Channel<SCG>;
+export class MessageComposer {
+  channel: Channel;
   config: MessageComposerConfig;
-  state: StateStore<MessageComposerState<SCG>>;
-  attachmentManager: AttachmentManager<SCG>;
-  linkPreviewsManager: LinkPreviewsManager<SCG>;
-  // todo: mediaRecorder: MediaRecorderController<SCG>;
-  textComposer: TextComposer<SCG>;
+  state: StateStore<MessageComposerState>;
+  attachmentManager: AttachmentManager;
+  linkPreviewsManager: LinkPreviewsManager;
+  // todo: mediaRecorder: MediaRecorderController;
+  textComposer: TextComposer;
   threadId: string | null;
   private unsubscribeFunctions: Set<() => void> = new Set();
 
-  constructor({ channel, composition, config = {}, threadId }: MessageComposerOptions<SCG>) {
+  constructor({ channel, composition, config = {}, threadId }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
     // todo: solve ts-ignore
-    // @ts-ignore
-    this.config = mergeWith(config, DEFAULT_COMPOSER_CONFIG);
-    const message = composition && (isMessageDraft(composition) ? composition.message : composition);
-    this.attachmentManager = new AttachmentManager<SCG>({ channel, message });
-    this.linkPreviewsManager = new LinkPreviewsManager<SCG>({ client: channel.getClient(), message });
-    this.textComposer = new TextComposer<SCG>({ composer: this, message });
-    this.state = new StateStore<MessageComposerState<SCG>>(initState<SCG>(composition));
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config);
+    const message =
+      composition && (isMessageDraft(composition) ? composition.message : composition);
+    this.attachmentManager = new AttachmentManager({ channel, message });
+    this.linkPreviewsManager = new LinkPreviewsManager({
+      client: channel.getClient(),
+      message,
+    });
+    this.textComposer = new TextComposer({ composer: this, message });
+    this.state = new StateStore<MessageComposerState>(initState(composition));
   }
 
   get client() {
@@ -103,8 +103,12 @@ export class MessageComposer<SCG extends ExtendableGenerics = DefaultGenerics> {
     return this.state.getLatestValue().quotedMessage;
   }
 
-  initState = ({ composition }: { composition?: DraftResponse<SCG> | MessageResponse<SCG> } = {}) => {
-    const message = composition && (composition.message as DraftMessage<SCG> | MessageResponseBase<SCG>);
+  initState = ({
+    composition,
+  }: { composition?: DraftResponse | MessageResponse } = {}) => {
+    const message = isMessageDraft(composition)
+      ? composition.message
+      : (composition as MessageResponse);
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
@@ -133,7 +137,12 @@ export class MessageComposer<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeMessageUpdated = () => {
     // todo: test the impact of 'reaction.new', 'reaction.deleted', 'reaction.updated'
-    const eventTypes: EventTypes[] = ['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'];
+    const eventTypes: EventTypes[] = [
+      'message.updated',
+      'reaction.new',
+      'reaction.deleted',
+      'reaction.updated',
+    ];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -163,25 +172,32 @@ export class MessageComposer<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private subscribeDraftUpdated = () =>
     this.client.on('draft.updated', (event) => {
-      const draft = event.draft as DraftResponse<SCG>;
-      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id) return;
+      const draft = event.draft as DraftResponse;
+      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id)
+        return;
       this.initState({ composition: draft });
     }).unsubscribe;
 
   private subscribeDraftDeleted = () =>
     this.client.on('draft.deleted', (event) => {
-      const draft = event.draft as DraftResponse<SCG>;
-      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id) return;
+      const draft = event.draft as DraftResponse;
+      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id)
+        return;
       this.clear();
     }).unsubscribe;
 
   private subscribeTextChanged = () =>
     this.textComposer.state.subscribe((nextValue, previousValue) => {
-      if (!this.config.urlPreviewEnabled || !nextValue.text || nextValue.text === previousValue?.text) return;
+      if (
+        !this.config.urlPreviewEnabled ||
+        !nextValue.text ||
+        nextValue.text === previousValue?.text
+      )
+        return;
       this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
     });
 
-  setQuotedMessage = (quotedMessage: FormatMessageResponse<SCG> | null) => {
+  setQuotedMessage = (quotedMessage: FormatMessageResponse | null) => {
     this.state.partialNext({ quotedMessage });
   };
 

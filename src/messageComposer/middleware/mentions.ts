@@ -1,9 +1,9 @@
-import {getTriggerCharWithToken, insertItemWithTrigger} from './middlewareUtils';
-import {UserSearchSource} from '../../search_controller';
-import {mergeWith} from '../../utils/mergeWith';
-import type {MiddlewareParams, TextComposerMiddlewareOptions,} from './types';
-import type {StreamChat} from '../../client';
-import type {DefaultGenerics, ExtendableGenerics, UserResponse} from '../../types';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './middlewareUtils';
+import { UserSearchSource } from '../../search_controller';
+import { mergeWith } from '../../utils/mergeWith';
+import type { MiddlewareParams, TextComposerMiddlewareOptions } from './types';
+import type { StreamChat } from '../../client';
+import type { UserResponse } from '../../types';
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '@' };
 
@@ -26,15 +26,21 @@ const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '
  * @returns
  */
 
-export const createMentionsMiddleware = <SCG extends ExtendableGenerics = DefaultGenerics>(client: StreamChat<SCG>, options?:TextComposerMiddlewareOptions) => {
+export const createMentionsMiddleware = (
+  client: StreamChat,
+  options?: TextComposerMiddlewareOptions,
+) => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   return {
     id: finalOptions.trigger,
-    onChange: ({input, nextHandler}: MiddlewareParams<SCG, UserResponse<SCG>>) => {
+    onChange: ({ input, nextHandler }: MiddlewareParams<UserResponse>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
-      const lastToken = getTriggerCharWithToken(finalOptions.trigger, state.text.slice(0, state.selection.end));
+      const lastToken = getTriggerCharWithToken(
+        finalOptions.trigger,
+        state.text.slice(0, state.selection.end),
+      );
 
       if (!lastToken || lastToken.length < finalOptions.minChars) {
         // todo: check whether suggestions already exist and if so remove them
@@ -56,9 +62,14 @@ export const createMentionsMiddleware = <SCG extends ExtendableGenerics = Defaul
         stop: true, // Stop other middleware from processing '@' character
       });
     },
-    onSuggestionItemSelect: ({input, nextHandler, selectedSuggestion}: MiddlewareParams<SCG, UserResponse<SCG>>) => {
+    onSuggestionItemSelect: ({
+      input,
+      nextHandler,
+      selectedSuggestion,
+    }: MiddlewareParams<UserResponse>) => {
       const { state } = input;
-      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger) return nextHandler(input);
+      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
+        return nextHandler(input);
 
       return Promise.resolve({
         state: {
@@ -73,6 +84,6 @@ export const createMentionsMiddleware = <SCG extends ExtendableGenerics = Defaul
           suggestions: undefined, // Clear suggestions after selection
         },
       });
-    }
+    },
   };
 };

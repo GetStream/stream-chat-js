@@ -1,11 +1,10 @@
 import { find } from 'linkifyjs';
 import { StateStore } from '../store';
-import { debounce, DebouncedFunc } from '../utils';
+import type { DebouncedFunc } from '../utils';
+import { debounce } from '../utils';
 import type { StreamChat } from '../client';
 import type {
-  DefaultGenerics,
   DraftMessage,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessageResponseBase,
   OGAttachment,
@@ -65,17 +64,17 @@ export type LinkPreviewsManagerState = {
   previews: LinkPreviewMap;
 };
 
-export type LinkPreviewsManagerOptions<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  client: StreamChat<SCG>;
+export type LinkPreviewsManagerOptions = {
+  client: StreamChat;
   /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
   debounceURLEnrichmentMs?: number;
-  message?: DraftMessage<SCG> | MessageResponseBase<SCG> | FormatMessageResponse<SCG>;
+  message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
 };
 
-const initState = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  message?: DraftMessage<SCG> | MessageResponseBase<SCG> | FormatMessageResponse<SCG>,
-): LinkPreviewsManagerState => {
-  return message
+const initState = (
+  message?: DraftMessage | MessageResponseBase | FormatMessageResponse,
+): LinkPreviewsManagerState =>
+  message
     ? {
         previews:
           message.attachments?.reduce<LinkPreviewMap>((acc, attachment) => {
@@ -93,37 +92,45 @@ const initState = <SCG extends ExtendableGenerics = DefaultGenerics>(
     : {
         previews: new Map<LinkURL, LinkPreview>(),
       };
-};
 
 /*
 docs:
 You can customize  function to identify URLs in a string and request OG data by overriding findURLFn?: (text: string) => string[];
  */
 
-export class LinkPreviewsManager<SCG extends ExtendableGenerics = DefaultGenerics> implements ILinkPreviewsManager {
+export class LinkPreviewsManager implements ILinkPreviewsManager {
   state: StateStore<LinkPreviewsManagerState>;
   findAndEnrichUrls: DebouncedFunc<(text: string) => void>;
-  private client: StreamChat<SCG>;
+  private client: StreamChat;
   private shouldDiscardEnrichQueries = false;
 
-  constructor({ client, debounceURLEnrichmentMs = 1500, message }: LinkPreviewsManagerOptions<SCG>) {
+  constructor({
+    client,
+    debounceURLEnrichmentMs = 1500,
+    message,
+  }: LinkPreviewsManagerOptions) {
     this.client = client;
     this.state = new StateStore<LinkPreviewsManagerState>(initState(message));
-    this.findAndEnrichUrls = debounce(this._findAndEnrichUrls.bind(this), debounceURLEnrichmentMs);
+    this.findAndEnrichUrls = debounce(
+      this._findAndEnrichUrls.bind(this),
+      debounceURLEnrichmentMs,
+    );
   }
 
   get previews() {
     return this.state.getLatestValue().previews;
   }
 
-  initState = ({ message }: { message?: DraftMessage<SCG> | MessageResponseBase<SCG> } = {}) => {
+  initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
     this.state.next(initState(message));
   };
 
   private _findAndEnrichUrls = (text: string) => {
     const urls = this.findURLs(text).filter((url) => {
       const existingPreviewLink = this.previews.get(url);
-      return !existingPreviewLink || existingPreviewLink.status !== LinkPreviewStatus.FAILED;
+      return (
+        !existingPreviewLink || existingPreviewLink.status !== LinkPreviewStatus.FAILED
+      );
     });
 
     this.shouldDiscardEnrichQueries = !urls.length;
@@ -132,7 +139,10 @@ export class LinkPreviewsManager<SCG extends ExtendableGenerics = DefaultGeneric
     }
 
     const addedLinkPreviews = urls.map((url) => {
-      const linkPreview = new LinkPreview({ data: { og_scrape_url: url }, status: LinkPreviewStatus.LOADING });
+      const linkPreview = new LinkPreview({
+        data: { og_scrape_url: url },
+        status: LinkPreviewStatus.LOADING,
+      });
       this.client
         .enrichURL(url)
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -147,7 +157,9 @@ export class LinkPreviewsManager<SCG extends ExtendableGenerics = DefaultGeneric
     });
 
     const newLinkPreviews = new Map(this.previews);
-    addedLinkPreviews.forEach((linkPreview) => newLinkPreviews.set(linkPreview.og_scrape_url, linkPreview));
+    addedLinkPreviews.forEach((linkPreview) =>
+      newLinkPreviews.set(linkPreview.og_scrape_url, linkPreview),
+    );
     this.state.partialNext({ previews: newLinkPreviews });
   };
 

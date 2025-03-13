@@ -1,20 +1,18 @@
-import {getTriggerCharWithToken, insertItemWithTrigger} from './middlewareUtils';
-import {BaseSearchSource} from '../../search_controller';
-import {mergeWith} from '../../utils/mergeWith';
-import type {MiddlewareParams, TextComposerMiddlewareOptions,} from './types';
-import type {SearchSourceOptions} from '../../search_controller';
-import type {CommandResponse, DefaultGenerics, ExtendableGenerics} from '../../types';
-import type {Channel} from '../../channel';
-import type {TextComposerSuggestion} from "../types";
+import { getTriggerCharWithToken, insertItemWithTrigger } from './middlewareUtils';
+import { BaseSearchSource } from '../../search_controller';
+import { mergeWith } from '../../utils/mergeWith';
+import type { MiddlewareParams, TextComposerMiddlewareOptions } from './types';
+import type { SearchSourceOptions } from '../../search_controller';
+import type { CommandResponse } from '../../types';
+import type { Channel } from '../../channel';
+import type { TextComposerSuggestion } from '../types';
 
-type CommandSuggestion<SCG extends ExtendableGenerics = DefaultGenerics> = TextComposerSuggestion<CommandResponse<SCG>>;
-class CommandSearchSource<SCG extends ExtendableGenerics = DefaultGenerics> extends BaseSearchSource<
-  CommandSuggestion<SCG>
-> {
+type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
+class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
   readonly type = 'commands';
-  private channel: Channel<SCG>;
+  private channel: Channel;
 
-  constructor(channel: Channel<SCG>, options?: SearchSourceOptions) {
+  constructor(channel: Channel, options?: SearchSourceOptions) {
     super(options);
     this.channel = channel;
   }
@@ -22,8 +20,10 @@ class CommandSearchSource<SCG extends ExtendableGenerics = DefaultGenerics> exte
   protected query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
-    const selectedCommands: (CommandResponse<SCG> & { name: string })[] = commands
-      .filter((command): command is CommandResponse<SCG> & { name: string } => !!(command.name && command.name.indexOf(searchQuery) !== -1));
+    const selectedCommands: (CommandResponse & { name: string })[] = commands.filter(
+      (command): command is CommandResponse & { name: string } =>
+        !!(command.name && command.name.indexOf(searchQuery) !== -1),
+    );
 
     // sort alphabetically unless you're matching the first char
     selectedCommands.sort((a, b) => {
@@ -47,12 +47,15 @@ class CommandSearchSource<SCG extends ExtendableGenerics = DefaultGenerics> exte
 
       return 0;
     });
-    return Promise.resolve({ items: selectedCommands.map((c) => ({...c, id: c.name})), next: null });
+    return Promise.resolve({
+      items: selectedCommands.map((c) => ({ ...c, id: c.name })),
+      next: null,
+    });
   }
 
   protected filterQueryResults(
-    items: CommandSuggestion<SCG>[],
-  ): CommandSuggestion<SCG>[] | Promise<CommandSuggestion<SCG>[]> {
+    items: CommandSuggestion[],
+  ): CommandSuggestion[] | Promise<CommandSuggestion[]> {
     return items;
   }
 }
@@ -72,15 +75,21 @@ class CommandSearchSource<SCG extends ExtendableGenerics = DefaultGenerics> exte
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '/' };
 
-export const createCommandsMiddleware = <SCG extends ExtendableGenerics = DefaultGenerics>(channel: Channel<SCG>, options?:TextComposerMiddlewareOptions) => {
+export const createCommandsMiddleware = (
+  channel: Channel,
+  options?: TextComposerMiddlewareOptions,
+) => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   return {
     id: finalOptions.trigger,
-    onChange: ({input, nextHandler}: MiddlewareParams<SCG, CommandSuggestion<SCG>>) => {
+    onChange: ({ input, nextHandler }: MiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
-      const lastToken = getTriggerCharWithToken(finalOptions.trigger, state.text.slice(0, state.selection.end));
+      const lastToken = getTriggerCharWithToken(
+        finalOptions.trigger,
+        state.text.slice(0, state.selection.end),
+      );
 
       if (!lastToken || lastToken.length < finalOptions.minChars) {
         // check whether suggestions already exist and if so remove them
@@ -102,9 +111,14 @@ export const createCommandsMiddleware = <SCG extends ExtendableGenerics = Defaul
         stop: true, // Stop other middleware from processing '/' character
       });
     },
-    onSuggestionItemSelect: ({input, nextHandler, selectedSuggestion}: MiddlewareParams<SCG, CommandSuggestion<SCG>>) => {
+    onSuggestionItemSelect: ({
+      input,
+      nextHandler,
+      selectedSuggestion,
+    }: MiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
-      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger) return nextHandler(input);
+      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
+        return nextHandler(input);
 
       return Promise.resolve({
         state: {

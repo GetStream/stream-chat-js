@@ -110,7 +110,12 @@ export function mergeWith<T extends object>(
     }
   }
 
-  function processKeys(target: object, source: object, stack: Set<unknown>, pendingMerges: PendingMerge[]): void {
+  function processKeys(
+    target: object,
+    source: object,
+    stack: Set<unknown>,
+    pendingMerges: PendingMerge[],
+  ): void {
     const keys = [...Object.keys(source), ...Object.getOwnPropertySymbols(source)];
     for (const key of keys) {
       processKeyValue(target, source, key, stack, pendingMerges);
@@ -145,6 +150,7 @@ export function mergeWith<T extends object>(
     processKeys(result, source, stack, pendingMerges);
 
     while (pendingMerges.length) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       processPendingMerge(pendingMerges.pop()!, stack, pendingMerges);
     }
 
@@ -154,5 +160,7 @@ export function mergeWith<T extends object>(
     return result;
   }
 
-  return sources.reduce<T>((result, source) => baseMerge(result, source) as T, { ...target } as T);
+  return sources.reduce<T>((result, source) => baseMerge(result, source) as T, {
+    ...target,
+  } as T);
 }

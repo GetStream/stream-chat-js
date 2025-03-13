@@ -80,7 +80,7 @@ export class ThreadManager {
     return threadsById;
   }
 
-  public addThread = (thread: Thread<SCG>) => {
+  public addThread = (thread: Thread) => {
     this.threadsByIdGetterCache.threadsById[thread.id] = thread;
   };
 

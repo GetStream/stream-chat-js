@@ -1,9 +1,12 @@
-import { TextSelection } from '../types';
+import type { TextSelection } from '../types';
 
 export const getTriggerCharWithToken = (trigger: string, text: string) => {
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
   const match = text.match(
-    new RegExp(`(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`, 'g'),
+    new RegExp(
+      `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`,
+      'g',
+    ),
   );
 
   return match && match[match.length - 1].trim();

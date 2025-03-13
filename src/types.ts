@@ -498,7 +498,7 @@ export interface ThreadResponse extends CustomThreadData {
   active_participant_count?: number;
   created_by?: UserResponse;
   deleted_at?: string;
-  draft?: DraftResponse<SCG>;
+  draft?: DraftResponse;
   last_message_at?: string;
   participant_count?: number;
   read?: Array<ReadResponse>;
@@ -1419,6 +1419,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;

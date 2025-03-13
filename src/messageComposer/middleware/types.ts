@@ -1,36 +1,30 @@
-import type { DefaultGenerics, ExtendableGenerics } from '../../types';
-import {TextComposerState, TextComposerSuggestion} from '../types';
+import type { TextComposerState, TextComposerSuggestion } from '../types';
 
 export type TextComposerMiddlewareOptions = { minChars: number; trigger: string };
 
-export type TextComposerMiddlewareValue<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  state: TextComposerState<SCG>;
+export type TextComposerMiddlewareValue = {
+  state: TextComposerState;
   stop?: boolean;
 };
 
-export type MiddlewareParams<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-  T = unknown
-> = {
-  input: TextComposerMiddlewareValue<SCG>,
-  nextHandler:(
-    input: TextComposerMiddlewareValue<SCG>,
-  ) => Promise<TextComposerMiddlewareValue<SCG> | 'canceled'>,
-  selectedSuggestion?: TextComposerSuggestion<T>,
-}
+export type MiddlewareParams<T = unknown> = {
+  input: TextComposerMiddlewareValue;
+  nextHandler: (
+    input: TextComposerMiddlewareValue,
+  ) => Promise<TextComposerMiddlewareValue | 'canceled'>;
+  selectedSuggestion?: TextComposerSuggestion<T>;
+};
 
-export type TextComposerMiddlewareHandler<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-> = (params: MiddlewareParams<SCG>) => Promise<TextComposerMiddlewareValue<SCG> | 'canceled'>;
+export type TextComposerMiddlewareHandler = (
+  params: MiddlewareParams,
+) => Promise<TextComposerMiddlewareValue | 'canceled'>;
 
-export type CustomTextComposerMiddleware<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  [key: string]: string | TextComposerMiddlewareHandler<SCG>
-}
+export type CustomTextComposerMiddleware = {
+  [key: string]: string | TextComposerMiddlewareHandler;
+};
 
-export type TextComposerMiddleware<
-  SCG extends ExtendableGenerics = DefaultGenerics,
-> = CustomTextComposerMiddleware<SCG> & {
+export type TextComposerMiddleware = CustomTextComposerMiddleware & {
   id: string;
-  onChange?: string | TextComposerMiddlewareHandler<SCG>;
-  onSuggestionItemSelect?: string | TextComposerMiddlewareHandler<SCG>;
-}
+  onChange?: string | TextComposerMiddlewareHandler;
+  onSuggestionItemSelect?: string | TextComposerMiddlewareHandler;
+};

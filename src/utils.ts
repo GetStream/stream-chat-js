@@ -298,10 +298,7 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param {MessageResponse} message `MessageResponse` object
  */
 export function formatMessage(
-  message:
-    | MessageResponse
-    | FormatMessageResponse
-    | MessageResponseBase,
+  message: MessageResponse | FormatMessageResponse | MessageResponseBase,
 ): FormatMessageResponse {
   return {
     ...message,

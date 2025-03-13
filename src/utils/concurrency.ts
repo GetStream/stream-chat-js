@@ -67,9 +67,7 @@ function createRunner<P extends unknown[], T>(wrapper: AsyncWrapper<P, T>) {
     const { cb: wrapped, onContinued } = wrapper(tag, cb);
     const pending = pendingPromises.get(tag);
     pending?.onContinued();
-    const promise = pending
-      ? pending.promise.then(wrapped, wrapped)
-      : wrapped();
+    const promise = pending ? pending.promise.then(wrapped, wrapped) : wrapped();
     pendingPromises.set(tag, { promise, onContinued });
     return promise;
   };
@@ -80,10 +78,7 @@ function createRunner<P extends unknown[], T>(wrapper: AsyncWrapper<P, T>) {
  * if the function is the last in the queue, it cleans up the whole chain
  * of promises after finishing.
  */
-function wrapWithContinuationTracking<T>(
-  tag: string | symbol,
-  cb: () => Promise<T>,
-) {
+function wrapWithContinuationTracking<T>(tag: string | symbol, cb: () => Promise<T>) {
   let hasContinuation = false;
   const wrapped = () =>
     cb().finally(() => {

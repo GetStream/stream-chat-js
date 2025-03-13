@@ -1,7 +1,8 @@
 import type { LocalAttachment, LocalImageAttachment } from './types';
-import type { Attachment, DefaultGenerics, ExtendableGenerics, UR } from '../types';
+import type { Attachment, UR } from '../types';
 
-export const isBlobButNotFile = (obj: unknown): obj is Blob => obj instanceof Blob && !(obj instanceof File);
+export const isBlobButNotFile = (obj: unknown): obj is Blob =>
+  obj instanceof Blob && !(obj instanceof File);
 
 export const createFileFromBlobs = ({
   blobsArray,
@@ -48,18 +49,21 @@ export const getAttachmentTypeFromMimeType = (mimeType: string) => {
   return 'file';
 };
 
-export const isFile = (fileLike: File | Blob): fileLike is File => !!(fileLike as File).lastModified;
+export const isFile = (fileLike: File | Blob): fileLike is File =>
+  !!(fileLike as File).lastModified;
 
-export const isScrapedContent = <SCG extends ExtendableGenerics = DefaultGenerics>(attachment: Attachment<SCG>) =>
+export const isScrapedContent = (attachment: Attachment) =>
   attachment.og_scrape_url || attachment.title_link;
 
-export const isUploadedImage = <SCG extends ExtendableGenerics = DefaultGenerics>(attachment: Attachment<SCG>) =>
+export const isUploadedImage = (attachment: Attachment) =>
   attachment.type === 'image' && !isScrapedContent(attachment);
 
-export const isLocalAttachment = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  attachment: UR,
-): attachment is LocalAttachment<SCG> => !!(attachment as LocalAttachment<SCG>).localMetadata?.id;
+// @ts-expect-error tmp
+export const isLocalAttachment = (attachment: UR): attachment is LocalAttachment =>
+  !!(attachment as LocalAttachment).localMetadata?.id;
 
-export const isLocalImageAttachment = <SCG extends ExtendableGenerics = DefaultGenerics>(
-  attachment: Attachment<SCG> | LocalAttachment<SCG>,
-): attachment is LocalImageAttachment<SCG> => isUploadedImage(attachment) && isLocalAttachment(attachment);
+export const isLocalImageAttachment = (
+  attachment: Attachment | LocalAttachment,
+): attachment is LocalImageAttachment =>
+  // @ts-expect-error tmp
+  isUploadedImage(attachment) && isLocalAttachment(attachment);
