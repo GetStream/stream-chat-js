@@ -3845,7 +3845,7 @@ export type Reminder<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   message?: MessageResponse<StreamChatGenerics>;
   created_at: string;
   updated_at: string;
-}
+};
 
 export type CreateReminderOptions = {
   remind_at?: string;
@@ -3859,13 +3859,13 @@ export type UpdateReminderOptions = {
 
 export type QueryRemindersOptions = {
   filter_conditions?: {
-    channel_cid?: string | { $in?: string[], $eq?: string };
-    message_id?: string | { $in?: string[], $eq?: string };
+    channel_cid?: string | { $in?: string[]; $eq?: string };
+    message_id?: string | { $in?: string[]; $eq?: string };
     remind_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
     created_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
     user_id?: string | { $in: string[] };
   };
-  sort?: Array<{field: string; direction: 1 | -1}>;
+  sort?: Array<{ field: string; direction: 1 | -1 }>;
   limit?: number;
 };
 
