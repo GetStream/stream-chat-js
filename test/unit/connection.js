@@ -91,6 +91,20 @@ describe('connection', function () {
 			const data = JSON.parse(query.json);
 			expect(data.device).to.deep.undefined;
 		});
+
+		it('should include extra params when building url if provided', function () {
+			const { query: prevQuery } = url.parse(ws._buildUrl(), true);
+			ws.client.options.wsUrlSuffix = '&foo=1&bar=2';
+			const { query } = url.parse(ws._buildUrl(), true);
+
+			// all of the previous query params should remain intact
+			Object.keys(prevQuery).forEach((key) => {
+				expect(prevQuery[key]).to.deep.equal(query[key]);
+			});
+			// only the updated query should contain the new ones
+			expect(query.foo).to.equal('1');
+			expect(query.bar).to.equal('2');
+		});
 	});
 
 	describe('isResolved flag', () => {
