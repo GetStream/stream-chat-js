@@ -191,7 +191,7 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
       this.client.key
     }&authorization=${token}&stream-auth-type=${this.client.getAuthType()}&X-Stream-Client=${encodeURIComponent(
       this.client.getUserAgent(),
-    )}`;
+    )}${this.client.options.wsUrlSuffix}`;
   };
 
   /**
