@@ -82,7 +82,10 @@ describe('connection', function () {
 			client.userAgent = userAgent;
 			const url = ws._buildUrl();
 
-			expect(url).to.contain(encodeURIComponent(userAgent));
+			const searchParams = new URLSearchParams({
+				'X-Stream-Client': userAgent,
+			});
+			expect(url).to.contain(searchParams.toString());
 		});
 
 		it('should not include device if not there', function () {
@@ -94,7 +97,7 @@ describe('connection', function () {
 
 		it('should include extra params when building url if provided', function () {
 			const { query: prevQuery } = url.parse(ws._buildUrl(), true);
-			ws.client.options.wsUrlSuffix = '&foo=1&bar=2';
+			ws.client.options.wsUrlParams = new URLSearchParams({ foo: '1', bar: '2' });
 			const { query } = url.parse(ws._buildUrl(), true);
 
 			// all of the previous query params should remain intact
