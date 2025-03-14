@@ -334,6 +334,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
+      wsUrlParams: new URLSearchParams({}),
       ...inputOptions,
     };
 
