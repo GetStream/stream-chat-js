@@ -1244,6 +1244,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * not be used in production apps.
    */
   wsConnection?: StableWSConnection;
+  /**
+   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
+   * used purely in testing suites and should not be used in production apps.
+   */
+  wsUrlSuffix?: string;
 };
 
 export type SyncOptions = {
