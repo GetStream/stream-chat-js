@@ -1600,6 +1600,18 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
     }
 >;
 
+export type DraftFilters<SCG extends ExtendableGenerics = DefaultGenerics> = {
+  channel_cid?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['channel_cid']>, '$in' | '$eq'>>
+    | PrimitiveFilter<DraftResponse<SCG>['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+    | PrimitiveFilter<DraftResponse<SCG>['created_at']>;
+  parent_id?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['created_at']>, '$in' | '$eq' | '$exists'>>
+    | PrimitiveFilter<DraftResponse<SCG>['parent_id']>;
+};
+
 export type QueryPollsParams = {
   filter?: QueryPollsFilters;
   options?: QueryPollsOptions;
@@ -2048,6 +2060,12 @@ export type SearchMessageSortBase<StreamChatGenerics extends ExtendableGenerics 
 export type SearchMessageSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | SearchMessageSortBase<StreamChatGenerics>
   | Array<SearchMessageSortBase<StreamChatGenerics>>;
+
+export type DraftSortBase = {
+  created_at?: AscDesc;
+};
+
+export type DraftSort = DraftSortBase | Array<DraftSortBase>;
 
 export type QuerySort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | BannedUsersSort
@@ -3836,3 +3854,51 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
 export type DeviceIdentifier = { os: string; model?: string };
+
+export declare type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  channel_cid: string;
+  created_at: string;
+  message: DraftMessage<StreamChatGenerics>;
+  channel?: ChannelResponse<StreamChatGenerics>;
+  parent_id?: string;
+  parent_message?: MessageResponseBase<StreamChatGenerics>;
+  quoted_message?: MessageResponseBase<StreamChatGenerics>;
+};
+export declare type CreateDraftResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = APIResponse & {
+  draft: DraftResponse<StreamChatGenerics>;
+};
+
+export declare type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  draft: DraftResponse<StreamChatGenerics>;
+};
+
+export declare type QueryDraftsResponse<
+  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
+> = APIResponse & {
+  drafts: DraftResponse<StreamChatGenerics>[];
+  next?: string;
+};
+
+export declare type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Omit<
+  DraftMessage<StreamChatGenerics>,
+  'id'
+> &
+  Partial<Pick<DraftMessage<StreamChatGenerics>, 'id'>>;
+
+export declare type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: string;
+  text: string;
+  attachments?: Attachment<StreamChatGenerics>[];
+  custom?: {};
+  html?: string;
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  poll_id?: string;
+  quoted_message_id?: string;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};

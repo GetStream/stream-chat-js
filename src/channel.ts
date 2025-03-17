@@ -62,6 +62,9 @@ import {
   AIState,
   MessageOptions,
   PushPreference,
+  CreateDraftResponse,
+  GetDraftResponse,
+  DraftMessagePayload,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -1349,6 +1352,47 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   async removeVote(messageId: string, pollId: string, voteId: string) {
     return await this.getClient().removePollVote(messageId, pollId, voteId);
+  }
+
+  /**
+   * createDraft - Creates or updates a draft message in a channel
+   *
+   * @param {string} channelType The channel type
+   * @param {string} channelID The channel ID
+   * @param {DraftMessagePayload<StreamChatGenerics>} message The draft message to create or update
+   *
+   * @return {Promise<CreateDraftResponse<StreamChatGenerics>>} Response containing the created draft
+   */
+  async createDraft(message: DraftMessagePayload<StreamChatGenerics>) {
+    return await this.getClient().post<CreateDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
+      message,
+    });
+  }
+
+  /**
+   * deleteDraft - Deletes a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<APIResponse>} API response
+   */
+  async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', { parent_id });
+  }
+
+  /**
+   * getDraft - Retrieves a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<GetDraftResponse<StreamChatGenerics>>} Response containing the draft
+   */
+  async getDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().get<GetDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
+      parent_id,
+    });
   }
 
   /**
