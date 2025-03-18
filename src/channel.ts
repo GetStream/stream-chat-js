@@ -1346,6 +1346,10 @@ export class Channel {
         isLatestMessageSet: messageSet.isLatest,
       },
     });
+    this.getClient().offlineDb?.upsertChannels?.({
+      channels: [state],
+      isLatestMessagesSet: messageSet.isLatest,
+    });
 
     return state;
   }

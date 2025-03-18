@@ -1,5 +1,6 @@
 import type { StreamChat } from './client';
 import type {
+  ChannelAPIResponse,
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
@@ -201,7 +202,17 @@ export class ChannelManager {
       if (currentChannels === newChannels) {
         return current;
       }
+
       return { ...current, channels: newChannels };
+    });
+    const {
+      channels,
+      pagination: { filters, sort },
+    } = this.state.getLatestValue();
+    this.client.offlineDb?.upsertCidsForQuery?.({
+      cids: channels.map((channel) => channel.cid),
+      filters,
+      sort,
     });
   };
 
@@ -237,6 +248,7 @@ export class ChannelManager {
     };
     const {
       pagination: { isLoading },
+      initialized,
     } = this.state.getLatestValue();
 
     if (isLoading && !this.options.abortInFlightQuery) {
@@ -257,6 +269,30 @@ export class ChannelManager {
         },
       }));
 
+      if (
+        this.client.offlineDb.getChannelsForQuery &&
+        this.client.user?.id &&
+        !initialized
+      ) {
+        const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
+          userId: this.client.user.id,
+          filters,
+          sort,
+        });
+
+        if (channelsFromDB) {
+          const offlineChannels = this.client.hydrateActiveChannels(
+            channelsFromDB as unknown as ChannelAPIResponse[],
+            {
+              offlineMode: true,
+              skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+            },
+          );
+
+          this.state.partialNext({ channels: offlineChannels });
+        }
+      }
+
       const channels = await this.client.queryChannels(
         filters,
         sort,
@@ -276,6 +312,11 @@ export class ChannelManager {
           options: newOptions,
         },
         initialized: true,
+      });
+      await this.client.offlineDb?.upsertCidsForQuery?.({
+        cids: channels.map((channel) => channel.cid),
+        filters: pagination.filters,
+        sort: pagination.sort,
       });
     } catch (error) {
       this.client.logger('error', (error as Error).message);

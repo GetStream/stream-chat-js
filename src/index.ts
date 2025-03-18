@@ -26,6 +26,7 @@ export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
 export * from './channel_manager';
+export * from './offline_support_api';
 // Don't use * here, that can break module augmentation https://github.com/microsoft/TypeScript/issues/46617
 export type {
   CustomAttachmentData,
