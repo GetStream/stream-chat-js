@@ -70,14 +70,10 @@ export type MentionsSearchSourceOptions = SearchSourceOptions & {
   transliterate?: (text: string) => string;
 };
 
-const CAN_SEARCH_MEMBERS_SERVER_SIDE_BY_EMPTY_AUTOCOMPLETE_STRING = false;
-
 export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
   readonly type = 'mentions';
   private client: StreamChat;
   private channel: Channel;
-  private localSearchResultCache: Record<string, UserResponse[]> = {};
-  private itemCountReturnedByLocalSearch = 0;
   filters: UserFilters | undefined;
   sort: UserSort | undefined;
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
@@ -98,26 +94,6 @@ export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
   get allMembersLoadedWithInitialChannelQuery() {
     const countLoadedMembers = Object.keys(this.channel.state.members || {}).length;
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
-  }
-
-  get hasListedAllInitiallyLoadedMembers() {
-    return (
-      !!this.localSearchResultCache[this.searchQuery] &&
-      this.localSearchResultCache[this.searchQuery].length <=
-        this.itemCountReturnedByLocalSearch
-    );
-  }
-
-  get hasNext() {
-    if (this.config.mentionAllAppUsers) {
-      return super.hasNext;
-    }
-    return (
-      super.hasNext ||
-      (CAN_SEARCH_MEMBERS_SERVER_SIDE_BY_EMPTY_AUTOCOMPLETE_STRING &&
-        !this.allMembersLoadedWithInitialChannelQuery &&
-        this.hasListedAllInitiallyLoadedMembers)
-    );
   }
 
   canExecuteQuery = (newSearchString?: string) => {
@@ -145,20 +121,12 @@ export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
     return Object.values(uniqueUsers);
   };
 
-  resetLocalUsersCache = () => {
-    this.localSearchResultCache = {};
-  };
-
   searchLocalUsers = (searchQuery: string) => {
     const { textComposerText } = this.config;
-    if (!textComposerText || this.hasListedAllInitiallyLoadedMembers)
-      return { items: [] };
+    if (!textComposerText) return { items: [] };
 
-    if (!this.localSearchResultCache[searchQuery]) {
-      // todo: is it ok to cache the search results even though watchers and members can change?
-      //  Do we want to allow for changing the underlying members and watchers list in the middle of the pagination?
-      const watchersAndMembers = this.getMembersAndWatchers();
-      this.localSearchResultCache[searchQuery] = watchersAndMembers.filter((user) => {
+    return {
+      items: this.getMembersAndWatchers().filter((user) => {
         if (user.id === this.client.userID) return false;
         if (!searchQuery) return true;
 
@@ -186,14 +154,8 @@ export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
         return (
           updatedId.includes(updatedQuery) || (levenshtein <= maxDistance && lastDigits)
         );
-      });
-    }
-    const items = this.localSearchResultCache[searchQuery].slice(
-      this.offset,
-      this.pageSize + (this.offset ?? 0), // todo: do we really need to paginate over the local search results?
-    );
-    this.itemCountReturnedByLocalSearch += items.length;
-    return { items };
+      }),
+    };
   };
 
   prepareQueryParams = (searchQuery: string) => ({
@@ -230,11 +192,6 @@ export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
   async query(searchQuery: string) {
     if (this.config.mentionAllAppUsers) {
       return await this.queryUsers(searchQuery);
-    }
-
-    const isFirstPage = this.offset === 0;
-    if (isFirstPage) {
-      this.itemCountReturnedByLocalSearch = 0;
     }
 
     const shouldSearchLocally =
@@ -320,7 +277,6 @@ export const createMentionsMiddleware = (
       );
       if (triggerWithToken === finalOptions.trigger) {
         searchSource.resetState();
-        searchSource.resetLocalUsersCache();
         searchSource.activate();
       }
 
