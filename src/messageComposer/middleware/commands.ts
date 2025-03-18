@@ -17,7 +17,12 @@ class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
     this.channel = channel;
   }
 
-  protected query(searchQuery: string) {
+  canExecuteQuery = (newSearchString?: string) => {
+    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
+    return this.isActive && !this.isLoading && (this.hasNext || hasNewSearchQuery);
+  };
+
+  query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
     const selectedCommands: (CommandResponse & { name: string })[] = commands.filter(
@@ -80,6 +85,9 @@ export const createCommandsMiddleware = (
   options?: TextComposerMiddlewareOptions,
 ) => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
+  const searchSource = new CommandSearchSource(channel);
+  searchSource.activate();
+
   return {
     id: finalOptions.trigger,
     onChange: ({ input, nextHandler }: MiddlewareParams<CommandSuggestion>) => {
@@ -92,12 +100,14 @@ export const createCommandsMiddleware = (
       );
 
       if (!lastToken || lastToken.length < finalOptions.minChars) {
-        // check whether suggestions already exist and if so remove them
-        return nextHandler(input);
+        const hasStaleSuggestions =
+          input.state.suggestions?.trigger === finalOptions.trigger;
+        const newInput = { ...input };
+        if (hasStaleSuggestions) {
+          delete newInput.state.suggestions;
+        }
+        return nextHandler(newInput);
       }
-
-      const searchSource = new CommandSearchSource(channel);
-      searchSource.activate();
 
       return Promise.resolve({
         state: {

@@ -1,6 +1,6 @@
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
-import type { TextComposerState, TextSelection } from './types';
+import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
 import type {
   DraftMessage,
   FormatMessageResponse,
@@ -10,7 +10,6 @@ import type {
 import type { MessageComposer } from './messageComposer';
 import type { TextComposerMiddleware, TextComposerMiddlewareValue } from './middleware';
 import { withCancellation } from '../utils/concurrency';
-import type { TextComposerSuggestion } from './types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -123,11 +122,11 @@ export class TextComposer {
    * // todo: change middleware creation to factory functions that return objects {id: string, onChange: () => state, onSelect: () => state }
    * const composer = new TextComposer<DefaultGenerics>()
    *   .use([
-   *      createMentionsMiddleware(client, { trigger: '@', minChars: 1 }),  // SearchSource<UserResponse>
-   *      createCommandsMiddleware(client, { trigger: '/' }),               // SearchSource<Command>
+   *      createMentionsMiddleware(channel, { trigger: '@', minChars: 1 }),  // SearchSource<UserResponse>
+   *      createCommandsMiddleware(channel, { trigger: '/' }),               // SearchSource<Command>
    *      createChannelMiddleware(client, { trigger: '#' }),                // SearchSource<Channel>
-   *      createEmojiMiddleware(client, { trigger: ':' }),                  // SearchSource<Emoji>
-   *      createCustomMiddleware(client, { trigger: '$' }),                 // SearchSource<CustomType>
+   *      createEmojiMiddleware(emojiSearchSource, { trigger: ':' }),                  // SearchSource<Emoji>
+   *      createCustomMiddleware(customClient, { trigger: '$' }),                 // SearchSource<CustomType>
    *   ]);
    * @param middleware
    */
@@ -155,13 +154,11 @@ export class TextComposer {
 
     const execute = (
       i: number,
-      input: TextComposerMiddlewareValue | 'canceled',
-    ): Promise<TextComposerMiddlewareValue | 'canceled'> => {
+      input: TextComposerMiddlewareValue,
+    ): Promise<TextComposerMiddlewareValue> => {
       if (i <= index) {
         throw new Error('next() called multiple times');
       }
-
-      if (input === 'canceled') return Promise.resolve(input);
 
       index = i;
 
@@ -183,15 +180,15 @@ export class TextComposer {
       });
     };
 
-    const output = await withCancellation('textComposer-middleware-execution', () =>
-      execute(0, initialInput),
-    );
-
-    if (output !== 'canceled' && output.state.suggestions) {
-      output.state.suggestions.searchSource.search(output.state.suggestions.query);
-    }
-
-    return output;
+    return await withCancellation('textComposer-middleware-execution', async () => {
+      const result = await execute(0, initialInput);
+      if (result.state.suggestions) {
+        await result.state.suggestions?.searchSource.search(
+          result.state.suggestions.query,
+        );
+      }
+      return result;
+    });
   };
 
   handleChange = async ({

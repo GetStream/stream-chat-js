@@ -161,7 +161,7 @@ export class Channel {
     this._messageComposer = new MessageComposer({ channel: this });
     this._messageComposer.textComposer.use([
       createCommandsMiddleware(this),
-      createMentionsMiddleware(client),
+      createMentionsMiddleware(this),
     ] as TextComposerMiddleware[]);
   }
 

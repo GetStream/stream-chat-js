@@ -186,7 +186,7 @@ export class Thread {
 
     this._messageComposer.textComposer.use([
       createCommandsMiddleware(channel),
-      createMentionsMiddleware(client),
+      createMentionsMiddleware(channel),
     ] as TextComposerMiddleware[]);
   }
 
