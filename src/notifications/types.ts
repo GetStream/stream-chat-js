@@ -7,17 +7,19 @@ export type NotificationSeverity =
   | (string & {});
 
 /** Represents an action button for a notification */
-export interface NotificationAction {
+export type NotificationAction = {
   /** Text label for the action button */
   label: string;
   /** Handler function called when action button is clicked */
   handler: () => void;
   /** Optional metadata for styling or other custom properties */
   metadata?: Record<string, unknown>;
-}
+};
+
+export type NotificationOrigin = { emitter: string; context?: Record<string, unknown> };
 
 /** Represents a single notification message */
-export interface Notification {
+export type Notification = {
   /** Unique identifier for the notification */
   id: string;
   /** The notification message text */
@@ -30,7 +32,7 @@ export interface Notification {
    * Identifier of the notification emitter.
    * The identifier then can be recognized by notification consumers to act upon specific origin values.
    */
-  origin: string;
+  origin: NotificationOrigin;
   /** Optional timestamp when notification should expire */
   expiresAt?: number;
   /** Whether notification should automatically close after duration. Defaults to true */
@@ -39,10 +41,10 @@ export interface Notification {
   actions?: NotificationAction[];
   /** Optional metadata to attach to the notification */
   metadata?: Record<string, unknown>;
-}
+};
 
 /** Configuration options when creating a notification */
-export interface NotificationOptions {
+export type NotificationOptions = {
   /** The severity level. Defaults to 'info' */
   severity?: NotificationSeverity;
   /** How long notification should display in milliseconds */
@@ -53,7 +55,7 @@ export interface NotificationOptions {
   actions?: NotificationAction[];
   /** Optional metadata to attach to the notification */
   metadata?: Record<string, unknown>;
-}
+};
 
 /** State shape for the notification store */
 export type NotificationState = {
@@ -67,6 +69,6 @@ export type NotificationManagerConfig = {
 
 export type AddNotificationPayload = {
   message: string;
-  origin: string;
+  origin: NotificationOrigin;
   options?: NotificationOptions;
 };
