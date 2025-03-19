@@ -26,6 +26,11 @@ export interface Notification {
   severity: NotificationSeverity;
   /** Timestamp when notification was created */
   createdAt: number;
+  /**
+   * Identifier of the notification emitter.
+   * The identifier then can be recognized by notification consumers to act upon specific origin values.
+   */
+  origin: string;
   /** Optional timestamp when notification should expire */
   expiresAt?: number;
   /** Whether notification should automatically close after duration. Defaults to true */

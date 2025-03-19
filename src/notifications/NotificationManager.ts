@@ -28,13 +28,18 @@ export class NotificationManager {
     };
   }
 
-  private add(message: string, options: NotificationOptions = {}): string {
+  private add(
+    message: string,
+    origin: string,
+    options: NotificationOptions = {},
+  ): string {
     const id = uuidv4();
     const now = Date.now();
 
     const notification: Notification = {
       id,
       message,
+      origin,
       severity: options.severity || 'info',
       createdAt: now,
       expiresAt: options.duration ? now + options.duration : undefined,
@@ -58,20 +63,20 @@ export class NotificationManager {
     return id;
   }
 
-  error(message: string, options = {}) {
-    return this.add(message, { severity: 'error', ...options });
+  error(message: string, origin: string, options = {}) {
+    return this.add(message, origin, { severity: 'error', ...options });
   }
 
-  warning(message: string, options = {}) {
-    return this.add(message, { severity: 'warning', ...options });
+  warning(message: string, origin: string, options = {}) {
+    return this.add(message, origin, { severity: 'warning', ...options });
   }
 
-  info(message: string, options = {}) {
-    return this.add(message, { severity: 'info', ...options });
+  info(message: string, origin: string, options = {}) {
+    return this.add(message, origin, { severity: 'info', ...options });
   }
 
-  success(message: string, options = {}) {
-    return this.add(message, { severity: 'success', ...options });
+  success(message: string, origin: string, options = {}) {
+    return this.add(message, origin, { severity: 'success', ...options });
   }
 
   remove(id: string): void {
