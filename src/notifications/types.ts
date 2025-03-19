@@ -64,3 +64,9 @@ export type NotificationState = {
 export type NotificationManagerConfig = {
   durations: Record<NotificationSeverity, number>;
 };
+
+export type AddNotificationPayload = {
+  message: string;
+  origin: string;
+  options?: NotificationOptions;
+};

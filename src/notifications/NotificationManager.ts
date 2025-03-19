@@ -1,12 +1,11 @@
+import { v4 as uuidv4 } from 'uuid';
 import { StateStore } from '../store';
 import type {
+  AddNotificationPayload,
   Notification,
   NotificationManagerConfig,
-  NotificationOptions,
-  NotificationSeverity,
   NotificationState,
 } from './types';
-import { v4 as uuidv4 } from 'uuid';
 
 const DURATIONS: NotificationManagerConfig['durations'] = {
   error: 10000,
@@ -28,11 +27,27 @@ export class NotificationManager {
     };
   }
 
-  private add(
-    message: string,
-    origin: string,
-    options: NotificationOptions = {},
-  ): string {
+  get notifications() {
+    return this.store.getLatestValue().notifications;
+  }
+
+  get warning() {
+    return this.notifications.filter((n) => n.severity === 'warning');
+  }
+
+  get error() {
+    return this.notifications.filter((n) => n.severity === 'error');
+  }
+
+  get info() {
+    return this.notifications.filter((n) => n.severity === 'info');
+  }
+
+  get success() {
+    return this.notifications.filter((n) => n.severity === 'success');
+  }
+
+  add({ message, origin, options = {} }: AddNotificationPayload): string {
     const id = uuidv4();
     const now = Date.now();
 
@@ -63,20 +78,20 @@ export class NotificationManager {
     return id;
   }
 
-  error(message: string, origin: string, options = {}) {
-    return this.add(message, origin, { severity: 'error', ...options });
+  addError({ message, origin, options }: AddNotificationPayload) {
+    return this.add({ message, origin, options: { ...options, severity: 'error' } });
   }
 
-  warning(message: string, origin: string, options = {}) {
-    return this.add(message, origin, { severity: 'warning', ...options });
+  addWarning({ message, origin, options }: AddNotificationPayload) {
+    return this.add({ message, origin, options: { ...options, severity: 'warning' } });
   }
 
-  info(message: string, origin: string, options = {}) {
-    return this.add(message, origin, { severity: 'info', ...options });
+  addInfo({ message, origin, options }: AddNotificationPayload) {
+    return this.add({ message, origin, options: { ...options, severity: 'info' } });
   }
 
-  success(message: string, origin: string, options = {}) {
-    return this.add(message, origin, { severity: 'success', ...options });
+  addSuccess({ message, origin, options }: AddNotificationPayload) {
+    return this.add({ message, origin, options: { ...options, severity: 'success' } });
   }
 
   remove(id: string): void {
@@ -96,19 +111,5 @@ export class NotificationManager {
     this.timeouts.clear();
 
     this.store.partialNext({ notifications: [] });
-  }
-
-  getBySeverity(severity: NotificationSeverity): Notification[] {
-    return this.store
-      .getLatestValue()
-      .notifications.filter((n) => n.severity === severity);
-  }
-
-  subscribe(callback: (state: NotificationState) => void) {
-    return this.store.subscribe(callback);
-  }
-
-  getState(): NotificationState {
-    return this.store.getLatestValue();
   }
 }
