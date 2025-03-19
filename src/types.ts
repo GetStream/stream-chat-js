@@ -16,6 +16,7 @@ import type {
   CustomThreadData,
   CustomUserData,
 } from './custom_types';
+import type { NotificationManager } from './notifications';
 
 /**
  * Utility Types
@@ -1338,6 +1339,12 @@ export type StreamChatOptions = AxiosRequestConfig & {
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   logger?: Logger;
+  /**
+   * Custom notification manager service to use for the client.
+   * If not provided, a default notification manager will be created.
+   * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
+   */
+  notifications?: NotificationManager;
   /**
    * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
    * call `connectUser` again to retry.

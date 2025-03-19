@@ -20,7 +20,7 @@ export class NotificationManager {
   private timeouts: Map<string, NodeJS.Timeout> = new Map();
   config: NotificationManagerConfig;
 
-  constructor(config: Partial<NotificationManagerConfig>) {
+  constructor(config: Partial<NotificationManagerConfig> = {}) {
     this.store = new StateStore<NotificationState>({ notifications: [] });
     this.config = {
       ...config,

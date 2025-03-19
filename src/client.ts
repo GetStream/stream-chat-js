@@ -224,6 +224,7 @@ import type {
   ChannelManagerOptions,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
+import { NotificationManager } from './notifications';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -239,6 +240,7 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
+  notifications: NotificationManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -319,6 +321,8 @@ export class StreamChat {
     this.mutedUsers = [];
 
     this.moderation = new Moderation(this);
+
+    this.notifications = options?.notifications ?? new NotificationManager();
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
