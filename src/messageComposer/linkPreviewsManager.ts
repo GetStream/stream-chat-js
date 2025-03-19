@@ -33,6 +33,18 @@ export class LinkPreview {
     return this.state.getLatestValue().status;
   }
 
+  get isLoading() {
+    return this.status === LinkPreviewStatus.LOADING;
+  }
+
+  get isLoaded() {
+    return this.status === LinkPreviewStatus.LOADED;
+  }
+
+  get isDismissed() {
+    return this.status === LinkPreviewStatus.DISMISSED;
+  }
+
   dismiss = () => {
     this.state.partialNext({ status: LinkPreviewStatus.DISMISSED });
   };
@@ -119,6 +131,24 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
 
   get previews() {
     return this.state.getLatestValue().previews;
+  }
+
+  get loadingPreviews() {
+    return Array.from(this.previews.values()).filter(
+      (linkPreview) => linkPreview.isLoading,
+    );
+  }
+
+  get loadedPreviews() {
+    return Array.from(this.previews.values()).filter(
+      (linkPreview) => linkPreview.isLoaded,
+    );
+  }
+
+  get dismissedPreviews() {
+    return Array.from(this.previews.values()).filter(
+      (linkPreview) => linkPreview.isDismissed,
+    );
   }
 
   initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {

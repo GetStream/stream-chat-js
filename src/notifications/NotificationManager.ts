@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
 import { StateStore } from '../store';
+import { generateUUIDv4 } from '../utils';
 import type {
   AddNotificationPayload,
   Notification,
@@ -48,7 +48,7 @@ export class NotificationManager {
   }
 
   add({ message, origin, options = {} }: AddNotificationPayload): string {
-    const id = uuidv4();
+    const id = generateUUIDv4();
     const now = Date.now();
 
     const notification: Notification = {

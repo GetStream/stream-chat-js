@@ -1,11 +1,14 @@
-import { getTriggerCharWithToken, insertItemWithTrigger } from './middlewareUtils';
-import { BaseSearchSource } from '../../search_controller';
-import { mergeWith } from '../../utils/mergeWith';
-import type { MiddlewareParams, TextComposerMiddlewareOptions } from './types';
-import type { SearchSourceOptions } from '../../search_controller';
-import type { CommandResponse } from '../../types';
-import type { Channel } from '../../channel';
-import type { TextComposerSuggestion } from '../types';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import { BaseSearchSource } from '../../../search_controller';
+import { mergeWith } from '../../../utils/mergeWith';
+import type {
+  TextComposerMiddlewareOptions,
+  TextComposerMiddlewareParams,
+} from './types';
+import type { SearchSourceOptions } from '../../../search_controller';
+import type { CommandResponse } from '../../../types';
+import type { Channel } from '../../../channel';
+import type { TextComposerSuggestion } from '../../types';
 
 type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
 class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
@@ -90,7 +93,10 @@ export const createCommandsMiddleware = (
 
   return {
     id: finalOptions.trigger,
-    onChange: ({ input, nextHandler }: MiddlewareParams<CommandSuggestion>) => {
+    onChange: ({
+      input,
+      nextHandler,
+    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
@@ -125,7 +131,7 @@ export const createCommandsMiddleware = (
       input,
       nextHandler,
       selectedSuggestion,
-    }: MiddlewareParams<CommandSuggestion>) => {
+    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
         return nextHandler(input);

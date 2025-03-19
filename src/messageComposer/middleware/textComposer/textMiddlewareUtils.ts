@@ -1,4 +1,4 @@
-import type { TextSelection } from '../types';
+import type { TextSelection } from '../../types';
 
 export const getTriggerCharWithToken = (trigger: string, text: string) => {
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
@@ -38,6 +38,7 @@ export const insertItemWithTrigger = ({
   };
 };
 
+// todo: implement the use according to the original in stream-chat-react
 export const replaceWordWithEntity = async ({
   caretPosition,
   getEntityString,

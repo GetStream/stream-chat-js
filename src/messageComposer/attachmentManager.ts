@@ -108,17 +108,29 @@ export class AttachmentManager {
     return this.state.getLatestValue().hasUploadPermission;
   }
 
+  get successfulUploads() {
+    return Object.values(this.attachments).filter(
+      ({ localMetadata }) =>
+        !localMetadata.uploadState || localMetadata.uploadState === 'finished',
+    );
+  }
+
   get successfulUploadsCount() {
     return Object.values(this.attachments).filter(
       ({ localMetadata }) =>
-        localMetadata.uploadState && localMetadata.uploadState !== 'failed',
+        !localMetadata.uploadState || localMetadata.uploadState === 'finished',
+    ).length;
+  }
+
+  get uploadsInProgressCount() {
+    return Object.values(this.attachments).filter(
+      ({ localMetadata }) => localMetadata.uploadState === 'uploading',
     ).length;
   }
 
   get failedUploadsCount() {
     return Object.values(this.attachments).filter(
-      ({ localMetadata }) =>
-        localMetadata.uploadState && localMetadata.uploadState === 'failed',
+      ({ localMetadata }) => localMetadata.uploadState === 'failed',
     ).length;
   }
 

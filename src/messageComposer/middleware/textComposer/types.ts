@@ -1,4 +1,4 @@
-import type { TextComposerState, TextComposerSuggestion } from '../types';
+import type { TextComposerState, TextComposerSuggestion } from '../../types';
 
 export type TextComposerMiddlewareOptions = {
   minChars: number;
@@ -10,7 +10,7 @@ export type TextComposerMiddlewareValue = {
   stop?: boolean;
 };
 
-export type MiddlewareParams<T = unknown> = {
+export type TextComposerMiddlewareParams<T = unknown> = {
   input: TextComposerMiddlewareValue;
   nextHandler: (
     input: TextComposerMiddlewareValue,
@@ -19,7 +19,7 @@ export type MiddlewareParams<T = unknown> = {
 };
 
 export type TextComposerMiddlewareHandler = (
-  params: MiddlewareParams,
+  params: TextComposerMiddlewareParams,
 ) => Promise<TextComposerMiddlewareValue>;
 
 export type CustomTextComposerMiddleware = {

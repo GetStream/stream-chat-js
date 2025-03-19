@@ -1,18 +1,27 @@
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { AttachmentManager } from './attachmentManager';
 import { TextComposer } from './textComposer';
+import {
+  createAttachmentsMiddleware,
+  createLinkPreviewsMiddleware,
+  createTextComposerMiddleware,
+  MessageComposerMiddlewareManager,
+} from './middleware/messageComposer';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
 import type { Channel } from '../channel';
+import { mergeWith } from '../utils/mergeWith';
 import type {
   DraftMessage,
   DraftResponse,
   EventTypes,
   FormatMessageResponse,
+  Message,
   MessageResponse,
   MessageResponseBase,
+  SendMessageOptions,
 } from '../types';
-import { mergeWith } from '../utils/mergeWith';
+import type { MessageComposerMiddlewareValue } from './middleware/messageComposer';
 
 /*
   todo:
@@ -23,6 +32,7 @@ export type MessageComposerState = {
   id: string;
   lastChange: Date | null;
   quotedMessage: FormatMessageResponse | null;
+  pollId: string | null;
 };
 
 export type MessageComposerConfig = {
@@ -44,20 +54,35 @@ const isMessageDraft = (composition: unknown): composition is DraftResponse =>
 
 const initState = (
   composition?: DraftResponse | MessageResponse | FormatMessageResponse,
-): MessageComposerState =>
-  composition
-    ? {
-        id: isMessageDraft(composition) ? composition.message.id : composition.id,
-        lastChange: new Date(),
-        quotedMessage: composition.quoted_message
-          ? formatMessage(composition.quoted_message as MessageResponseBase)
-          : null,
-      }
-    : {
-        id: generateUUIDv4(),
-        lastChange: null,
-        quotedMessage: null,
-      };
+): MessageComposerState => {
+  if (!composition) {
+    return {
+      id: MessageComposer.generateId(),
+      lastChange: null,
+      quotedMessage: null,
+      pollId: null,
+    };
+  }
+
+  let quoted_message;
+  let message;
+  if (isMessageDraft(composition)) {
+    message = composition.message;
+    quoted_message = composition.quoted_message;
+  } else {
+    message = composition;
+    quoted_message = composition.quoted_message;
+  }
+
+  return {
+    id: message.id,
+    lastChange: new Date(),
+    quotedMessage: quoted_message
+      ? formatMessage(quoted_message as MessageResponseBase)
+      : null,
+    pollId: message.poll_id ?? null,
+  };
+};
 
 const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   publishTypingEvents: true,
@@ -74,11 +99,11 @@ export class MessageComposer {
   textComposer: TextComposer;
   threadId: string | null;
   private unsubscribeFunctions: Set<() => void> = new Set();
+  private middlewareManager: MessageComposerMiddlewareManager;
 
   constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
-    // todo: solve ts-ignore
     this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
     const message =
       composition && (isMessageDraft(composition) ? composition.message : composition);
@@ -89,6 +114,14 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.state = new StateStore<MessageComposerState>(initState(composition));
+    this.middlewareManager = new MessageComposerMiddlewareManager(this.threadId);
+
+    // Register default middleware
+    this.middlewareManager.use([
+      createTextComposerMiddleware(this),
+      createAttachmentsMiddleware(this),
+      createLinkPreviewsMiddleware(this),
+    ]);
   }
 
   get client() {
@@ -102,6 +135,21 @@ export class MessageComposer {
   get quotedMessage() {
     return this.state.getLatestValue().quotedMessage;
   }
+
+  get pollId() {
+    return this.state.getLatestValue().pollId;
+  }
+
+  get canSendMessage() {
+    return (
+      !this.attachmentManager.uploadsInProgressCount &&
+      (!this.textComposer.textIsEmpty ||
+        this.attachmentManager.successfulUploadsCount > 0) //&&
+      // !customMessageData?.poll_id
+    );
+  }
+
+  static generateId = generateUUIDv4;
 
   initState = ({
     composition,
@@ -208,7 +256,63 @@ export class MessageComposer {
     this.initState();
   };
 
-  sendMessage = () => {
-    // todo: see useSubmitHandler
+  compose = async (): Promise<
+    { message: Message; sendOptions: SendMessageOptions } | undefined
+  > => {
+    const initialState: MessageComposerMiddlewareValue = {
+      state: {
+        message: {
+          id: this.id,
+          attachments: [],
+          linkPreviews: [],
+          text: '',
+          type: 'regular',
+        },
+        sendOptions: {},
+      },
+    };
+
+    const result = await this.middlewareManager.execute('compose', initialState);
+    if (result === 'canceled') return;
+    // todo: keep in stream-chat-react
+    // const optimisticUpdateMessageProps = {
+    //   created_at: new Date(),
+    //   reactions: [],
+    //   status: 'sending',
+    // };
+
+    const { attachments, linkPreviews, ...message } = result.state.message;
+    return {
+      message: {
+        ...message,
+        attachments: attachments.concat(linkPreviews),
+        html: result.state.message.text,
+        user: this.client.user,
+      },
+      sendOptions: result.state.sendOptions,
+    };
+  };
+
+  // todo: keep in stream-chat-react
+  sendMessage = async () => {
+    if (!this.canSendMessage) return;
+
+    if (this.attachmentManager.uploadsInProgressCount > 0) {
+      this.client.notifications.addWarning({
+        message: 'Wait until all attachments have uploaded',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { messageId: this.id, threadId: this.threadId },
+        },
+      });
+      return;
+    }
+
+    const composition = await this.compose();
+    if (!composition) return;
+
+    const { message, sendOptions } = composition;
+
+    return this.channel.sendMessage(message, sendOptions);
   };
 }

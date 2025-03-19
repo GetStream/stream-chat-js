@@ -1,3 +1,4 @@
+import { TextComposerMiddlewareManager } from './middleware/textComposer';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
@@ -8,8 +9,7 @@ import type {
   UserResponse,
 } from '../types';
 import type { MessageComposer } from './messageComposer';
-import type { TextComposerMiddleware, TextComposerMiddlewareValue } from './middleware';
-import { withCancellation } from '../utils/concurrency';
+import type { TextComposerMiddleware } from './middleware/textComposer/types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -38,11 +38,12 @@ const initState = (
 export class TextComposer {
   composer: MessageComposer;
   state: StateStore<TextComposerState>;
-  private middleware: TextComposerMiddleware[] = [];
+  private middlewareManager: TextComposerMiddlewareManager;
 
   constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
     this.state = new StateStore<TextComposerState>(initState(message));
+    this.middlewareManager = new TextComposerMiddlewareManager();
   }
 
   get channel() {
@@ -56,7 +57,21 @@ export class TextComposer {
   }
 
   get text() {
-    return Array.from(this.state.getLatestValue().text);
+    return this.state.getLatestValue().text;
+  }
+
+  get textIsEmpty() {
+    const trimmedText = this.text.trim();
+    return (
+      trimmedText === '' ||
+      trimmedText === '>' ||
+      trimmedText === '``````' ||
+      trimmedText === '``' ||
+      trimmedText === '**' ||
+      trimmedText === '____' ||
+      trimmedText === '__' ||
+      trimmedText === '****'
+    );
   }
 
   initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
@@ -71,10 +86,10 @@ export class TextComposer {
     const mentionedUsers = [...this.mentionedUsers];
     const existingUserIndex = mentionedUsers.findIndex((u) => u.id === user.id);
     if (existingUserIndex >= 0) {
-      this.state.partialNext({
-        mentionedUsers: mentionedUsers.splice(existingUserIndex, 1, user),
-      });
+      mentionedUsers.splice(existingUserIndex, 1, user);
+      this.state.partialNext({ mentionedUsers });
     } else {
+      mentionedUsers.push(user);
       this.state.partialNext({ mentionedUsers });
     }
   };
@@ -85,9 +100,9 @@ export class TextComposer {
   removeMentionedUser = (userId: string) => {
     const existingUserIndex = this.mentionedUsers.findIndex((u) => u.id === userId);
     if (existingUserIndex === -1) return;
-    this.state.partialNext({
-      mentionedUsers: this.mentionedUsers.splice(existingUserIndex, 1),
-    });
+    const mentionedUsers = [...this.mentionedUsers];
+    mentionedUsers.splice(existingUserIndex, 1);
+    this.state.partialNext({ mentionedUsers });
   };
 
   setText = (text: string) => {
@@ -116,10 +131,8 @@ export class TextComposer {
   };
   // --- END STATE API ---
 
-  // --- START TEXT PROCESSING ----
-
+  // --- START MIDDLEWARE API ----
   /**
-   * // todo: change middleware creation to factory functions that return objects {id: string, onChange: () => state, onSelect: () => state }
    * const composer = new TextComposer<DefaultGenerics>()
    *   .use([
    *      createMentionsMiddleware(channel, { trigger: '@', minChars: 1 }),  // SearchSource<UserResponse>
@@ -131,65 +144,15 @@ export class TextComposer {
    * @param middleware
    */
   use = (middleware: TextComposerMiddleware | TextComposerMiddleware[]) => {
-    this.middleware = this.middleware.concat(middleware);
+    this.middlewareManager.use(middleware);
   };
 
   upsertMiddleware = (middleware: TextComposerMiddleware[]) => {
-    const newMiddleware = [...this.middleware];
-    middleware.forEach((upserted) => {
-      const existingIndex = this.middleware.findIndex(
-        (existing) => existing.id === upserted.id,
-      );
-      newMiddleware.splice(existingIndex, 1, upserted);
-    });
-    this.middleware = newMiddleware;
+    this.middlewareManager.upsert(middleware);
   };
+  // --- END MIDDLEWARE API ----
 
-  private executeMiddleware = async (
-    eventName: keyof Omit<TextComposerMiddleware, 'id'>,
-    initialInput: TextComposerMiddlewareValue,
-    selectedSuggestion?: TextComposerSuggestion<unknown>,
-  ): Promise<TextComposerMiddlewareValue | 'canceled'> => {
-    let index = -1;
-
-    const execute = (
-      i: number,
-      input: TextComposerMiddlewareValue,
-    ): Promise<TextComposerMiddlewareValue> => {
-      if (i <= index) {
-        throw new Error('next() called multiple times');
-      }
-
-      index = i;
-
-      if (i === this.middleware.length || input.stop) {
-        return Promise.resolve({ state: input.state });
-      }
-
-      const middleware = this.middleware[i];
-      const handler = middleware[eventName];
-
-      if (!handler || typeof handler === 'string') {
-        return execute(i + 1, input);
-      }
-
-      return handler({
-        input,
-        nextHandler: (nextInput) => execute(i + 1, nextInput),
-        selectedSuggestion,
-      });
-    };
-
-    return await withCancellation('textComposer-middleware-execution', async () => {
-      const result = await execute(0, initialInput);
-      if (result.state.suggestions) {
-        await result.state.suggestions?.searchSource.search(
-          result.state.suggestions.query,
-        );
-      }
-      return result;
-    });
-  };
+  // --- START TEXT PROCESSING ----
 
   handleChange = async ({
     text,
@@ -198,8 +161,7 @@ export class TextComposer {
     selection: TextSelection;
     text: string;
   }) => {
-    // todo: check isComposing
-    const output = await this.executeMiddleware('onChange', {
+    const output = await this.middlewareManager.execute('onChange', {
       state: {
         ...this.state.getLatestValue(),
         text,
@@ -218,7 +180,7 @@ export class TextComposer {
   };
 
   handleSelect = async (target: TextComposerSuggestion<unknown>) => {
-    const output = await this.executeMiddleware(
+    const output = await this.middlewareManager.execute(
       'onSuggestionItemSelect',
       {
         state: this.state.getLatestValue(),

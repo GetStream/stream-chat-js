@@ -1,12 +1,15 @@
-import { getTriggerCharWithToken, insertItemWithTrigger } from './middlewareUtils';
-import type { SearchSourceOptions } from '../../search_controller';
-import { BaseSearchSource } from '../../search_controller';
-import { mergeWith } from '../../utils/mergeWith';
-import type { MiddlewareParams, TextComposerMiddlewareOptions } from './types';
-import type { StreamChat } from '../../client';
-import type { UserFilters, UserOptions, UserResponse, UserSort } from '../../types';
-import type { Channel } from '../../channel';
-import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../constants';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import type { SearchSourceOptions } from '../../../search_controller';
+import { BaseSearchSource } from '../../../search_controller';
+import { mergeWith } from '../../../utils/mergeWith';
+import type {
+  TextComposerMiddlewareOptions,
+  TextComposerMiddlewareParams,
+} from './types';
+import type { StreamChat } from '../../../client';
+import type { UserFilters, UserOptions, UserResponse, UserSort } from '../../../types';
+import type { Channel } from '../../../channel';
+import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
 
 // todo: the map is too small - Slavic letters with diacritics are missing for example
 export const accentsMap: { [key: string]: string } = {
@@ -267,7 +270,7 @@ export const createMentionsMiddleware = (
   searchSource.activate();
   return {
     id: finalOptions.trigger,
-    onChange: ({ input, nextHandler }: MiddlewareParams<UserResponse>) => {
+    onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserResponse>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
@@ -309,7 +312,7 @@ export const createMentionsMiddleware = (
       input,
       nextHandler,
       selectedSuggestion,
-    }: MiddlewareParams<UserResponse>) => {
+    }: TextComposerMiddlewareParams<UserResponse>) => {
       const { state } = input;
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
         return nextHandler(input);
