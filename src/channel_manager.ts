@@ -1,6 +1,5 @@
 import type { StreamChat } from './client';
 import type {
-  ChannelAPIResponse,
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
@@ -281,15 +280,16 @@ export class ChannelManager {
         });
 
         if (channelsFromDB) {
-          const offlineChannels = this.client.hydrateActiveChannels(
-            channelsFromDB as unknown as ChannelAPIResponse[],
-            {
-              offlineMode: true,
-              skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
-            },
-          );
+          const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
+            offlineMode: true,
+            skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+          });
 
           this.state.partialNext({ channels: offlineChannels });
+
+          if (!this.client.offlineDb.syncManager.syncStatus) {
+            return;
+          }
         }
       }
 

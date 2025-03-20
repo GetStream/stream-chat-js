@@ -224,7 +224,7 @@ import type {
   ChannelManagerOptions,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
-import type { OfflineDBApi } from './offline_support_api';
+import type { AbstractOfflineDB } from './offline_support_api';
 import { DefaultOfflineDB } from './offline_support_api';
 
 function isString(x: unknown): x is string {
@@ -240,7 +240,7 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
-  offlineDb: OfflineDBApi;
+  offlineDb: AbstractOfflineDB;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -498,7 +498,7 @@ export class StreamChat {
     return StreamChat._instance as StreamChat;
   }
 
-  setOfflineDBApi(offlineDBInstance: DefaultOfflineDB) {
+  setOfflineDBApi(offlineDBInstance: AbstractOfflineDB) {
     this.offlineDb = offlineDBInstance;
   }
 
