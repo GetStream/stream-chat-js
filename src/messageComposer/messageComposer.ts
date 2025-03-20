@@ -6,11 +6,12 @@ import {
   createLinkPreviewsMiddleware,
   createTextComposerMiddleware,
   MessageComposerMiddlewareManager,
-} from './middleware/messageComposer';
+} from './middleware';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
-import type { Channel } from '../channel';
 import { mergeWith } from '../utils/mergeWith';
+import type { MessageComposerMiddlewareValue } from './middleware';
+import type { Channel } from '../channel';
 import type {
   DraftMessage,
   DraftResponse,
@@ -21,7 +22,6 @@ import type {
   MessageResponseBase,
   SendMessageOptions,
 } from '../types';
-import type { MessageComposerMiddlewareValue } from './middleware/messageComposer';
 
 /*
   todo:
@@ -99,7 +99,7 @@ export class MessageComposer {
   textComposer: TextComposer;
   threadId: string | null;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private middlewareManager: MessageComposerMiddlewareManager;
+  private compositionMiddlewareManager: MessageComposerMiddlewareManager;
 
   constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
@@ -114,10 +114,12 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.state = new StateStore<MessageComposerState>(initState(composition));
-    this.middlewareManager = new MessageComposerMiddlewareManager(this.threadId);
+    this.compositionMiddlewareManager = new MessageComposerMiddlewareManager(
+      this.threadId,
+    );
 
     // Register default middleware
-    this.middlewareManager.use([
+    this.compositionMiddlewareManager.use([
       createTextComposerMiddleware(this),
       createAttachmentsMiddleware(this),
       createLinkPreviewsMiddleware(this),
@@ -272,24 +274,28 @@ export class MessageComposer {
       },
     };
 
-    const result = await this.middlewareManager.execute('compose', initialState);
+    const result = await this.compositionMiddlewareManager.execute(
+      'compose',
+      initialState,
+    );
     if (result === 'canceled') return;
-    // todo: keep in stream-chat-react
-    // const optimisticUpdateMessageProps = {
-    //   created_at: new Date(),
-    //   reactions: [],
-    //   status: 'sending',
-    // };
+
+    const optimisticUpdateMessageProps = {
+      created_at: new Date(),
+      reactions: [],
+      status: 'sending',
+    };
 
     const { attachments, linkPreviews, ...message } = result.state.message;
     return {
+      ...result.state,
       message: {
         ...message,
+        ...optimisticUpdateMessageProps,
         attachments: attachments.concat(linkPreviews),
         html: result.state.message.text,
         user: this.client.user,
       },
-      sendOptions: result.state.sendOptions,
     };
   };
 
