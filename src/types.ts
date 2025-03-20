@@ -2707,7 +2707,7 @@ export type MessageBase = CustomMessageData & {
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
-  type?: 'regular' | 'system';
+  type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
 };
