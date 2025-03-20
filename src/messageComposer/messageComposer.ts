@@ -3,9 +3,10 @@ import { AttachmentManager } from './attachmentManager';
 import { TextComposer } from './textComposer';
 import {
   createAttachmentsMiddleware,
+  createCompositionValidationMiddleware,
   createLinkPreviewsMiddleware,
   createTextComposerMiddleware,
-  MessageComposerMiddlewareManager,
+  MessageComposerMiddlewareExecutor,
 } from './middleware';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
@@ -17,7 +18,6 @@ import type {
   DraftResponse,
   EventTypes,
   FormatMessageResponse,
-  Message,
   MessageResponse,
   MessageResponseBase,
   SendMessageOptions,
@@ -99,7 +99,7 @@ export class MessageComposer {
   textComposer: TextComposer;
   threadId: string | null;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private compositionMiddlewareManager: MessageComposerMiddlewareManager;
+  private compositionMiddlewareManager: MessageComposerMiddlewareExecutor;
 
   constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
@@ -114,7 +114,7 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.state = new StateStore<MessageComposerState>(initState(composition));
-    this.compositionMiddlewareManager = new MessageComposerMiddlewareManager(
+    this.compositionMiddlewareManager = new MessageComposerMiddlewareExecutor(
       this.threadId,
     );
 
@@ -123,6 +123,7 @@ export class MessageComposer {
       createTextComposerMiddleware(this),
       createAttachmentsMiddleware(this),
       createLinkPreviewsMiddleware(this),
+      createCompositionValidationMiddleware(),
     ]);
   }
 
@@ -259,7 +260,7 @@ export class MessageComposer {
   };
 
   compose = async (): Promise<
-    { message: Message; sendOptions: SendMessageOptions } | undefined
+    { message: MessageResponseBase; sendOptions: SendMessageOptions } | undefined
   > => {
     const initialState: MessageComposerMiddlewareValue = {
       state: {
@@ -278,10 +279,10 @@ export class MessageComposer {
       'compose',
       initialState,
     );
-    if (result === 'canceled') return;
+    if (result.status === 'discard') return;
 
     const optimisticUpdateMessageProps = {
-      created_at: new Date(),
+      created_at: new Date().toISOString(),
       reactions: [],
       status: 'sending',
     };
@@ -301,24 +302,11 @@ export class MessageComposer {
 
   // todo: keep in stream-chat-react
   sendMessage = async () => {
-    if (!this.canSendMessage) return;
-
-    if (this.attachmentManager.uploadsInProgressCount > 0) {
-      this.client.notifications.addWarning({
-        message: 'Wait until all attachments have uploaded',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { messageId: this.id, threadId: this.threadId },
-        },
-      });
-      return;
-    }
-
     const composition = await this.compose();
     if (!composition) return;
 
-    const { message, sendOptions } = composition;
+    // const { message, sendOptions } = composition;
 
-    return this.channel.sendMessage(message, sendOptions);
+    // return this.channel.sendMessage(message, sendOptions);
   };
 }

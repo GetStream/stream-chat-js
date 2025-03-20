@@ -1,29 +1,31 @@
 import { withCancellation } from './utils/concurrency';
 
-export type MiddlewareExecutor<
-  TState,
-  TValue extends { state: TState; stop?: boolean },
-> = {
-  id: string;
-  [key: string]:
-    | string
-    | ((params: {
-        input: TValue;
-        nextHandler: (input: TValue) => Promise<TValue>;
-      }) => Promise<TValue>);
+export type MiddlewareStatus = 'complete' | 'discard';
+
+export type MiddlewareValue<TState> = {
+  state: TState;
+  status?: MiddlewareStatus;
 };
 
-export class Middleware<TState, TValue extends { state: TState; stop?: boolean }> {
-  private middleware: MiddlewareExecutor<TState, TValue>[] = [];
+export type MiddlewareHandler<TValue> = (params: {
+  input: TValue;
+  nextHandler: (input: TValue) => Promise<TValue>;
+}) => Promise<TValue>;
 
-  use(
-    middleware: MiddlewareExecutor<TState, TValue> | MiddlewareExecutor<TState, TValue>[],
-  ) {
+export type Middleware<TState, TValue extends MiddlewareValue<TState>> = {
+  id: string;
+  [key: string]: string | MiddlewareHandler<TValue>;
+};
+
+export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> {
+  private middleware: Middleware<TState, TValue>[] = [];
+
+  use(middleware: Middleware<TState, TValue> | Middleware<TState, TValue>[]) {
     this.middleware = this.middleware.concat(middleware);
     return this;
   }
 
-  upsert(middleware: MiddlewareExecutor<TState, TValue>[]) {
+  upsert(middleware: Middleware<TState, TValue>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {
       const existingIndex = this.middleware.findIndex(
@@ -43,19 +45,20 @@ export class Middleware<TState, TValue extends { state: TState; stop?: boolean }
     eventName: string,
     initialInput: TValue,
     extraParams: Record<string, unknown> = {},
-  ): Promise<TValue | 'canceled'> {
+  ): Promise<TValue> {
     let index = -1;
 
-    const execute = (i: number, input: TValue): Promise<TValue> => {
+    const execute = async (i: number, input: TValue): Promise<TValue> => {
       if (i <= index) {
         throw new Error('next() called multiple times');
       }
 
       index = i;
 
-      if (i === this.middleware.length || input.stop) {
-        return Promise.resolve({ state: input.state, stop: input.stop } as TValue);
-      }
+      const returnFromChain =
+        i === this.middleware.length ||
+        (input.status && ['complete', 'discard'].includes(input.status));
+      if (returnFromChain) return input;
 
       const middleware = this.middleware[i];
       const handler = middleware[eventName];
@@ -64,20 +67,22 @@ export class Middleware<TState, TValue extends { state: TState; stop?: boolean }
         return execute(i + 1, input);
       }
 
-      return handler({
+      return await handler({
         input,
-        nextHandler: (nextInput) => execute(i + 1, nextInput),
+        nextHandler: (nextInput: TValue) => execute(i + 1, nextInput),
         ...extraParams,
       });
     };
 
-    return await withCancellation(
+    const result = await withCancellation(
       'middleware-execution',
       async () => await execute(0, initialInput),
     );
+
+    return result === 'canceled' ? { ...initialInput, status: 'discard' } : result;
   }
 
-  async execute(eventName: string, initialInput: TValue): Promise<TValue | 'canceled'> {
+  async execute(eventName: string, initialInput: TValue): Promise<TValue> {
     return await this.executeMiddlewareChain(eventName, initialInput);
   }
 }

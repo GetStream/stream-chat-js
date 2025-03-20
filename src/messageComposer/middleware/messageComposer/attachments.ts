@@ -13,6 +13,17 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
       input: MessageComposerMiddlewareValue,
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
+    if (composer.attachmentManager.uploadsInProgressCount > 0) {
+      composer.client.notifications.addWarning({
+        message: 'Wait until all attachments have uploaded',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { messageId: composer.id, threadId: composer.threadId },
+        },
+      });
+      return nextHandler({ ...input, status: 'discard' });
+    }
+
     const attachments = composer.attachmentManager.successfulUploads.map(
       (localAttachment) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -27,7 +38,7 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
         ...input.state,
         message: {
           ...input.state.message,
-          attachments: input.state.message.attachments.concat(attachments ?? []),
+          attachments: input.state.message.attachments.concat(attachments),
         },
       },
     });

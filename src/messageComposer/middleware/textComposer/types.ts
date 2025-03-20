@@ -1,14 +1,12 @@
 import type { TextComposerState, TextComposerSuggestion } from '../../types';
+import type { MiddlewareValue } from '../../../middleware';
 
 export type TextComposerMiddlewareOptions = {
   minChars: number;
   trigger: string;
 };
 
-export type TextComposerMiddlewareValue = {
-  state: TextComposerState;
-  stop?: boolean;
-};
+export type TextComposerMiddlewareValue = MiddlewareValue<TextComposerState>;
 
 export type TextComposerMiddlewareParams<T = unknown> = {
   input: TextComposerMiddlewareValue;

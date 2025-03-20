@@ -1,7 +1,7 @@
-import { Middleware } from '../../../middleware';
+import { MiddlewareExecutor } from '../../../middleware';
 import type { MessageComposerMiddlewareValue } from './types';
 
-export class MessageComposerMiddlewareManager extends Middleware<
+export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
   MessageComposerMiddlewareValue['state'],
   MessageComposerMiddlewareValue
 > {

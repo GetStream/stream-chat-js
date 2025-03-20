@@ -1,4 +1,4 @@
-import { TextComposerMiddlewareManager } from './middleware/textComposer';
+import { TextComposerMiddlewareExecutor } from './middleware/textComposer';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
@@ -14,6 +14,20 @@ import type { TextComposerMiddleware } from './middleware/textComposer/types';
 export type TextComposerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
+};
+
+export const textIsEmpty = (text: string) => {
+  const trimmedText = text.trim();
+  return (
+    trimmedText === '' ||
+    trimmedText === '>' ||
+    trimmedText === '``````' ||
+    trimmedText === '``' ||
+    trimmedText === '**' ||
+    trimmedText === '____' ||
+    trimmedText === '__' ||
+    trimmedText === '****'
+  );
 };
 
 const initState = (
@@ -38,12 +52,12 @@ const initState = (
 export class TextComposer {
   composer: MessageComposer;
   state: StateStore<TextComposerState>;
-  private middlewareManager: TextComposerMiddlewareManager;
+  private middlewareExecutor: TextComposerMiddlewareExecutor;
 
   constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
     this.state = new StateStore<TextComposerState>(initState(message));
-    this.middlewareManager = new TextComposerMiddlewareManager();
+    this.middlewareExecutor = new TextComposerMiddlewareExecutor();
   }
 
   get channel() {
@@ -61,17 +75,7 @@ export class TextComposer {
   }
 
   get textIsEmpty() {
-    const trimmedText = this.text.trim();
-    return (
-      trimmedText === '' ||
-      trimmedText === '>' ||
-      trimmedText === '``````' ||
-      trimmedText === '``' ||
-      trimmedText === '**' ||
-      trimmedText === '____' ||
-      trimmedText === '__' ||
-      trimmedText === '****'
-    );
+    return textIsEmpty(this.text);
   }
 
   initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
@@ -144,11 +148,11 @@ export class TextComposer {
    * @param middleware
    */
   use = (middleware: TextComposerMiddleware | TextComposerMiddleware[]) => {
-    this.middlewareManager.use(middleware);
+    this.middlewareExecutor.use(middleware);
   };
 
   upsertMiddleware = (middleware: TextComposerMiddleware[]) => {
-    this.middlewareManager.upsert(middleware);
+    this.middlewareExecutor.upsert(middleware);
   };
   // --- END MIDDLEWARE API ----
 
@@ -161,14 +165,14 @@ export class TextComposer {
     selection: TextSelection;
     text: string;
   }) => {
-    const output = await this.middlewareManager.execute('onChange', {
+    const output = await this.middlewareExecutor.execute('onChange', {
       state: {
         ...this.state.getLatestValue(),
         text,
         selection,
       },
     });
-    if (output === 'canceled') return;
+    if (output.status === 'discard') return;
     this.state.next(output.state);
 
     if (this.composer.config.publishTypingEvents && text) {
@@ -180,14 +184,14 @@ export class TextComposer {
   };
 
   handleSelect = async (target: TextComposerSuggestion<unknown>) => {
-    const output = await this.middlewareManager.execute(
+    const output = await this.middlewareExecutor.execute(
       'onSuggestionItemSelect',
       {
         state: this.state.getLatestValue(),
       },
       target,
     );
-    if (output === 'canceled') return;
+    if (output?.status === 'discard') return;
     this.state.next(output.state);
   };
   // --- END TEXT PROCESSING ----

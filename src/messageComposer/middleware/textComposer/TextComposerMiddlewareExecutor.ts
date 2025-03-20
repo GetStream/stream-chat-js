@@ -1,9 +1,9 @@
-import { Middleware } from '../../../middleware';
+import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type { TextComposerMiddlewareValue } from './types';
 import type { TextComposerState, TextComposerSuggestion } from '../../types';
 
-export class TextComposerMiddlewareManager extends Middleware<
+export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<
   TextComposerState,
   TextComposerMiddlewareValue
 > {
@@ -11,12 +11,12 @@ export class TextComposerMiddlewareManager extends Middleware<
     eventName: string,
     initialInput: TextComposerMiddlewareValue,
     selectedSuggestion?: TextComposerSuggestion,
-  ): Promise<TextComposerMiddlewareValue | 'canceled'> {
+  ): Promise<TextComposerMiddlewareValue> {
     const result = await this.executeMiddlewareChain(eventName, initialInput, {
       selectedSuggestion,
     });
 
-    if (result !== 'canceled' && result.state.suggestions) {
+    if (result && result.state.suggestions) {
       const searchResult = await withCancellation(
         'textComposer-suggestions-search',
         async () => {
@@ -25,7 +25,7 @@ export class TextComposerMiddlewareManager extends Middleware<
           );
         },
       );
-      if (searchResult === 'canceled') return 'canceled';
+      if (searchResult === 'canceled') return { ...result, status: 'discard' };
     }
 
     return result;
