@@ -4,6 +4,7 @@ import type {
   ChannelFilters,
   ChannelSort,
   Event,
+  UserResponse,
 } from './types';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
@@ -33,6 +34,14 @@ export type UpsertUserSyncStatusType = {
   lastSyncedAt: string;
 };
 
+export type UpsertReactionType = {
+  channel: Channel;
+  enforceUniqueReaction: boolean;
+  messageId: string;
+  reactionType: string;
+  user: UserResponse;
+};
+
 export type GetChannelsType = {
   cids: string[];
   userId: string;
@@ -60,6 +69,7 @@ export interface OfflineDBApi {
   upsertUserSyncStatus:
     | ((options: UpsertUserSyncStatusType) => Promise<unknown>)
     | undefined;
+  upsertReaction: ((options: UpsertReactionType) => Promise<unknown>) | undefined;
   getChannels: ((options: GetChannelsType) => Promise<unknown>) | undefined;
   getChannelsForQuery:
     | ((
@@ -82,6 +92,7 @@ export interface OfflineDBApi {
 export abstract class AbstractOfflineDB implements OfflineDBApi {
   private client: StreamChat;
   public syncManager: OfflineDBSyncManager;
+  public initialized = false;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
@@ -91,6 +102,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
+
+  abstract upsertReaction: OfflineDBApi['upsertReaction'];
 
   abstract getChannels: OfflineDBApi['getChannels'];
 
@@ -117,6 +130,8 @@ export class DefaultOfflineDB extends AbstractOfflineDB {
   upsertCidsForQuery = undefined;
 
   upsertChannels = undefined;
+
+  upsertReaction = undefined;
 
   getChannels = undefined;
 
@@ -365,7 +380,8 @@ export class OfflineDBSyncManager {
     const channel = this.client.channel(task.channelType, task.channelId);
 
     if (task.type === 'send-reaction') {
-      return await channel.sendReaction(...task.payload);
+      const [messageId, reaction, options] = task.payload;
+      return await channel.sendReaction(messageId, reaction, options, false);
     }
 
     if (task.type === 'delete-reaction') {

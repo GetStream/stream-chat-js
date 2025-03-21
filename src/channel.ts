@@ -363,12 +363,33 @@ export class Channel {
     messageID: string,
     reaction: Reaction,
     options?: { enforce_unique?: boolean; skip_push?: boolean },
-  ) {
+    shouldRunOffline = true,
+  ): Promise<ReactionAPIResponse | undefined> {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
     if (!reaction || Object.keys(reaction).length === 0) {
       throw Error(`Reaction object is missing`);
+    }
+
+    const offlineDb = this.getClient().offlineDb;
+    if (offlineDb.upsertReaction && shouldRunOffline) {
+      await offlineDb.upsertReaction({
+        channel: this,
+        reactionType: reaction.type,
+        user: this.getClient().user as UserResponse,
+        enforceUniqueReaction: !!options?.enforce_unique,
+        messageId: messageID,
+      });
+      return (await offlineDb.syncManager.queueTask({
+        task: {
+          channelId: this.id as string,
+          channelType: this.type,
+          messageId: messageID,
+          payload: [messageID, reaction, options],
+          type: 'send-reaction',
+        },
+      })) as ReactionAPIResponse;
     }
     return await this.getClient().post<ReactionAPIResponse>(
       this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
