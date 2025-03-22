@@ -374,13 +374,6 @@ export class Channel {
 
     const offlineDb = this.getClient().offlineDb;
     if (offlineDb.upsertReaction && shouldRunOffline) {
-      await offlineDb.upsertReaction({
-        channel: this,
-        reactionType: reaction.type,
-        user: this.getClient().user as UserResponse,
-        enforceUniqueReaction: !!options?.enforce_unique,
-        messageId: messageID,
-      });
       return (await offlineDb.syncManager.queueTask({
         task: {
           channelId: this.id as string,
@@ -409,12 +402,36 @@ export class Channel {
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
-  deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+  async deleteReaction(
+    messageID: string,
+    reactionType: string,
+    user_id?: string,
+    shouldRunOffline = true,
+  ) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
       throw Error(
         'Deleting a reaction requires specifying both the message and reaction type',
       );
+    }
+
+    const offlineDb = this.getClient().offlineDb;
+    if (offlineDb.deleteReaction && shouldRunOffline) {
+      await offlineDb.deleteReaction({
+        channel: this,
+        messageId: messageID,
+        reactionType,
+        userId: (this.getClient().userID as string) ?? user_id,
+      });
+      await offlineDb.syncManager.queueTask({
+        task: {
+          channelId: this.id as string,
+          channelType: this.type,
+          messageId: messageID,
+          payload: [messageID, reactionType],
+          type: 'delete-reaction',
+        },
+      });
     }
 
     const url =

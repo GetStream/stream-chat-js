@@ -6,10 +6,10 @@ import type {
   Event,
   UserResponse,
 } from './types';
+import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 
-// const noop = async <T, R = unknown>(_: T): Promise<R> => undefined as unknown as R;
 export type PreparedBatchQueries =
   | [string]
   | [string, Array<unknown> | Array<Array<unknown>>];
@@ -40,6 +40,7 @@ export type UpsertReactionType = {
   messageId: string;
   reactionType: string;
   user: UserResponse;
+  flush?: boolean;
 };
 
 export type GetChannelsType = {
@@ -60,6 +61,14 @@ export type GetLastSyncedAtType = {
 export type GetPendingTasksType = { messageId?: string };
 
 export type DeletePendingTaskType = { id: number };
+
+export type DeleteReactionType = {
+  channel: Channel;
+  messageId: string;
+  reactionType: string;
+  userId: string;
+  flush?: boolean;
+};
 
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
 
@@ -87,6 +96,7 @@ export interface OfflineDBApi {
     | ((conditions?: GetPendingTasksType) => Promise<PendingTask[]>)
     | undefined;
   deletePendingTask: ((options: DeletePendingTaskType) => Promise<unknown>) | undefined;
+  deleteReaction: ((options: DeleteReactionType) => Promise<unknown>) | undefined;
 }
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
@@ -124,6 +134,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
 
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
+
+  abstract deleteReaction: OfflineDBApi['deleteReaction'];
 }
 
 export class DefaultOfflineDB extends AbstractOfflineDB {
@@ -152,19 +164,10 @@ export class DefaultOfflineDB extends AbstractOfflineDB {
   getPendingTasks = undefined;
 
   deletePendingTask = undefined;
+
+  deleteReaction = undefined;
 }
 
-import type { AxiosError } from 'axios';
-//
-// // import { handleEventToSyncDB } from '../components/Chat/hooks/handleEventToSyncDB';
-// // import { getAllChannelIds, getLastSyncedAt, upsertUserSyncStatus } from '../store/apis';
-// //
-// // import { addPendingTask } from '../store/apis/addPendingTask';
-// //
-// // import { deletePendingTask } from '../store/apis/deletePendingTask';
-// // import { getPendingTasks } from '../store/apis/getPendingTasks';
-// // import { SqliteClient } from '../store/SqliteClient';
-//
 export type PendingTaskTypes = {
   deleteMessage: 'delete-message';
   deleteReaction: 'delete-reaction';
@@ -385,7 +388,8 @@ export class OfflineDBSyncManager {
     }
 
     if (task.type === 'delete-reaction') {
-      return await channel.deleteReaction(...task.payload);
+      const [messageId, reactionType] = task.payload;
+      return await channel.deleteReaction(messageId, reactionType, undefined, false);
     }
 
     if (task.type === 'delete-message') {
