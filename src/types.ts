@@ -727,6 +727,8 @@ export type MessageResponseBase<
   status?: string;
   thread_participants?: UserResponse<StreamChatGenerics>[];
   updated_at?: string;
+  live_location_id?: string;
+  live_location?: LiveLocation<StreamChatGenerics> | null;
 };
 
 export type ReactionGroupResponse = {
@@ -2674,6 +2676,8 @@ export type MessageBase<
   text?: string;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
+  live_location_id?: string;
+  live_location?: LiveLocation<StreamChatGenerics> | null;
 };
 
 export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
@@ -3899,3 +3903,20 @@ export declare type DraftMessage<StreamChatGenerics extends ExtendableGenerics =
   silent?: boolean;
   type?: MessageLabel;
 };
+
+export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: string;
+  channel_cid: string;
+  latitude: number;
+  longitude: number;
+  end_at: string;
+  created_by_device_id: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  user?: UserResponse<StreamChatGenerics>;
+}
+
+export type LiveLocationResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  live_location: LiveLocation<StreamChatGenerics>;
+}
