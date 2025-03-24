@@ -218,6 +218,7 @@ import {
   DraftFilters,
   DraftSort,
   Pager,
+  LiveLocation,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2297,6 +2298,17 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...(userID ? { user_id: userID } : {}),
     });
   }
+
+  /** getUserLiveLocations
+   * 
+   * @param userId string The user id
+   * 
+   * @returns {Promise<APIResponse>} The server response
+  */
+  async getUserLiveLocations(userId: string) {
+    return await this.get<LiveLocation>(this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`);
+  }
+
   /** muteUser - mutes a user
    *
    * @param {string} targetID

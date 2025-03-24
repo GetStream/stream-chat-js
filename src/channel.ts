@@ -65,6 +65,8 @@ import {
   CreateDraftResponse,
   GetDraftResponse,
   DraftMessagePayload,
+  LiveLocation, 
+  LiveLocationResponse,
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -1392,6 +1394,23 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   async getDraft({ parent_id }: { parent_id?: string } = {}) {
     return await this.getClient().get<GetDraftResponse<StreamChatGenerics>>(this._channelURL() + '/draft', {
       parent_id,
+    });
+  }
+
+  /**
+   * updateLiveLocation - Updates a live location
+   * 
+   * @param liveLocation LiveLocation The live location data to update
+   * 
+   * @returns {Promise<APIResponse>} The server response
+   */
+  async updateLiveLocation(liveLocation: LiveLocation<StreamChatGenerics>) {
+    return await this.getClient().put<LiveLocationResponse>(this._channelURL() + '/live_location', {
+      location_id: liveLocation.id,
+      longitude: liveLocation.longitude,
+      latitude: liveLocation.latitude,
+      created_by_device_id: liveLocation.created_by_device_id,
+      end_at: liveLocation.end_at,
     });
   }
 
