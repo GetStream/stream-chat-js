@@ -1337,6 +1337,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * not be used in production apps.
    */
   wsConnection?: StableWSConnection;
+  /**
+   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
+   * used purely in testing suites and should not be used in production apps.
+   */
+  wsUrlParams?: URLSearchParams;
 };
 
 export type SyncOptions = {
@@ -1681,6 +1686,25 @@ export type ChannelFilters = QueryFilters<
       | PrimitiveFilter<ChannelResponse[Key]>;
   }
 >;
+
+export type DraftFilters = {
+  channel_cid?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse['channel_cid']>, '$in' | '$eq'>>
+    | PrimitiveFilter<DraftResponse['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<DraftResponse['created_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<DraftResponse['created_at']>;
+  parent_id?:
+    | RequireOnlyOne<
+        Pick<QueryFilter<DraftResponse['created_at']>, '$in' | '$eq' | '$exists'>
+      >
+    | PrimitiveFilter<DraftResponse['parent_id']>;
+};
 
 export type QueryPollsParams = {
   filter?: QueryPollsFilters;
@@ -2068,6 +2092,12 @@ export type SearchMessageSortBase = Sort<CustomMessageData> & {
 export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
 
 export type QuerySort = BannedUsersSort | ChannelSort | SearchMessageSort | UserSort;
+
+export type DraftSortBase = {
+  created_at?: AscDesc;
+};
+
+export type DraftSort = DraftSortBase | Array<DraftSortBase>;
 
 export type PollSort = PollSortBase | Array<PollSortBase>;
 
@@ -3870,3 +3900,44 @@ export type SdkIdentifier = {
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
 export type DeviceIdentifier = { os: string; model?: string };
+
+export type DraftResponse = {
+  channel_cid: string;
+  created_at: string;
+  message: DraftMessage;
+  channel?: ChannelResponse;
+  parent_id?: string;
+  parent_message?: MessageResponseBase;
+  quoted_message?: MessageResponseBase;
+};
+export type CreateDraftResponse = APIResponse & {
+  draft: DraftResponse;
+};
+
+export type GetDraftResponse = APIResponse & {
+  draft: DraftResponse;
+};
+
+export type QueryDraftsResponse = APIResponse & {
+  drafts: DraftResponse[];
+  next?: string;
+};
+
+export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
+  Partial<Pick<DraftMessage, 'id'>>;
+
+export type DraftMessage = {
+  id: string;
+  text: string;
+  attachments?: Attachment[];
+  custom?: {};
+  html?: string;
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  poll_id?: string;
+  quoted_message_id?: string;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};
