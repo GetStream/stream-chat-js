@@ -1,3 +1,14 @@
+## [9.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.8...v9.0.0-rc.9) (2025-03-25)
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+
 ## [9.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.7...v9.0.0-rc.8) (2025-03-12)
 
 ### Bug Fixes
