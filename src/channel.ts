@@ -350,20 +350,10 @@ export class Channel {
     );
   }
 
-  /**
-   * sendReaction - Send a reaction about a message
-   *
-   * @param {string} messageID the message id
-   * @param {Reaction} reaction the reaction object for instance {type: 'love'}
-   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
-   *
-   * @return {Promise<ReactionAPIResponse>} The Server Response
-   */
   async sendReaction(
     messageID: string,
     reaction: Reaction,
     options?: { enforce_unique?: boolean; skip_push?: boolean },
-    shouldRunOffline = true,
   ): Promise<ReactionAPIResponse | undefined> {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -373,7 +363,7 @@ export class Channel {
     }
 
     const offlineDb = this.getClient().offlineDb;
-    if (offlineDb.upsertReaction && shouldRunOffline) {
+    if (offlineDb) {
       return (await offlineDb.syncManager.queueTask({
         task: {
           channelId: this.id as string,
@@ -384,6 +374,31 @@ export class Channel {
         },
       })) as ReactionAPIResponse;
     }
+
+    return this._sendReaction(messageID, reaction, options);
+  }
+
+  /**
+   * sendReaction - Send a reaction about a message
+   *
+   * @param {string} messageID the message id
+   * @param {Reaction} reaction the reaction object for instance {type: 'love'}
+   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
+   *
+   * @return {Promise<ReactionAPIResponse>} The Server Response
+   */
+  async _sendReaction(
+    messageID: string,
+    reaction: Reaction,
+    options?: { enforce_unique?: boolean; skip_push?: boolean },
+  ): Promise<ReactionAPIResponse | undefined> {
+    if (!messageID) {
+      throw Error(`Message id is missing`);
+    }
+    if (!reaction || Object.keys(reaction).length === 0) {
+      throw Error(`Reaction object is missing`);
+    }
+
     return await this.getClient().post<ReactionAPIResponse>(
       this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
       {
@@ -391,6 +406,36 @@ export class Channel {
         ...options,
       },
     );
+  }
+
+  async deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+    this._checkInitialized();
+    if (!reactionType || !messageID) {
+      throw Error(
+        'Deleting a reaction requires specifying both the message and reaction type',
+      );
+    }
+
+    const offlineDb = this.getClient().offlineDb;
+    if (offlineDb) {
+      await offlineDb.deleteReaction({
+        channel: this,
+        messageId: messageID,
+        reactionType,
+        userId: (this.getClient().userID as string) ?? user_id,
+      });
+      return await offlineDb.syncManager.queueTask({
+        task: {
+          channelId: this.id as string,
+          channelType: this.type,
+          messageId: messageID,
+          payload: [messageID, reactionType],
+          type: 'delete-reaction',
+        },
+      });
+    }
+
+    return await this._deleteReaction(messageID, reactionType, user_id);
   }
 
   /**
@@ -402,12 +447,7 @@ export class Channel {
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
-  async deleteReaction(
-    messageID: string,
-    reactionType: string,
-    user_id?: string,
-    shouldRunOffline = true,
-  ) {
+  async _deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
       throw Error(
@@ -415,34 +455,15 @@ export class Channel {
       );
     }
 
-    const offlineDb = this.getClient().offlineDb;
-    if (offlineDb.deleteReaction && shouldRunOffline) {
-      await offlineDb.deleteReaction({
-        channel: this,
-        messageId: messageID,
-        reactionType,
-        userId: (this.getClient().userID as string) ?? user_id,
-      });
-      await offlineDb.syncManager.queueTask({
-        task: {
-          channelId: this.id as string,
-          channelType: this.type,
-          messageId: messageID,
-          payload: [messageID, reactionType],
-          type: 'delete-reaction',
-        },
-      });
-    }
-
     const url =
       this.getClient().baseURL +
       `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
     //provided when server side request
     if (user_id) {
-      return this.getClient().delete<ReactionAPIResponse>(url, { user_id });
+      return await this.getClient().delete<ReactionAPIResponse>(url, { user_id });
     }
 
-    return this.getClient().delete<ReactionAPIResponse>(url, {});
+    return await this.getClient().delete<ReactionAPIResponse>(url, {});
   }
 
   /**

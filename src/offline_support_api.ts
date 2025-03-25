@@ -73,36 +73,27 @@ export type DeleteReactionType = {
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
 
 export interface OfflineDBApi {
-  upsertCidsForQuery: ((options: UpsertCidsForQueryType) => Promise<unknown>) | undefined;
-  upsertChannels: ((options: UpsertChannelsType) => Promise<unknown>) | undefined;
-  upsertUserSyncStatus:
-    | ((options: UpsertUserSyncStatusType) => Promise<unknown>)
-    | undefined;
-  upsertReaction: ((options: UpsertReactionType) => Promise<unknown>) | undefined;
-  getChannels: ((options: GetChannelsType) => Promise<unknown>) | undefined;
-  getChannelsForQuery:
-    | ((
-        options: GetChannelsForQueryType,
-      ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>)
-    | undefined;
-  getAllChannelCids: (() => Promise<string[]>) | undefined;
-  getLastSyncedAt:
-    | ((options: GetLastSyncedAtType) => Promise<number | undefined>)
-    | undefined;
-  resetDB: (() => Promise<unknown>) | undefined;
-  executeSqlBatch: ((queries: ExecuteBatchQueriesType) => Promise<unknown>) | undefined;
-  addPendingTask: ((task: PendingTask) => Promise<() => Promise<void>>) | undefined;
-  getPendingTasks:
-    | ((conditions?: GetPendingTasksType) => Promise<PendingTask[]>)
-    | undefined;
-  deletePendingTask: ((options: DeletePendingTaskType) => Promise<unknown>) | undefined;
-  deleteReaction: ((options: DeleteReactionType) => Promise<unknown>) | undefined;
+  upsertCidsForQuery: (options: UpsertCidsForQueryType) => Promise<unknown>;
+  upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
+  upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
+  upsertReaction: (options: UpsertReactionType) => Promise<unknown>;
+  getChannels: (options: GetChannelsType) => Promise<unknown>;
+  getChannelsForQuery: (
+    options: GetChannelsForQueryType,
+  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  getAllChannelCids: () => Promise<string[]>;
+  getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<number | undefined>;
+  resetDB: () => Promise<unknown>;
+  executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
+  addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
+  getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
+  deletePendingTask: (options: DeletePendingTaskType) => Promise<unknown>;
+  deleteReaction: (options: DeleteReactionType) => Promise<unknown>;
 }
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
   private client: StreamChat;
   public syncManager: OfflineDBSyncManager;
-  public initialized = false;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
@@ -136,36 +127,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
-}
-
-export class DefaultOfflineDB extends AbstractOfflineDB {
-  upsertCidsForQuery = undefined;
-
-  upsertChannels = undefined;
-
-  upsertReaction = undefined;
-
-  getChannels = undefined;
-
-  getChannelsForQuery = undefined;
-
-  getAllChannelCids = undefined;
-
-  getLastSyncedAt = undefined;
-
-  resetDB = undefined;
-
-  executeSqlBatch = undefined;
-
-  upsertUserSyncStatus = undefined;
-
-  addPendingTask = undefined;
-
-  getPendingTasks = undefined;
-
-  deletePendingTask = undefined;
-
-  deleteReaction = undefined;
 }
 
 export type PendingTaskTypes = {
@@ -213,7 +174,7 @@ export type PendingTask = {
  * })
  * ```
  */
-const restBeforeNextTask = () => new Promise((resolve) => setTimeout(resolve, 500));
+// const restBeforeNextTask = () => new Promise((resolve) => setTimeout(resolve, 500));
 // FIXME: This is temporary, while we implement the other apis.
 // eslint-disable-next-line
 const handleEventToSyncDB = async (event: Event, client: StreamChat) => {};
@@ -288,10 +249,10 @@ export class OfflineDBSyncManager {
     };
   };
 
-  private sync = async (client: StreamChat) => {
+  private sync = async () => {
     if (
       !this.client?.user ||
-      !this.client.offlineDb.getAllChannelCids ||
+      !this.client.offlineDb?.getAllChannelCids ||
       !this.client.offlineDb?.getLastSyncedAt
     ) {
       return;
@@ -323,7 +284,7 @@ export class OfflineDBSyncManager {
         try {
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
           const queryPromises = result.events.map(
-            async (event) => await handleEventToSyncDB(event, client),
+            async (event) => await handleEventToSyncDB(event, this.client),
           );
           const queriesArray = await Promise.all(queryPromises);
           const queries = queriesArray.flat();
@@ -352,16 +313,10 @@ export class OfflineDBSyncManager {
     }
 
     await this.executePendingTasks();
-    await this.sync(this.client);
+    await this.sync();
   };
 
   public queueTask = async ({ task }: { task: PendingTask }) => {
-    if (!this.client.offlineDb?.addPendingTask) {
-      return;
-    }
-
-    const removeFromApi = await this.client.offlineDb.addPendingTask(task);
-
     let response;
     try {
       response = await this.executeTask({ task });
@@ -370,11 +325,10 @@ export class OfflineDBSyncManager {
         // Error code 16 - message already exists
         // ignore
       } else {
+        await this.client.offlineDb?.addPendingTask(task);
         throw e;
       }
     }
-
-    await removeFromApi();
 
     return response;
   };
@@ -383,13 +337,11 @@ export class OfflineDBSyncManager {
     const channel = this.client.channel(task.channelType, task.channelId);
 
     if (task.type === 'send-reaction') {
-      const [messageId, reaction, options] = task.payload;
-      return await channel.sendReaction(messageId, reaction, options, false);
+      return await channel._sendReaction(...task.payload);
     }
 
     if (task.type === 'delete-reaction') {
-      const [messageId, reactionType] = task.payload;
-      return await channel.deleteReaction(messageId, reactionType, undefined, false);
+      return await channel._deleteReaction(...task.payload);
     }
 
     if (task.type === 'delete-message') {
@@ -400,11 +352,12 @@ export class OfflineDBSyncManager {
   };
 
   private executePendingTasks = async () => {
-    if (!this.client.offlineDb.getPendingTasks) {
+    if (!this.client.offlineDb?.getPendingTasks) {
       return;
     }
     const queue = await this.client.offlineDb.getPendingTasks();
     for (const task of queue) {
+      console.log('[OFFLINE]: ', task);
       if (!task.id) {
         continue;
       }
@@ -425,7 +378,7 @@ export class OfflineDBSyncManager {
       await this.client.offlineDb?.deletePendingTask?.({
         id: task.id,
       });
-      await restBeforeNextTask();
+      // await restBeforeNextTask();
     }
   };
 
@@ -446,3 +399,39 @@ export class OfflineDBSyncManager {
     }
   };
 }
+
+// export const executeTask = async ({ task }: { task: PendingTask }) => {
+//   const channel = this.client.channel(task.channelType, task.channelId);
+//
+//   if (task.type === 'send-reaction') {
+//     return await channel.sendReaction(...task.payload);
+//   }
+//
+//   if (task.type === 'delete-reaction') {
+//     const [messageId, reactionType] = task.payload;
+//     return await channel.deleteReaction(messageId, reactionType, undefined, false);
+//   }
+//
+//   if (task.type === 'delete-message') {
+//     return await this.client.deleteMessage(...task.payload);
+//   }
+//
+//   throw new Error('Invalid task type');
+// };
+//
+// export const withEnqueueing = async <T>({ task }: { task: PendingTask }, callback: (...args: PendingTask['payload']) => Promise<T>) => {
+//   let response;
+//   try {
+//     response = await callback(...task.payload);
+//   } catch (e) {
+//     if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
+//       // Error code 16 - message already exists
+//       // ignore
+//     } else {
+//       await this.client.offlineDb?.addPendingTask(task);
+//       throw e;
+//     }
+//   }
+//
+//   return response;
+// };

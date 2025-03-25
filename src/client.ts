@@ -225,7 +225,6 @@ import type {
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
 import type { AbstractOfflineDB } from './offline_support_api';
-import { DefaultOfflineDB } from './offline_support_api';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -240,7 +239,7 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
-  offlineDb: AbstractOfflineDB;
+  offlineDb?: AbstractOfflineDB;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -451,7 +450,7 @@ export class StreamChat {
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
-    this.offlineDb = new DefaultOfflineDB({ client: this });
+    // this.offlineDb = new DefaultOfflineDB({ client: this });
   }
 
   /**
@@ -499,6 +498,10 @@ export class StreamChat {
   }
 
   setOfflineDBApi(offlineDBInstance: AbstractOfflineDB) {
+    if (this.offlineDb) {
+      return;
+    }
+
     this.offlineDb = offlineDBInstance;
   }
 
@@ -1754,7 +1757,7 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
-    if (data.channels?.length && this.offlineDb.upsertChannels) {
+    if (data.channels?.length && this.offlineDb?.upsertChannels) {
       await this.offlineDb.upsertChannels({
         channels: data.channels,
         isLatestMessagesSet: true,

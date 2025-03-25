@@ -269,7 +269,7 @@ export class ChannelManager {
       }));
 
       if (
-        this.client.offlineDb.getChannelsForQuery &&
+        this.client.offlineDb?.getChannelsForQuery &&
         this.client.user?.id &&
         !initialized
       ) {
