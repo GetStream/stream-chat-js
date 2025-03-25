@@ -1,8 +1,6 @@
-import chai from 'chai';
 import sinon from 'sinon';
 import url from 'url';
-import { Server as WsServer } from 'ws';
-import chaiAsPromised from 'chai-as-promised';
+import { Server as WsServer } from 'isomorphic-ws';
 
 import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
@@ -10,8 +8,7 @@ import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
 import { InsightMetrics } from '../../src/insights';
 
-chai.use(chaiAsPromised);
-const expect = chai.expect;
+import { describe, expect, it, afterAll } from 'vitest';
 
 describe('connection', function () {
 	const wsBaseURL = 'http://localhost:9999';
@@ -42,7 +39,7 @@ describe('connection', function () {
 		),
 	);
 
-	after(() => wss.close());
+	afterAll(() => wss.close());
 
 	describe('Connection tokenProvider', () => {
 		it('should handle token provider rejection ', async () => {
@@ -51,7 +48,9 @@ describe('connection', function () {
 			});
 			client.defaultWSTimeout = 20;
 			const tokenProvider = () => Promise.reject(new Error('network failure'));
-			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).to.be.rejectedWith(/tokenProvider failed/);
+			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).rejects.toThrow(
+				/tokenProvider failed/,
+			);
 		});
 	});
 
@@ -139,7 +138,7 @@ describe('connection', function () {
 		it('connect should throw if already connecting', async () => {
 			const c = new StableWSConnection({ client: newStreamChat() });
 			c.isConnecting = true;
-			await expect(c.connect()).to.be.rejectedWith(/called connect twice/);
+			await expect(c.connect()).rejects.toThrow(/called connect twice/);
 		});
 
 		it('_recover should not call _connect if isConnecting is set', async () => {
@@ -207,7 +206,7 @@ describe('connection', function () {
 			});
 			client.defaultWSTimeout = 2000;
 
-			await expect(client.connectUser({ id: 'amin' }, token)).to.be.rejectedWith(
+			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
 				/initial WS connection could not be established/,
 			);
 		});

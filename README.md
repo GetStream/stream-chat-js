@@ -20,7 +20,7 @@
 
 You can sign up for a Stream account at our [Get Started](https://getstream.io/chat/get_started/) page.
 
-This library can be used by both frontend and backend applications. For frontend, we have frameworks that are based on this library such as the [Flutter](https://github.com/GetStream/stream-chat-flutter), [React](https://github.com/GetStream/stream-chat-react) and [Angular](https://github.com/GetStream/stream-chat-angular) SDKs. For more information, check out our [docs](https://getstream.io/chat/docs/).
+This library can be used by both frontend and backend applications. For frontend, we have frameworks that are based on this library such as the [Flutter](https://github.com/GetStream/stream-chat-flutter), [React](https://github.com/GetStream/stream-chat-react) and [Angular](https://github.com/GetStream/stream-chat-angular) SDKs. For more information, check out our [documentation](https://getstream.io/chat/docs/).
 
 ## ⚙️ Installation
 
@@ -36,95 +36,97 @@ npm install stream-chat
 yarn add stream-chat
 ```
 
-### JS deliver
+## ✨ Getting Started
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/stream-chat"></script>
-```
-
-## ✨ Getting started
-
-The StreamChat client is setup to allow extension of the base types through use of generics when instantiated. The default instantiation has all generics set to `Record<string, unknown>`.
-
-```typescript
+```ts
 import { StreamChat } from 'stream-chat';
-// Or if you are on commonjs
-const StreamChat = require('stream-chat').StreamChat;
+// or if you are using CommonJS
+const { StreamChat } = require('stream-chat');
 
-const client = StreamChat.getInstance('YOUR_API_KEY', 'API_KEY_SECRET');
+const client = new StreamChat('API_KEY', 'API_SECRET', {
+  disableCache: true, // recommended option for server-side use
+  // ...other options like `baseURL`...
+});
 
-const channel = client.channel('messaging', 'TestChannel');
-await channel.create();
-```
-
-Or you can customize the generics:
-
-```typescript
-type ChatChannel = { image: string; category?: string };
-type ChatUser1 = { nickname: string; age: number; admin?: boolean };
-type ChatUser2 = { nickname: string; avatar?: string };
-type UserMessage = { country?: string };
-type AdminMessage = { priorityLevel: number };
-type ChatAttachment = { originalURL?: string };
-type CustomReaction = { size?: number };
-type ChatEvent = { quitChannel?: boolean };
-type CustomCommands = 'giphy';
-
-type StreamType = {
-  attachmentType: ChatAttachment;
-  channelType: ChatChannel;
-  commandType: CustomCommands;
-  eventType: ChatEvent;
-  messageType: UserMessage | AdminMessage;
-  reactionType: CustomReaction;
-  userType: ChatUser1 | ChatUser2;
-};
-
-const client = StreamChat.getInstance<StreamType>('YOUR_API_KEY', 'API_KEY_SECRET');
-
-// Create channel
-const channel = client.channel('messaging', 'TestChannel');
-await channel.create();
-
-// Create user
+// create a user
 await client.upsertUser({
   id: 'vishal-1',
   name: 'Vishal',
 });
 
-// Send message
-const { message } = await channel.sendMessage({ text: `Test message` });
+// create a channel
+const channel = client.channel('messaging', 'test-channel', {
+  created_by_id: 'vishal-1',
+});
+await channel.create();
 
-// Send reaction
+// send message
+const { message } = await channel.sendMessage({ text: 'This is a test message' });
+
+// send reaction
 await channel.sendReaction(message.id, { type: 'love', user: { id: 'vishal-1' } });
 ```
 
-Custom types provided when initializing the client will carry through to all client returns and provide intellisense to queries.
+The `StreamChat` client is set up to allow extension of the base types through use of module augmentation, custom types will carry through to all client returns and provide code-completion to queries (if supported). To extend Stream's entities with custom data you'll have to create a declaration file and make sure it's loaded by TypeScript, [see the list of extendable interfaces](https://github.com/GetStream/stream-chat-js/blob/master/src/custom_types.ts) and the example bellow using two of the most common ones:
 
-## 🔗 (Optional) Development Setup in Combination with our SDKs
+```ts
+// stream-custom-data.d.ts
+
+import 'stream-chat';
+
+declare module 'stream-chat' {
+  interface CustomMessageData {
+    custom_property?: number;
+  }
+  interface CustomUserData {
+    profile_picture?: string;
+  }
+}
+
+// index.ts
+
+// property `profile_picture` is code-completed and expects type `string | undefined`
+await client.partialUpdateUser({
+  id: 'vishal-1',
+  set: { profile_picture: 'https://random.picture/1.jpg' },
+});
+
+// property `custom_property` is code-completed and expects type `number | undefined`
+const { message } = await channel.sendMessage({
+  text: 'This is another test message',
+  custom_property: 255,
+});
+
+message.custom_property; // in the response object as well
+```
+
+> [!WARNING]  
+> Generics mechanism has been removed in version `9.0.0` in favour of the module augmentation, please see [the release guide](https://getstream.io/chat/docs/node/upgrade-stream-chat-to-v9) on how to migrate.
+
+## 🔗 (Optional) Development Setup in Combination With Our SDKs
 
 ### Connect to [Stream Chat React Native SDK](https://github.com/GetStream/stream-chat-react-native)
 
-Run in the root of this repo
+Run in the root of this repository:
 
-```shell
+```sh
 yarn link
 ```
 
-Run in the root of one of the example apps (SampleApp/TypeScriptMessaging) in the `stream-chat-react-native` repo
+Run in the root of one of the example applications (SampleApp/TypeScriptMessaging) in the `stream-chat-react-native` repository:
 
-```shell
+```sh
 yarn link stream-chat
 yarn start
 ```
 
-Open `metro.config.js` file and set value for watchFolders as
+Open `metro.config.js` file and set value for `watchFolders` as:
 
-```javascript
-const streamChatRoot = '{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}/stream-chat-js'
+```js
+const streamChatRoot = '<PATH TO YOUR PROJECT>/stream-chat-js'
 
 module.exports = {
-  // the rest of the metro config goes here
+  // the rest of the metro configuration goes here
   ...
   watchFolders: [projectRoot].concat(alternateRoots).concat([streamChatRoot]),
   resolver: {
@@ -139,17 +141,17 @@ module.exports = {
 };
 ```
 
-Make sure to replace `{{CHANGE_TO_THE_PATH_TO_YOUR_PROJECT}}` with the correct path for the `stream-chat-js` folder as per your directory structure.
+Make sure to replace `<PATH TO YOUR PROJECT>` with the correct path for the `stream-chat-js` folder as per your directory structure.
 
-Run in the root of this repo
+Run in the root of this repository:
 
-```shell
+```sh
 yarn start
 ```
 
-## 📚 More code examples
+## 📚 More Code Examples
 
-Head over to [docs/typescript.md](./docs/typescript.md) for more examples.
+Read up more on [Logging](./docs/logging.md) and [User Token](./docs/userToken.md) or visit our [documentation](https://getstream.io/chat/docs/) for more examples.
 
 ## ✍️ Contributing
 
@@ -157,7 +159,7 @@ We welcome code changes that improve this library or fix a problem, please make 
 
 Head over to [CONTRIBUTING.md](./CONTRIBUTING.md) for some development tips.
 
-## 🧑‍💻 We are hiring!
+## 🧑‍💻 We Are Hiring!
 
 We've recently closed a [$38 million Series B funding round](https://techcrunch.com/2021/03/04/stream-raises-38m-as-its-chat-and-activity-feed-apis-power-communications-for-1b-users/) and we keep actively growing.
 Our APIs are used by more than a billion end-users, and you'll have a chance to make a huge impact on the product within a team of the strongest engineers all over the world.

@@ -1,4 +1,4 @@
-name: Type Test
+name: Type test
 on: [pull_request]
 
 concurrency:

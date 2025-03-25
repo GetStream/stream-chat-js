@@ -1,8 +1,7 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import { StreamChat } from '../../src';
 import { generateChannel } from './test-utils/generateChannel';
-import { v4 as uuidv4 } from 'uuid';
+import { describe, afterEach, beforeEach, it, expect } from 'vitest';
 
 describe('Draft Messages', () => {
 	let client;
@@ -110,7 +109,10 @@ describe('Draft Messages', () => {
 		};
 
 		const queryResponse = {
-			drafts: [draftResponse.draft, { ...draftResponse.draft, channel_cid: 'messaging:other-channel' }],
+			drafts: [
+				draftResponse.draft,
+				{ ...draftResponse.draft, channel_cid: 'messaging:other-channel' },
+			],
 			next: 'next-page-token',
 		};
 		client.queryDrafts.resolves(queryResponse);

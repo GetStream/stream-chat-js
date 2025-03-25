@@ -7,8 +7,8 @@ export const generateChannel = (options = { channel: {} }) => {
 	const id = idFromOptions
 		? idFromOptions
 		: options.members && options.members.length
-		? `!members-${uuidv4()}`
-		: uuidv4();
+			? `!members-${uuidv4()}`
+			: uuidv4();
 	return {
 		messages: [],
 		members: [],

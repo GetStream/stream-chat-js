@@ -1,13 +1,10 @@
-import chai from 'chai';
 import sinon from 'sinon';
-import chaiAsPromised from 'chai-as-promised';
 
 import * as utils from '../../src/utils';
 import * as errors from '../../src/errors';
 import { ConnectionState, WSConnectionFallback } from '../../src/connection_fallback';
 
-chai.use(chaiAsPromised);
-const expect = chai.expect;
+import { describe, it, expect, afterEach, vi, beforeAll, beforeEach } from 'vitest';
 
 describe('connection_fallback', () => {
 	const newClient = (overrides) => ({
@@ -19,6 +16,10 @@ describe('connection_fallback', () => {
 		handleEvent: sinon.spy(),
 		recoverState: sinon.spy(),
 		...overrides,
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	afterEach(() => {
@@ -35,10 +36,13 @@ describe('connection_fallback', () => {
 			expect(c.consecutiveFailures).to.be.eql(0);
 		});
 
-		it('should register window event listeners', () => {
-			sinon.spy(utils, 'addConnectionEventListeners');
+		it('should register window event listeners', async () => {
+			vi.spyOn(utils, 'addConnectionEventListeners');
+
 			const c = new WSConnectionFallback({ client: newClient() });
-			expect(utils.addConnectionEventListeners.calledOnceWithExactly(c._onlineStatusChanged)).to.be.true;
+			expect(utils.addConnectionEventListeners).toHaveBeenCalledExactlyOnceWith(
+				c._onlineStatusChanged,
+			);
 			sinon.restore();
 		});
 	});
@@ -71,7 +75,12 @@ describe('connection_fallback', () => {
 			expect(client.dispatchEvent.called).to.be.false;
 
 			c._setState(ConnectionState.Connected);
-			expect(client.dispatchEvent.calledOnceWithExactly({ type: 'connection.changed', online: true })).to.be.true;
+			expect(
+				client.dispatchEvent.calledOnceWithExactly({
+					type: 'connection.changed',
+					online: true,
+				}),
+			).to.be.true;
 		});
 
 		it('should dispatchEvent for offline status', function () {
@@ -80,8 +89,12 @@ describe('connection_fallback', () => {
 			expect(client.dispatchEvent.called).to.be.false;
 
 			c._setState(ConnectionState.Closed);
-			expect(client.dispatchEvent.calledOnceWithExactly({ type: 'connection.changed', online: false })).to.be
-				.true;
+			expect(
+				client.dispatchEvent.calledOnceWithExactly({
+					type: 'connection.changed',
+					online: false,
+				}),
+			).to.be.true;
 
 			c._setState(ConnectionState.Connected);
 			expect(client.dispatchEvent.calledOnce).to.be.true;
@@ -89,8 +102,12 @@ describe('connection_fallback', () => {
 			c._setState(ConnectionState.Disconnected);
 			expect(client.dispatchEvent.calledTwice).to.be.true;
 
-			expect(client.dispatchEvent.alwaysCalledWithExactly({ type: 'connection.changed', online: false })).to.be
-				.true;
+			expect(
+				client.dispatchEvent.alwaysCalledWithExactly({
+					type: 'connection.changed',
+					online: false,
+				}),
+			).to.be.true;
 		});
 	});
 
@@ -149,12 +166,13 @@ describe('connection_fallback', () => {
 
 	describe('disconnect', () => {
 		it('should unregister window event listeners', async () => {
-			sinon.spy(utils, 'removeConnectionEventListeners');
+			vi.spyOn(utils, 'removeConnectionEventListeners');
 			const c = new WSConnectionFallback({ client: newClient() });
 			c._req = () => null;
 			await c.disconnect();
-			expect(utils.removeConnectionEventListeners.calledOnceWithExactly(c._onlineStatusChanged)).to.be.true;
-			sinon.restore();
+			expect(utils.removeConnectionEventListeners).toHaveBeenCalledExactlyOnceWith(
+				c._onlineStatusChanged,
+			);
 		});
 
 		it('should cancel requests and set the state correctly', async () => {
@@ -171,7 +189,9 @@ describe('connection_fallback', () => {
 			expect(c.connectionID).to.be.undefined;
 			expect(c.cancelToken).to.be.undefined;
 			expect(cancel.calledOnce).to.be.true;
-			expect(c._req.calledOnceWithExactly({ close: true, connection_id }, { timeout }, false)).to.be.true;
+			expect(
+				c._req.calledOnceWithExactly({ close: true, connection_id }, { timeout }, false),
+			).to.be.true;
 		});
 
 		it('should ingore request errors', async () => {
@@ -210,7 +230,15 @@ describe('connection_fallback', () => {
 
 		it('should keep track of consecutive failures', async () => {
 			// ok-err-err-ok-ok...
-			const doAxiosRequest = sinon.stub().onCall(0).resolves().onCall(1).rejects().onCall(2).rejects().resolves();
+			const doAxiosRequest = sinon
+				.stub()
+				.onCall(0)
+				.resolves()
+				.onCall(1)
+				.rejects()
+				.onCall(2)
+				.rejects()
+				.resolves();
 			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
 
 			expect(c.consecutiveFailures).to.be.eql(0);
@@ -233,7 +261,7 @@ describe('connection_fallback', () => {
 			sinon.spy(c);
 
 			expect(c.consecutiveFailures).to.be.eql(0);
-			await expect(c._req({}, {}, true)).to.be.rejected;
+			await expect(c._req({}, {}, true)).rejects.toThrow();
 			expect(c.consecutiveFailures).to.be.eql(1);
 			expect(c._req.calledOnce).to.be.true;
 		});
@@ -245,20 +273,26 @@ describe('connection_fallback', () => {
 			sinon.spy(c);
 
 			expect(c.consecutiveFailures).to.be.eql(0);
-			await expect(c._req({}, {}, false)).to.be.rejected;
+			await expect(c._req({}, {}, false)).rejects.toThrow();
 			expect(c.consecutiveFailures).to.be.eql(1);
 			expect(c._req.calledOnce).to.be.true;
 		});
 
 		it('should retry errors if it is retryable', async () => {
 			const doAxiosRequest = sinon.stub().rejects();
-			sinon.stub(errors, 'isErrorRetryable').onCall(0).returns(true).onCall(1).returns(true).returns(false);
-			sinon.stub(utils, 'sleep').resolves();
+
+			vi.spyOn(errors, 'isErrorRetryable')
+				.mockReturnValueOnce(true)
+				.mockReturnValueOnce(true)
+				.mockReturnValueOnce(false);
+
+			vi.spyOn(utils, 'sleep').mockResolvedValue();
+
 			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
 			sinon.spy(c, '_req');
 
 			expect(c.consecutiveFailures).to.be.eql(0);
-			await expect(c._req({}, {}, true)).to.be.rejected;
+			await expect(c._req({}, {}, true)).rejects.toThrow();
 			expect(c.consecutiveFailures).to.be.eql(3);
 			expect(c._req.calledThrice).to.be.true;
 		});
@@ -285,12 +319,14 @@ describe('connection_fallback', () => {
 			expect(await c.connect()).to.be.eql(health);
 			expect(c.client._buildWSPayload.calledOnce).to.be.true;
 			expect(c._poll.calledOnce).to.be.true;
-			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false)).to.be.true;
+			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false))
+				.to.be.true;
 
 			c.state = ConnectionState.Init;
 			c._req = sinon.stub().resolves({ event: health });
 			expect(await c.connect(true)).to.be.eql(health);
-			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, true)).to.be.true;
+			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, true))
+				.to.be.true;
 		});
 
 		it('should update state and connectionID', async () => {
@@ -304,7 +340,7 @@ describe('connection_fallback', () => {
 			c = new WSConnectionFallback({ client: newClient() });
 			c._req = sinon.stub().rejects();
 			c._poll = sinon.spy();
-			await expect(c.connect()).to.be.rejected;
+			await expect(c.connect()).rejects.toThrow();
 			expect(c._poll.called).to.be.false;
 			expect(c.state).to.be.eql(ConnectionState.Closed);
 			expect(c.connectionID).to.be.undefined;
@@ -320,7 +356,7 @@ describe('connection_fallback', () => {
 			c = new WSConnectionFallback({ client: newClient() });
 			c._req = sinon.stub().rejects();
 			c._poll = sinon.spy();
-			await expect(c.connect()).to.be.rejected;
+			await expect(c.connect()).rejects.toThrow();
 			expect(c._poll.called).to.be.false;
 		});
 
@@ -334,7 +370,7 @@ describe('connection_fallback', () => {
 			c = new WSConnectionFallback({ client: newClient() });
 			c._req = sinon.stub().rejects();
 			c._poll = sinon.spy();
-			await expect(c.connect()).to.be.rejected;
+			await expect(c.connect()).rejects.toThrow();
 			expect(c.client.recoverState.called).to.be.false;
 
 			c = new WSConnectionFallback({ client: newClient() });
@@ -399,29 +435,28 @@ describe('connection_fallback', () => {
 		});
 
 		it('should stop for non-retryable errors', async () => {
+			vi.spyOn(errors, 'isErrorRetryable').mockReturnValue(false);
+			vi.spyOn(errors, 'isAPIError').mockReturnValue(true);
 			const c = new WSConnectionFallback({ client: newClient() });
 			c.state = ConnectionState.Connected;
 			c._req = sinon.stub().rejects();
-			sinon.stub(errors, 'isErrorRetryable').returns(false);
-			sinon.stub(errors, 'isAPIError').returns(true);
 
 			await c._poll();
 			expect(c.state).to.be.eql(ConnectionState.Closed);
 		});
 
 		it('should continue retrying for random errors', async () => {
+			let counter = 0;
+			vi.spyOn(utils, 'sleep').mockImplementation(() => {
+				if (++counter > 2) c.state = ConnectionState.Disconnected;
+			});
 			const c = new WSConnectionFallback({ client: newClient() });
 			c.state = ConnectionState.Connected;
 			c._req = sinon.stub().rejects();
 
-			let counter = 0;
-			sinon.stub(utils, 'sleep').callsFake(() => {
-				if (++counter > 2) c.state = ConnectionState.Disconnected;
-			});
-
 			await c._poll();
 			expect(c._req.calledThrice).to.be.true;
-			expect(utils.sleep.calledThrice).to.be.true;
+			expect(utils.sleep).toHaveBeenCalledTimes(3);
 		});
 	});
 });
