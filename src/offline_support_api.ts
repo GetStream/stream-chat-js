@@ -97,7 +97,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
-    this.syncManager = new OfflineDBSyncManager({ client });
+    this.syncManager = new OfflineDBSyncManager({ client, offlineDb: this });
   }
 
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
@@ -127,6 +127,69 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
+
+  public queueTask = async ({ task }: { task: PendingTask }) => {
+    let response;
+    try {
+      response = await this.executeTask({ task });
+    } catch (e) {
+      if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
+        // Error code 16 - message already exists
+        // ignore
+      } else {
+        await this.addPendingTask(task);
+        throw e;
+      }
+    }
+
+    return response;
+  };
+
+  private executeTask = async ({ task }: { task: PendingTask }) => {
+    const channel = this.client.channel(task.channelType, task.channelId);
+
+    if (task.type === 'send-reaction') {
+      return await channel._sendReaction(...task.payload);
+    }
+
+    if (task.type === 'delete-reaction') {
+      return await channel._deleteReaction(...task.payload);
+    }
+
+    if (task.type === 'delete-message') {
+      return await this.client.deleteMessage(...task.payload);
+    }
+
+    throw new Error('Invalid task type');
+  };
+
+  public executePendingTasks = async () => {
+    const queue = await this.getPendingTasks();
+    for (const task of queue) {
+      console.log('[OFFLINE]: ', task);
+      if (!task.id) {
+        continue;
+      }
+
+      try {
+        await this.executeTask({
+          task,
+        });
+      } catch (e) {
+        console.log('[OFFLINE]: FAILED', e);
+        if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
+          // Error code 16 - message already exists
+          // ignore
+        } else {
+          continue;
+        }
+      }
+
+      await this.deletePendingTask({
+        id: task.id,
+      });
+    }
+  };
 }
 
 export type PendingTaskTypes = {
@@ -134,7 +197,7 @@ export type PendingTaskTypes = {
   deleteReaction: 'delete-reaction';
   sendReaction: 'send-reaction';
 };
-//
+
 export type PendingTask = {
   channelId: string;
   channelType: string;
@@ -184,14 +247,23 @@ export class OfflineDBSyncManager {
   public connectionChangedListener: { unsubscribe: () => void } | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
   private client: StreamChat;
+  private offlineDb: AbstractOfflineDB;
 
-  constructor({ client }: { client: StreamChat }) {
+  constructor({
+    client,
+    offlineDb,
+  }: {
+    client: StreamChat;
+    offlineDb: AbstractOfflineDB;
+  }) {
     this.client = client;
+    this.offlineDb = offlineDb;
   }
 
   /**
-   * Initializes the DBSyncManager. This function should be called only once
-   * throughout the lifetime of SDK.
+   * Initializes the OfflineDBSyncManager. This function should be called only once
+   * throughout the lifetime of SDK. If it is performed more than once for whatever
+   * reason, it will run cleanup on its listeners to prevent memory leaks.
    */
   public init = async () => {
     try {
@@ -250,21 +322,17 @@ export class OfflineDBSyncManager {
   };
 
   private sync = async () => {
-    if (
-      !this.client?.user ||
-      !this.client.offlineDb?.getAllChannelCids ||
-      !this.client.offlineDb?.getLastSyncedAt
-    ) {
+    if (!this.client?.user) {
       return;
     }
-    const cids = await this.client.offlineDb.getAllChannelCids();
+    const cids = await this.offlineDb.getAllChannelCids();
     // If there are no channels, then there is no need to sync.
     if (cids.length === 0) {
       return;
     }
 
     // TODO: We should not need our own user ID in the API, it can be inferred
-    const lastSyncedAt = await this.client.offlineDb?.getLastSyncedAt?.({
+    const lastSyncedAt = await this.offlineDb.getLastSyncedAt({
       userId: this.client.user.id,
     });
 
@@ -279,7 +347,7 @@ export class OfflineDBSyncManager {
       if (diff > 30) {
         // stream backend will send an error if we try to sync after 30 days.
         // In that case reset the entire DB and start fresh.
-        await this.client.offlineDb?.resetDB?.();
+        await this.offlineDb?.resetDB?.();
       } else {
         try {
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
@@ -292,146 +360,37 @@ export class OfflineDBSyncManager {
           if (queries.length) {
             // TODO: FIXME
             // @ts-expect-error since handleEventToSyncDB is mocked right now
-            await this.client.offlineDb?.executeSqlBatch?.(queries);
+            await this.offlineDb.executeSqlBatch(queries);
           }
         } catch (e) {
           // Error will be raised by the sync API if there are too many events.
           // In that case reset the entire DB and start fresh.
-          await this.client.offlineDb?.resetDB?.();
+          await this.offlineDb.resetDB();
         }
       }
     }
-    await this.client.offlineDb?.upsertUserSyncStatus?.({
+    await this.offlineDb.upsertUserSyncStatus({
       userId: this.client.user.id,
       lastSyncedAt: new Date().toString(),
     });
   };
 
   private syncAndExecutePendingTasks = async () => {
-    if (!this.client) {
-      return;
-    }
-
-    await this.executePendingTasks();
+    await this.offlineDb.executePendingTasks();
     await this.sync();
   };
 
-  public queueTask = async ({ task }: { task: PendingTask }) => {
-    let response;
-    try {
-      response = await this.executeTask({ task });
-    } catch (e) {
-      if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
-        // Error code 16 - message already exists
-        // ignore
-      } else {
-        await this.client.offlineDb?.addPendingTask(task);
-        throw e;
-      }
-    }
-
-    return response;
-  };
-
-  private executeTask = async ({ task }: { task: PendingTask }) => {
-    const channel = this.client.channel(task.channelType, task.channelId);
-
-    if (task.type === 'send-reaction') {
-      return await channel._sendReaction(...task.payload);
-    }
-
-    if (task.type === 'delete-reaction') {
-      return await channel._deleteReaction(...task.payload);
-    }
-
-    if (task.type === 'delete-message') {
-      return await this.client.deleteMessage(...task.payload);
-    }
-
-    throw new Error('Invalid task type');
-  };
-
-  private executePendingTasks = async () => {
-    if (!this.client.offlineDb?.getPendingTasks) {
-      return;
-    }
-    const queue = await this.client.offlineDb.getPendingTasks();
-    for (const task of queue) {
-      console.log('[OFFLINE]: ', task);
-      if (!task.id) {
-        continue;
-      }
-
-      try {
-        await this.executeTask({
-          task,
-        });
-      } catch (e) {
-        if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
-          // Error code 16 - message already exists
-          // ignore
-        } else {
-          throw e;
-        }
-      }
-
-      await this.client.offlineDb?.deletePendingTask?.({
-        id: task.id,
-      });
-      // await restBeforeNextTask();
-    }
-  };
-
   public dropPendingTasks = async (conditions: { messageId: string }) => {
-    if (!this.client.offlineDb?.getPendingTasks) {
-      return;
-    }
-    const tasks = await this.client.offlineDb.getPendingTasks(conditions);
+    const tasks = await this.offlineDb.getPendingTasks(conditions);
 
     for (const task of tasks) {
       if (!task.id) {
         continue;
       }
 
-      await this.client.offlineDb?.deletePendingTask?.({
+      await this.offlineDb.deletePendingTask?.({
         id: task.id,
       });
     }
   };
 }
-
-// export const executeTask = async ({ task }: { task: PendingTask }) => {
-//   const channel = this.client.channel(task.channelType, task.channelId);
-//
-//   if (task.type === 'send-reaction') {
-//     return await channel.sendReaction(...task.payload);
-//   }
-//
-//   if (task.type === 'delete-reaction') {
-//     const [messageId, reactionType] = task.payload;
-//     return await channel.deleteReaction(messageId, reactionType, undefined, false);
-//   }
-//
-//   if (task.type === 'delete-message') {
-//     return await this.client.deleteMessage(...task.payload);
-//   }
-//
-//   throw new Error('Invalid task type');
-// };
-//
-// export const withEnqueueing = async <T>({ task }: { task: PendingTask }, callback: (...args: PendingTask['payload']) => Promise<T>) => {
-//   let response;
-//   try {
-//     response = await callback(...task.payload);
-//   } catch (e) {
-//     if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
-//       // Error code 16 - message already exists
-//       // ignore
-//     } else {
-//       await this.client.offlineDb?.addPendingTask(task);
-//       throw e;
-//     }
-//   }
-//
-//   return response;
-// };

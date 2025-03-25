@@ -364,7 +364,7 @@ export class Channel {
 
     const offlineDb = this.getClient().offlineDb;
     if (offlineDb) {
-      return (await offlineDb.syncManager.queueTask({
+      return (await offlineDb.queueTask({
         task: {
           channelId: this.id as string,
           channelType: this.type,
@@ -424,7 +424,7 @@ export class Channel {
         reactionType,
         userId: (this.getClient().userID as string) ?? user_id,
       });
-      return await offlineDb.syncManager.queueTask({
+      return await offlineDb.queueTask({
         task: {
           channelId: this.id as string,
           channelType: this.type,
