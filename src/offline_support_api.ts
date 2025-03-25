@@ -4,7 +4,6 @@ import type {
   ChannelFilters,
   ChannelSort,
   Event,
-  UserResponse,
 } from './types';
 import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
@@ -34,15 +33,6 @@ export type UpsertUserSyncStatusType = {
   lastSyncedAt: string;
 };
 
-export type UpsertReactionType = {
-  channel: Channel;
-  enforceUniqueReaction: boolean;
-  messageId: string;
-  reactionType: string;
-  user: UserResponse;
-  flush?: boolean;
-};
-
 export type GetChannelsType = {
   cids: string[];
   userId: string;
@@ -70,13 +60,14 @@ export type DeleteReactionType = {
   flush?: boolean;
 };
 
+export type DeleteMessageType = { id: string; flush?: boolean };
+
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
 
 export interface OfflineDBApi {
   upsertCidsForQuery: (options: UpsertCidsForQueryType) => Promise<unknown>;
   upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
   upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
-  upsertReaction: (options: UpsertReactionType) => Promise<unknown>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
@@ -89,6 +80,8 @@ export interface OfflineDBApi {
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
   deletePendingTask: (options: DeletePendingTaskType) => Promise<unknown>;
   deleteReaction: (options: DeleteReactionType) => Promise<unknown>;
+  hardDeleteMessage: (optins: DeleteMessageType) => Promise<unknown>;
+  softDeleteMessage: (optins: DeleteMessageType) => Promise<unknown>;
 }
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
@@ -103,8 +96,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
-
-  abstract upsertReaction: OfflineDBApi['upsertReaction'];
 
   abstract getChannels: OfflineDBApi['getChannels'];
 
@@ -128,6 +119,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
 
+  abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
+
+  abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
@@ -146,18 +141,22 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   private executeTask = async ({ task }: { task: PendingTask }) => {
+    if (task.type === 'delete-message') {
+      return await this.client._deleteMessage(...task.payload);
+    }
+
     const channel = this.client.channel(task.channelType, task.channelId);
 
-    if (task.type === 'send-reaction') {
-      return await channel._sendReaction(...task.payload);
-    }
+    const { channelType, channelId } = task;
 
-    if (task.type === 'delete-reaction') {
-      return await channel._deleteReaction(...task.payload);
-    }
+    if (channelType && channelId) {
+      if (task.type === 'send-reaction') {
+        return await channel._sendReaction(...task.payload);
+      }
 
-    if (task.type === 'delete-message') {
-      return await this.client.deleteMessage(...task.payload);
+      if (task.type === 'delete-reaction') {
+        return await channel._deleteReaction(...task.payload);
+      }
     }
 
     throw new Error('Invalid task type');
@@ -176,7 +175,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           task,
         });
       } catch (e) {
-        console.log('[OFFLINE]: FAILED', e);
         if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
           // Error code 16 - message already exists
           // ignore
@@ -190,6 +188,22 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       });
     }
   };
+
+  // FIXME: This should be a single DELETE query with a condition, no reason
+  //        to potentially run many queries.
+  public dropPendingTasks = async (conditions: { messageId: string }) => {
+    const tasks = await this.getPendingTasks(conditions);
+
+    for (const task of tasks) {
+      if (!task.id) {
+        continue;
+      }
+
+      await this.deletePendingTask?.({
+        id: task.id,
+      });
+    }
+  };
 }
 
 export type PendingTaskTypes = {
@@ -198,24 +212,27 @@ export type PendingTaskTypes = {
   sendReaction: 'send-reaction';
 };
 
-export type PendingTask = {
+export type PendingTaskChannelCommonType = {
   channelId: string;
   channelType: string;
+};
+
+export type PendingTask = {
   messageId: string;
   id?: number;
 } & (
-  | {
+  | (PendingTaskChannelCommonType & {
       payload: Parameters<Channel['sendReaction']>;
       type: PendingTaskTypes['sendReaction'];
-    }
+    })
   | {
       payload: Parameters<StreamChat['deleteMessage']>;
       type: PendingTaskTypes['deleteMessage'];
     }
-  | {
+  | (PendingTaskChannelCommonType & {
       payload: Parameters<Channel['deleteReaction']>;
       type: PendingTaskTypes['deleteReaction'];
-    }
+    })
 );
 
 /**
@@ -378,19 +395,5 @@ export class OfflineDBSyncManager {
   private syncAndExecutePendingTasks = async () => {
     await this.offlineDb.executePendingTasks();
     await this.sync();
-  };
-
-  public dropPendingTasks = async (conditions: { messageId: string }) => {
-    const tasks = await this.offlineDb.getPendingTasks(conditions);
-
-    for (const task of tasks) {
-      if (!task.id) {
-        continue;
-      }
-
-      await this.offlineDb.deletePendingTask?.({
-        id: task.id,
-      });
-    }
   };
 }

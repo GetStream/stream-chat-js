@@ -2957,6 +2957,25 @@ export class StreamChat {
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
+    if (this.offlineDb) {
+      if (hardDelete) {
+        await this.offlineDb.hardDeleteMessage({ id: messageID });
+      } else {
+        await this.offlineDb.softDeleteMessage({ id: messageID });
+      }
+      return await this.offlineDb.queueTask({
+        task: {
+          messageId: messageID,
+          payload: [messageID, hardDelete],
+          type: 'delete-message',
+        },
+      });
+    }
+
+    return this._deleteMessage(messageID, hardDelete);
+  }
+
+  async _deleteMessage(messageID: string, hardDelete?: boolean) {
     let params = {};
     if (hardDelete) {
       params = { hard: true };
