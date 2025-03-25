@@ -145,11 +145,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return await this.client._deleteMessage(...task.payload);
     }
 
-    const channel = this.client.channel(task.channelType, task.channelId);
-
     const { channelType, channelId } = task;
 
     if (channelType && channelId) {
+      const channel = this.client.channel(channelType, channelId);
+
       if (task.type === 'send-reaction') {
         return await channel._sendReaction(...task.payload);
       }
@@ -212,27 +212,25 @@ export type PendingTaskTypes = {
   sendReaction: 'send-reaction';
 };
 
-export type PendingTaskChannelCommonType = {
-  channelId: string;
-  channelType: string;
-};
-
+// TODO: Please rethink the definition of PendingTasks as it seems awkward
 export type PendingTask = {
+  channelId?: string;
+  channelType?: string;
   messageId: string;
   id?: number;
 } & (
-  | (PendingTaskChannelCommonType & {
+  | {
       payload: Parameters<Channel['sendReaction']>;
       type: PendingTaskTypes['sendReaction'];
-    })
+    }
   | {
       payload: Parameters<StreamChat['deleteMessage']>;
       type: PendingTaskTypes['deleteMessage'];
     }
-  | (PendingTaskChannelCommonType & {
+  | {
       payload: Parameters<Channel['deleteReaction']>;
       type: PendingTaskTypes['deleteReaction'];
-    })
+    }
 );
 
 /**
