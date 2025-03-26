@@ -81,7 +81,10 @@ describe('connection', function () {
 			client.userAgent = userAgent;
 			const url = ws._buildUrl();
 
-			expect(url).to.contain(encodeURIComponent(userAgent));
+			const searchParams = new URLSearchParams({
+				'X-Stream-Client': userAgent,
+			});
+			expect(url).to.contain(searchParams.toString());
 		});
 
 		it('should not include device if not there', function () {
@@ -89,6 +92,20 @@ describe('connection', function () {
 			const { query } = url.parse(ws._buildUrl(), true);
 			const data = JSON.parse(query.json);
 			expect(data.device).to.deep.undefined;
+		});
+
+		it('should include extra params when building url if provided', function () {
+			const { query: prevQuery } = url.parse(ws._buildUrl(), true);
+			ws.client.options.wsUrlParams = new URLSearchParams({ foo: '1', bar: '2' });
+			const { query } = url.parse(ws._buildUrl(), true);
+
+			// all of the previous query params should remain intact
+			Object.keys(prevQuery).forEach((key) => {
+				expect(prevQuery[key]).to.deep.equal(query[key]);
+			});
+			// only the updated query should contain the new ones
+			expect(query.foo).to.equal('1');
+			expect(query.bar).to.equal('2');
 		});
 	});
 

@@ -80,6 +80,8 @@ import type {
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
+  DraftFilters,
+  DraftSort,
   EndpointName,
   Event,
   EventHandler,
@@ -129,6 +131,7 @@ import type {
   NewMemberPayload,
   OGAttachment,
   OwnUserResponse,
+  Pager,
   PartialMessageUpdate,
   PartialPollUpdate,
   PartialThreadUpdate,
@@ -149,6 +152,7 @@ import type {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QueryDraftsResponse,
   QueryMessageHistoryFilters,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
@@ -348,6 +352,7 @@ export class StreamChat {
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
+      wsUrlParams: new URLSearchParams({}),
       ...inputOptions,
     };
 
@@ -4340,5 +4345,28 @@ export class StreamChat {
         ...options,
       },
     );
+  }
+
+  /**
+   * queryDrafts - Queries drafts for the current user
+   *
+   * @param {object} [options] Query options
+   * @param {object} [options.filter] Filters for the query
+   * @param {number} [options.sort] Sort parameters
+   * @param {number} [options.limit] Limit the number of results
+   * @param {string} [options.next] Pagination parameter
+   * @param {string} [options.prev] Pagination parameter
+   * @param {string} [options.user_id] Has to be provided when called server-side
+   *
+   * @return {Promise<APIResponse & { drafts: DraftResponse[]; next?: string }>} Response containing the drafts
+   */
+  async queryDrafts(
+    options: Pager & {
+      filter?: DraftFilters;
+      sort?: DraftSort;
+      user_id?: string;
+    } = {},
+  ) {
+    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', options);
   }
 }
