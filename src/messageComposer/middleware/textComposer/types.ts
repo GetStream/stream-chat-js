@@ -1,5 +1,6 @@
 import type { TextComposerState, TextComposerSuggestion } from '../../types';
 import type { MiddlewareValue } from '../../../middleware';
+import type { MessageComposer } from '../../messageComposer';
 
 export type TextComposerMiddlewareOptions = {
   minChars: number;
@@ -28,4 +29,8 @@ export type TextComposerMiddleware = CustomTextComposerMiddleware & {
   id: string;
   onChange?: string | TextComposerMiddlewareHandler;
   onSuggestionItemSelect?: string | TextComposerMiddlewareHandler;
+};
+
+export type TextComposerMiddlewareExecutorOptions = {
+  composer: MessageComposer;
 };

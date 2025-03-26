@@ -10,6 +10,9 @@ import type { StreamChat } from '../../../client';
 import type { UserFilters, UserOptions, UserResponse, UserSort } from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
+import type { TextComposerSuggestion } from '../../types';
+
+export type UserSuggestion = TextComposerSuggestion<UserResponse>;
 
 // todo: the map is too small - Slavic letters with diacritics are missing for example
 export const accentsMap: { [key: string]: string } = {
@@ -73,7 +76,7 @@ export type MentionsSearchSourceOptions = SearchSourceOptions & {
   transliterate?: (text: string) => string;
 };
 
-export class MentionsSearchSource extends BaseSearchSource<UserResponse> {
+export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   readonly type = 'mentions';
   private client: StreamChat;
   private channel: Channel;
@@ -270,7 +273,7 @@ export const createMentionsMiddleware = (
   searchSource.activate();
   return {
     id: finalOptions.trigger,
-    onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserResponse>) => {
+    onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
@@ -312,7 +315,7 @@ export const createMentionsMiddleware = (
       input,
       nextHandler,
       selectedSuggestion,
-    }: TextComposerMiddlewareParams<UserResponse>) => {
+    }: TextComposerMiddlewareParams<UserSuggestion>) => {
       const { state } = input;
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
         return nextHandler(input);

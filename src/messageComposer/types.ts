@@ -1,4 +1,4 @@
-import type { Attachment, FileUploadConfig, UR, UserResponse } from '../types';
+import type { Attachment, FileUploadConfig, UserResponse } from '../types';
 import type { SearchSource } from '../search_controller';
 
 export type LocalAttachment =
@@ -129,7 +129,7 @@ export type FileLike = File | Blob;
 type Id = string;
 export type MentionedUserMap = Map<Id, UserResponse>;
 export type TextSelection = { end: number; start: number };
-export type TextComposerSuggestion<T = UR> = T & {
+export type TextComposerSuggestion<T = unknown> = T & {
   id: string;
 };
 
