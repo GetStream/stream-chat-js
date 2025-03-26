@@ -149,6 +149,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (channelType && channelId) {
       const channel = this.client.channel(channelType, channelId);
+      if (!channel.initialized) {
+        await channel.watch();
+      }
 
       if (task.type === 'send-reaction') {
         return await channel._sendReaction(...task.payload);
@@ -175,8 +178,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           task,
         });
       } catch (e) {
-        if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
+        const error = e as AxiosError<APIErrorResponse>;
+        if (error?.response?.data?.code === 4) {
           // Error code 16 - message already exists
+          // ignore
+        } else if (error?.response?.data?.code === 17) {
+          // Error code 17 - missing own_capabilities to execute the task
           // ignore
         } else {
           continue;
