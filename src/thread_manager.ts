@@ -51,6 +51,9 @@ export class ThreadManager {
     threads: ThreadManagerState['threads'];
     threadsById: Record<string, Thread | undefined>;
   };
+  // cache used in combination with threadsById
+  // used for threads which are not stored in the list
+  // private threadCache: Record<string, Thread | undefined> = {};
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
@@ -79,10 +82,6 @@ export class ThreadManager {
 
     return threadsById;
   }
-
-  public addThread = (thread: Thread) => {
-    this.threadsByIdGetterCache.threadsById[thread.id] = thread;
-  };
 
   public resetState = () => {
     this.state.next(THREAD_MANAGER_INITIAL_STATE);
@@ -242,11 +241,10 @@ export class ThreadManager {
         limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
       });
 
-      const currentThreads = this.threadsById;
       const nextThreads: Thread[] = [];
 
       for (const incomingThread of response.threads) {
-        const existingThread = currentThreads[incomingThread.id];
+        const existingThread = this.threadsById[incomingThread.id];
 
         if (existingThread) {
           // Reuse thread instances if possible

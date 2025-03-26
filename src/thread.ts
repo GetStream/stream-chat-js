@@ -181,7 +181,7 @@ export class Thread {
     this._messageComposer = new MessageComposer({
       channel,
       composition: threadData.draft,
-      threadId: threadData.parent_message_id,
+      threadId: this.id,
     });
 
     this._messageComposer.textComposer.use([
@@ -236,13 +236,15 @@ export class Thread {
     }
 
     if (thread.id !== this.id) {
-      throw new Error("Cannot hydrate thread state with using thread's state");
+      throw new Error(
+        "Cannot hydrate thread's state using thread with different threadId",
+      );
     }
 
     const {
       createdAt,
       custom,
-
+      title,
       deletedAt,
       parentMessage,
       participants,
@@ -256,6 +258,7 @@ export class Thread {
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
     this.state.partialNext({
+      title,
       createdAt,
       custom,
       deletedAt,
@@ -459,6 +462,7 @@ export class Thread {
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
+    this.state.partialNext({ isStateStale: true });
   };
 
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {

@@ -3037,7 +3037,7 @@ export class StreamChat {
    */
   async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThread');
     }
 
     const optionsWithDefaults = {
