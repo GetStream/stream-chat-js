@@ -214,33 +214,6 @@ export class Channel {
     );
   }
 
-  /**
-   * draftMessage - create a message draftMessage for the channel or a message thread
-   *
-   * @param {DraftMessagePayload} message The DraftMessage object
-   * @return {Promise<CreateDraftResponse>} The Server Response
-   */
-  async draftMessage(message: DraftMessagePayload) {
-    return await this.getClient().post<CreateDraftResponse>(
-      this._channelURL() + '/draft',
-      {
-        message,
-      },
-    );
-  }
-
-  async getMessageDraft({ parent_id }: { parent_id?: string }) {
-    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
-  }
-
-  async deleteMessageDraft({ parent_id }: { parent_id?: string }) {
-    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
-  }
-
   sendFile(
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
@@ -1517,6 +1490,52 @@ export class Channel {
 
   async removeVote(messageId: string, pollId: string, voteId: string) {
     return await this.getClient().removePollVote(messageId, pollId, voteId);
+  }
+
+  /**
+   * createDraft - Creates or updates a draft message in a channel
+   *
+   * @param {string} channelType The channel type
+   * @param {string} channelID The channel ID
+   * @param {DraftMessagePayload} message The draft message to create or update
+   *
+   * @return {Promise<CreateDraftResponse>} Response containing the created draft
+   */
+  async createDraft(message: DraftMessagePayload) {
+    return await this.getClient().post<CreateDraftResponse>(
+      this._channelURL() + '/draft',
+      {
+        message,
+      },
+    );
+  }
+
+  /**
+   * deleteDraft - Deletes a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<APIResponse>} API response
+   */
+  async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
+      parent_id,
+    });
+  }
+
+  /**
+   * getDraft - Retrieves a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<GetDraftResponse>} Response containing the draft
+   */
+  async getDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
+      parent_id,
+    });
   }
 
   /**

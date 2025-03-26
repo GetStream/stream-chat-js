@@ -58,21 +58,19 @@ const initState = (
     };
   }
 
-  let quoted_message;
+  const quotedMessage = composition.quoted_message;
   let message;
   if (isMessageDraft(composition)) {
     message = composition.message;
-    quoted_message = composition.quoted_message;
   } else {
     message = composition;
-    quoted_message = composition.quoted_message;
   }
 
   return {
     id: message.id,
     lastChange: new Date(),
-    quotedMessage: quoted_message
-      ? formatMessage(quoted_message as MessageResponseBase)
+    quotedMessage: quotedMessage
+      ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
     pollId: message.poll_id ?? null,
   };
@@ -181,6 +179,14 @@ export class MessageComposer {
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
+  };
+
+  public hydrateState = (composer: MessageComposer) => {
+    if (composer.id !== this.id) return;
+
+    // TODO
+    // this.textComposer.hydrate
+    // this.attachmentManager.hydrate
   };
 
   private subscribeMessageUpdated = () => {
