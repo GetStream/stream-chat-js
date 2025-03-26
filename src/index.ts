@@ -45,6 +45,7 @@ export {
   isOwnUser,
   chatCodes,
   logChatPromiseExecution,
+  localMessageToNewMessagePayload,
   formatMessage,
   promoteChannel,
 } from './utils';
