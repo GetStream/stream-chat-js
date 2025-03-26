@@ -214,33 +214,6 @@ export class Channel {
     );
   }
 
-  /**
-   * draftMessage - create a message draftMessage for the channel or a message thread
-   *
-   * @param {DraftMessagePayload} message The DraftMessage object
-   * @return {Promise<CreateDraftResponse>} The Server Response
-   */
-  async draftMessage(message: DraftMessagePayload) {
-    return await this.getClient().post<CreateDraftResponse>(
-      this._channelURL() + '/draft',
-      {
-        message,
-      },
-    );
-  }
-
-  async getMessageDraft({ parent_id }: { parent_id?: string }) {
-    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
-  }
-
-  async deleteMessageDraft({ parent_id }: { parent_id?: string }) {
-    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
-  }
-
   sendFile(
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
