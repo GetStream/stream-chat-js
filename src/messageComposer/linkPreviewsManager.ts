@@ -1,14 +1,9 @@
 import { find } from 'linkifyjs';
 import { StateStore } from '../store';
-import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
+import type { DebouncedFunc } from '../utils';
 import type { StreamChat } from '../client';
-import type {
-  DraftMessage,
-  FormatMessageResponse,
-  MessageResponseBase,
-  OGAttachment,
-} from '../types';
+import type { DraftMessage, LocalMessage, OGAttachment } from '../types';
 
 export type LinkPreviewState = OGAttachment & {
   status: LinkPreviewStatus;
@@ -80,12 +75,10 @@ export type LinkPreviewsManagerOptions = {
   client: StreamChat;
   /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
   debounceURLEnrichmentMs?: number;
-  message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
+  message?: DraftMessage | LocalMessage;
 };
 
-const initState = (
-  message?: DraftMessage | MessageResponseBase | FormatMessageResponse,
-): LinkPreviewsManagerState =>
+const initState = (message?: DraftMessage | LocalMessage): LinkPreviewsManagerState =>
   message
     ? {
         previews:
@@ -151,7 +144,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     );
   }
 
-  initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
+  initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState(message));
   };
 

@@ -28,6 +28,7 @@ import {
   randomId,
   retryInterval,
   sleep,
+  toUpdatedMessagePayload,
 } from './utils';
 
 import type {
@@ -116,6 +117,7 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  LocalMessage,
   Logger,
   MarkChannelsReadOptions,
   MessageFilters,
@@ -169,7 +171,6 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -198,7 +199,6 @@ import type {
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
-  UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
@@ -2848,69 +2848,20 @@ export class StreamChat {
    * @param {string | { id: string }} [userId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
-   * @return {{ message: MessageResponse }} Response that includes the message
+   * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: UpdatedMessage,
-    userId?: string | { id: string },
+    message: LocalMessage | MessageResponse,
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
 
-    const clonedMessage: Partial<UpdatedMessage & { __html: unknown }> = { ...message };
-    delete clonedMessage.id;
-
-    const reservedMessageFields: Array<ReservedMessageFields> = [
-      'command',
-      'created_at',
-      'html',
-      'latest_reactions',
-      'own_reactions',
-      'quoted_message',
-      'reaction_counts',
-      'reply_count',
-      'type',
-      'updated_at',
-      'user',
-      'pinned_at',
-      '__html',
-    ];
-
-    for (const field of reservedMessageFields) {
-      if (typeof clonedMessage[field] !== 'undefined') {
-        delete clonedMessage[field];
-      }
-    }
-
-    if (userId != null) {
-      if (isString(userId)) {
-        clonedMessage.user_id = userId;
-      } else {
-        clonedMessage.user = {
-          id: userId.id,
-        } as UserResponse;
-      }
-    }
-
-    /**
-     * Server always expects mentioned_users to be array of string. We are adding extra check, just in case
-     * SDK missed this conversion.
-     */
-    if (
-      Array.isArray(clonedMessage.mentioned_users) &&
-      !isString(clonedMessage.mentioned_users[0])
-    ) {
-      clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
-        (mu) => (mu as unknown as UserResponse).id,
-      );
-    }
-
     return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
-        message: clonedMessage,
+        message: toUpdatedMessagePayload(message),
         ...options,
       },
     );

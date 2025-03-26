@@ -470,6 +470,8 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
+// FIXME: remove FormatMessageResponse in favor of LocalMessage
+// @deprecated in favor of LocalMessage
 export type FormatMessageResponse = Omit<
   MessageResponse,
   'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
@@ -479,6 +481,32 @@ export type FormatMessageResponse = Omit<
   pinned_at: Date | null;
   status: string;
   updated_at: Date;
+};
+
+export type LocalMessageBase = Omit<
+  MessageResponseBase,
+  | 'attachments'
+  | 'created_at'
+  | 'deleted_at'
+  | 'mentioned_users'
+  | 'pinned_at'
+  | 'status'
+  | 'text'
+  | 'updated_at'
+> & {
+  attachments: Attachment[];
+  created_at: Date;
+  deleted_at: Date | null;
+  mentioned_users: UserResponse[];
+  pinned_at: Date | null;
+  status: string;
+  text: string;
+  updated_at: Date;
+};
+
+export type LocalMessage = LocalMessageBase & {
+  error: ErrorFromResponse<APIErrorResponse> | null;
+  quoted_message?: LocalMessageBase;
 };
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
@@ -2669,9 +2697,10 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<MessageBase> & {
-  mentioned_users?: string[];
-};
+export type Message = Partial<MessageBase> &
+  Pick<MessageBase, 'id'> & {
+    mentioned_users?: string[];
+  };
 
 export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
   Partial<Pick<DraftMessage, 'id'>>;
@@ -2946,22 +2975,25 @@ export type TranslationLanguages =
 
 export type TypingStartEvent = Event;
 
-export type ReservedMessageFields =
+export type ReservedUpdatedMessageFields =
   | 'command'
   | 'created_at'
+  | 'deleted_at'
   | 'html'
+  | 'i18n'
   | 'latest_reactions'
+  | 'mentioned_users'
   | 'own_reactions'
+  | 'pinned_at'
   | 'quoted_message'
   | 'reaction_counts'
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'pinned_at'
   | 'user'
   | '__html';
 
-export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
+export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
   mentioned_users?: string[];
   type?: MessageLabel;
 };
@@ -3198,7 +3230,7 @@ export type MessageSetType = 'latest' | 'current' | 'new';
 export type MessageSet = {
   isCurrent: boolean;
   isLatest: boolean;
-  messages: FormatMessageResponse[];
+  messages: LocalMessage[];
   pagination: { hasNext: boolean; hasPrev: boolean };
 };
 

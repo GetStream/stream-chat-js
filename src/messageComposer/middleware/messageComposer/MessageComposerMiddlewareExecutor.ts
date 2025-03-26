@@ -1,27 +1,30 @@
 import { MiddlewareExecutor } from '../../../middleware';
-import type { MessageComposerMiddlewareValue } from './types';
+import { createTextComposerMiddleware } from './textComposer';
+import { createAttachmentsMiddleware } from './attachments';
+import { createLinkPreviewsMiddleware } from './linkPreviews';
+import { createMessageComposerStateMiddleware } from './messageComposerState';
+import { createCompositionValidationMiddleware } from './compositionValidation';
+import { createCleanDataMiddleware } from './cleanData';
+import type {
+  MessageComposerMiddlewareExecutorOptions,
+  MessageComposerMiddlewareValue,
+} from './types';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
   MessageComposerMiddlewareValue['state'],
   MessageComposerMiddlewareValue
 > {
-  constructor(threadId: string | null = null) {
+  constructor({ composer }: MessageComposerMiddlewareExecutorOptions) {
     super();
-    if (threadId) {
-      this.use({
-        id: 'thread',
-        compose: ({ input, nextHandler }) =>
-          nextHandler({
-            ...input,
-            state: {
-              ...input.state,
-              message: {
-                ...input.state.message,
-                parent_id: threadId,
-              },
-            },
-          }),
-      });
-    }
+    // todo: document how to add custom data to a composed message using middleware
+    //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
+    this.use([
+      createTextComposerMiddleware(composer),
+      createAttachmentsMiddleware(composer),
+      createLinkPreviewsMiddleware(composer),
+      createMessageComposerStateMiddleware(composer),
+      createCompositionValidationMiddleware(),
+      createCleanDataMiddleware(composer),
+    ]);
   }
 }

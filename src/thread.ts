@@ -8,7 +8,7 @@ import {
 import type {
   AscDesc,
   EventTypes,
-  FormatMessageResponse,
+  LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
@@ -46,10 +46,10 @@ export type ThreadState = {
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
    */
-  parentMessage: FormatMessageResponse;
+  parentMessage: LocalMessage;
   participants: ThreadResponse['thread_participants'];
   read: ThreadReadState;
-  replies: Array<FormatMessageResponse>;
+  replies: Array<LocalMessage>;
   replyCount: number;
   title: string;
   updatedAt: Date | null;
@@ -119,7 +119,7 @@ export class Thread {
 
   private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private failedRepliesMap: Map<string, FormatMessageResponse> = new Map();
+  private failedRepliesMap: Map<string, LocalMessage> = new Map();
   private _messageComposer: MessageComposer;
 
   constructor({
@@ -488,7 +488,7 @@ export class Thread {
     message,
     timestampChanged = false,
   }: {
-    message: MessageResponse;
+    message: MessageResponse | LocalMessage;
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {

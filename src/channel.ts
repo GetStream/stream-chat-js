@@ -30,11 +30,11 @@ import type {
   EventAPIResponse,
   EventHandler,
   EventTypes,
-  FormatMessageResponse,
   GetDraftResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
+  LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
   MemberFilters,
@@ -975,7 +975,7 @@ export class Channel {
    *
    * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
    */
-  lastMessage(): FormatMessageResponse | undefined {
+  lastMessage(): LocalMessage | undefined {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
     let min = this.state.latestMessages.length - 5;
@@ -1201,7 +1201,7 @@ export class Channel {
     }
   }
 
-  _countMessageAsUnread(message: FormatMessageResponse | MessageResponse) {
+  _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.parent_id && !message.show_in_channel) return false;

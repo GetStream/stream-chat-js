@@ -29,9 +29,7 @@ import type {
   Attachment,
   ChannelResponse,
   DraftMessage,
-  FormatMessageResponse,
-  MessageResponse,
-  MessageResponseBase,
+  LocalMessage,
   SendFileAPIResponse,
 } from '../types';
 import { mergeWith } from '../utils/mergeWith';
@@ -56,7 +54,7 @@ export type AttachmentManagerOptions = {
   fileUploadFilter?: (file: FileLike) => boolean;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage?: number;
-  message?: DraftMessage | MessageResponseBase | MessageResponse | FormatMessageResponse;
+  message?: DraftMessage | LocalMessage;
 };
 
 const initState = ({
@@ -64,7 +62,7 @@ const initState = ({
   message,
 }: {
   channel: Channel;
-  message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
+  message?: DraftMessage | LocalMessage;
 }): AttachmentManagerState => ({
   attachments: (message?.attachments ?? [])
     ?.filter(({ og_scrape_url }) => !og_scrape_url)
@@ -81,7 +79,7 @@ const initState = ({
 });
 
 export class AttachmentManager {
-  state: StateStore<AttachmentManagerState>;
+  readonly state: StateStore<AttachmentManagerState>;
   fileUploadFilter: ((file: FileLike) => boolean) | null;
   maxNumberOfFilesPerMessage: number;
   private channel: Channel;
@@ -98,6 +96,10 @@ export class AttachmentManager {
       maxNumberOfFilesPerMessage ?? API_MAX_FILES_ALLOWED_PER_MESSAGE;
     this.fileUploadFilter = fileUploadFilter || null;
     this.state = new StateStore<AttachmentManagerState>(initState({ channel, message }));
+  }
+
+  get client() {
+    return this.channel.getClient();
   }
 
   get attachments() {
@@ -142,7 +144,7 @@ export class AttachmentManager {
     return this.hasUploadPermission && this.availableUploadSlots > 0;
   }
 
-  initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
+  initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ channel: this.channel, message }));
   };
 

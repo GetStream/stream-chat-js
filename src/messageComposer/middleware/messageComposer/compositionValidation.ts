@@ -13,8 +13,8 @@ export const createCompositionValidationMiddleware = () => ({
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
     const isEmptyMessage =
-      textIsEmpty(input.state.message.text) &&
-      !input.state.message.attachments.length &&
+      textIsEmpty(input.state.message.text ?? '') &&
+      !input.state.message.attachments?.length &&
       !input.state.message.poll_id;
 
     if (isEmptyMessage) {

@@ -1,19 +1,14 @@
-import { TextComposerMiddlewareExecutor } from './middleware/textComposer';
+import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
-import type {
-  DraftMessage,
-  FormatMessageResponse,
-  MessageResponseBase,
-  UserResponse,
-} from '../types';
 import type { MessageComposer } from './messageComposer';
-import type { TextComposerMiddleware } from './middleware/textComposer/types';
+import type { TextComposerMiddleware } from './middleware';
+import type { DraftMessage, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
-  message?: DraftMessage | MessageResponseBase | FormatMessageResponse;
+  message?: DraftMessage | LocalMessage;
 };
 
 export const textIsEmpty = (text: string) => {
@@ -30,9 +25,7 @@ export const textIsEmpty = (text: string) => {
   );
 };
 
-const initState = (
-  message?: DraftMessage | MessageResponseBase | FormatMessageResponse,
-): TextComposerState => {
+const initState = (message?: DraftMessage | LocalMessage): TextComposerState => {
   if (!message) {
     return {
       mentionedUsers: [],
@@ -57,7 +50,7 @@ export class TextComposer {
   constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
     this.state = new StateStore<TextComposerState>(initState(message));
-    this.middlewareExecutor = new TextComposerMiddlewareExecutor();
+    this.middlewareExecutor = new TextComposerMiddlewareExecutor({ composer });
   }
 
   get channel() {
@@ -78,7 +71,7 @@ export class TextComposer {
     return textIsEmpty(this.text);
   }
 
-  initState = ({ message }: { message?: DraftMessage | MessageResponseBase } = {}) => {
+  initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState(message));
   };
 

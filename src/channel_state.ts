@@ -3,8 +3,9 @@ import type {
   ChannelMemberResponse,
   DraftResponse,
   Event,
-  FormatMessageResponse,
+  LocalMessage,
   MessageResponse,
+  MessageResponseBase,
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
@@ -125,7 +126,7 @@ export class ChannelState {
    * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
    */
   addMessageSorted(
-    newMessage: MessageResponse,
+    newMessage: MessageResponse | LocalMessage,
     timestampChanged = false,
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
@@ -145,7 +146,8 @@ export class ChannelState {
    *
    * @param {MessageResponse} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse) => formatMessage(message);
+  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
+    formatMessage(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
@@ -158,7 +160,7 @@ export class ChannelState {
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse[],
+    newMessages: (MessageResponse | LocalMessage)[],
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
@@ -183,7 +185,7 @@ export class ChannelState {
       if (isMessageFormatted) {
         message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
-        message = this.formatMessage(messagesToAdd[i] as MessageResponse);
+        message = this.formatMessage(messagesToAdd[i]);
 
         if (message.user && this._channel?.cid) {
           /**
@@ -368,7 +370,7 @@ export class ChannelState {
         updated_at: m.updated_at?.toISOString(),
       }) as unknown as MessageResponse;
 
-    const update = (messages: FormatMessageResponse[]) => {
+    const update = (messages: LocalMessage[]) => {
       const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
           acc.push({
@@ -760,12 +762,11 @@ export class ChannelState {
   }
 
   private findTargetMessageSet(
-    newMessages: MessageResponse[],
+    newMessages: (MessageResponse | LocalMessage)[],
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    let messagesToAdd: (MessageResponse | ReturnType<ChannelState['formatMessage']>)[] =
-      newMessages;
+    let messagesToAdd: (MessageResponse | LocalMessage)[] = newMessages;
     let targetMessageSetIndex!: number;
     if (addIfDoesNotExist) {
       const overlappingMessageSetIndices = this.messageSets

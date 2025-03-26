@@ -1,22 +1,21 @@
 import type { MiddlewareValue } from '../../../middleware';
 import type {
-  Attachment,
-  MessageLabel,
+  LocalMessage,
+  Message,
   SendMessageOptions,
-  UserResponse,
+  UpdatedMessage,
 } from '../../../types';
+import type { MessageComposer } from '../../messageComposer';
 
-export type MessageComposerMiddlewareValue = MiddlewareValue<{
-  message: {
-    attachments: Attachment[];
-    id: string;
-    linkPreviews: Attachment[];
-    mentioned_users?: UserResponse[];
-    text: string;
-    type: MessageLabel;
-    parent_id?: string;
-    poll_id?: string;
-    quoted_message_id?: string;
-  };
+export type MessageComposerMiddlewareValueState = {
+  message: Message | UpdatedMessage;
+  localMessage: LocalMessage;
   sendOptions: SendMessageOptions;
-}>;
+};
+
+export type MessageComposerMiddlewareValue =
+  MiddlewareValue<MessageComposerMiddlewareValueState>;
+
+export type MessageComposerMiddlewareExecutorOptions = {
+  composer: MessageComposer;
+};

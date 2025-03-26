@@ -25,6 +25,7 @@ export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> 
     return this;
   }
 
+  // todo: document how to re-arrange the order of middleware using upsert
   upsert(middleware: Middleware<TState, TValue>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {

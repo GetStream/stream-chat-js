@@ -13,32 +13,39 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
       input: MessageComposerMiddlewareValue,
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
-    if (composer.attachmentManager.uploadsInProgressCount > 0) {
+    const { attachmentManager } = composer;
+    if (!attachmentManager) return nextHandler(input);
+
+    if (attachmentManager.uploadsInProgressCount > 0) {
       composer.client.notifications.addWarning({
         message: 'Wait until all attachments have uploaded',
         origin: {
           emitter: 'MessageComposer',
-          context: { messageId: composer.id, threadId: composer.threadId },
+          context: { composer },
         },
       });
       return nextHandler({ ...input, status: 'discard' });
     }
 
-    const attachments = composer.attachmentManager.successfulUploads.map(
-      (localAttachment) => {
+    const attachments = (input.state.message.attachments ?? []).concat(
+      attachmentManager.successfulUploads.map((localAttachment) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { localMetadata: _, ...attachment } = localAttachment;
+        const { localMetadata, ...attachment } = localAttachment;
         return attachment as Attachment;
-      },
+      }),
     );
 
     return nextHandler({
       ...input,
       state: {
         ...input.state,
+        localMessage: {
+          ...input.state.localMessage,
+          attachments,
+        },
         message: {
           ...input.state.message,
-          attachments: input.state.message.attachments.concat(attachments),
+          attachments,
         },
       },
     });

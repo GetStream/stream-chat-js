@@ -1,26 +1,20 @@
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { AttachmentManager } from './attachmentManager';
 import { TextComposer } from './textComposer';
-import {
-  createAttachmentsMiddleware,
-  createCompositionValidationMiddleware,
-  createLinkPreviewsMiddleware,
-  createTextComposerMiddleware,
-  MessageComposerMiddlewareExecutor,
-} from './middleware';
+import type { MessageComposerMiddlewareValue } from './middleware';
+import { MessageComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
-import type { MessageComposerMiddlewareValue } from './middleware';
 import type { Channel } from '../channel';
 import type {
   DraftMessage,
   DraftResponse,
   EventTypes,
-  FormatMessageResponse,
+  LocalMessage,
+  LocalMessageBase,
   MessageResponse,
   MessageResponseBase,
-  SendMessageOptions,
 } from '../types';
 
 /*
@@ -31,7 +25,7 @@ import type {
 export type MessageComposerState = {
   id: string;
   lastChange: Date | null;
-  quotedMessage: FormatMessageResponse | null;
+  quotedMessage: LocalMessageBase | null;
   pollId: string | null;
 };
 
@@ -44,7 +38,7 @@ export type MessageComposerConfig = {
 
 export type MessageComposerOptions = {
   channel: Channel;
-  composition?: DraftResponse | MessageResponse | FormatMessageResponse;
+  composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: Partial<MessageComposerConfig>;
   threadId?: string;
 };
@@ -53,7 +47,7 @@ const isMessageDraft = (composition: unknown): composition is DraftResponse =>
   !!(composition as { message?: DraftMessage })?.message;
 
 const initState = (
-  composition?: DraftResponse | MessageResponse | FormatMessageResponse,
+  composition?: DraftResponse | MessageResponse | LocalMessage,
 ): MessageComposerState => {
   if (!composition) {
     return {
@@ -90,23 +84,31 @@ const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
 };
 
 export class MessageComposer {
-  channel: Channel;
+  readonly channel: Channel;
+  readonly state: StateStore<MessageComposerState>;
+  readonly editedMessage?: LocalMessage;
+  readonly threadId: string | null;
   config: MessageComposerConfig;
-  state: StateStore<MessageComposerState>;
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
-  // todo: mediaRecorder: MediaRecorderController;
   textComposer: TextComposer;
-  threadId: string | null;
+  // todo: mediaRecorder: MediaRecorderController;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private compositionMiddlewareManager: MessageComposerMiddlewareExecutor;
+  private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
 
   constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
     this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
-    const message =
-      composition && (isMessageDraft(composition) ? composition.message : composition);
+
+    let message: LocalMessage | DraftMessage | undefined = undefined;
+    if (isMessageDraft(composition)) {
+      message = composition.message;
+    } else if (composition) {
+      message = formatMessage(composition);
+      this.editedMessage = message;
+    }
+
     this.attachmentManager = new AttachmentManager({ channel, message });
     this.linkPreviewsManager = new LinkPreviewsManager({
       client: channel.getClient(),
@@ -114,17 +116,9 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.state = new StateStore<MessageComposerState>(initState(composition));
-    this.compositionMiddlewareManager = new MessageComposerMiddlewareExecutor(
-      this.threadId,
-    );
-
-    // Register default middleware
-    this.compositionMiddlewareManager.use([
-      createTextComposerMiddleware(this),
-      createAttachmentsMiddleware(this),
-      createLinkPreviewsMiddleware(this),
-      createCompositionValidationMiddleware(),
-    ]);
+    this.compositionMiddlewareExecutor = new MessageComposerMiddlewareExecutor({
+      composer: this,
+    });
   }
 
   get client() {
@@ -157,9 +151,12 @@ export class MessageComposer {
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse } = {}) => {
-    const message = isMessageDraft(composition)
-      ? composition.message
-      : (composition as MessageResponse);
+    const message: LocalMessage | DraftMessage | undefined =
+      typeof composition === 'undefined'
+        ? composition
+        : isMessageDraft(composition)
+          ? composition.message
+          : formatMessage(composition);
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
@@ -248,7 +245,7 @@ export class MessageComposer {
       this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
     });
 
-  setQuotedMessage = (quotedMessage: FormatMessageResponse | null) => {
+  setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
   };
 
@@ -259,54 +256,42 @@ export class MessageComposer {
     this.initState();
   };
 
-  compose = async (): Promise<
-    { message: MessageResponseBase; sendOptions: SendMessageOptions } | undefined
-  > => {
-    const initialState: MessageComposerMiddlewareValue = {
+  compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
+    const created_at = this.editedMessage?.created_at ?? new Date();
+    const text = '';
+    const result = await this.compositionMiddlewareExecutor.execute('compose', {
       state: {
         message: {
-          id: this.id,
           attachments: [],
-          linkPreviews: [],
-          text: '',
+          id: this.id,
+          parent_id: this.threadId ?? undefined,
+          text,
           type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at, // only assigned to localMessage as this is used for optimistic update
+          deleted_at: null,
+          error: null,
+          id: this.id,
+          mentioned_users: [],
+          parent_id: this.threadId ?? undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text,
+          type: 'regular',
+          updated_at: created_at,
         },
         sendOptions: {},
       },
-    };
-
-    const result = await this.compositionMiddlewareManager.execute(
-      'compose',
-      initialState,
-    );
+    });
     if (result.status === 'discard') return;
 
-    const optimisticUpdateMessageProps = {
-      created_at: new Date().toISOString(),
-      reactions: [],
-      status: 'sending',
-    };
-
-    const { attachments, linkPreviews, ...message } = result.state.message;
-    return {
-      ...result.state,
-      message: {
-        ...message,
-        ...optimisticUpdateMessageProps,
-        attachments: attachments.concat(linkPreviews),
-        html: result.state.message.text,
-        user: this.client.user,
-      },
-    };
+    return result.state;
   };
 
-  // todo: keep in stream-chat-react
-  sendMessage = async () => {
-    const composition = await this.compose();
-    if (!composition) return;
-
-    // const { message, sendOptions } = composition;
-
-    // return this.channel.sendMessage(message, sendOptions);
+  composeDraft = () => {
+    console.error('not implemented');
   };
 }
