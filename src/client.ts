@@ -802,7 +802,17 @@ export class StreamChat {
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    return await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    const userId = this.userID as string;
+    if (!this.wsConnection?.isHealthy && this.offlineDb && userId) {
+      return await this.offlineDb?.getAppSettings({ userId });
+    }
+    const appSettings = await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+
+    if (userId) {
+      this.offlineDb?.upsertAppSettings({ appSettings, userId });
+    }
+
+    return appSettings;
   }
 
   /**

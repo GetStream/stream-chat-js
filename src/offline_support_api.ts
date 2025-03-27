@@ -1,5 +1,6 @@
 import type {
   APIErrorResponse,
+  AppSettingsAPIResponse,
   ChannelAPIResponse,
   ChannelFilters,
   ChannelSort,
@@ -28,6 +29,12 @@ export type UpsertChannelsType = {
   sort?: ChannelSort;
 };
 
+export type UpsertAppSettingsType = {
+  appSettings: AppSettingsAPIResponse;
+  userId: string;
+  flush?: boolean;
+};
+
 export type UpsertUserSyncStatusType = {
   userId: string;
   lastSyncedAt: string;
@@ -50,6 +57,10 @@ export type GetLastSyncedAtType = {
 
 export type GetPendingTasksType = { messageId?: string };
 
+export type GetAppSettingsType = {
+  userId: string;
+};
+
 export type DeletePendingTaskType = { id: number };
 
 export type DeleteReactionType = {
@@ -68,20 +79,22 @@ export interface OfflineDBApi {
   upsertCidsForQuery: (options: UpsertCidsForQueryType) => Promise<unknown>;
   upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
   upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
+  upsertAppSettings: (options: UpsertAppSettingsType) => Promise<unknown>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<number | undefined>;
-  resetDB: () => Promise<unknown>;
+  getAppSettings: (options: GetAppSettingsType) => Promise<unknown>;
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
   deletePendingTask: (options: DeletePendingTaskType) => Promise<unknown>;
   deleteReaction: (options: DeleteReactionType) => Promise<unknown>;
-  hardDeleteMessage: (optins: DeleteMessageType) => Promise<unknown>;
-  softDeleteMessage: (optins: DeleteMessageType) => Promise<unknown>;
+  hardDeleteMessage: (options: DeleteMessageType) => Promise<unknown>;
+  softDeleteMessage: (options: DeleteMessageType) => Promise<unknown>;
+  resetDB: () => Promise<unknown>;
 }
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
@@ -97,6 +110,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
 
+  abstract upsertUserSyncStatus: OfflineDBApi['upsertUserSyncStatus'];
+
+  abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
+
   abstract getChannels: OfflineDBApi['getChannels'];
 
   abstract getChannelsForQuery: OfflineDBApi['getChannelsForQuery'];
@@ -105,15 +122,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract getLastSyncedAt: OfflineDBApi['getLastSyncedAt'];
 
-  abstract resetDB: OfflineDBApi['resetDB'];
+  abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
+
+  abstract getAppSettings: OfflineDBApi['getAppSettings'];
 
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
 
-  abstract upsertUserSyncStatus: OfflineDBApi['upsertUserSyncStatus'];
-
   abstract addPendingTask: OfflineDBApi['addPendingTask'];
-
-  abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
 
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
@@ -122,6 +137,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
   abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
+
+  abstract resetDB: OfflineDBApi['resetDB'];
 
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
