@@ -28,6 +28,7 @@ import { normalizeQuerySort } from './utils';
 export const MODERATION_ENTITY_TYPES = {
   user: 'stream:user',
   message: 'stream:chat:v1:message',
+  userprofile: 'stream:v1:user_profile',
 };
 
 // Moderation class provides all the endpoints related to moderation v2.
@@ -247,6 +248,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     configKey: string,
     options?: {
       force_sync?: boolean;
+      test_mode?: boolean;
     },
   ) {
     return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
@@ -257,6 +259,52 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       config_key: configKey,
       options,
     });
+  }
+
+  /**
+   * Experimental: Check user profile
+   *
+   * Warning: This is an experimental feature and the API is subject to change.
+   *
+   * This function is used to check a user profile for moderation.
+   * This will not create any review queue items for the user profile.
+   * You can just use this to check weather to allow certain user profile to be created or not.
+   *
+   * Example:
+   *
+   * ```ts
+   * const res = await client.moderation.checkUserProfile(userId, { username: "fuck_boy_001", profileImage: "https://example.com/profile.jpg" });
+   * if (res.recommended_action === "remove") {
+   *   // Block the user profile from being created
+   * } else {
+   *   // Allow the user profile to be created
+   * }
+   * ```
+   *
+   * @param userId
+   * @param username
+   * @param profileImage
+   * @returns
+   */
+  async checkUserProfile(userId: string, profile: { profileImage?: string, username?: string; } = {}) {
+    if (!profile.username && !profile.profileImage) {
+      throw new Error('Either username or profileImage must be provided');
+    }
+
+    return await this.check(
+      MODERATION_ENTITY_TYPES.userprofile,
+      userId,
+      userId,
+      {
+        texts: [profile.username as string],
+        images: [profile.profileImage as string],
+      },
+      'user_profile:default',
+      {
+        force_sync: true,
+        test_mode: true,
+      },
+    );
   }
 
   /**
