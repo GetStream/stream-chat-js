@@ -21,6 +21,7 @@ import {
   CustomCheckFlag,
   ReviewQueueItem,
   QueryConfigsResponse,
+  RequireAtLeastOne,
 } from './types';
 import { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -273,7 +274,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * Example:
    *
    * ```ts
-   * const res = await client.moderation.checkUserProfile(userId, { username: "fuck_boy_001", profileImage: "https://example.com/profile.jpg" });
+   * const res = await client.moderation.checkUserProfile(userId, { username: "fuck_boy_001", image: "https://example.com/profile.jpg" });
    * if (res.recommended_action === "remove") {
    *   // Block the user profile from being created
    * } else {
@@ -282,13 +283,13 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * ```
    *
    * @param userId
-   * @param username
-   * @param profileImage
+   * @param profile.username
+   * @param profile.image
    * @returns
    */
-  async checkUserProfile(userId: string, profile: { profileImage?: string; username?: string } = {}) {
-    if (!profile.username && !profile.profileImage) {
-      throw new Error('Either username or profileImage must be provided');
+  async checkUserProfile(userId: string, profile: RequireAtLeastOne<{ image?: string; username?: string }>) {
+    if (!profile.username && !profile.image) {
+      throw new Error('Either username or image must be provided');
     }
 
     return await this.check(
@@ -297,7 +298,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       userId,
       {
         texts: [profile.username as string],
-        images: [profile.profileImage as string],
+        images: [profile.image as string],
       },
       'user_profile:default',
       {
