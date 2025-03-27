@@ -99,8 +99,9 @@ export const createCommandsMiddleware = (
     }: TextComposerMiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
-      // If the first character is not a '/', return the input unchanged
-      if (state.text.length > 0 && state.text[0] !== '/') return nextHandler(input);
+      // If the first character is not a command trigger do not process
+      if (state.text.length > 0 && state.text[0] !== finalOptions.trigger)
+        return nextHandler(input);
 
       const lastToken = getTriggerCharWithToken(
         finalOptions.trigger,
