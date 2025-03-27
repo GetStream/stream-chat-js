@@ -268,7 +268,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * This function is used to check a user profile for moderation.
    * This will not create any review queue items for the user profile.
-   * You can just use this to check weather to allow certain user profile to be created or not.
+   * You can just use this to check whether to allow a certain user profile to be created or not.
    *
    * Example:
    *
