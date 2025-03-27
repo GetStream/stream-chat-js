@@ -292,14 +292,19 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       throw new Error('Either username or image must be provided');
     }
 
+    const moderationPayload: { images?: string[], texts?: string[]; } = {};
+    if (profile.username) {
+      moderationPayload.texts = [profile.username];
+    }
+    if (profile.image) {
+      moderationPayload.images = [profile.image];
+    }
+
     return await this.check(
       MODERATION_ENTITY_TYPES.userprofile,
       userId,
       userId,
-      {
-        texts: [profile.username as string],
-        images: [profile.image as string],
-      },
+      moderationPayload,
       'user_profile:default',
       {
         force_sync: true,
