@@ -286,7 +286,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param profileImage
    * @returns
    */
-  async checkUserProfile(userId: string, profile: { profileImage?: string, username?: string; } = {}) {
+  async checkUserProfile(userId: string, profile: { profileImage?: string; username?: string } = {}) {
     if (!profile.username && !profile.profileImage) {
       throw new Error('Either username or profileImage must be provided');
     }
