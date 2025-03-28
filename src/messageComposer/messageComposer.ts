@@ -1,5 +1,6 @@
-import { LinkPreviewsManager } from './linkPreviewsManager';
 import { AttachmentManager } from './attachmentManager';
+import { LinkPreviewsManager } from './linkPreviewsManager';
+import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import { MessageComposerMiddlewareExecutor } from './middleware';
@@ -90,6 +91,7 @@ export class MessageComposer {
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
+  pollComposer: PollComposer;
   // todo: mediaRecorder: MediaRecorderController;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
@@ -113,6 +115,7 @@ export class MessageComposer {
       message,
     });
     this.textComposer = new TextComposer({ composer: this, message });
+    this.pollComposer = new PollComposer({ composer: this });
     this.state = new StateStore<MessageComposerState>(initState(composition));
     this.compositionMiddlewareExecutor = new MessageComposerMiddlewareExecutor({
       composer: this,
@@ -137,10 +140,10 @@ export class MessageComposer {
 
   get canSendMessage() {
     return (
-      !this.attachmentManager.uploadsInProgressCount &&
-      (!this.textComposer.textIsEmpty ||
-        this.attachmentManager.successfulUploadsCount > 0) //&&
-      // !customMessageData?.poll_id
+      (!this.attachmentManager.uploadsInProgressCount &&
+        (!this.textComposer.textIsEmpty ||
+          this.attachmentManager.successfulUploadsCount > 0)) ||
+      this.pollId
     );
   }
 
@@ -259,6 +262,7 @@ export class MessageComposer {
     this.attachmentManager.initState();
     this.linkPreviewsManager.initState();
     this.textComposer.initState();
+    this.pollComposer.initState();
     this.initState();
   };
 
@@ -299,5 +303,23 @@ export class MessageComposer {
 
   composeDraft = () => {
     console.error('not implemented');
+  };
+
+  createPoll = async () => {
+    const composition = await this.pollComposer.compose();
+    if (!composition || !composition.data.id) return;
+    try {
+      const { poll } = await this.client.createPoll(composition.data);
+      this.state.partialNext({ pollId: poll.id });
+    } catch (error) {
+      this.client.notifications.add({
+        message: 'Failed to create the poll',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: this },
+        },
+      });
+      throw error;
+    }
   };
 }
