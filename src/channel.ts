@@ -1812,7 +1812,10 @@ export class Channel {
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
-          event.message = channelState.addReaction(event.reaction, event.message);
+          event.message = channelState.addReaction(
+            event.reaction,
+            event.message,
+          ) as MessageResponse;
         }
         break;
       case 'reaction.deleted':
@@ -1823,7 +1826,11 @@ export class Channel {
       case 'reaction.updated':
         if (event.reaction) {
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(event.reaction, event.message, true);
+          event.message = channelState.addReaction(
+            event.reaction,
+            event.message,
+            true,
+          ) as MessageResponse;
         }
         break;
       case 'channel.hidden':
