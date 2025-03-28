@@ -82,6 +82,8 @@ const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   urlPreviewEnabled: false,
 };
 
+const noop = () => undefined;
+
 export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
@@ -167,7 +169,7 @@ export class MessageComposer {
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
       // Already listening for events and changes
-      return;
+      return noop;
     }
     this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
@@ -178,8 +180,11 @@ export class MessageComposer {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
     }
+
+    return this.unregisterSubscriptions;
   };
 
+  // TODO: maybe make these private across the SDK
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
