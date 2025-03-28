@@ -42,6 +42,7 @@ export type MessageComposerOptions = {
   composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: Partial<MessageComposerConfig>;
   threadId?: string;
+  tag?: string;
 };
 
 const isMessageDraft = (composition: unknown): composition is DraftResponse =>
@@ -82,11 +83,14 @@ const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   urlPreviewEnabled: false,
 };
 
+const noop = () => undefined;
+
 export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editedMessage?: LocalMessage;
   readonly threadId: string | null;
+  readonly tag: string;
   config: MessageComposerConfig;
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
@@ -96,10 +100,11 @@ export class MessageComposer {
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
 
-  constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
+  constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
     this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
+    this.tag = tag ?? generateUUIDv4();
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (isMessageDraft(composition)) {
@@ -167,8 +172,9 @@ export class MessageComposer {
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
       // Already listening for events and changes
-      return;
+      return noop;
     }
+    this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeTextChanged());
@@ -177,8 +183,11 @@ export class MessageComposer {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
     }
+
+    return this.unregisterSubscriptions;
   };
 
+  // TODO: maybe make these private across the SDK
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
@@ -215,6 +224,24 @@ export class MessageComposer {
     );
 
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  private subscribeMessageComposerSetupStateChange = () => {
+    let cleanupBefore: (() => void) | null = null;
+    const unsubscribe = this.client._messageComposerSetupState.subscribeWithSelector(
+      ({ applyModifications }) => ({
+        applyModifications,
+      }),
+      ({ applyModifications }) => {
+        cleanupBefore?.();
+        cleanupBefore = applyModifications?.({ composer: this }) ?? null;
+      },
+    );
+
+    return () => {
+      cleanupBefore?.();
+      unsubscribe();
+    };
   };
 
   private subscribeMessageDeleted = () =>
