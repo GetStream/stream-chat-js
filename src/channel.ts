@@ -159,10 +159,6 @@ export class Channel {
     this.disconnected = false;
 
     this._messageComposer = new MessageComposer({ channel: this });
-    this._messageComposer.textComposer.use([
-      createCommandsMiddleware(this),
-      createMentionsMiddleware(this),
-    ] as TextComposerMiddleware[]);
   }
 
   /**

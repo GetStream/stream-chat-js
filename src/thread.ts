@@ -183,11 +183,6 @@ export class Thread {
       composition: threadData.draft,
       threadId: this.id,
     });
-
-    this._messageComposer.textComposer.use([
-      createCommandsMiddleware(channel),
-      createMentionsMiddleware(channel),
-    ] as TextComposerMiddleware[]);
   }
 
   get messageComposer() {
