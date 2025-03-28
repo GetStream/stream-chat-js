@@ -337,6 +337,7 @@ export class ChannelState {
               count: oldOwnReactionTypeData.count - 1,
               sum_scores: oldOwnReactionTypeData.sum_scores - (ownReaction.score ?? 1),
             };
+            // If there are no reactions left in this group, simply remove it.
             if (messageFromState.reaction_groups[ownReaction.type].count < 1) {
               delete messageFromState.reaction_groups[ownReaction.type];
             }
@@ -421,16 +422,65 @@ export class ChannelState {
   }
 
   removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
-    if (!message) return;
-    const messageWithReaction = message;
-    this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
-        msg.own_reactions,
-        reaction,
-      );
-      return this.formatMessage(messageWithReaction);
+    const messageWithRemovedReaction = message;
+    let messageFromState: FormatMessageResponse | undefined;
+    if (!messageWithRemovedReaction) {
+      messageFromState = this.findMessage(reaction.message_id);
+    }
+
+    if (!messageWithRemovedReaction && !messageFromState) {
+      return;
+    }
+
+    const messageToUpdate = messageWithRemovedReaction ?? messageFromState;
+    const updateData = {
+      id: messageToUpdate?.id,
+      parent_id: messageToUpdate?.parent_id,
+      pinned: messageToUpdate?.pinned,
+      show_in_channel: messageToUpdate?.show_in_channel,
+    };
+    this._updateMessage(updateData, (msg) => {
+      if (messageWithRemovedReaction) {
+        messageWithRemovedReaction.own_reactions = this._removeOwnReactionFromMessage(
+          msg.own_reactions,
+          reaction,
+        );
+        return this.formatMessage(messageWithRemovedReaction);
+      }
+
+      if (messageFromState) {
+        const reactionToRemove = messageFromState.own_reactions?.find(
+          (r) => r.type === reaction.type,
+        );
+        if (
+          reactionToRemove &&
+          messageFromState.reaction_groups?.[reactionToRemove.type]
+        ) {
+          const newReactionGroup =
+            messageFromState.reaction_groups[reactionToRemove.type];
+          messageFromState.reaction_groups[reactionToRemove.type] = {
+            ...newReactionGroup,
+            count: newReactionGroup.count - 1,
+            sum_scores: newReactionGroup.sum_scores - (reactionToRemove.score ?? 1),
+          };
+          // If there are no reactions left in this group, simply remove it.
+          if (messageFromState.reaction_groups[reactionToRemove.type].count < 1) {
+            delete messageFromState.reaction_groups[reactionToRemove.type];
+          }
+        }
+        messageFromState.own_reactions = messageFromState.own_reactions?.filter(
+          (r) => r.type !== reaction.type,
+        );
+        const userId = this._channel.getClient().userID;
+        messageFromState.latest_reactions = messageFromState.latest_reactions?.filter(
+          (r) => !(r.user_id === userId && r.type === reaction.type),
+        );
+        return messageFromState;
+      }
+
+      return msg;
     });
-    return messageWithReaction;
+    return messageWithRemovedReaction;
   }
 
   _updateQuotedMessageReferences({
