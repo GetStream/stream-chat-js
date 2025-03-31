@@ -62,6 +62,5 @@ export const EVENT_MAP = {
   'capabilities.changed': true,
 
   // live location events
-  'live.location.created': true,
-  'live.location.updated': true,
+  'live_location.updated': true,
 };
