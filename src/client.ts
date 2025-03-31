@@ -1792,15 +1792,37 @@ export class StreamChat {
     sort: ReactionSort = [],
     options: QueryReactionsOptions = {},
   ) {
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // Return a list of channels
     const payload = {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
     };
+
+    if (this.offlineDb?.getReactions && !options.next) {
+      try {
+        const reactionsFromDb = await this.offlineDb.getReactions({
+          messageId: messageID,
+          filters: filter,
+          sort,
+          limit: options.limit,
+        });
+
+        if (reactionsFromDb) {
+          this.dispatchEvent({
+            type: 'offline_reactions.queried',
+            offlineReactions: reactionsFromDb as ReactionResponse[],
+          });
+        }
+      } catch (e) {
+        this.logger('warn', 'An error has occurred while querying offline reactions', {
+          error: e,
+        });
+      }
+    }
+
+    // TODO: Why is this here ? Looks not needed.
+    // Make sure we wait for the connect promise if there is a pending one
+    await this.wsPromise;
 
     return await this.post<QueryReactionsAPIResponse>(
       this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',

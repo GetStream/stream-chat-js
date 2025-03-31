@@ -1416,6 +1416,7 @@ export type Event = CustomEventData & {
     channels: ChannelAPIResponse[];
     isLatestMessageSet?: boolean;
   };
+  offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
   shadow?: boolean;

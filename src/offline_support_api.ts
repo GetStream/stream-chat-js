@@ -5,6 +5,8 @@ import type {
   ChannelFilters,
   ChannelSort,
   Event,
+  ReactionFilters,
+  ReactionSort,
 } from './types';
 import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
@@ -61,6 +63,13 @@ export type GetAppSettingsType = {
   userId: string;
 };
 
+export type GetReactionsType = {
+  messageId: string;
+  filters?: Pick<ReactionFilters, 'type'>;
+  sort?: ReactionSort;
+  limit?: number;
+};
+
 export type DeletePendingTaskType = { id: number };
 
 export type DeleteReactionType = {
@@ -87,6 +96,7 @@ export interface OfflineDBApi {
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<number | undefined>;
   getAppSettings: (options: GetAppSettingsType) => Promise<unknown>;
+  getReactions: (options: GetReactionsType) => Promise<unknown>;
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
@@ -125,6 +135,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
 
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
+
+  abstract getReactions: OfflineDBApi['getReactions'];
 
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
 
