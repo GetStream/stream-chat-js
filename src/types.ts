@@ -482,7 +482,7 @@ export type LocalMessageBase = Omit<
 };
 
 export type LocalMessage = LocalMessageBase & {
-  error: ErrorFromResponse<APIErrorResponse> | null;
+  error?: ErrorFromResponse<APIErrorResponse>;
   quoted_message?: LocalMessageBase;
 };
 
