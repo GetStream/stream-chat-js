@@ -470,19 +470,6 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-// FIXME: remove FormatMessageResponse in favor of LocalMessage
-// @deprecated in favor of LocalMessage
-export type FormatMessageResponse = Omit<
-  MessageResponse,
-  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
-> & {
-  created_at: Date;
-  deleted_at: Date | null;
-  pinned_at: Date | null;
-  status: string;
-  updated_at: Date;
-};
-
 export type LocalMessageBase = Omit<
   MessageResponseBase,
   | 'attachments'
@@ -508,6 +495,9 @@ export type LocalMessage = LocalMessageBase & {
   error: ErrorFromResponse<APIErrorResponse> | null;
   quoted_message?: LocalMessageBase;
 };
+
+// @deprecated in favor of LocalMessage
+export type FormatMessageResponse = LocalMessage;
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
