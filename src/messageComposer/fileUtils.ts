@@ -58,7 +58,7 @@ export const isScrapedContent = (attachment: Attachment) =>
 export const isUploadedImage = (attachment: Attachment) =>
   attachment.type === 'image' && !isScrapedContent(attachment);
 
-// @ts-expect-error tmp
+/** @ts-expect-error tmp */
 export const isLocalAttachment = (attachment: UR): attachment is LocalAttachment =>
   !!(attachment as LocalAttachment).localMetadata?.id;
 
