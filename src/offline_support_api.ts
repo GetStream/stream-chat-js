@@ -5,6 +5,7 @@ import type {
   ChannelFilters,
   ChannelSort,
   Event,
+  PollResponse,
   ReactionFilters,
   ReactionSort,
 } from './types';
@@ -40,6 +41,11 @@ export type UpsertAppSettingsType = {
 export type UpsertUserSyncStatusType = {
   userId: string;
   lastSyncedAt: string;
+};
+
+export type UpsertPollType = {
+  poll: PollResponse;
+  flush?: boolean;
 };
 
 export type GetChannelsType = {
@@ -89,6 +95,7 @@ export interface OfflineDBApi {
   upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
   upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
   upsertAppSettings: (options: UpsertAppSettingsType) => Promise<unknown>;
+  upsertPoll: (options: UpsertPollType) => Promise<unknown>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
@@ -123,6 +130,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertUserSyncStatus: OfflineDBApi['upsertUserSyncStatus'];
 
   abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
+
+  abstract upsertPoll: OfflineDBApi['upsertPoll'];
 
   abstract getChannels: OfflineDBApi['getChannels'];
 
@@ -291,7 +300,40 @@ export type PendingTask = {
 // const restBeforeNextTask = () => new Promise((resolve) => setTimeout(resolve, 500));
 // FIXME: This is temporary, while we implement the other apis.
 // eslint-disable-next-line
-const handleEventToSyncDB = async (event: Event, client: StreamChat) => {};
+const handleEventToSyncDB = async (event: Event, client: StreamChat, flush?: boolean) => {
+  const { type } = event;
+
+  if (type.startsWith('poll.')) {
+    const { poll } = event;
+    if (poll) {
+      let pollFromState = client.polls.fromState(poll.id);
+      if (!pollFromState) {
+        // @ts-expect-error hydratePollCache only accepts message objects, and yet uses poll properties.
+        client.polls.hydratePollCache([{ poll, poll_id: poll.id }]);
+        pollFromState = client.polls.fromState(poll.id);
+      }
+      if (type === 'poll.closed') {
+        pollFromState?.handlePollClosed(event);
+      }
+
+      if (type === 'poll.updated') {
+        pollFromState?.handlePollUpdated(event);
+      }
+
+      if (type === 'poll.vote_casted') {
+        pollFromState?.handleVoteCasted(event);
+      }
+
+      if (type === 'poll.vote_removed') {
+        pollFromState?.handleVoteRemoved(event);
+      }
+
+      if (type === 'poll.vote_changed') {
+        pollFromState?.handleVoteChanged(event);
+      }
+    }
+  }
+};
 
 export class OfflineDBSyncManager {
   public syncStatus = false;
