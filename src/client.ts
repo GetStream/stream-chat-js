@@ -2910,7 +2910,7 @@ export class StreamChat {
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: LocalMessage | MessageResponse,
+    message: LocalMessage | Partial<MessageResponse>,
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {

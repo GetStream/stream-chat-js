@@ -368,7 +368,7 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
 };
 
 export const toUpdatedMessagePayload = (
-  message: LocalMessage | MessageResponse,
+  message: LocalMessage | Partial<MessageResponse>,
 ): UpdatedMessage => {
   const messageFields = Object.fromEntries(
     Object.entries(message).filter(
