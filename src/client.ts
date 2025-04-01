@@ -230,12 +230,11 @@ import type {
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
+import type { MessageComposerOptions, TextComposerMiddleware } from './messageComposer';
 import {
   createCommandsMiddleware,
   createMentionsMiddleware,
   MessageComposer,
-  MessageComposerOptions,
-  TextComposerMiddleware,
 } from './messageComposer';
 
 function isString(x: unknown): x is string {
@@ -2911,17 +2910,28 @@ export class StreamChat {
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: LocalMessage | MessageResponse,
+    message: LocalMessage | Partial<MessageResponse>,
+    userId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
+    const payload = toUpdatedMessagePayload(message);
+    if (userId != null) {
+      if (isString(userId)) {
+        payload.user_id = userId;
+      } else {
+        payload.user = {
+          id: userId.id,
+        };
+      }
+    }
 
     return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
-        message: toUpdatedMessagePayload(message),
+        message: payload,
         ...options,
       },
     );
@@ -4377,9 +4387,8 @@ export class StreamChat {
   }
 
   // TODO: this might not be needed
-  public createMessageComposer: MessageComposerDefine = (setup) => {
-    return this._messageComposerSetupState.getLatestValue().define(setup);
-  };
+  public createMessageComposer: MessageComposerDefine = (setup) =>
+    this._messageComposerSetupState.getLatestValue().define(setup);
 
   public setMessageComposerApplyModifications = (
     applyModifications: MessageComposerSetupState['applyModifications'],

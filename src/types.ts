@@ -2689,10 +2689,11 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<MessageBase> &
-  Pick<MessageBase, 'id'> & {
-    mentioned_users?: string[];
-  };
+export type Message = Partial<
+  MessageBase & {
+    mentioned_users: string[];
+  }
+>;
 
 export type MessageBase = CustomMessageData & {
   id: string;
