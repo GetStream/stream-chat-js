@@ -230,12 +230,11 @@ import type {
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
+import type { MessageComposerOptions, TextComposerMiddleware } from './messageComposer';
 import {
   createCommandsMiddleware,
   createMentionsMiddleware,
   MessageComposer,
-  MessageComposerOptions,
-  TextComposerMiddleware,
 } from './messageComposer';
 
 function isString(x: unknown): x is string {
@@ -4377,9 +4376,8 @@ export class StreamChat {
   }
 
   // TODO: this might not be needed
-  public createMessageComposer: MessageComposerDefine = (setup) => {
-    return this._messageComposerSetupState.getLatestValue().define(setup);
-  };
+  public createMessageComposer: MessageComposerDefine = (setup) =>
+    this._messageComposerSetupState.getLatestValue().define(setup);
 
   public setMessageComposerApplyModifications = (
     applyModifications: MessageComposerSetupState['applyModifications'],
