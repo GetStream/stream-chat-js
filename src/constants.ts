@@ -24,7 +24,6 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS: Array<ReservedUpdatedMessageFields
   // Message text related fields that shouldn't be in update
   'i18n',
   'type',
-  'user',
   'html',
   '__html',
 ] as const;

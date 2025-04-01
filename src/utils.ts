@@ -363,12 +363,12 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
   return {
     ...messageFields,
     pinned_at: messageFields.pinned_at?.toISOString(),
-    mentioned_users: mentioned_users.map((user) => user.id),
+    mentioned_users: mentioned_users?.map((user) => user.id),
   };
 };
 
 export const toUpdatedMessagePayload = (
-  message: LocalMessage | MessageResponse,
+  message: LocalMessage | Partial<MessageResponse>,
 ): UpdatedMessage => {
   const messageFields = Object.fromEntries(
     Object.entries(message).filter(

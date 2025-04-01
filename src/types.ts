@@ -472,22 +472,12 @@ export type FlagUserResponse = APIResponse & {
 
 export type LocalMessageBase = Omit<
   MessageResponseBase,
-  | 'attachments'
-  | 'created_at'
-  | 'deleted_at'
-  | 'mentioned_users'
-  | 'pinned_at'
-  | 'status'
-  | 'text'
-  | 'updated_at'
+  'created_at' | 'deleted_at' | 'pinned_at' | 'status' | 'updated_at'
 > & {
-  attachments: Attachment[];
   created_at: Date;
   deleted_at: Date | null;
-  mentioned_users: UserResponse[];
   pinned_at: Date | null;
   status: string;
-  text: string;
   updated_at: Date;
 };
 
@@ -2973,7 +2963,6 @@ export type ReservedUpdatedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'user'
   | '__html';
 
 export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
