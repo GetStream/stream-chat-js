@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.58.0](https://github.com/GetStream/stream-chat-js/compare/v8.57.6...v8.58.0) (2025-04-01)
+
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+* user profile check endpoint ([#1503](https://github.com/GetStream/stream-chat-js/issues/1503)) ([8114c22](https://github.com/GetStream/stream-chat-js/commit/8114c223b2a6650a89790e64a236d1a03cf64c3b))
+
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
+
 ### [8.57.6](https://github.com/GetStream/stream-chat-js/compare/v8.57.5...v8.57.6) (2025-03-03)
 
 
