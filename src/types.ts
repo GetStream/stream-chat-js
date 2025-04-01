@@ -2956,6 +2956,7 @@ export type ReservedUpdatedMessageFields =
   | 'html'
   | 'i18n'
   | 'latest_reactions'
+  // the the original array of UserResponse object is converted to array of user ids and re-inserted before sending the update request
   | 'mentioned_users'
   | 'own_reactions'
   | 'pinned_at'
