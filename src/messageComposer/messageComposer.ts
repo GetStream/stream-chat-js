@@ -501,6 +501,7 @@ export class MessageComposer {
 
   clear = () => {
     this.attachmentManager.initState();
+    this.uploadManager?.initState();
     this.linkPreviewsManager.initState();
     this.textComposer.initState();
     this.pollComposer.initState();
