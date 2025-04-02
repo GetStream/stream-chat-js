@@ -65,7 +65,7 @@ import {
   CreateDraftResponse,
   GetDraftResponse,
   DraftMessagePayload,
-  LiveLocation, 
+  LiveLocation,
   LiveLocationResponse,
 } from './types';
 import { Role } from './permissions';
@@ -1399,9 +1399,9 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
 
   /**
    * updateLiveLocation - Updates a live location
-   * 
+   *
    * @param liveLocation LiveLocation The live location data to update
-   * 
+   *
    * @returns {Promise<APIResponse>} The server response
    */
   async updateLiveLocation(liveLocation: LiveLocation<StreamChatGenerics>) {

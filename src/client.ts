@@ -2300,11 +2300,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   }
 
   /** getUserLiveLocations
-   * 
+   *
    * @param userId string The user id
-   * 
+   *
    * @returns {Promise<APIResponse>} The server response
-  */
+   */
   async getUserLiveLocations(userId: string) {
     return await this.get<LiveLocation>(this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`);
   }

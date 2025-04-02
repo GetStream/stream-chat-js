@@ -716,8 +716,8 @@ export type MessageResponseBase<
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
   live_location?: LiveLocation<StreamChatGenerics> | null;
   live_location_id?: string;
-  mentioned_users?: UserResponse<StreamChatGenerics>[]; 
-  message_text_updated_at?: string; 
+  mentioned_users?: UserResponse<StreamChatGenerics>[];
+  message_text_updated_at?: string;
   moderation?: ModerationResponse;
   // present only with Moderation v2
   moderation_details?: ModerationDetailsResponse;
@@ -3930,8 +3930,8 @@ export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = Default
   message_id: string;
   updated_at: string;
   user_id: string;
-}
+};
 
 export type LiveLocationResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   live_location: LiveLocation<StreamChatGenerics>;
-}
+};
