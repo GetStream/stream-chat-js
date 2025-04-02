@@ -1,5 +1,5 @@
-import { AxiosResponse } from 'axios';
-import { APIErrorResponse } from './types';
+import type { AxiosResponse } from 'axios';
+import type { APIErrorResponse } from './types';
 
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
   '-1': { name: 'InternalSystemError', retryable: true },
@@ -31,7 +31,11 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '99': { name: 'AppSuspendedError', retryable: false },
 };
 
-type APIError = Error & { code: number; isWSFailure?: boolean };
+export type APIError = Error & {
+  code: number;
+  isWSFailure?: boolean;
+  StatusCode?: number;
+};
 
 export function isAPIError(error: Error): error is APIError {
   return (error as APIError).code !== undefined;
@@ -60,6 +64,8 @@ export function isWSFailure(err: APIError): boolean {
   }
 }
 
-export function isErrorResponse(res: AxiosResponse<unknown>): res is AxiosResponse<APIErrorResponse> {
+export function isErrorResponse(
+  res: AxiosResponse<unknown>,
+): res is AxiosResponse<APIErrorResponse> {
   return !res.status || res.status < 200 || 300 <= res.status;
 }

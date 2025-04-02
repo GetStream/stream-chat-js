@@ -1,7 +1,5 @@
-import { StreamChat } from './client';
-import {
-  DefaultGenerics,
-  ExtendableGenerics,
+import type { StreamChat } from './client';
+import type {
   QuerySegmentTargetsFilter,
   SegmentData,
   SegmentResponse,
@@ -16,20 +14,25 @@ type SegmentUpdatableFields = {
   name?: string;
 };
 
-export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class Segment {
   type: SegmentType;
   id: string | null;
-  client: StreamChat<StreamChatGenerics>;
+  client: StreamChat;
   data?: SegmentData | SegmentResponse;
 
-  constructor(client: StreamChat<StreamChatGenerics>, type: SegmentType, id: string | null, data?: SegmentData) {
+  constructor(
+    client: StreamChat,
+    type: SegmentType,
+    id: string | null,
+    data?: SegmentData,
+  ) {
     this.client = client;
     this.type = type;
     this.id = id;
     this.data = data;
   }
 
-  async create() {
+  create() {
     const body = {
       name: this.data?.name,
       filter: this.data?.filter,
@@ -49,38 +52,42 @@ export class Segment<StreamChatGenerics extends ExtendableGenerics = DefaultGene
     }
   }
 
-  async get() {
+  get() {
     this.verifySegmentId();
     return this.client.getSegment(this.id as string);
   }
 
-  async update(data: Partial<SegmentUpdatableFields>) {
+  update(data: Partial<SegmentUpdatableFields>) {
     this.verifySegmentId();
 
     return this.client.updateSegment(this.id as string, data);
   }
 
-  async addTargets(targets: string[]) {
+  addTargets(targets: string[]) {
     this.verifySegmentId();
     return this.client.addSegmentTargets(this.id as string, targets);
   }
 
-  async removeTargets(targets: string[]) {
+  removeTargets(targets: string[]) {
     this.verifySegmentId();
     return this.client.removeSegmentTargets(this.id as string, targets);
   }
 
-  async delete() {
+  delete() {
     this.verifySegmentId();
     return this.client.deleteSegment(this.id as string);
   }
 
-  async targetExists(targetId: string) {
+  targetExists(targetId: string) {
     this.verifySegmentId();
     return this.client.segmentTargetExists(this.id as string, targetId);
   }
 
-  async queryTargets(filter: QuerySegmentTargetsFilter | null = {}, sort: SortParam[] | null | [] = [], options = {}) {
+  queryTargets(
+    filter: QuerySegmentTargetsFilter | null = {},
+    sort: SortParam[] | null | [] = [],
+    options = {},
+  ) {
     this.verifySegmentId();
 
     return this.client.querySegmentTargets(this.id as string, filter, sort, options);

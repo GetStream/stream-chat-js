@@ -1,4 +1,5 @@
-import { debounce, DebouncedFunc } from './utils';
+import type { DebouncedFunc } from './utils';
+import { debounce } from './utils';
 import { StateStore } from './store';
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
@@ -6,8 +7,6 @@ import type {
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
-  DefaultGenerics,
-  ExtendableGenerics,
   MessageFilters,
   MessageResponse,
   SearchMessageSort,
@@ -153,7 +152,13 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   async executeQuery(newSearchString?: string) {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
-    if (!this.isActive || this.isLoading || (!this.hasNext && !hasNewSearchQuery) || !searchString) return;
+    if (
+      !this.isActive ||
+      this.isLoading ||
+      (!this.hasNext && !hasNewSearchQuery) ||
+      !searchString
+    )
+      return;
 
     if (hasNewSearchQuery) {
       this.state.next({
@@ -203,46 +208,45 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   }
 }
 
-export class UserSearchSource<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> extends BaseSearchSource<
-  UserResponse<StreamChatGenerics>
-> {
+export class UserSearchSource extends BaseSearchSource<UserResponse> {
   readonly type = 'users';
-  private client: StreamChat<StreamChatGenerics>;
-  filters: UserFilters<StreamChatGenerics> | undefined;
-  sort: UserSort<StreamChatGenerics> | undefined;
+  private client: StreamChat;
+  filters: UserFilters | undefined;
+  sort: UserSort | undefined;
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
 
-  constructor(client: StreamChat<StreamChatGenerics>, options?: SearchSourceOptions) {
+  constructor(client: StreamChat, options?: SearchSourceOptions) {
     super(options);
     this.client = client;
   }
 
   protected async query(searchQuery: string) {
     const filters = {
-      $or: [{ id: { $autocomplete: searchQuery } }, { name: { $autocomplete: searchQuery } }],
+      $or: [
+        { id: { $autocomplete: searchQuery } },
+        { name: { $autocomplete: searchQuery } },
+      ],
       ...this.filters,
-    } as UserFilters<StreamChatGenerics>;
-    const sort = { id: 1, ...this.sort } as UserSort<StreamChatGenerics>;
+    } as UserFilters;
+    const sort = { id: 1, ...this.sort } as UserSort;
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
     const { users } = await this.client.queryUsers(filters, sort, options);
     return { items: users };
   }
 
-  protected filterQueryResults(items: UserResponse<StreamChatGenerics>[]) {
+  protected filterQueryResults(items: UserResponse[]) {
     return items.filter((u) => u.id !== this.client.user?.id);
   }
 }
 
-export class ChannelSearchSource<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> extends BaseSearchSource<Channel<StreamChatGenerics>> {
+export class ChannelSearchSource extends BaseSearchSource<Channel> {
   readonly type = 'channels';
-  private client: StreamChat<StreamChatGenerics>;
-  filters: ChannelFilters<StreamChatGenerics> | undefined;
-  sort: ChannelSort<StreamChatGenerics> | undefined;
+  private client: StreamChat;
+  filters: ChannelFilters | undefined;
+  sort: ChannelSort | undefined;
   searchOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
-  constructor(client: StreamChat<StreamChatGenerics>, options?: SearchSourceOptions) {
+  constructor(client: StreamChat, options?: SearchSourceOptions) {
     super(options);
     this.client = client;
   }
@@ -252,31 +256,29 @@ export class ChannelSearchSource<
       members: { $in: [this.client.userID] },
       name: { $autocomplete: searchQuery },
       ...this.filters,
-    } as ChannelFilters<StreamChatGenerics>;
+    } as ChannelFilters;
     const sort = this.sort ?? {};
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
     const items = await this.client.queryChannels(filters, sort, options);
     return { items };
   }
 
-  protected filterQueryResults(items: Channel<StreamChatGenerics>[]) {
+  protected filterQueryResults(items: Channel[]) {
     return items;
   }
 }
 
-export class MessageSearchSource<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> extends BaseSearchSource<MessageResponse<StreamChatGenerics>> {
+export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
   readonly type = 'messages';
-  private client: StreamChat<StreamChatGenerics>;
-  messageSearchChannelFilters: ChannelFilters<StreamChatGenerics> | undefined;
-  messageSearchFilters: MessageFilters<StreamChatGenerics> | undefined;
-  messageSearchSort: SearchMessageSort<StreamChatGenerics> | undefined;
-  channelQueryFilters: ChannelFilters<StreamChatGenerics> | undefined;
-  channelQuerySort: ChannelSort<StreamChatGenerics> | undefined;
+  private client: StreamChat;
+  messageSearchChannelFilters: ChannelFilters | undefined;
+  messageSearchFilters: MessageFilters | undefined;
+  messageSearchSort: SearchMessageSort | undefined;
+  channelQueryFilters: ChannelFilters | undefined;
+  channelQuerySort: ChannelSort | undefined;
   channelQueryOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
-  constructor(client: StreamChat<StreamChatGenerics>, options?: SearchSourceOptions) {
+  constructor(client: StreamChat, options?: SearchSourceOptions) {
     super(options);
     this.client = client;
   }
@@ -284,18 +286,18 @@ export class MessageSearchSource<
   protected async query(searchQuery: string) {
     if (!this.client.userID) return { items: [] };
 
-    const channelFilters: ChannelFilters<StreamChatGenerics> = {
+    const channelFilters: ChannelFilters = {
       members: { $in: [this.client.userID] },
       ...this.messageSearchChannelFilters,
-    } as ChannelFilters<StreamChatGenerics>;
+    } as ChannelFilters;
 
-    const messageFilters: MessageFilters<StreamChatGenerics> = {
+    const messageFilters: MessageFilters = {
       text: searchQuery,
       type: 'regular', // FIXME: type: 'reply' resp. do not filter by type and allow to jump to a message in a thread - missing support
       ...this.messageSearchFilters,
-    } as MessageFilters<StreamChatGenerics>;
+    } as MessageFilters;
 
-    const sort: SearchMessageSort<StreamChatGenerics> = {
+    const sort: SearchMessageSort = {
       created_at: -1,
       ...this.messageSearchSort,
     };
@@ -304,9 +306,13 @@ export class MessageSearchSource<
       limit: this.pageSize,
       next: this.next,
       sort,
-    } as SearchOptions<StreamChatGenerics>;
+    } as SearchOptions;
 
-    const { next, results } = await this.client.search(channelFilters, messageFilters, options);
+    const { next, results } = await this.client.search(
+      channelFilters,
+      messageFilters,
+      options,
+    );
     const items = results.map(({ message }) => message);
 
     const cids = Array.from(
@@ -321,7 +327,7 @@ export class MessageSearchSource<
         {
           cid: { $in: cids },
           ...this.channelQueryFilters,
-        } as ChannelFilters<StreamChatGenerics>,
+        } as ChannelFilters,
         {
           last_message_at: -1,
           ...this.channelQuerySort,
@@ -333,15 +339,15 @@ export class MessageSearchSource<
     return { items, next };
   }
 
-  protected filterQueryResults(items: MessageResponse<StreamChatGenerics>[]) {
+  protected filterQueryResults(items: MessageResponse[]) {
     return items;
   }
 }
 
-export type DefaultSearchSources<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = [
-  UserSearchSource<StreamChatGenerics>,
-  ChannelSearchSource<StreamChatGenerics>,
-  MessageSearchSource<StreamChatGenerics>,
+export type DefaultSearchSources = [
+  UserSearchSource,
+  ChannelSearchSource,
+  MessageSearchSource,
 ];
 
 export type SearchControllerState = {
@@ -350,10 +356,10 @@ export type SearchControllerState = {
   sources: SearchSource[];
 };
 
-export type InternalSearchControllerState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type InternalSearchControllerState = {
   // FIXME: focusedMessage should live in a MessageListController class that does not exist yet.
   //  This state prop should be then removed
-  focusedMessage?: MessageResponse<StreamChatGenerics>;
+  focusedMessage?: MessageResponse;
 };
 
 export type SearchControllerConfig = {
@@ -366,12 +372,12 @@ export type SearchControllerOptions = {
   sources?: SearchSource[];
 };
 
-export class SearchController<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class SearchController {
   /**
    * Not intended for direct use by integrators, might be removed without notice resulting in
    * broken integrations.
    */
-  _internalState: StateStore<InternalSearchControllerState<StreamChatGenerics>>;
+  _internalState: StateStore<InternalSearchControllerState>;
   state: StateStore<SearchControllerState>;
   config: SearchControllerConfig;
 
@@ -381,7 +387,7 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
       searchQuery: '',
       sources: sources ?? [],
     });
-    this._internalState = new StateStore<InternalSearchControllerState<StreamChatGenerics>>({});
+    this._internalState = new StateStore<InternalSearchControllerState>({});
     this.config = { keepSingleActiveSource: true, ...config };
   }
   get hasNext() {
@@ -414,7 +420,8 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
     });
   };
 
-  getSource = (sourceType: SearchSource['type']) => this.sources.find((s) => s.type === sourceType);
+  getSource = (sourceType: SearchSource['type']) =>
+    this.sources.find((s) => s.type === sourceType);
 
   removeSource = (sourceType: SearchSource['type']) => {
     const newSources = this.sources.filter((s) => s.type !== sourceType);
@@ -446,7 +453,9 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
 
   activate = () => {
     if (!this.activeSources.length) {
-      const sourcesToActivate = this.config.keepSingleActiveSource ? this.sources.slice(0, 1) : this.sources;
+      const sourcesToActivate = this.config.keepSingleActiveSource
+        ? this.sources.slice(0, 1)
+        : this.sources;
       sourcesToActivate.forEach((s) => s.activate());
     }
     if (this.isActive) return;
@@ -467,7 +476,9 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
 
   clear = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
+    this.sources.forEach((source) =>
+      source.state.next({ ...source.initialState, isActive: source.isActive }),
+    );
     this.state.next((current) => ({
       ...current,
       isActive: true,
@@ -478,7 +489,9 @@ export class SearchController<StreamChatGenerics extends ExtendableGenerics = De
 
   exit = () => {
     this.cancelSearchQueries();
-    this.sources.forEach((source) => source.state.next({ ...source.initialState, isActive: source.isActive }));
+    this.sources.forEach((source) =>
+      source.state.next({ ...source.initialState, isActive: source.isActive }),
+    );
     this.state.next((current) => ({
       ...current,
       isActive: false,

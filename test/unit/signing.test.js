@@ -1,11 +1,14 @@
-import { expect } from 'chai';
 import { CheckSignature } from '../../src';
+
+import { describe, it, expect } from 'vitest';
 
 const MOCK_SECRET = 'porewqKAFDSAKZssecretsercretfads';
 const MOCK_TEXT = 'text';
 const MOCK_JSON_BODY = { a: 1 };
-const MOCK_TEXT_SHA256 = 'd0b770e93a56adc3ee9ac5734533cc0acd71eea8e5e8204a28042ca0f60de1f3';
-const MOCK_JSON_SHA256 = 'e527a6ad4993a4c9a30680c8be4b3eda1c36ab104f1f7d39c744bd27016a9624';
+const MOCK_TEXT_SHA256 =
+	'd0b770e93a56adc3ee9ac5734533cc0acd71eea8e5e8204a28042ca0f60de1f3';
+const MOCK_JSON_SHA256 =
+	'e527a6ad4993a4c9a30680c8be4b3eda1c36ab104f1f7d39c744bd27016a9624';
 
 describe('Signing', () => {
 	describe('CheckSignature', () => {

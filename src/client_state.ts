@@ -1,16 +1,16 @@
-import { UserResponse, ExtendableGenerics, DefaultGenerics } from './types';
-import { StreamChat } from './client';
+import type { UserResponse } from './types';
+import type { StreamChat } from './client';
 
 /**
  * ClientState - A container class for the client state.
  */
-export class ClientState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  private client: StreamChat<StreamChatGenerics>;
+export class ClientState {
+  private client: StreamChat;
   users: {
-    [key: string]: UserResponse<StreamChatGenerics>;
+    [key: string]: UserResponse;
   };
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
-  constructor({ client }: { client: StreamChat<StreamChatGenerics> }) {
+  constructor({ client }: { client: StreamChat }) {
     // show the status for a certain user...
     // ie online, offline etc
     this.client = client;
@@ -19,19 +19,19 @@ export class ClientState<StreamChatGenerics extends ExtendableGenerics = Default
     this.userChannelReferences = {};
   }
 
-  updateUsers(users: UserResponse<StreamChatGenerics>[]) {
+  updateUsers(users: UserResponse[]) {
     for (const user of users) {
       this.updateUser(user);
     }
   }
 
-  updateUser(user?: UserResponse<StreamChatGenerics>) {
+  updateUser(user?: UserResponse) {
     if (user != null && this.client._cacheEnabled()) {
       this.users[user.id] = user;
     }
   }
 
-  updateUserReference(user: UserResponse<StreamChatGenerics>, channelID: string) {
+  updateUserReference(user: UserResponse, channelID: string) {
     if (user == null || !this.client._cacheEnabled()) {
       return;
     }

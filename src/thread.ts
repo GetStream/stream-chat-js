@@ -1,34 +1,37 @@
-import type { Channel } from './channel';
-import type { StreamChat } from './client';
 import { StateStore } from './store';
+import {
+  addToMessageList,
+  findIndexInSortedArray,
+  formatMessage,
+  throttle,
+} from './utils';
 import type {
   AscDesc,
-  DefaultGenerics,
   EventTypes,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
   ThreadResponse,
-  ThreadResponseCustomData,
   UserResponse,
 } from './types';
-import { addToMessageList, findIndexInSortedArray, formatMessage, throttle } from './utils';
+import type { Channel } from './channel';
+import type { StreamChat } from './client';
+import type { CustomThreadData } from './custom_types';
 
-type QueryRepliesOptions<SCG extends ExtendableGenerics> = {
+type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
-} & MessagePaginationOptions & { user?: UserResponse<SCG>; user_id?: string };
+} & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
 
-export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadState = {
   /**
    * Determines if the thread is currently opened and on-screen. When the thread is active,
    * all new messages are immediately marked as read.
    */
   active: boolean;
-  channel: Channel<SCG>;
+  channel: Channel;
   createdAt: Date;
-  custom: ThreadResponseCustomData;
+  custom: CustomThreadData;
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
@@ -37,10 +40,10 @@ export type ThreadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
    */
-  parentMessage: FormatMessageResponse<SCG>;
-  participants: ThreadResponse<SCG>['thread_participants'];
+  parentMessage: FormatMessageResponse;
+  participants: ThreadResponse['thread_participants'];
   read: ThreadReadState;
-  replies: Array<FormatMessageResponse<SCG>>;
+  replies: Array<FormatMessageResponse>;
   replyCount: number;
   title: string;
   updatedAt: Date | null;
@@ -53,17 +56,14 @@ export type ThreadRepliesPagination = {
   prevCursor: string | null;
 };
 
-export type ThreadUserReadState<SCG extends ExtendableGenerics = DefaultGenerics> = {
+export type ThreadUserReadState = {
   lastReadAt: Date;
   unreadMessageCount: number;
-  user: UserResponse<SCG>;
+  user: UserResponse;
   lastReadMessageId?: string;
 };
 
-export type ThreadReadState<SCG extends ExtendableGenerics = DefaultGenerics> = Record<
-  string,
-  ThreadUserReadState<SCG> | undefined
->;
+export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
@@ -91,14 +91,14 @@ export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> =
 
 // TODO: remove this once we move to API v2
 const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
-  const custom: ThreadResponseCustomData = {};
+  const custom: CustomThreadData = {};
 
   for (const key in threadData) {
     if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
       continue;
     }
 
-    const customKey = key as keyof ThreadResponseCustomData;
+    const customKey = key as keyof CustomThreadData;
 
     custom[customKey] = threadData[customKey];
   }
@@ -106,27 +106,43 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   return custom;
 };
 
-export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: StateStore<ThreadState<SCG>>;
+export class Thread {
+  public readonly state: StateStore<ThreadState>;
   public readonly id: string;
 
-  private client: StreamChat<SCG>;
+  private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private failedRepliesMap: Map<string, FormatMessageResponse<SCG>> = new Map();
+  private failedRepliesMap: Map<string, FormatMessageResponse> = new Map();
 
-  constructor({ client, threadData }: { client: StreamChat<SCG>; threadData: ThreadResponse<SCG> }) {
+  constructor({
+    client,
+    threadData,
+  }: {
+    client: StreamChat;
+    threadData: ThreadResponse;
+  }) {
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
+      // @ts-expect-error name is a "custom" property
       name: threadData.channel.name,
     });
-    channel._hydrateMembers({ members: threadData.channel.members ?? [], overrideCurrentState: false });
+    channel._hydrateMembers({
+      members: threadData.channel.members ?? [],
+      overrideCurrentState: false,
+    });
 
     // For when read object is undefined and due to that unreadMessageCount for
     // the current user isn't being incremented on message.new
     const placeholderReadResponse: ReadResponse[] = client.userID
-      ? [{ user: { id: client.userID }, unread_messages: 0, last_read: new Date().toISOString() }]
+      ? [
+          {
+            user: { id: client.userID },
+            unread_messages: 0,
+            last_read: new Date().toISOString(),
+          },
+        ]
       : [];
 
-    this.state = new StateStore<ThreadState<SCG>>({
+    this.state = new StateStore<ThreadState>({
       // local only
       active: false,
       isLoading: false,
@@ -140,7 +156,9 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
       parentMessage: formatMessage(threadData.parent_message),
       participants: threadData.thread_participants,
       read: formatReadState(
-        !threadData.read || threadData.read.length === 0 ? placeholderReadResponse : threadData.read,
+        !threadData.read || threadData.read.length === 0
+          ? placeholderReadResponse
+          : threadData.read,
       ),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
@@ -188,7 +206,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public hydrateState = (thread: Thread<SCG>) => {
+  public hydrateState = (thread: Thread) => {
     if (thread === this) {
       // skip if the instances are the same
       return;
@@ -241,8 +259,8 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
   };
 
-  private subscribeThreadUpdated = () => {
-    return this.client.on('thread.updated', (event) => {
+  private subscribeThreadUpdated = () =>
+    this.client.on('thread.updated', (event) => {
       if (!event.thread || event.thread.parent_message_id !== this.id) {
         return;
       }
@@ -257,10 +275,9 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
         custom: constructCustomDataObject(threadData),
       });
     }).unsubscribe;
-  };
 
-  private subscribeMarkActiveThreadRead = () => {
-    return this.state.subscribeWithSelector(
+  private subscribeMarkActiveThreadRead = () =>
+    this.state.subscribeWithSelector(
       (nextValue) => ({
         active: nextValue.active,
         unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
@@ -270,7 +287,6 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
         this.throttledMarkAsRead();
       },
     );
-  };
 
   private subscribeReloadActiveStaleThread = () =>
     this.state.subscribeWithSelector(
@@ -286,7 +302,11 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.client.on('user.watching.stop', (event) => {
       const { channel } = this.state.getLatestValue();
 
-      if (!this.client.userID || this.client.userID !== event.user?.id || event.channel?.cid !== channel.cid) {
+      if (
+        !this.client.userID ||
+        this.client.userID !== event.user?.id ||
+        event.channel?.cid !== channel.cid
+      ) {
         return;
       }
 
@@ -391,7 +411,12 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const eventTypes: EventTypes[] = ['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'];
+    const eventTypes: EventTypes[] = [
+      'message.updated',
+      'reaction.new',
+      'reaction.deleted',
+      'reaction.updated',
+    ];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -410,7 +435,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.unsubscribeFunctions.clear();
   };
 
-  public deleteReplyLocally = ({ message }: { message: MessageResponse<SCG> }) => {
+  public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
     const { replies } = this.state.getLatestValue();
 
     const index = findIndexInSortedArray({
@@ -437,7 +462,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     message,
     timestampChanged = false,
   }: {
-    message: MessageResponse<SCG>;
+    message: MessageResponse;
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -459,7 +484,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     }));
   };
 
-  public updateParentMessageLocally = ({ message }: { message: MessageResponse<SCG> }) => {
+  public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
     }
@@ -476,7 +501,7 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
 
-  public updateParentMessageOrReplyLocally = (message: MessageResponse<SCG>) => {
+  public updateParentMessageOrReplyLocally = (message: MessageResponse) => {
     if (message.parent_id === this.id) {
       this.upsertReplyLocally({ message });
     }
@@ -494,23 +519,24 @@ export class Thread<SCG extends ExtendableGenerics = DefaultGenerics> {
     return await this.channel.markRead({ thread_id: this.id });
   };
 
-  private throttledMarkAsRead = throttle(() => this.markAsRead(), MARK_AS_READ_THROTTLE_TIMEOUT, { trailing: true });
+  private throttledMarkAsRead = throttle(
+    () => this.markAsRead(),
+    MARK_AS_READ_THROTTLE_TIMEOUT,
+    { trailing: true },
+  );
 
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,
     sort = DEFAULT_SORT,
     ...otherOptions
-  }: QueryRepliesOptions<SCG> = {}) => {
-    return this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
-  };
+  }: QueryRepliesOptions = {}) =>
+    this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
 
-  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
-    return this.loadPage(limit);
-  };
+  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
+    this.loadPage(limit);
 
-  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) => {
-    return this.loadPage(-limit);
-  };
+  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
+    this.loadPage(-limit);
 
   private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
@@ -574,19 +600,22 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
     return state;
   }, {});
 
-const repliesPaginationFromInitialThread = (thread: ThreadResponse): ThreadRepliesPagination => {
-  const latestRepliesContainsAllReplies = thread.latest_replies.length === thread.reply_count;
+const repliesPaginationFromInitialThread = (
+  thread: ThreadResponse,
+): ThreadRepliesPagination => {
+  const latestRepliesContainsAllReplies =
+    thread.latest_replies.length === thread.reply_count;
 
   return {
     nextCursor: null,
-    prevCursor: latestRepliesContainsAllReplies ? null : thread.latest_replies.at(0)?.id ?? null,
+    prevCursor: latestRepliesContainsAllReplies
+      ? null
+      : (thread.latest_replies.at(0)?.id ?? null),
     isLoadingNext: false,
     isLoadingPrev: false,
   };
 };
 
-const ownUnreadCountSelector = (currentUserId: string | undefined) => <
-  SCG extends ExtendableGenerics = DefaultGenerics
->(
-  state: ThreadState<SCG>,
-) => (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
+const ownUnreadCountSelector =
+  (currentUserId: string | undefined) => (state: ThreadState) =>
+    (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;

@@ -1,6 +1,5 @@
 /dist
 /node_modules
 /.vscode
-/types
 CHANGELOG.md
 test/typescript/data.ts
