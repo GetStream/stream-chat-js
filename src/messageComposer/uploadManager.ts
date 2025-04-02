@@ -35,14 +35,12 @@ export type UploadManagerState = {
   hasUploadPermission: boolean;
 };
 
-type Message = DraftMessage | LocalMessage | undefined;
-
 export type UploadManagerOptions<T> = {
   fileUploadFilter?: (file: T) => boolean;
   channel: Channel;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage?: number;
-  message?: Message;
+  message?: DraftMessage | LocalMessage;
 };
 
 export type UploadManagerBaseInterface = {
@@ -52,6 +50,9 @@ export type UploadManagerBaseInterface = {
   successfulUploads: LocalAttachment[];
   successfulUploadsCount: number;
   availableUploadSlots: number;
+  failedUploadsCount: number;
+  hasUploadPermission: boolean;
+  isUploadEnabled: boolean;
   initState: ({ message }?: { message?: DraftMessage | LocalMessage }) => void;
   removeUploads: (uploadIds: string[]) => void;
   upsertUploads: (uploadsToUpsert: LocalAttachment[]) => void;
@@ -118,6 +119,10 @@ class UploadManager<T = unknown> {
     return this.state.getLatestValue().uploads;
   }
 
+  get hasUploadPermission() {
+    return this.state.getLatestValue().hasUploadPermission;
+  }
+
   get uploadsInProgressCount() {
     return Object.values(this.uploads).filter(
       ({ localMetadata }) => localMetadata.uploadState === 'uploading',
@@ -137,6 +142,16 @@ class UploadManager<T = unknown> {
 
   get availableUploadSlots() {
     return this.maxNumberOfFilesPerMessage - this.successfulUploadsCount;
+  }
+
+  get failedUploadsCount() {
+    return Object.values(this.uploads).filter(
+      ({ localMetadata }) => localMetadata.uploadState === 'failed',
+    ).length;
+  }
+
+  get isUploadEnabled() {
+    return this.hasUploadPermission && this.availableUploadSlots > 0;
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {

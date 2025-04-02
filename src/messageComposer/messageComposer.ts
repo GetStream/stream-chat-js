@@ -172,8 +172,8 @@ export class MessageComposer {
           ? composition.message
           : formatMessage(composition);
 
-    this.uploadManager?.initState({ message });
     this.attachmentManager.initState();
+    this.uploadManager?.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
     this.state.next(initState(composition));
