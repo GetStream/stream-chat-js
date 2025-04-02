@@ -7,26 +7,26 @@ export type MiddlewareValue<TState> = {
   status?: MiddlewareStatus;
 };
 
-export type MiddlewareHandler<TValue> = (params: {
-  input: TValue;
-  nextHandler: (input: TValue) => Promise<TValue>;
-}) => Promise<TValue>;
+export type MiddlewareHandler<TState> = (params: {
+  input: MiddlewareValue<TState>;
+  nextHandler: (input: MiddlewareValue<TState>) => Promise<MiddlewareValue<TState>>;
+}) => Promise<MiddlewareValue<TState>>;
 
-export type Middleware<TState, TValue extends MiddlewareValue<TState>> = {
+export type Middleware<TState> = {
   id: string;
-  [key: string]: string | MiddlewareHandler<TValue>;
+  [key: string]: string | MiddlewareHandler<TState>;
 };
 
-export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> {
-  private middleware: Middleware<TState, TValue>[] = [];
+export class MiddlewareExecutor<TState> {
+  private middleware: Middleware<TState>[] = [];
 
-  use(middleware: Middleware<TState, TValue> | Middleware<TState, TValue>[]) {
+  use(middleware: Middleware<TState> | Middleware<TState>[]) {
     this.middleware = this.middleware.concat(middleware);
     return this;
   }
 
   // todo: document how to re-arrange the order of middleware using upsert
-  upsert(middleware: Middleware<TState, TValue>[]) {
+  upsert(middleware: Middleware<TState>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {
       const existingIndex = this.middleware.findIndex(
@@ -44,12 +44,15 @@ export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> 
 
   protected async executeMiddlewareChain(
     eventName: string,
-    initialInput: TValue,
+    initialInput: MiddlewareValue<TState>,
     extraParams: Record<string, unknown> = {},
-  ): Promise<TValue> {
+  ): Promise<MiddlewareValue<TState>> {
     let index = -1;
 
-    const execute = async (i: number, input: TValue): Promise<TValue> => {
+    const execute = async (
+      i: number,
+      input: MiddlewareValue<TState>,
+    ): Promise<MiddlewareValue<TState>> => {
       if (i <= index) {
         throw new Error('next() called multiple times');
       }
@@ -70,7 +73,7 @@ export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> 
 
       return await handler({
         input,
-        nextHandler: (nextInput: TValue) => execute(i + 1, nextInput),
+        nextHandler: (nextInput: MiddlewareValue<TState>) => execute(i + 1, nextInput),
         ...extraParams,
       });
     };
@@ -83,7 +86,10 @@ export class MiddlewareExecutor<TState, TValue extends MiddlewareValue<TState>> 
     return result === 'canceled' ? { ...initialInput, status: 'discard' } : result;
   }
 
-  async execute(eventName: string, initialInput: TValue): Promise<TValue> {
+  async execute(
+    eventName: string,
+    initialInput: MiddlewareValue<TState>,
+  ): Promise<MiddlewareValue<TState>> {
     return await this.executeMiddlewareChain(eventName, initialInput);
   }
 }

@@ -94,7 +94,7 @@ export class PollComposer {
       hasAtLeastOneOption &&
       hasName &&
       validMaxVotesAllowed &&
-      Object.keys(errors).length > 0
+      Object.keys(errors).length === 0
     );
   }
 

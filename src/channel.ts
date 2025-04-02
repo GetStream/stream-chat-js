@@ -73,12 +73,7 @@ import type {
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
-import type { TextComposerMiddleware } from './messageComposer';
-import {
-  createCommandsMiddleware,
-  createMentionsMiddleware,
-  MessageComposer,
-} from './messageComposer';
+import { MessageComposer } from './messageComposer';
 
 /**
  * Channel - The Channel class manages it's own state.

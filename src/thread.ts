@@ -18,12 +18,7 @@ import type {
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
-import type { TextComposerMiddleware } from './messageComposer';
-import {
-  createCommandsMiddleware,
-  createMentionsMiddleware,
-  MessageComposer,
-} from './messageComposer';
+import { MessageComposer } from './messageComposer';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];

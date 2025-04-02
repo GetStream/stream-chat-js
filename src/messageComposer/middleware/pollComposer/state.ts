@@ -1,7 +1,6 @@
 import type {
   PollComposerFieldErrors,
   PollComposerState,
-  PollComposerStateMiddlewareValue,
   PollComposerStateMiddlewareValueState,
 } from './types';
 import { generateUUIDv4 } from '../../../utils';
@@ -119,84 +118,82 @@ const processors: Partial<Record<keyof PollComposerState['data'], Processor>> = 
   },
 };
 
-export const createPollComposerStateMiddleware = (): Middleware<
-  PollComposerStateMiddlewareValueState,
-  PollComposerStateMiddlewareValue
-> => ({
-  id: 'pollComposerStateProcessing',
-  handleFieldChange: ({ input, nextHandler }) => {
-    if (!input.state.targetFields) return nextHandler(input);
-    const {
-      state: { previousState, targetFields },
-    } = input;
-    const finalValidators = { ...validators, ...changeValidators };
+export const createPollComposerStateMiddleware =
+  (): Middleware<PollComposerStateMiddlewareValueState> => ({
+    id: 'pollComposerStateProcessing',
+    handleFieldChange: ({ input, nextHandler }) => {
+      if (!input.state.targetFields) return nextHandler(input);
+      const {
+        state: { previousState, targetFields },
+      } = input;
+      const finalValidators = { ...validators, ...changeValidators };
 
-    const newData = Object.entries(targetFields).reduce(
-      (acc, [key, value]) => {
-        const processor = processors[key as keyof PollComposerState['data']];
-        acc = {
-          ...acc,
-          ...(processor
-            ? processor({ data: previousState.data, value })
-            : { [key]: value }),
-        };
+      const newData = Object.entries(targetFields).reduce(
+        (acc, [key, value]) => {
+          const processor = processors[key as keyof PollComposerState['data']];
+          acc = {
+            ...acc,
+            ...(processor
+              ? processor({ data: previousState.data, value })
+              : { [key]: value }),
+          };
+          return acc;
+        },
+        {} as PollComposerState['data'],
+      );
+
+      const newErrors = Object.keys(targetFields).reduce((acc, key) => {
+        const validator = finalValidators[key as keyof PollComposerState['data']];
+        if (validator) {
+          const error = validator({
+            data: previousState.data,
+            value: newData[key as keyof PollComposerState['data']],
+            currentError: previousState.errors[key as keyof PollComposerState['data']],
+          });
+          acc = { ...acc, ...error };
+        }
         return acc;
-      },
-      {} as PollComposerState['data'],
-    );
+      }, {} as PollComposerFieldErrors);
 
-    const newErrors = Object.keys(targetFields).reduce((acc, key) => {
-      const validator = finalValidators[key as keyof PollComposerState['data']];
-      if (validator) {
-        const error = validator({
-          data: previousState.data,
-          value: newData[key as keyof PollComposerState['data']],
-          currentError: previousState.errors[key as keyof PollComposerState['data']],
-        });
-        acc = { ...acc, ...error };
-      }
-      return acc;
-    }, {} as PollComposerFieldErrors);
-
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        nextState: {
-          ...previousState,
-          data: { ...previousState.data, ...newData },
-          errors: { ...previousState.errors, ...newErrors },
+      return nextHandler({
+        ...input,
+        state: {
+          ...input.state,
+          nextState: {
+            ...previousState,
+            data: { ...previousState.data, ...newData },
+            errors: { ...previousState.errors, ...newErrors },
+          },
         },
-      },
-    });
-  },
-  handleFieldBlur: ({ input, nextHandler }) => {
-    const {
-      state: { previousState, targetFields },
-    } = input;
-    const finalValidators = { ...validators, ...blurValidators };
-    const newErrors = Object.entries(targetFields).reduce((acc, [key, value]) => {
-      const validator = finalValidators[key as keyof PollComposerState['data']];
-      if (validator) {
-        const error = validator({
-          data: previousState.data,
-          value,
-          currentError: previousState.errors[key as keyof PollComposerState['data']],
-        });
-        acc = { ...acc, ...error };
-      }
-      return acc;
-    }, {} as PollComposerFieldErrors);
+      });
+    },
+    handleFieldBlur: ({ input, nextHandler }) => {
+      const {
+        state: { previousState, targetFields },
+      } = input;
+      const finalValidators = { ...validators, ...blurValidators };
+      const newErrors = Object.entries(targetFields).reduce((acc, [key, value]) => {
+        const validator = finalValidators[key as keyof PollComposerState['data']];
+        if (validator) {
+          const error = validator({
+            data: previousState.data,
+            value,
+            currentError: previousState.errors[key as keyof PollComposerState['data']],
+          });
+          acc = { ...acc, ...error };
+        }
+        return acc;
+      }, {} as PollComposerFieldErrors);
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        nextState: {
-          ...previousState,
-          errors: { ...previousState.errors, ...newErrors },
+      return nextHandler({
+        ...input,
+        state: {
+          ...input.state,
+          nextState: {
+            ...previousState,
+            errors: { ...previousState.errors, ...newErrors },
+          },
         },
-      },
-    });
-  },
-});
+      });
+    },
+  });

@@ -1,4 +1,7 @@
-import type { MessageComposerMiddlewareValue } from './types';
+import type {
+  MessageComposerMiddlewareValue,
+  MessageDraftComposerMiddlewareValue,
+} from './types';
 import type { MessageComposer } from '../../messageComposer';
 import type { LocalMessage, LocalMessageBase } from '../../../types';
 
@@ -32,6 +35,38 @@ export const createMessageComposerStateMiddleware = (composer: MessageComposer) 
         },
         message: {
           ...input.state.message,
+          ...payload,
+        },
+      },
+    });
+  },
+});
+
+export const createDraftMessageComposerStateMiddleware = (composer: MessageComposer) => ({
+  id: 'messageComposerState',
+  compose: ({
+    input,
+    nextHandler,
+  }: {
+    input: MessageDraftComposerMiddlewareValue;
+    nextHandler: (
+      input: MessageDraftComposerMiddlewareValue,
+    ) => Promise<MessageDraftComposerMiddlewareValue>;
+  }) => {
+    const payload: Pick<LocalMessage, 'poll_id' | 'quoted_message_id'> = {};
+    if (composer.quotedMessage) {
+      payload.quoted_message_id = composer.quotedMessage.id;
+    }
+    if (composer.pollId) {
+      payload.poll_id = composer.pollId;
+    }
+
+    return nextHandler({
+      ...input,
+      state: {
+        ...input.state,
+        draft: {
+          ...input.state.draft,
           ...payload,
         },
       },
