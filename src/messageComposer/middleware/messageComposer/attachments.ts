@@ -13,10 +13,10 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
       input: MessageComposerMiddlewareValue,
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
-    const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+    const { attachmentManager, uploadManager } = composer;
+    if (!attachmentManager || !uploadManager) return nextHandler(input);
 
-    if (attachmentManager.uploadsInProgressCount > 0) {
+    if (uploadManager.uploadsInProgressCount > 0) {
       composer.client.notifications.addWarning({
         message: 'Wait until all attachments have uploaded',
         origin: {
@@ -28,7 +28,7 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
     }
 
     const attachments = (input.state.message.attachments ?? []).concat(
-      attachmentManager.successfulUploads.map((localAttachment) => {
+      uploadManager.successfulUploads.map((localAttachment) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { localMetadata, ...attachment } = localAttachment;
         return attachment as Attachment;

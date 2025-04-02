@@ -1,5 +1,4 @@
 import { LinkPreviewsManager } from './linkPreviewsManager';
-import { AttachmentManager } from './attachmentManager';
 import { TextComposer } from './textComposer';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import { MessageComposerMiddlewareExecutor } from './middleware';
@@ -16,6 +15,8 @@ import type {
   MessageResponse,
   MessageResponseBase,
 } from '../types';
+import { type UploadManagerInterface } from './uploadManager';
+import { AttachmentManager } from './attachmentManager';
 
 /*
   todo:
@@ -34,6 +35,7 @@ export type MessageComposerConfig = {
   publishTypingEvents: boolean;
   maxTextLength?: number;
   urlPreviewEnabled?: boolean;
+  uploadManager?: UploadManagerInterface;
 };
 
 export type MessageComposerOptions = {
@@ -86,10 +88,13 @@ export class MessageComposer {
   readonly state: StateStore<MessageComposerState>;
   readonly editedMessage?: LocalMessage;
   readonly threadId: string | null;
-  config: MessageComposerConfig;
+
   attachmentManager: AttachmentManager;
+  config: MessageComposerConfig;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
+  uploadManager?: UploadManagerInterface;
+
   // todo: mediaRecorder: MediaRecorderController;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
@@ -97,7 +102,8 @@ export class MessageComposer {
   constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
+    const { uploadManager, ...restConfig } = config ?? {};
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, restConfig);
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (isMessageDraft(composition)) {
@@ -107,7 +113,9 @@ export class MessageComposer {
       this.editedMessage = message;
     }
 
-    this.attachmentManager = new AttachmentManager({ channel, message });
+    this.attachmentManager = new AttachmentManager();
+    this.uploadManager = uploadManager;
+
     this.linkPreviewsManager = new LinkPreviewsManager({
       client: channel.getClient(),
       message,
@@ -136,11 +144,10 @@ export class MessageComposer {
   }
 
   get canSendMessage() {
+    if (!this.uploadManager) return;
     return (
-      !this.attachmentManager.uploadsInProgressCount &&
-      (!this.textComposer.textIsEmpty ||
-        this.attachmentManager.successfulUploadsCount > 0) //&&
-      // !customMessageData?.poll_id
+      !this.uploadManager?.uploadsInProgressCount &&
+      (!this.textComposer.textIsEmpty || this.uploadManager?.successfulUploadsCount > 0) // && !customMessageData?.poll_id)
     );
   }
 
@@ -155,7 +162,9 @@ export class MessageComposer {
         : isMessageDraft(composition)
           ? composition.message
           : formatMessage(composition);
-    this.attachmentManager.initState({ message });
+
+    this.uploadManager?.initState({ message });
+    this.attachmentManager.initState();
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
     this.state.next(initState(composition));
@@ -169,6 +178,7 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeTextChanged());
+    this.unsubscribeFunctions.add(this.subscribeUploadsChanged());
 
     if (this.client.options.drafts) {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
@@ -250,6 +260,29 @@ export class MessageComposer {
         return;
       this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
     });
+
+  private subscribeUploadsChanged = () => {
+    if (!this.uploadManager)
+      return () => {
+        console.log('No upload manager.');
+      };
+    return this.uploadManager.state.subscribe((nextValue, previousValue) => {
+      const removedUploadsIds = previousValue?.uploads
+        .filter(
+          (prevUpload) =>
+            !nextValue.uploads.find(
+              (v) => v.localMetadata.id === prevUpload.localMetadata.id,
+            ),
+        )
+        .map((upload) => upload.localMetadata.id);
+
+      if (removedUploadsIds?.length) {
+        this.attachmentManager.removeAttachments(removedUploadsIds);
+      }
+      console.log('nextValue.uploads', nextValue.uploads);
+      this.attachmentManager.upsertAttachments(nextValue.uploads);
+    });
+  };
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });

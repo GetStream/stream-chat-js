@@ -5,3 +5,4 @@ export * from './messageComposer';
 export * from './middleware';
 export * from './textComposer';
 export * from './types';
+export * from './uploadManager';
