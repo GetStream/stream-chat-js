@@ -295,7 +295,7 @@ export class MessageComposer {
   private subscribeUploadsChanged = () => {
     if (!this.uploadManager)
       return () => {
-        console.log('No upload manager.');
+        console.info('No upload manager.');
       };
     return this.uploadManager.state.subscribe((nextValue, previousValue) => {
       const removedUploadsIds = previousValue?.uploads
@@ -310,7 +310,6 @@ export class MessageComposer {
       if (removedUploadsIds?.length) {
         this.attachmentManager.removeAttachments(removedUploadsIds);
       }
-      console.log('nextValue.uploads', nextValue.uploads);
       this.attachmentManager.upsertAttachments(nextValue.uploads);
     });
   };

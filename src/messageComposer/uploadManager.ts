@@ -177,7 +177,6 @@ class UploadManager<T = unknown> {
       }
     });
 
-    console.log('uploads', uploads);
     this.state.partialNext({ uploads });
   };
 
