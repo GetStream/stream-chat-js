@@ -3,7 +3,10 @@ import { LinkPreviewsManager } from './linkPreviewsManager';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
 import type { MessageComposerMiddlewareValue } from './middleware';
-import { MessageComposerMiddlewareExecutor } from './middleware';
+import {
+  MessageComposerMiddlewareExecutor,
+  MessageDraftComposerMiddlewareExecutor,
+} from './middleware';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
@@ -19,14 +22,21 @@ import type {
 } from '../types';
 import { type UploadManagerInterface } from './uploadManager';
 
-/*
-  todo:
-  1/ decide whether lastChange timestamp is necessary
- */
+export type ComposerMap = {
+  attachmentManager: AttachmentManager;
+  linkPreviewsManager: LinkPreviewsManager;
+  textComposer: TextComposer;
+  pollComposer: PollComposer;
+};
+
+type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
+
+type EditingAuditState = {
+  lastChange: LastComposerChange;
+};
 
 export type MessageComposerState = {
   id: string;
-  lastChange: Date | null;
   quotedMessage: LocalMessageBase | null;
   pollId: string | null;
 };
@@ -34,6 +44,7 @@ export type MessageComposerState = {
 export type MessageComposerConfig = {
   /** If true, triggers typing events on text input keystroke */
   publishTypingEvents: boolean;
+  draftsEnabled?: boolean;
   maxTextLength?: number;
   urlPreviewEnabled?: boolean;
   uploadManager?: UploadManagerInterface;
@@ -47,8 +58,20 @@ export type MessageComposerOptions = {
   tag?: string;
 };
 
-const isMessageDraft = (composition: unknown): composition is DraftResponse =>
+const compositionIsMessageDraft = (composition: unknown): composition is DraftResponse =>
   !!(composition as { message?: DraftMessage })?.message;
+
+const initEditingAuditState = (
+  composition?: DraftResponse | MessageResponse | LocalMessage,
+): EditingAuditState => {
+  const timeStamp = new Date().getTime();
+  return {
+    lastChange: {
+      draftUpdate: compositionIsMessageDraft(composition) ? timeStamp : null,
+      stateUpdate: timeStamp,
+    },
+  };
+};
 
 const initState = (
   composition?: DraftResponse | MessageResponse | LocalMessage,
@@ -56,7 +79,6 @@ const initState = (
   if (!composition) {
     return {
       id: MessageComposer.generateId(),
-      lastChange: null,
       quotedMessage: null,
       pollId: null,
     };
@@ -64,7 +86,7 @@ const initState = (
 
   const quotedMessage = composition.quoted_message;
   let message;
-  if (isMessageDraft(composition)) {
+  if (compositionIsMessageDraft(composition)) {
     message = composition.message;
   } else {
     message = composition;
@@ -72,7 +94,6 @@ const initState = (
 
   return {
     id: message.id,
-    lastChange: new Date(),
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
@@ -81,6 +102,7 @@ const initState = (
 };
 
 const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
+  draftsEnabled: true,
   publishTypingEvents: true,
   urlPreviewEnabled: false,
 };
@@ -93,16 +115,20 @@ export class MessageComposer {
   readonly editedMessage?: LocalMessage;
   readonly threadId: string | null;
   readonly tag: string;
-  attachmentManager: AttachmentManager;
+
   config: MessageComposerConfig;
+  attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
   uploadManager?: UploadManagerInterface;
 
   pollComposer: PollComposer;
   // todo: mediaRecorder: MediaRecorderController;
+
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
+  private draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
+  private editingAuditState: StateStore<EditingAuditState>;
 
   constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
     this.channel = channel;
@@ -112,7 +138,7 @@ export class MessageComposer {
     this.tag = tag ?? generateUUIDv4();
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
-    if (isMessageDraft(composition)) {
+    if (compositionIsMessageDraft(composition)) {
       message = composition.message;
     } else if (composition) {
       message = formatMessage(composition);
@@ -128,8 +154,16 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.pollComposer = new PollComposer({ composer: this });
+
+    this.editingAuditState = new StateStore<EditingAuditState>(
+      this.initEditingAuditState(composition),
+    );
     this.state = new StateStore<MessageComposerState>(initState(composition));
+
     this.compositionMiddlewareExecutor = new MessageComposerMiddlewareExecutor({
+      composer: this,
+    });
+    this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
   }
@@ -140,6 +174,9 @@ export class MessageComposer {
 
   get id() {
     return this.state.getLatestValue().id;
+  }
+  get lastChange() {
+    return this.editingAuditState.getLatestValue().lastChange;
   }
 
   get quotedMessage() {
@@ -160,15 +197,33 @@ export class MessageComposer {
     );
   }
 
+  get lastChangeOriginIsLocal() {
+    return (
+      this.lastChange.draftUpdate === null ||
+      this.lastChange.draftUpdate < this.lastChange.stateUpdate
+    );
+  }
+
+  get compositionIsEmpty() {
+    return (
+      !this.quotedMessage &&
+      this.textComposer.textIsEmpty &&
+      !this.attachmentManager.attachments.length &&
+      !this.pollId
+    );
+  }
+
   static generateId = generateUUIDv4;
 
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse } = {}) => {
+    this.editingAuditState.partialNext(this.initEditingAuditState(composition));
+
     const message: LocalMessage | DraftMessage | undefined =
       typeof composition === 'undefined'
         ? composition
-        : isMessageDraft(composition)
+        : compositionIsMessageDraft(composition)
           ? composition.message
           : formatMessage(composition);
 
@@ -179,6 +234,28 @@ export class MessageComposer {
     this.state.next(initState(composition));
   };
 
+  initEditingAuditState = (
+    composition?: DraftResponse | MessageResponse | LocalMessage,
+  ) =>
+    initEditingAuditState(
+      this.config?.draftsEnabled || !compositionIsMessageDraft(composition)
+        ? composition
+        : undefined,
+    );
+
+  private logStateUpdateTimestamp() {
+    this.editingAuditState.partialNext({
+      lastChange: { ...this.lastChange, stateUpdate: new Date().getTime() },
+    });
+  }
+  private logDraftUpdateTimestamp() {
+    if (!this.config.draftsEnabled) return;
+    const timestamp = new Date().getTime();
+    this.editingAuditState.partialNext({
+      lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
+    });
+  }
+
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
       // Already listening for events and changes
@@ -187,10 +264,15 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
-    this.unsubscribeFunctions.add(this.subscribeTextChanged());
     this.unsubscribeFunctions.add(this.subscribeUploadsChanged());
 
-    if (this.client.options.drafts) {
+    this.unsubscribeFunctions.add(this.subscribeTextComposerStateChanged());
+    this.unsubscribeFunctions.add(this.subscribeAttachmentManagerStateChanged());
+    this.unsubscribeFunctions.add(this.subscribeLinkPreviewsManagerStateChanged());
+    this.unsubscribeFunctions.add(this.subscribePollComposerStateChanged());
+    this.unsubscribeFunctions.add(this.subscribeMessageComposerStateChanged());
+
+    if (this.config.draftsEnabled) {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
     }
@@ -217,8 +299,8 @@ export class MessageComposer {
     const eventTypes: EventTypes[] = [
       'message.updated',
       'reaction.new',
-      'reaction.deleted',
-      'reaction.updated',
+      'reaction.deleted', // todo: do we need to subscribe to this especially when the whole state is overriden?
+      'reaction.updated', // todo: do we need to subscribe to this especially when the whole state is overriden?
     ];
 
     const unsubscribeFunctions = eventTypes.map(
@@ -268,7 +350,11 @@ export class MessageComposer {
   private subscribeDraftUpdated = () =>
     this.client.on('draft.updated', (event) => {
       const draft = event.draft as DraftResponse;
-      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id)
+      if (
+        !draft ||
+        !!draft.parent_id !== !!this.threadId ||
+        draft.channel_cid !== this.channel.cid
+      )
         return;
       this.initState({ composition: draft });
     }).unsubscribe;
@@ -276,13 +362,29 @@ export class MessageComposer {
   private subscribeDraftDeleted = () =>
     this.client.on('draft.deleted', (event) => {
       const draft = event.draft as DraftResponse;
-      if (!draft || draft.parent_id !== this.threadId || draft.message.id !== this.id)
+      if (
+        !draft ||
+        !!draft.parent_id !== !!this.threadId ||
+        draft.channel_cid !== this.channel.cid
+      )
         return;
+
+      this.logDraftUpdateTimestamp();
+      if (this.compositionIsEmpty) {
+        return;
+      }
       this.clear();
     }).unsubscribe;
 
-  private subscribeTextChanged = () =>
+  private subscribeTextComposerStateChanged = () =>
     this.textComposer.state.subscribe((nextValue, previousValue) => {
+      if (previousValue && nextValue.text !== previousValue?.text) {
+        this.logStateUpdateTimestamp();
+        if (this.compositionIsEmpty) {
+          this.deleteDraft();
+          return;
+        }
+      }
       if (
         !this.config.urlPreviewEnabled ||
         !nextValue.text ||
@@ -298,6 +400,8 @@ export class MessageComposer {
         console.info('No upload manager.');
       };
     return this.uploadManager.state.subscribe((nextValue, previousValue) => {
+      console.log('nextValue', nextValue);
+      console.log('previousValue', previousValue);
       const removedUploadsIds = previousValue?.uploads
         .filter(
           (prevUpload) =>
@@ -313,6 +417,85 @@ export class MessageComposer {
       this.attachmentManager.upsertAttachments(nextValue.uploads);
     });
   };
+
+  private subscribeAttachmentManagerStateChanged = () =>
+    this.attachmentManager.state.subscribe((nextValue, previousValue) => {
+      const isActualStateChange =
+        !!previousValue &&
+        (nextValue.attachments.length !== previousValue.attachments.length ||
+          nextValue.attachments.some(
+            (attachment, index) =>
+              attachment.localMetadata.id !==
+              previousValue.attachments[index].localMetadata.id,
+          ));
+      if (isActualStateChange) {
+        this.logStateUpdateTimestamp();
+        if (this.compositionIsEmpty) {
+          this.deleteDraft();
+          return;
+        }
+      }
+    });
+
+  private subscribeLinkPreviewsManagerStateChanged = () =>
+    this.linkPreviewsManager.state.subscribe((nextValue, previousValue) => {
+      const previousPreviews = Array.from(previousValue?.previews ?? []);
+      const isActualStateChange =
+        !!previousValue &&
+        Array.from(nextValue.previews).some(
+          ([url], index) => url !== previousPreviews[index][0],
+        );
+      if (isActualStateChange) {
+        this.logStateUpdateTimestamp();
+        if (this.compositionIsEmpty) {
+          this.deleteDraft();
+          return;
+        }
+      }
+    });
+
+  private subscribePollComposerStateChanged = () =>
+    this.pollComposer.state.subscribe((nextValue, previousValue) => {
+      const isActualStateChange =
+        !!previousValue &&
+        (nextValue.data.allow_answers !== previousValue.data.allow_answers ||
+          nextValue.data.allow_user_suggested_options !==
+            previousValue.data.allow_user_suggested_options ||
+          nextValue.data.description !== previousValue.data.description ||
+          nextValue.data.enforce_unique_vote !== previousValue.data.enforce_unique_vote ||
+          nextValue.data.id !== previousValue.data.id ||
+          nextValue.data.is_closed !== previousValue.data.is_closed ||
+          nextValue.data.max_votes_allowed !== previousValue.data.max_votes_allowed ||
+          nextValue.data.name !== previousValue.data.name ||
+          nextValue.data.options.some(
+            (option, index) => option.text !== previousValue.data.options[index].text,
+          ) ||
+          nextValue.data.user_id !== previousValue.data.user_id ||
+          nextValue.data.voting_visibility !== previousValue.data.voting_visibility);
+      if (isActualStateChange) {
+        this.logStateUpdateTimestamp();
+        if (this.compositionIsEmpty) {
+          this.deleteDraft();
+          return;
+        }
+      }
+    });
+
+  private subscribeMessageComposerStateChanged = () =>
+    this.state.subscribe((nextValue, previousValue) => {
+      const isActualStateChange =
+        !!previousValue &&
+        (nextValue.pollId !== previousValue.pollId ||
+          nextValue.quotedMessage?.id !== previousValue.quotedMessage?.id);
+
+      if (isActualStateChange) {
+        this.logStateUpdateTimestamp();
+        if (this.compositionIsEmpty) {
+          this.deleteDraft();
+          return;
+        }
+      }
+    });
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
@@ -332,10 +515,8 @@ export class MessageComposer {
     const result = await this.compositionMiddlewareExecutor.execute('compose', {
       state: {
         message: {
-          attachments: [],
           id: this.id,
           parent_id: this.threadId ?? undefined,
-          text,
           type: 'regular',
         },
         localMessage: {
@@ -361,8 +542,34 @@ export class MessageComposer {
     return result.state;
   };
 
-  composeDraft = () => {
-    console.error('not implemented');
+  composeDraft = async () => {
+    const { state, status } = await this.draftCompositionMiddlewareExecutor.execute(
+      'compose',
+      {
+        state: {
+          draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
+        },
+      },
+    );
+    if (status === 'discard') return;
+    return state;
+  };
+
+  createDraft = async () => {
+    // server-side drafts are not stored on message level but on thread and channel level
+    // therefore we don't need to create a draft if the message is edited
+    if (this.editedMessage || !this.config.draftsEnabled) return;
+    const composition = await this.composeDraft();
+    if (!composition) return;
+    const { draft } = composition;
+    this.logDraftUpdateTimestamp();
+    await this.channel.createDraft(draft);
+  };
+
+  deleteDraft = async () => {
+    if (this.editedMessage || !this.config.draftsEnabled) return;
+    this.logDraftUpdateTimestamp();
+    await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
   };
 
   createPoll = async () => {

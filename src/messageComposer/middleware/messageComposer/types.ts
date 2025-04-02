@@ -1,5 +1,6 @@
 import type { MiddlewareValue } from '../../../middleware';
 import type {
+  DraftMessagePayload,
   LocalMessage,
   Message,
   SendMessageOptions,
@@ -17,5 +18,16 @@ export type MessageComposerMiddlewareValue =
   MiddlewareValue<MessageComposerMiddlewareValueState>;
 
 export type MessageComposerMiddlewareExecutorOptions = {
+  composer: MessageComposer;
+};
+
+export type MessageDraftComposerMiddlewareValueState = {
+  draft: DraftMessagePayload;
+};
+
+export type MessageDraftComposerMiddlewareValue =
+  MiddlewareValue<MessageDraftComposerMiddlewareValueState>;
+
+export type MessageDraftComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
 };

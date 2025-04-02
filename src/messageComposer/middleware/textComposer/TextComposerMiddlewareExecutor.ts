@@ -8,10 +8,7 @@ import type {
 } from './types';
 import type { TextComposerState, TextComposerSuggestion } from '../../types';
 
-export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<
-  TextComposerState,
-  TextComposerMiddlewareValue
-> {
+export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextComposerState> {
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
