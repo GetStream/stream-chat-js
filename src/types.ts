@@ -331,6 +331,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
+  active_live_locations?: LiveLocationResponse<StreamChatGenerics>[];
 };
 
 export type ChannelUpdateOptions = {
