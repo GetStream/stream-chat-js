@@ -400,8 +400,6 @@ export class MessageComposer {
         console.info('No upload manager.');
       };
     return this.uploadManager.state.subscribe((nextValue, previousValue) => {
-      console.log('nextValue', nextValue);
-      console.log('previousValue', previousValue);
       const removedUploadsIds = previousValue?.uploads
         .filter(
           (prevUpload) =>
