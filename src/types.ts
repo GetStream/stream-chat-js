@@ -486,7 +486,9 @@ export type LocalMessage = LocalMessageBase & {
   quoted_message?: LocalMessageBase;
 };
 
-// @deprecated in favor of LocalMessage
+/**
+ * @deprecated in favor of LocalMessage
+ */
 export type FormatMessageResponse = LocalMessage;
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;

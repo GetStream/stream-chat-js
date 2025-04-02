@@ -488,6 +488,7 @@ export class MessageComposer {
           attachments: [],
           created_at, // only assigned to localMessage as this is used for optimistic update
           deleted_at: null,
+          error: undefined,
           id: this.id,
           mentioned_users: [],
           parent_id: this.threadId ?? undefined,
