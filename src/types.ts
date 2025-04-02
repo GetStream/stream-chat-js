@@ -323,6 +323,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
+  active_live_locations?: LiveLocationResponse<StreamChatGenerics>[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
@@ -331,7 +332,6 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse<StreamChatGenerics>[];
-  active_live_locations?: LiveLocationResponse<StreamChatGenerics>[];
 };
 
 export type ChannelUpdateOptions = {
