@@ -323,7 +323,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
-  active_live_locations?: LiveLocationResponse<StreamChatGenerics>[];
+  active_live_locations?: LiveLocationResponse[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
@@ -714,7 +714,7 @@ export type MessageResponseBase<
     language: TranslationLanguages;
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
-  live_location?: LiveLocation<StreamChatGenerics> | null;
+  live_location?: LiveLocation | null;
   live_location_id?: string;
   mentioned_users?: UserResponse<StreamChatGenerics>[];
   message_text_updated_at?: string;
@@ -1327,7 +1327,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
-  live_location?: LiveLocation<StreamChatGenerics>;
+  live_location?: LiveLocation;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
@@ -3919,7 +3919,7 @@ export declare type DraftMessage<StreamChatGenerics extends ExtendableGenerics =
   type?: MessageLabel;
 };
 
-export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type LiveLocation = {
   channel_cid: string;
   created_at: string;
   created_by_device_id: string;
@@ -3932,6 +3932,6 @@ export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = Default
   user_id: string;
 };
 
-export type LiveLocationResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
-  live_location: LiveLocation<StreamChatGenerics>;
+export type LiveLocationResponse = APIResponse & {
+  live_location: LiveLocation;
 };
