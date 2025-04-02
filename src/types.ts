@@ -42,12 +42,12 @@ export type KnownKeys<T> = {
   : never;
 
 export type RequireAtLeastOne<T> = {
-  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<keyof T, K>>>;
+  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
 export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
-    [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
 /* Unknown Record */
@@ -470,44 +470,24 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-// FIXME: remove FormatMessageResponse in favor of LocalMessage
-// @deprecated in favor of LocalMessage
-export type FormatMessageResponse = Omit<
-  MessageResponse,
-  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
-> & {
-  created_at: Date;
-  deleted_at: Date | null;
-  pinned_at: Date | null;
-  status: string;
-  updated_at: Date;
-};
-
 export type LocalMessageBase = Omit<
   MessageResponseBase,
-  | 'attachments'
-  | 'created_at'
-  | 'deleted_at'
-  | 'mentioned_users'
-  | 'pinned_at'
-  | 'status'
-  | 'text'
-  | 'updated_at'
+  'created_at' | 'deleted_at' | 'pinned_at' | 'status' | 'updated_at'
 > & {
-  attachments: Attachment[];
   created_at: Date;
   deleted_at: Date | null;
-  mentioned_users: UserResponse[];
   pinned_at: Date | null;
   status: string;
-  text: string;
   updated_at: Date;
 };
 
 export type LocalMessage = LocalMessageBase & {
-  error: ErrorFromResponse<APIErrorResponse> | null;
+  error?: ErrorFromResponse<APIErrorResponse>;
   quoted_message?: LocalMessageBase;
 };
+
+// @deprecated in favor of LocalMessage
+export type FormatMessageResponse = LocalMessage;
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
@@ -2709,10 +2689,11 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<MessageBase> &
-  Pick<MessageBase, 'id'> & {
-    mentioned_users?: string[];
-  };
+export type Message = Partial<
+  MessageBase & {
+    mentioned_users: string[];
+  }
+>;
 
 export type MessageBase = CustomMessageData & {
   id: string;
@@ -2975,6 +2956,7 @@ export type ReservedUpdatedMessageFields =
   | 'html'
   | 'i18n'
   | 'latest_reactions'
+  // the the original array of UserResponse object is converted to array of user ids and re-inserted before sending the update request
   | 'mentioned_users'
   | 'own_reactions'
   | 'pinned_at'
@@ -2983,7 +2965,6 @@ export type ReservedUpdatedMessageFields =
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'user'
   | '__html';
 
 export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {

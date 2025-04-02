@@ -52,7 +52,7 @@ export type UploadManagerBaseInterface = {
   successfulUploads: LocalAttachment[];
   successfulUploadsCount: number;
   availableUploadSlots: number;
-  initState: ({ message }?: { message?: Message }) => void;
+  initState: ({ message }?: { message?: DraftMessage | LocalMessage }) => void;
   removeUploads: (uploadIds: string[]) => void;
   upsertUploads: (uploadsToUpsert: LocalAttachment[]) => void;
 };

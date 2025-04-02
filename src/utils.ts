@@ -310,10 +310,8 @@ export function formatMessage(
     if (!msg) return null;
     return {
       ...msg,
-      attachments: msg.attachments ?? [],
       created_at: message.created_at ? new Date(message.created_at) : new Date(),
       deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
-      mentioned_users: msg.mentioned_users ?? [],
       pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
       reaction_groups: maybeGetReactionGroupsFallback(
         message.reaction_groups,
@@ -321,7 +319,6 @@ export function formatMessage(
         message.reaction_scores,
       ),
       status: message.status || 'received',
-      text: msg.text ?? '',
       updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
     };
   };
@@ -363,12 +360,12 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
   return {
     ...messageFields,
     pinned_at: messageFields.pinned_at?.toISOString(),
-    mentioned_users: mentioned_users.map((user) => user.id),
+    mentioned_users: mentioned_users?.map((user) => user.id),
   };
 };
 
 export const toUpdatedMessagePayload = (
-  message: LocalMessage | MessageResponse,
+  message: LocalMessage | Partial<MessageResponse>,
 ): UpdatedMessage => {
   const messageFields = Object.fromEntries(
     Object.entries(message).filter(
@@ -383,6 +380,7 @@ export const toUpdatedMessagePayload = (
 
   return {
     ...messageFields,
+    // todo: check for date
     pinned: !!message.pinned_at,
     mentioned_users:
       message.mentioned_users?.map((user) =>

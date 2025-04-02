@@ -229,10 +229,62 @@ import type {
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
+import { StateStore } from './store';
+import type { MessageComposerOptions, TextComposerMiddleware } from './messageComposer';
+import {
+  createCommandsMiddleware,
+  createMentionsMiddleware,
+  MessageComposer,
+} from './messageComposer';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
+
+type MessageComposerDefine = ({
+  constructorParameters,
+}: {
+  constructorParameters: MessageComposerOptions;
+}) => MessageComposer;
+
+type MessageComposerApplyModifications = ({
+  composer,
+}: {
+  composer: MessageComposer;
+}) => void | (() => void);
+
+// TODO: maybe template modifications
+// { template1: { applyModifications... }, template2: {applyModifications} }
+// new MessageComposer({ channel, modificationTemplate: 'template1' })
+type MessageComposerSetupState = {
+  define: MessageComposerDefine;
+  /**
+   * Each `MessageComposer` runs this function each time its signature changes or
+   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
+   * from `applyModifications` will be used as a cleanup function - it will be stored
+   * and ran before new modification is applied. Cleaning up only the
+   * modified parts is the general way to go but if your setup gets a bit
+   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
+   */
+  applyModifications: MessageComposerApplyModifications | null;
+};
+
+const INITIAL_MESSAGE_COMPOSER_SETUP_STATE: MessageComposerSetupState = {
+  define: ({ constructorParameters }) => new MessageComposer(constructorParameters),
+  applyModifications: ({ composer }) => {
+    console.log(composer);
+
+    composer.textComposer.upsertMiddleware([
+      createMentionsMiddleware(composer.channel),
+      createCommandsMiddleware(composer.channel),
+      // TODO: fix typing
+    ] as TextComposerMiddleware[]);
+
+    return () => {
+      // composer.restore()
+    };
+  },
+};
 
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
@@ -289,6 +341,8 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
+  public _messageComposerSetupState: StateStore<MessageComposerSetupState> =
+    new StateStore(INITIAL_MESSAGE_COMPOSER_SETUP_STATE);
 
   /**
    * Initialize a client
@@ -2856,17 +2910,28 @@ export class StreamChat {
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: LocalMessage | MessageResponse,
+    message: LocalMessage | Partial<MessageResponse>,
+    userId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
+    const payload = toUpdatedMessagePayload(message);
+    if (userId != null) {
+      if (isString(userId)) {
+        payload.user_id = userId;
+      } else {
+        payload.user = {
+          id: userId.id,
+        };
+      }
+    }
 
     return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
-        message: toUpdatedMessagePayload(message),
+        message: payload,
         ...options,
       },
     );
@@ -4320,4 +4385,14 @@ export class StreamChat {
   ) {
     return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', options);
   }
+
+  // TODO: this might not be needed
+  public createMessageComposer: MessageComposerDefine = (setup) =>
+    this._messageComposerSetupState.getLatestValue().define(setup);
+
+  public setMessageComposerApplyModifications = (
+    applyModifications: MessageComposerSetupState['applyModifications'],
+  ) => {
+    this._messageComposerSetupState.partialNext({ applyModifications });
+  };
 }

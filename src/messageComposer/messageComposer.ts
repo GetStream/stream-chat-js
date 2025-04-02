@@ -1,4 +1,6 @@
+import { AttachmentManager } from './attachmentManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
+import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import { MessageComposerMiddlewareExecutor } from './middleware';
@@ -16,7 +18,6 @@ import type {
   MessageResponseBase,
 } from '../types';
 import { type UploadManagerInterface } from './uploadManager';
-import { AttachmentManager } from './attachmentManager';
 
 /*
   todo:
@@ -43,6 +44,7 @@ export type MessageComposerOptions = {
   composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: Partial<MessageComposerConfig>;
   threadId?: string;
+  tag?: string;
 };
 
 const isMessageDraft = (composition: unknown): composition is DraftResponse =>
@@ -83,27 +85,31 @@ const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   urlPreviewEnabled: false,
 };
 
+const noop = () => undefined;
+
 export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editedMessage?: LocalMessage;
   readonly threadId: string | null;
-
+  readonly tag: string;
   attachmentManager: AttachmentManager;
   config: MessageComposerConfig;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
   uploadManager?: UploadManagerInterface;
 
+  pollComposer: PollComposer;
   // todo: mediaRecorder: MediaRecorderController;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
 
-  constructor({ channel, composition, config, threadId }: MessageComposerOptions) {
+  constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
     const { uploadManager, ...restConfig } = config ?? {};
     this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, restConfig);
+    this.tag = tag ?? generateUUIDv4();
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (isMessageDraft(composition)) {
@@ -121,6 +127,7 @@ export class MessageComposer {
       message,
     });
     this.textComposer = new TextComposer({ composer: this, message });
+    this.pollComposer = new PollComposer({ composer: this });
     this.state = new StateStore<MessageComposerState>(initState(composition));
     this.compositionMiddlewareExecutor = new MessageComposerMiddlewareExecutor({
       composer: this,
@@ -146,8 +153,10 @@ export class MessageComposer {
   get canSendMessage() {
     if (!this.uploadManager) return;
     return (
-      !this.uploadManager?.uploadsInProgressCount &&
-      (!this.textComposer.textIsEmpty || this.uploadManager?.successfulUploadsCount > 0) // && !customMessageData?.poll_id)
+      (!this.uploadManager.uploadsInProgressCount &&
+        (!this.textComposer.textIsEmpty ||
+          this.uploadManager.successfulUploadsCount > 0)) ||
+      this.pollId
     );
   }
 
@@ -173,8 +182,9 @@ export class MessageComposer {
   public registerSubscriptions = () => {
     if (this.unsubscribeFunctions.size) {
       // Already listening for events and changes
-      return;
+      return noop;
     }
+    this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
     this.unsubscribeFunctions.add(this.subscribeTextChanged());
@@ -184,8 +194,11 @@ export class MessageComposer {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
     }
+
+    return this.unregisterSubscriptions;
   };
 
+  // TODO: maybe make these private across the SDK
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
@@ -222,6 +235,24 @@ export class MessageComposer {
     );
 
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  private subscribeMessageComposerSetupStateChange = () => {
+    let cleanupBefore: (() => void) | null = null;
+    const unsubscribe = this.client._messageComposerSetupState.subscribeWithSelector(
+      ({ applyModifications }) => ({
+        applyModifications,
+      }),
+      ({ applyModifications }) => {
+        cleanupBefore?.();
+        cleanupBefore = applyModifications?.({ composer: this }) ?? null;
+      },
+    );
+
+    return () => {
+      cleanupBefore?.();
+      unsubscribe();
+    };
   };
 
   private subscribeMessageDeleted = () =>
@@ -292,6 +323,7 @@ export class MessageComposer {
     this.attachmentManager.initState();
     this.linkPreviewsManager.initState();
     this.textComposer.initState();
+    this.pollComposer.initState();
     this.initState();
   };
 
@@ -311,7 +343,7 @@ export class MessageComposer {
           attachments: [],
           created_at, // only assigned to localMessage as this is used for optimistic update
           deleted_at: null,
-          error: null,
+          error: undefined,
           id: this.id,
           mentioned_users: [],
           parent_id: this.threadId ?? undefined,
@@ -332,5 +364,23 @@ export class MessageComposer {
 
   composeDraft = () => {
     console.error('not implemented');
+  };
+
+  createPoll = async () => {
+    const composition = await this.pollComposer.compose();
+    if (!composition || !composition.data.id) return;
+    try {
+      const { poll } = await this.client.createPoll(composition.data);
+      this.state.partialNext({ pollId: poll.id });
+    } catch (error) {
+      this.client.notifications.add({
+        message: 'Failed to create the poll',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: this },
+        },
+      });
+      throw error;
+    }
   };
 }
