@@ -32,6 +32,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; //alias to avoid breaking change
@@ -1316,6 +1318,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse<StreamChatGenerics>;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -3855,7 +3858,7 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  */
 export type DeviceIdentifier = { os: string; model?: string };
 
-export declare type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_cid: string;
   created_at: string;
   message: DraftMessage<StreamChatGenerics>;
@@ -3864,30 +3867,24 @@ export declare type DraftResponse<StreamChatGenerics extends ExtendableGenerics 
   parent_message?: MessageResponseBase<StreamChatGenerics>;
   quoted_message?: MessageResponseBase<StreamChatGenerics>;
 };
-export declare type CreateDraftResponse<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = APIResponse & {
+export type CreateDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   draft: DraftResponse<StreamChatGenerics>;
 };
 
-export declare type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+export type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   draft: DraftResponse<StreamChatGenerics>;
 };
 
-export declare type QueryDraftsResponse<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = APIResponse & {
+export type QueryDraftsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   drafts: DraftResponse<StreamChatGenerics>[];
-  next?: string;
-};
+} & Omit<Pager, 'limit'>;
 
-export declare type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Omit<
+export type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = PartializeKeys<
   DraftMessage<StreamChatGenerics>,
   'id'
-> &
-  Partial<Pick<DraftMessage<StreamChatGenerics>, 'id'>>;
+> & { user_id?: string };
 
-export declare type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   id: string;
   text: string;
   attachments?: Attachment<StreamChatGenerics>[];
