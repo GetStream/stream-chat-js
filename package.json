@@ -35,7 +35,7 @@
     "license"
   ],
   "dependencies": {
-    "@babel/runtime": "^7.16.3",
+    "@babel/runtime": "^7.27.0",
     "@types/jsonwebtoken": "~9.0.0",
     "@types/ws": "^7.4.0",
     "axios": "^1.6.0",
