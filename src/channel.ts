@@ -1404,7 +1404,7 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @returns {Promise<APIResponse>} The server response
    */
-  async updateLiveLocation(liveLocation: LiveLocation<StreamChatGenerics>) {
+  async updateLiveLocation(liveLocation: LiveLocation) {
     return await this.getClient().put<LiveLocationResponse>(this._channelURL() + '/live_location', {
       location_id: liveLocation.id,
       longitude: liveLocation.longitude,
