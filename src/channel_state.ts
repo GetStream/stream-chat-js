@@ -581,7 +581,17 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.latestMessages.filter((message) => message.type !== 'error');
+    const userId = this._channel.getClient().userID;
+
+    if (!userId) return;
+
+    const filteredMessages = this.latestMessages.filter(
+      (message) =>
+        !(
+          message.type === 'error' &&
+          (message.user?.id === userId || message.user_id === userId)
+        ),
+    );
 
     this.latestMessages = filteredMessages;
   }
