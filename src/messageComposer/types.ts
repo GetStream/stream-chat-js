@@ -60,6 +60,42 @@ export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
 export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
   CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
 
+export enum FileTypes {
+  Audio = 'audio',
+  File = 'file',
+  Giphy = 'giphy',
+  Image = 'image',
+  Imgur = 'imgur',
+  Video = 'video',
+  VoiceRecording = 'voiceRecording',
+}
+
+export type RNFile = {
+  // common to all files(images/files)
+  name: string;
+  uri: string;
+  size: number;
+  mimeType: string;
+  type: FileTypes;
+
+  // For voice recordings
+  duration?: number;
+  waveform_data?: number[];
+
+  // For images
+  height?: number;
+  width?: number;
+
+  // This is specially needed for video in camera roll
+  thumb_url?: string;
+};
+
+export type LocalNotImageAttachment =
+  | LocalFileAttachment
+  | LocalAudioAttachment
+  | LocalVideoAttachment
+  | LocalVoiceRecordingAttachment;
+
 export type VoiceRecordingAttachment = Attachment & {
   asset_url: string;
   type: 'voiceRecording';
@@ -108,7 +144,7 @@ export type BaseLocalAttachmentMetadata = {
 };
 
 export type LocalAttachmentUploadMetadata = {
-  file?: File;
+  file?: File | RNFile;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
   uploadState?: AttachmentLoadingState;
 };

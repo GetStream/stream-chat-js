@@ -39,18 +39,12 @@ export const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
 export const generateFileName = (mimeType: string) =>
   `file_${new Date().toISOString()}.${getExtensionFromMimeType(mimeType)}`;
 
-export const isImageFile = (fileLike: File | Blob) =>
-  fileLike.type.startsWith('image/') && !fileLike.type.endsWith('.photoshop'); // photoshop files begin with 'image/'
-
 export const getAttachmentTypeFromMimeType = (mimeType: string) => {
   if (mimeType.startsWith('image/') && !mimeType.endsWith('.photoshop')) return 'image';
   if (mimeType.includes('video/')) return 'video';
   if (mimeType.includes('audio/')) return 'audio';
   return 'file';
 };
-
-export const isFile = (fileLike: File | Blob): fileLike is File =>
-  !!(fileLike as File).lastModified;
 
 export const isScrapedContent = (attachment: Attachment) =>
   attachment.og_scrape_url || attachment.title_link;

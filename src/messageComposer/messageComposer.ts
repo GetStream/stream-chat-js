@@ -20,6 +20,7 @@ import type {
   MessageResponse,
   MessageResponseBase,
 } from '../types';
+import { type UploadManagerInterface } from './uploadManager';
 
 export type ComposerMap = {
   attachmentManager: AttachmentManager;
@@ -46,6 +47,7 @@ export type MessageComposerConfig = {
   draftsEnabled?: boolean;
   maxTextLength?: number;
   urlPreviewEnabled?: boolean;
+  uploadManager?: UploadManagerInterface;
 };
 
 export type MessageComposerOptions = {
@@ -118,6 +120,8 @@ export class MessageComposer {
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
+  uploadManager?: UploadManagerInterface;
+
   pollComposer: PollComposer;
   // todo: mediaRecorder: MediaRecorderController;
 
@@ -129,7 +133,8 @@ export class MessageComposer {
   constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
+    const { uploadManager, ...restConfig } = config ?? {};
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, restConfig);
     this.tag = tag ?? generateUUIDv4();
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
@@ -140,7 +145,9 @@ export class MessageComposer {
       this.editedMessage = message;
     }
 
-    this.attachmentManager = new AttachmentManager({ channel, message });
+    this.attachmentManager = new AttachmentManager();
+    this.uploadManager = uploadManager;
+
     this.linkPreviewsManager = new LinkPreviewsManager({
       client: channel.getClient(),
       message,
@@ -181,10 +188,11 @@ export class MessageComposer {
   }
 
   get canSendMessage() {
+    if (!this.uploadManager) return;
     return (
-      (!this.attachmentManager.uploadsInProgressCount &&
+      (!this.uploadManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
-          this.attachmentManager.successfulUploadsCount > 0)) ||
+          this.uploadManager.successfulUploadsCount > 0)) ||
       this.pollId
     );
   }
@@ -218,7 +226,9 @@ export class MessageComposer {
         : compositionIsMessageDraft(composition)
           ? composition.message
           : formatMessage(composition);
-    this.attachmentManager.initState({ message });
+
+    this.attachmentManager.initState();
+    this.uploadManager?.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
     this.state.next(initState(composition));
@@ -254,6 +264,7 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
     this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
     this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
+    this.unsubscribeFunctions.add(this.subscribeUploadsChanged());
 
     this.unsubscribeFunctions.add(this.subscribeTextComposerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeAttachmentManagerStateChanged());
@@ -383,6 +394,28 @@ export class MessageComposer {
       this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
     });
 
+  private subscribeUploadsChanged = () => {
+    if (!this.uploadManager)
+      return () => {
+        console.info('No upload manager.');
+      };
+    return this.uploadManager.state.subscribe((nextValue, previousValue) => {
+      const removedUploadsIds = previousValue?.uploads
+        .filter(
+          (prevUpload) =>
+            !nextValue.uploads.find(
+              (v) => v.localMetadata.id === prevUpload.localMetadata.id,
+            ),
+        )
+        .map((upload) => upload.localMetadata.id);
+
+      if (removedUploadsIds?.length) {
+        this.attachmentManager.removeAttachments(removedUploadsIds);
+      }
+      this.attachmentManager.upsertAttachments(nextValue.uploads);
+    });
+  };
+
   private subscribeAttachmentManagerStateChanged = () =>
     this.attachmentManager.state.subscribe((nextValue, previousValue) => {
       const isActualStateChange =
@@ -468,6 +501,7 @@ export class MessageComposer {
 
   clear = () => {
     this.attachmentManager.initState();
+    this.uploadManager?.initState();
     this.linkPreviewsManager.initState();
     this.textComposer.initState();
     this.pollComposer.initState();

@@ -23,10 +23,10 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
       input: MessageComposerMiddlewareValue,
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
-    const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+    const { attachmentManager, uploadManager } = composer;
+    if (!attachmentManager || !uploadManager) return nextHandler(input);
 
-    if (attachmentManager.uploadsInProgressCount > 0) {
+    if (uploadManager.uploadsInProgressCount > 0) {
       composer.client.notifications.addWarning({
         message: 'Wait until all attachments have uploaded',
         origin: {
@@ -38,7 +38,7 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
     }
 
     const attachments = (input.state.message.attachments ?? []).concat(
-      attachmentManager.successfulUploads.map(localAttachmentToAttachment),
+      uploadManager.successfulUploads.map(localAttachmentToAttachment),
     );
 
     // prevent introducing attachments array into the payload sent to the server
@@ -72,13 +72,13 @@ export const createDraftAttachmentsMiddleware = (composer: MessageComposer) => (
       input: MessageDraftComposerMiddlewareValue,
     ) => Promise<MessageDraftComposerMiddlewareValue>;
   }) => {
-    const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+    const { uploadManager } = composer;
+    if (!uploadManager) return nextHandler(input);
 
-    if (attachmentManager.uploadsInProgressCount > 0) {
+    if (uploadManager.uploadsInProgressCount > 0) {
       return nextHandler({ ...input, status: 'discard' });
     }
-    const successfulUploads = attachmentManager.successfulUploads;
+    const successfulUploads = uploadManager.successfulUploads;
     const attachments = successfulUploads.length
       ? (input.state.draft.attachments ?? []).concat(
           successfulUploads.map(localAttachmentToAttachment),
