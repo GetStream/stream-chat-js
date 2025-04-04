@@ -863,9 +863,12 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
+  teams_role?: TeamsRole;
   updated_at?: string;
   username?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
