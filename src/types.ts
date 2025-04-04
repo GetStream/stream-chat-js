@@ -919,8 +919,11 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
+  teams_role?: TeamsRole;
   updated_at?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
