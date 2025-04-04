@@ -4071,6 +4071,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       user_id?: string;
     } = {},
   ) {
-    return await this.post<QueryDraftsResponse<StreamChatGenerics>>(this.baseURL + '/drafts/query', options);
+    const payload = {
+      ...options,
+      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
+    };
+
+    return await this.post<QueryDraftsResponse<StreamChatGenerics>>(this.baseURL + '/drafts/query', payload);
   }
 }
