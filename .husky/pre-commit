@@ -1,3 +1,5 @@
+#!/usr/bin/env sh
+
 if ! yarn run lint-staged; then
     echo
     echo "Some files were not formatted correctly (see output above), commit aborted!"
