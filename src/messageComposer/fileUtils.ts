@@ -1,8 +1,36 @@
-import type { LocalAttachment, LocalImageAttachment } from './types';
-import type { Attachment, UR } from '../types';
+import type { Attachment } from '../types';
+import { generateUUIDv4 } from '../utils';
+import { isLocalAttachment } from './attachmentIdentity';
+import type {
+  BaseLocalAttachmentMetadata,
+  FileLike,
+  LocalAttachment,
+  RNFile,
+} from './types';
+
+export const isFile = (fileLike: RNFile | File | Blob): fileLike is File =>
+  !!(fileLike as File).lastModified;
+
+export const isFileList = (obj: unknown): obj is FileList => {
+  if (obj === null || obj === undefined) return false;
+  if (typeof obj !== 'object') return false;
+
+  return (
+    (obj as object) instanceof FileList ||
+    ('item' in obj && 'length' in obj && !Array.isArray(obj))
+  );
+};
 
 export const isBlobButNotFile = (obj: unknown): obj is Blob =>
   obj instanceof Blob && !(obj instanceof File);
+
+export const isRNFile = (obj: RNFile | FileLike): obj is RNFile =>
+  !isFile(obj) &&
+  !isBlobButNotFile(obj) &&
+  !!obj.name &&
+  !!obj.uri &&
+  !!obj.size &&
+  !!obj.type;
 
 export const createFileFromBlobs = ({
   blobsArray,
@@ -39,8 +67,10 @@ export const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
 export const generateFileName = (mimeType: string) =>
   `file_${new Date().toISOString()}.${getExtensionFromMimeType(mimeType)}`;
 
-export const isImageFile = (fileLike: File | Blob) =>
-  fileLike.type.startsWith('image/') && !fileLike.type.endsWith('.photoshop'); // photoshop files begin with 'image/'
+export const isImageFile = (fileLike: RNFile | FileLike) => {
+  const mimeType = fileLike.type;
+  return mimeType.startsWith('image/') && !mimeType.endsWith('.photoshop'); // photoshop files begin with 'image/'
+};
 
 export const getAttachmentTypeFromMimeType = (mimeType: string) => {
   if (mimeType.startsWith('image/') && !mimeType.endsWith('.photoshop')) return 'image';
@@ -49,21 +79,19 @@ export const getAttachmentTypeFromMimeType = (mimeType: string) => {
   return 'file';
 };
 
-export const isFile = (fileLike: File | Blob): fileLike is File =>
-  !!(fileLike as File).lastModified;
-
-export const isScrapedContent = (attachment: Attachment) =>
-  attachment.og_scrape_url || attachment.title_link;
-
-export const isUploadedImage = (attachment: Attachment) =>
-  attachment.type === 'image' && !isScrapedContent(attachment);
-
-/** @ts-expect-error tmp */
-export const isLocalAttachment = (attachment: UR): attachment is LocalAttachment =>
-  !!(attachment as LocalAttachment).localMetadata?.id;
-
-export const isLocalImageAttachment = (
+export const ensureIsLocalAttachment = (
   attachment: Attachment | LocalAttachment,
-): attachment is LocalImageAttachment =>
-  // @ts-expect-error tmp
-  isUploadedImage(attachment) && isLocalAttachment(attachment);
+): LocalAttachment => {
+  if (isLocalAttachment(attachment)) {
+    return attachment;
+  }
+  // local is considered local only if localMetadata has `id` so this is to doublecheck
+  const { localMetadata, ...rest } = attachment as LocalAttachment;
+  return {
+    localMetadata: {
+      ...(localMetadata ?? {}),
+      id: (localMetadata as BaseLocalAttachmentMetadata)?.id || generateUUIDv4(),
+    },
+    ...rest,
+  };
+};

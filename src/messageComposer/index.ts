@@ -1,3 +1,4 @@
+export * from './attachmentIdentity';
 export * from './attachmentManager';
 export * from './fileUtils';
 export * from './linkPreviewsManager';

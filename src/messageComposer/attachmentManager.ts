@@ -1,11 +1,13 @@
+import { isLocalImageAttachment } from './attachmentIdentity';
 import {
   createFileFromBlobs,
+  ensureIsLocalAttachment,
   generateFileName,
   getAttachmentTypeFromMimeType,
-  isBlobButNotFile,
   isFile,
+  isFileList,
   isImageFile,
-  isLocalImageAttachment,
+  isRNFile,
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
@@ -19,14 +21,13 @@ import type {
   LocalAttachment,
   LocalAudioAttachment,
   LocalFileAttachment,
-  LocalImageAttachment,
-  LocalUploadAttachmentSeed,
+  LocalUploadAttachment,
   LocalVideoAttachment,
   LocalVoiceRecordingAttachment,
+  RNFile,
   UploadPermissionCheckResult,
 } from './types';
 import type {
-  Attachment,
   ChannelResponse,
   DraftMessage,
   LocalMessage,
@@ -40,6 +41,8 @@ type LocalNotImageAttachment =
   | LocalVideoAttachment
   | LocalVoiceRecordingAttachment;
 
+export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean;
+
 export type AttachmentManagerState = {
   attachments: LocalAttachment[];
   hasUploadPermission: boolean;
@@ -51,11 +54,13 @@ export type AttachmentManagerOptions = {
    * Function that allows to prevent uploading files based on the functions output.
    * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
    */
-  fileUploadFilter?: (file: FileLike) => boolean;
+  fileUploadFilter?: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage?: number;
   message?: DraftMessage | LocalMessage;
 };
+
+const forward: FileUploadFilter = () => true;
 
 const initState = ({
   channel,
@@ -80,9 +85,9 @@ const initState = ({
 
 export class AttachmentManager {
   readonly state: StateStore<AttachmentManagerState>;
-  fileUploadFilter: ((file: FileLike) => boolean) | null;
   maxNumberOfFilesPerMessage: number;
   private channel: Channel;
+  private _fileUploadFilter: FileUploadFilter;
 
   constructor({
     channel,
@@ -94,7 +99,7 @@ export class AttachmentManager {
     // note: removed prop multipleUploads (Whether to allow multiple attachment uploads) as it is a duplicate
     this.maxNumberOfFilesPerMessage =
       maxNumberOfFilesPerMessage ?? API_MAX_FILES_ALLOWED_PER_MESSAGE;
-    this.fileUploadFilter = fileUploadFilter || null;
+    this._fileUploadFilter = fileUploadFilter || forward;
     this.state = new StateStore<AttachmentManagerState>(initState({ channel, message }));
   }
 
@@ -164,14 +169,16 @@ export class AttachmentManager {
       );
 
       if (attachmentIndex === -1) {
-        attachments.push(upsertedAttachment);
+        attachments.push(ensureIsLocalAttachment(upsertedAttachment));
       } else {
         attachments.splice(
           attachmentIndex,
           1,
-          mergeWith<LocalAttachment>(
-            stateAttachments[attachmentIndex] ?? {},
-            upsertedAttachment,
+          ensureIsLocalAttachment(
+            mergeWith<LocalAttachment>(
+              stateAttachments[attachmentIndex] ?? {},
+              upsertedAttachment,
+            ),
           ),
         );
       }
@@ -188,15 +195,12 @@ export class AttachmentManager {
     });
   };
 
-  private filterFileUploads = (fileLikes: FileList | FileLike[]) => {
-    const iterableFiles = Array.from(fileLikes);
-    return this.fileUploadFilter
-      ? iterableFiles.filter(this.fileUploadFilter)
-      : iterableFiles;
-  };
+  get fileUploadFilter() {
+    return this._fileUploadFilter;
+  }
 
   getUploadConfigCheck = async (
-    fileLike: FileLike,
+    fileLike: RNFile | FileLike,
   ): Promise<UploadPermissionCheckResult> => {
     const client = this.channel.getClient();
     let appSettings;
@@ -219,6 +223,7 @@ export class AttachmentManager {
     } = uploadConfig;
 
     const sizeLimit = size_limit || DEFAULT_UPLOAD_SIZE_LIMIT_BYTES;
+    const mimeType = fileLike.type;
 
     if (isFile(fileLike)) {
       if (
@@ -242,18 +247,14 @@ export class AttachmentManager {
 
     if (
       allowed_mime_types?.length &&
-      !allowed_mime_types.some(
-        (type) => type.toLowerCase() === fileLike.type?.toLowerCase(),
-      )
+      !allowed_mime_types.some((type) => type.toLowerCase() === mimeType?.toLowerCase())
     ) {
       return { uploadBlocked: true, reason: 'allowed_mime_types' };
     }
 
     if (
       blocked_mime_types?.length &&
-      blocked_mime_types.some(
-        (type) => type.toLowerCase() === fileLike.type?.toLowerCase(),
-      )
+      blocked_mime_types.some((type) => type.toLowerCase() === mimeType?.toLowerCase())
     ) {
       return { uploadBlocked: true, reason: 'blocked_mime_types' };
     }
@@ -265,22 +266,69 @@ export class AttachmentManager {
     return { uploadBlocked: false };
   };
 
-  makeLocalUploadAttachmentSeed = async (
-    fileLike: FileLike,
-  ): Promise<LocalUploadAttachmentSeed> => ({
-    type: getAttachmentTypeFromMimeType(fileLike.type),
-    localMetadata: {
-      file: isBlobButNotFile(fileLike)
-        ? createFileFromBlobs({
+  fileToLocalUploadAttachment = async (
+    fileLike: RNFile | FileLike,
+  ): Promise<LocalUploadAttachment> => {
+    const file =
+      isRNFile(fileLike) || isFile(fileLike)
+        ? fileLike
+        : createFileFromBlobs({
             blobsArray: [fileLike],
             fileName: generateFileName(fileLike.type),
             mimeType: fileLike.type,
-          })
-        : fileLike,
-      id: generateUUIDv4(),
-      uploadPermissionCheck: await this.getUploadConfigCheck(fileLike),
-    },
-  });
+          });
+
+    const uploadPermissionCheck = await this.getUploadConfigCheck(file);
+
+    const localAttachment: LocalUploadAttachment = {
+      file_size: file.size,
+      mime_type: file.type,
+      localMetadata: {
+        file,
+        id: generateUUIDv4(),
+        uploadPermissionCheck,
+        uploadState: uploadPermissionCheck.uploadBlocked ? 'blocked' : 'pending',
+      },
+      type: getAttachmentTypeFromMimeType(file.type),
+    };
+
+    localAttachment[isImageFile(file) ? 'fallback' : 'title'] = file.name;
+
+    if (isImageFile(file)) {
+      localAttachment.localMetadata.previewUri = isRNFile(fileLike)
+        ? fileLike.uri
+        : URL.createObjectURL?.(fileLike);
+
+      if (isRNFile(fileLike) && fileLike.height && fileLike.width) {
+        localAttachment.original_height = fileLike.height;
+        localAttachment.original_width = fileLike.width;
+      }
+    }
+
+    if (isRNFile(fileLike) && fileLike.thumb_url) {
+      localAttachment.thumb_url = fileLike.thumb_url;
+    }
+
+    return localAttachment;
+  };
+
+  private ensureLocalUploadAttachment = async (
+    attachment: Partial<LocalUploadAttachment>,
+  ) => {
+    if (!attachment.localMetadata?.file || !attachment.localMetadata.id) {
+      this.client.notifications.addError({
+        message: 'File is required for upload attachment',
+        origin: { emitter: 'AttachmentManager', context: { attachment } },
+      });
+      return;
+    }
+
+    // todo: document this
+    // the following is substitute for: if (noFiles && !isImage) return att
+    if (!this.fileUploadFilter(attachment)) return;
+
+    return await this.fileToLocalUploadAttachment(attachment.localMetadata.file);
+  };
 
   /**
    * todo: docs how to customize the image and file upload by overriding do
@@ -289,52 +337,34 @@ export class AttachmentManager {
    * const messageComposer = new MessageComposer({attachmentManager, channel })
    */
 
-  doUploadRequest = (fileLike: FileLike) =>
-    this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
-      isFile(fileLike)
-        ? fileLike
-        : createFileFromBlobs({
-            blobsArray: [fileLike],
-            fileName: 'Unknown',
-            mimeType: fileLike.type,
-          }),
-    );
-
-  uploadAttachment = async (attachment: LocalAttachment) => {
-    if (!attachment.localMetadata?.file || !attachment.localMetadata.id) return;
-
-    const { file } = attachment.localMetadata;
-
-    // the following is substitute for: if (noFiles && !isImage) return att
-    if (!this.filterFileUploads([file])) return;
-
-    if (!attachment.type) {
-      attachment.type = getAttachmentTypeFromMimeType(file.type);
+  doUploadRequest = (fileLike: RNFile | FileLike) => {
+    if (isRNFile(fileLike)) {
+      return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
+        fileLike.uri,
+        fileLike.name,
+        fileLike.type,
+      );
     }
 
-    (attachment as Attachment).file_size = file.size;
-    const isImage = isImageFile(file);
-    if (isImage) {
-      (attachment as LocalImageAttachment).localMetadata.previewUri =
-        URL.createObjectURL?.(file);
-      if (file instanceof File) {
-        (attachment as LocalImageAttachment).fallback = file.name;
-      }
-    } else {
-      (attachment as LocalNotImageAttachment).mime_type = file.type;
-      if (file instanceof File) {
-        (attachment as LocalNotImageAttachment).title = file.name;
-      }
-    }
+    const file = isFile(fileLike)
+      ? fileLike
+      : createFileFromBlobs({
+          blobsArray: [fileLike],
+          fileName: generateFileName(fileLike.type),
+          mimeType: fileLike.type,
+        });
 
-    // substitute for checkUploadPermissions
-    if (typeof attachment.localMetadata.uploadPermissionCheck === 'undefined') {
-      attachment.localMetadata.uploadPermissionCheck =
-        await this.getUploadConfigCheck(file);
-    }
-    if (attachment.localMetadata.uploadPermissionCheck.uploadBlocked) {
-      attachment.localMetadata.uploadState = 'blocked';
-      this.upsertAttachments([attachment]);
+    return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](file);
+  };
+
+  uploadAttachment = async (attachment: LocalUploadAttachment) => {
+    const localAttachment = await this.ensureLocalUploadAttachment(attachment);
+
+    if (typeof localAttachment === 'undefined') return;
+
+    if (localAttachment.localMetadata.uploadState === 'blocked') {
+      this.upsertAttachments([localAttachment]);
+      return;
     }
 
     this.upsertAttachments([
@@ -349,7 +379,7 @@ export class AttachmentManager {
 
     let response: SendFileAPIResponse;
     try {
-      response = await this.doUploadRequest(file);
+      response = await this.doUploadRequest(localAttachment.localMetadata.file);
     } catch (error) {
       let finalError: Error = {
         message: 'Error uploading attachment',
@@ -361,7 +391,12 @@ export class AttachmentManager {
         finalError = Object.assign(finalError, error);
       }
 
-      const failedAttachment: LocalAttachment = {
+      this.client.notifications.addError({
+        message: finalError.message,
+        origin: { emitter: 'AttachmentManager', context: { attachment } },
+      });
+
+      const failedAttachment: LocalUploadAttachment = {
         ...attachment,
         localMetadata: {
           ...attachment.localMetadata,
@@ -383,7 +418,7 @@ export class AttachmentManager {
       return;
     }
 
-    const uploadedAttachment: LocalAttachment = {
+    const uploadedAttachment: LocalUploadAttachment = {
       ...attachment,
       localMetadata: {
         ...attachment.localMetadata,
@@ -409,12 +444,19 @@ export class AttachmentManager {
     return uploadedAttachment;
   };
 
-  uploadFiles = (files: FileList | File[] | Blob[]) =>
-    Promise.all(
-      this.filterFileUploads(files)
-        .slice(0, this.availableUploadSlots)
-        .map(async (fileLike) =>
-          this.uploadAttachment(await this.makeLocalUploadAttachmentSeed(fileLike)),
-        ),
+  uploadFiles = async (files: RNFile[] | FileList | FileLike[]) => {
+    const iterableFiles: RNFile[] | FileLike[] = isFileList(files)
+      ? Array.from(files)
+      : files;
+    const attachments = await Promise.all(
+      iterableFiles.map(this.fileToLocalUploadAttachment),
     );
+
+    return Promise.all(
+      attachments
+        .filter(this.fileUploadFilter)
+        .slice(0, this.availableUploadSlots)
+        .map(this.uploadAttachment),
+    );
+  };
 }

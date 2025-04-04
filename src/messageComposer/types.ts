@@ -1,10 +1,7 @@
 import type { Attachment, FileUploadConfig, UserResponse } from '../types';
 import type { SearchSource } from '../search_controller';
 
-export type LocalAttachment =
-  | AnyLocalAttachment
-  | LocalUploadAttachment
-  | LocalUploadAttachmentSeed;
+export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
 export type LocalUploadAttachment =
   | LocalFileAttachment
@@ -12,13 +9,6 @@ export type LocalUploadAttachment =
   | LocalAudioAttachment
   | LocalVideoAttachment
   | LocalVoiceRecordingAttachment;
-
-export type LocalUploadAttachmentSeed = LocalAttachmentCast<
-  {
-    type: string;
-  },
-  LocalAttachmentUploadMetadata
->;
 
 export type LocalVoiceRecordingAttachment<CustomLocalMetadata = Record<string, unknown>> =
   LocalAttachmentCast<
@@ -70,7 +60,7 @@ export type VoiceRecordingAttachment = Attachment & {
   waveform_data?: Array<number>;
 };
 
-type FileAttachment = Attachment & {
+export type FileAttachment = Attachment & {
   type: 'file';
   asset_url?: string;
   file_size?: number;
@@ -95,7 +85,7 @@ export type VideoAttachment = Attachment & {
   title?: string;
 };
 
-type ImageAttachment = Attachment & {
+export type ImageAttachment = Attachment & {
   type: 'image';
   fallback?: string;
   image_url?: string;
@@ -108,16 +98,21 @@ export type BaseLocalAttachmentMetadata = {
 };
 
 export type LocalAttachmentUploadMetadata = {
-  file?: File;
+  file: File | RNFile;
+  uploadState: AttachmentLoadingState;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
-  uploadState?: AttachmentLoadingState;
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {
   previewUri?: string;
 };
 
-export type AttachmentLoadingState = 'uploading' | 'finished' | 'failed' | 'blocked';
+export type AttachmentLoadingState =
+  | 'uploading'
+  | 'finished'
+  | 'failed'
+  | 'blocked'
+  | 'pending';
 
 export type UploadPermissionCheckResult = {
   uploadBlocked: boolean;
@@ -125,6 +120,21 @@ export type UploadPermissionCheckResult = {
 };
 
 export type FileLike = File | Blob;
+
+// todo: make sure that RN SDK passes MIME type in the type field
+export type RNFile = Pick<File, 'name' | 'size' | 'type'> & {
+  uri: string;
+  // For images
+  height?: number;
+  width?: number;
+
+  // For voice recordings
+  duration?: number;
+  waveform_data?: number[];
+
+  // This is specially needed for video in camera roll
+  thumb_url?: string;
+};
 
 type Id = string;
 export type MentionedUserMap = Map<Id, UserResponse>;
