@@ -17,6 +17,7 @@ import {
 } from '../constants';
 import type { Channel } from '../channel';
 import type {
+  AttachmentLoadingState,
   FileLike,
   LocalAttachment,
   LocalAudioAttachment,
@@ -27,6 +28,7 @@ import type {
   RNFile,
   UploadPermissionCheckResult,
 } from './types';
+import type { StreamChat } from '../client';
 import type {
   ChannelResponse,
   DraftMessage,
@@ -48,19 +50,30 @@ export type AttachmentManagerState = {
   hasUploadPermission: boolean;
 };
 
-export type AttachmentManagerOptions = {
-  channel: Channel;
+export type AttachmentManagerConfig = {
+  // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
   /**
    * Function that allows to prevent uploading files based on the functions output.
    * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
    */
-  fileUploadFilter?: FileUploadFilter;
+  fileUploadFilter: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
-  maxNumberOfFilesPerMessage?: number;
+  maxNumberOfFilesPerMessage: number;
+  // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
+  /** Function that allows to customize the upload request. */
+  doUploadRequest?: (fileLike: RNFile | FileLike) => ReturnType<StreamChat['sendFile']>;
+};
+
+export type AttachmentManagerOptions = {
+  channel: Channel;
+  config?: Partial<AttachmentManagerConfig>;
   message?: DraftMessage | LocalMessage;
 };
 
-const forward: FileUploadFilter = () => true;
+const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
+  fileUploadFilter: () => true,
+  maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
+};
 
 const initState = ({
   channel,
@@ -84,27 +97,45 @@ const initState = ({
 });
 
 export class AttachmentManager {
+  configState: StateStore<AttachmentManagerConfig>;
   readonly state: StateStore<AttachmentManagerState>;
-  maxNumberOfFilesPerMessage: number;
   private channel: Channel;
-  private _fileUploadFilter: FileUploadFilter;
 
-  constructor({
-    channel,
-    fileUploadFilter,
-    maxNumberOfFilesPerMessage,
-    message,
-  }: AttachmentManagerOptions) {
+  constructor({ channel, config = {}, message }: AttachmentManagerOptions) {
     this.channel = channel;
-    // note: removed prop multipleUploads (Whether to allow multiple attachment uploads) as it is a duplicate
-    this.maxNumberOfFilesPerMessage =
-      maxNumberOfFilesPerMessage ?? API_MAX_FILES_ALLOWED_PER_MESSAGE;
-    this._fileUploadFilter = fileUploadFilter || forward;
+    // todo: document: removed prop multipleUploads (Whether to allow multiple attachment uploads) as it is a duplicate
+    this.configState = new StateStore(
+      mergeWith(DEFAULT_ATTACHMENT_MANAGER_CONFIG, config),
+    );
     this.state = new StateStore<AttachmentManagerState>(initState({ channel, message }));
   }
 
   get client() {
     return this.channel.getClient();
+  }
+
+  get config() {
+    return this.configState.getLatestValue();
+  }
+
+  get fileUploadFilter() {
+    return this.configState.getLatestValue().fileUploadFilter;
+  }
+  get maxNumberOfFilesPerMessage() {
+    return this.configState.getLatestValue().maxNumberOfFilesPerMessage;
+  }
+
+  set config(config: AttachmentManagerConfig) {
+    this.configState.next(config);
+  }
+
+  set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
+    this.configState.partialNext({ fileUploadFilter });
+  }
+  set maxNumberOfFilesPerMessage(
+    maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
+  ) {
+    this.configState.partialNext({ maxNumberOfFilesPerMessage });
   }
 
   get attachments() {
@@ -115,38 +146,42 @@ export class AttachmentManager {
     return this.state.getLatestValue().hasUploadPermission;
   }
 
+  get isUploadEnabled() {
+    return this.hasUploadPermission && this.availableUploadSlots > 0;
+  }
+
   get successfulUploads() {
-    return Object.values(this.attachments).filter(
-      ({ localMetadata }) =>
-        !localMetadata.uploadState || localMetadata.uploadState === 'finished',
-    );
+    return this.getUploadsByState('finished');
   }
 
   get successfulUploadsCount() {
-    return Object.values(this.attachments).filter(
-      ({ localMetadata }) =>
-        !localMetadata.uploadState || localMetadata.uploadState === 'finished',
-    ).length;
+    return this.successfulUploads.length;
   }
 
   get uploadsInProgressCount() {
-    return Object.values(this.attachments).filter(
-      ({ localMetadata }) => localMetadata.uploadState === 'uploading',
-    ).length;
+    return this.getUploadsByState('uploading').length;
   }
 
   get failedUploadsCount() {
-    return Object.values(this.attachments).filter(
-      ({ localMetadata }) => localMetadata.uploadState === 'failed',
-    ).length;
+    return this.getUploadsByState('failed').length;
+  }
+
+  get blockedUploadsCount() {
+    return this.getUploadsByState('blocked').length;
+  }
+
+  get pendingUploadsCount() {
+    return this.getUploadsByState('pending').length;
   }
 
   get availableUploadSlots() {
-    return this.maxNumberOfFilesPerMessage - this.successfulUploadsCount;
+    return this.config.maxNumberOfFilesPerMessage - this.successfulUploadsCount;
   }
 
-  get isUploadEnabled() {
-    return this.hasUploadPermission && this.availableUploadSlots > 0;
+  getUploadsByState(state: AttachmentLoadingState) {
+    return Object.values(this.attachments).filter(
+      ({ localMetadata }) => localMetadata.uploadState === state,
+    );
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
@@ -194,10 +229,6 @@ export class AttachmentManager {
       ),
     });
   };
-
-  get fileUploadFilter() {
-    return this._fileUploadFilter;
-  }
 
   getUploadConfigCheck = async (
     fileLike: RNFile | FileLike,
@@ -338,6 +369,10 @@ export class AttachmentManager {
    */
 
   doUploadRequest = (fileLike: RNFile | FileLike) => {
+    if (this.config.doUploadRequest) {
+      return this.config.doUploadRequest(fileLike);
+    }
+
     if (isRNFile(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
@@ -358,6 +393,8 @@ export class AttachmentManager {
   };
 
   uploadAttachment = async (attachment: LocalUploadAttachment) => {
+    if (!this.isUploadEnabled) return;
+
     const localAttachment = await this.ensureLocalUploadAttachment(attachment);
 
     if (typeof localAttachment === 'undefined') return;
@@ -445,6 +482,7 @@ export class AttachmentManager {
   };
 
   uploadFiles = async (files: RNFile[] | FileList | FileLike[]) => {
+    if (!this.isUploadEnabled) return;
     const iterableFiles: RNFile[] | FileLike[] = isFileList(files)
       ? Array.from(files)
       : files;

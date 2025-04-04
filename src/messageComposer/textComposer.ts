@@ -5,9 +5,15 @@ import type { TextComposerState, TextComposerSuggestion, TextSelection } from '.
 import type { MessageComposer } from './messageComposer';
 import type { TextComposerMiddleware } from './middleware';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
+import { mergeWith } from '../utils/mergeWith';
+
+const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {};
+
+export type TextComposerConfig = {};
 
 export type TextComposerOptions = {
   composer: MessageComposer;
+  config?: Partial<TextComposerConfig>;
   message?: DraftMessage | LocalMessage;
 };
 
@@ -42,14 +48,18 @@ const initState = (message?: DraftMessage | LocalMessage): TextComposerState => 
   };
 };
 
+// todo: MessageInputProps?:
+// additionalTextareaProps.defaultValue
 export class TextComposer {
   composer: MessageComposer;
+  config: TextComposerConfig;
   state: StateStore<TextComposerState>;
   private middlewareExecutor: TextComposerMiddlewareExecutor;
 
-  constructor({ composer, message }: TextComposerOptions) {
+  constructor({ composer, config = {}, message }: TextComposerOptions) {
     this.composer = composer;
     this.state = new StateStore<TextComposerState>(initState(message));
+    this.config = mergeWith(DEFAULT_TEXT_COMPOSER_CONFIG, config);
     this.middlewareExecutor = new TextComposerMiddlewareExecutor({ composer });
   }
 
@@ -176,6 +186,7 @@ export class TextComposer {
     }
   };
 
+  // todo: document how to register own middleware handler to simulate onSelectUser prop
   handleSelect = async (target: TextComposerSuggestion<unknown>) => {
     const output = await this.middlewareExecutor.execute(
       'onSuggestionItemSelect',

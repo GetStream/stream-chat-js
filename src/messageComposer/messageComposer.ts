@@ -10,6 +10,8 @@ import {
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4 } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
+import type { AttachmentManagerConfig } from './attachmentManager';
+import type { LinkPreviewsManagerConfig } from './linkPreviewsManager';
 import type { Channel } from '../channel';
 import type {
   DraftMessage,
@@ -43,9 +45,10 @@ export type MessageComposerState = {
 export type MessageComposerConfig = {
   /** If true, triggers typing events on text input keystroke */
   publishTypingEvents: boolean;
+  attachmentManager?: Partial<AttachmentManagerConfig>;
   draftsEnabled?: boolean;
+  linkPreviewsManager?: Partial<LinkPreviewsManagerConfig>;
   maxTextLength?: number;
-  urlPreviewEnabled?: boolean;
 };
 
 export type MessageComposerOptions = {
@@ -102,7 +105,6 @@ const initState = (
 const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   draftsEnabled: true,
   publishTypingEvents: true,
-  urlPreviewEnabled: false,
 };
 
 const noop = () => undefined;
@@ -129,7 +131,12 @@ export class MessageComposer {
   constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
     this.channel = channel;
     this.threadId = threadId ?? null;
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
+    const {
+      attachmentManager: attachmentManagerConfig,
+      linkPreviewsManager: linkPreviewsManagerConfig,
+      ...messageComposerConfig
+    } = config ?? {};
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, messageComposerConfig ?? {});
     this.tag = tag ?? generateUUIDv4();
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
@@ -140,9 +147,14 @@ export class MessageComposer {
       this.editedMessage = message;
     }
 
-    this.attachmentManager = new AttachmentManager({ channel, message });
+    this.attachmentManager = new AttachmentManager({
+      channel, // todo: pass composer reference to each manager
+      config: attachmentManagerConfig,
+      message,
+    });
     this.linkPreviewsManager = new LinkPreviewsManager({
       client: channel.getClient(),
+      config: linkPreviewsManagerConfig,
       message,
     });
     this.textComposer = new TextComposer({ composer: this, message });
@@ -375,7 +387,7 @@ export class MessageComposer {
         }
       }
       if (
-        !this.config.urlPreviewEnabled ||
+        !this.config.linkPreviewsManager?.enabled ||
         !nextValue.text ||
         nextValue.text === previousValue?.text
       )
