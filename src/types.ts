@@ -16,6 +16,7 @@ import type {
   CustomThreadData,
   CustomUserData,
 } from './custom_types';
+import type { NotificationManager } from './notifications';
 
 /**
  * Utility Types
@@ -41,12 +42,12 @@ export type KnownKeys<T> = {
   : never;
 
 export type RequireAtLeastOne<T> = {
-  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<keyof T, K>>>;
+  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
 export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
-    [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
 /* Unknown Record */
@@ -311,6 +312,7 @@ export type ChannelAPIResponse = {
   members: ChannelMemberResponse[];
   messages: MessageResponse[];
   pinned_messages: MessageResponse[];
+  draft?: DraftResponse;
   hidden?: boolean;
   membership?: ChannelMemberResponse | null;
   pending_messages?: PendingMessageResponse[];
@@ -468,9 +470,9 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-export type FormatMessageResponse = Omit<
-  MessageResponse,
-  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
+export type LocalMessageBase = Omit<
+  MessageResponseBase,
+  'created_at' | 'deleted_at' | 'pinned_at' | 'status' | 'updated_at'
 > & {
   created_at: Date;
   deleted_at: Date | null;
@@ -478,6 +480,16 @@ export type FormatMessageResponse = Omit<
   status: string;
   updated_at: Date;
 };
+
+export type LocalMessage = LocalMessageBase & {
+  error?: ErrorFromResponse<APIErrorResponse>;
+  quoted_message?: LocalMessageBase;
+};
+
+/**
+ * @deprecated in favor of LocalMessage
+ */
+export type FormatMessageResponse = LocalMessage;
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
@@ -497,6 +509,7 @@ export interface ThreadResponse extends CustomThreadData {
   active_participant_count?: number;
   created_by?: UserResponse;
   deleted_at?: string;
+  draft?: DraftResponse;
   last_message_at?: string;
   participant_count?: number;
   read?: Array<ReadResponse>;
@@ -1313,10 +1326,20 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * that also relies on WS events will break these functionalities, so please use carefully.
    */
   disableCache?: boolean;
+  /**
+   * When enabled, message and thread reply drafts will be stored on the Stream server. This allows drafts to persist across devices and sessions.
+   */
+  drafts?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   logger?: Logger;
+  /**
+   * Custom notification manager service to use for the client.
+   * If not provided, a default notification manager will be created.
+   * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
+   */
+  notifications?: NotificationManager;
   /**
    * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
    * call `connectUser` again to retry.
@@ -1403,6 +1426,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -2670,9 +2694,11 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<MessageBase> & {
-  mentioned_users?: string[];
-};
+export type Message = Partial<
+  MessageBase & {
+    mentioned_users: string[];
+  }
+>;
 
 export type MessageBase = CustomMessageData & {
   id: string;
@@ -2689,6 +2715,7 @@ export type MessageBase = CustomMessageData & {
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
+  type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
 };
@@ -2703,6 +2730,7 @@ export type MessageLabel =
 
 export type SendMessageOptions = {
   force_moderation?: boolean;
+  // @deprecated use `pending` instead
   is_pending_message?: boolean;
   keep_channel_hidden?: boolean;
   pending?: boolean;
@@ -2926,22 +2954,25 @@ export type TranslationLanguages =
 
 export type TypingStartEvent = Event;
 
-export type ReservedMessageFields =
+export type ReservedUpdatedMessageFields =
   | 'command'
   | 'created_at'
+  | 'deleted_at'
   | 'html'
+  | 'i18n'
   | 'latest_reactions'
+  // the the original array of UserResponse object is converted to array of user ids and re-inserted before sending the update request
+  | 'mentioned_users'
   | 'own_reactions'
+  | 'pinned_at'
   | 'quoted_message'
   | 'reaction_counts'
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'pinned_at'
-  | 'user'
   | '__html';
 
-export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
+export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
   mentioned_users?: string[];
   type?: MessageLabel;
 };
@@ -3178,7 +3209,7 @@ export type MessageSetType = 'latest' | 'current' | 'new';
 export type MessageSet = {
   isCurrent: boolean;
   isLatest: boolean;
-  messages: FormatMessageResponse[];
+  messages: LocalMessage[];
   pagination: { hasNext: boolean; hasPrev: boolean };
 };
 
