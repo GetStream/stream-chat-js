@@ -418,11 +418,17 @@ export class Channel {
 
     const offlineDb = this.getClient().offlineDb;
     if (offlineDb) {
+      const message = this.state.messages.find(({ id }) => id === messageID);
+      const reaction = {
+        created_at: '',
+        updated_at: '',
+        message_id: messageID,
+        type: reactionType,
+        user_id: (this.getClient().userID as string) ?? user_id,
+      };
       await offlineDb.deleteReaction({
-        channel: this,
-        messageId: messageID,
-        reactionType,
-        userId: (this.getClient().userID as string) ?? user_id,
+        message,
+        reaction,
       });
       return await offlineDb.queueTask({
         task: {
@@ -1816,11 +1822,19 @@ export class Channel {
             event.reaction,
             event.message,
           ) as MessageResponse;
+          this.getClient().offlineDb?.insertReaction({
+            message: event.message,
+            reaction: event.reaction,
+          });
         }
         break;
       case 'reaction.deleted':
-        if (event.reaction) {
+        if (event.message && event.reaction) {
           event.message = channelState.removeReaction(event.reaction, event.message);
+          this.getClient().offlineDb?.deleteReaction({
+            message: event.message,
+            reaction: event.reaction,
+          });
         }
         break;
       case 'reaction.updated':
@@ -1831,6 +1845,10 @@ export class Channel {
             event.message,
             true,
           ) as MessageResponse;
+          this.getClient().offlineDb?.updateReaction({
+            message: event.message,
+            reaction: event.reaction,
+          });
         }
         break;
       case 'channel.hidden':

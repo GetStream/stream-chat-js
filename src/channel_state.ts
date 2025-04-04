@@ -395,6 +395,9 @@ export class ChannelState {
     reaction: ReactionResponse,
     enforce_unique?: boolean,
   ) {
+    if (this._channel.getClient().userID !== reaction.user_id) {
+      return ownReactions;
+    }
     if (enforce_unique) {
       ownReactions = [];
     } else {
@@ -402,9 +405,8 @@ export class ChannelState {
     }
 
     ownReactions = ownReactions || [];
-    if (this._channel.getClient().userID === reaction.user_id) {
-      ownReactions.push(reaction);
-    }
+
+    ownReactions.push(reaction);
 
     return ownReactions;
   }

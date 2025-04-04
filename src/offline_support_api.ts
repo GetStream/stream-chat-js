@@ -5,8 +5,11 @@ import type {
   ChannelFilters,
   ChannelSort,
   Event,
+  FormatMessageResponse,
+  MessageResponse,
   PollResponse,
   ReactionFilters,
+  ReactionResponse,
   ReactionSort,
 } from './types';
 import type { AxiosError } from 'axios';
@@ -16,6 +19,12 @@ import type { Channel } from './channel';
 export type PreparedBatchQueries =
   | [string]
   | [string, Array<unknown> | Array<Array<unknown>>];
+
+export type InsertReactionType = {
+  message: MessageResponse | FormatMessageResponse;
+  reaction: ReactionResponse;
+  flush?: boolean;
+};
 
 export type UpsertCidsForQueryType = {
   cids: string[];
@@ -45,6 +54,12 @@ export type UpsertUserSyncStatusType = {
 
 export type UpsertPollType = {
   poll: PollResponse;
+  flush?: boolean;
+};
+
+export type UpdateReactionType = {
+  message: MessageResponse | FormatMessageResponse;
+  reaction: ReactionResponse;
   flush?: boolean;
 };
 
@@ -79,10 +94,8 @@ export type GetReactionsType = {
 export type DeletePendingTaskType = { id: number };
 
 export type DeleteReactionType = {
-  channel: Channel;
-  messageId: string;
-  reactionType: string;
-  userId: string;
+  reaction: ReactionResponse;
+  message?: MessageResponse | FormatMessageResponse;
   flush?: boolean;
 };
 
@@ -91,17 +104,19 @@ export type DeleteMessageType = { id: string; flush?: boolean };
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
 
 export interface OfflineDBApi {
+  insertReaction: (options: InsertReactionType) => Promise<unknown>;
   upsertCidsForQuery: (options: UpsertCidsForQueryType) => Promise<unknown>;
   upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
   upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
   upsertAppSettings: (options: UpsertAppSettingsType) => Promise<unknown>;
   upsertPoll: (options: UpsertPollType) => Promise<unknown>;
+  updateReaction: (options: UpdateReactionType) => Promise<unknown>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
-  getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<number | undefined>;
+  getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<string | undefined>;
   getAppSettings: (options: GetAppSettingsType) => Promise<unknown>;
   getReactions: (options: GetReactionsType) => Promise<unknown>;
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
@@ -123,6 +138,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     this.syncManager = new OfflineDBSyncManager({ client, offlineDb: this });
   }
 
+  abstract insertReaction: OfflineDBApi['insertReaction'];
+
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
@@ -132,6 +149,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
 
   abstract upsertPoll: OfflineDBApi['upsertPoll'];
+
+  abstract updateReaction: OfflineDBApi['updateReaction'];
 
   abstract getChannels: OfflineDBApi['getChannels'];
 
@@ -297,43 +316,6 @@ export type PendingTask = {
  * })
  * ```
  */
-// const restBeforeNextTask = () => new Promise((resolve) => setTimeout(resolve, 500));
-// FIXME: This is temporary, while we implement the other apis.
-// eslint-disable-next-line
-const handleEventToSyncDB = async (event: Event, client: StreamChat, flush?: boolean) => {
-  const { type } = event;
-
-  if (type.startsWith('poll.')) {
-    const { poll } = event;
-    if (poll) {
-      let pollFromState = client.polls.fromState(poll.id);
-      if (!pollFromState) {
-        // @ts-expect-error hydratePollCache only accepts message objects, and yet uses poll properties.
-        client.polls.hydratePollCache([{ poll, poll_id: poll.id }]);
-        pollFromState = client.polls.fromState(poll.id);
-      }
-      if (type === 'poll.closed') {
-        pollFromState?.handlePollClosed(event);
-      }
-
-      if (type === 'poll.updated') {
-        pollFromState?.handlePollUpdated(event);
-      }
-
-      if (type === 'poll.vote_casted') {
-        pollFromState?.handleVoteCasted(event);
-      }
-
-      if (type === 'poll.vote_removed') {
-        pollFromState?.handleVoteRemoved(event);
-      }
-
-      if (type === 'poll.vote_changed') {
-        pollFromState?.handleVoteChanged(event);
-      }
-    }
-  }
-};
 
 export class OfflineDBSyncManager {
   public syncStatus = false;
@@ -414,6 +396,29 @@ export class OfflineDBSyncManager {
     };
   };
 
+  private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
+    const { type } = event;
+    console.log('SYNCING REACTION EVENT1: ', event.type);
+
+    if (type.startsWith('reaction') && event.message && event.reaction) {
+      const { message, reaction } = event;
+
+      if (type === 'reaction.new') {
+        return await this.offlineDb.insertReaction({ message, reaction, flush });
+      }
+
+      if (type === 'reaction.updated') {
+        return await this.offlineDb.updateReaction({ message, reaction, flush });
+      }
+
+      if (type === 'reaction.deleted') {
+        return await this.offlineDb?.deleteReaction({ message, reaction, flush });
+      }
+    }
+
+    return [];
+  };
+
   private sync = async () => {
     if (!this.client?.user) {
       return;
@@ -424,10 +429,14 @@ export class OfflineDBSyncManager {
       return;
     }
 
+    console.log('MIDWAY SKIDMARK :D');
+
     // TODO: We should not need our own user ID in the API, it can be inferred
     const lastSyncedAt = await this.offlineDb.getLastSyncedAt({
       userId: this.client.user.id,
     });
+
+    console.log('LAST SYNC AT: ', lastSyncedAt);
 
     if (lastSyncedAt) {
       const lastSyncedAtDate = new Date(lastSyncedAt);
@@ -437,25 +446,28 @@ export class OfflineDBSyncManager {
       const diff = Math.floor(
         (nowDate.getTime() - lastSyncedAtDate.getTime()) / (1000 * 60 * 60 * 24),
       );
+      console.log('DIFF: ', diff);
       if (diff > 30) {
         // stream backend will send an error if we try to sync after 30 days.
         // In that case reset the entire DB and start fresh.
         await this.offlineDb?.resetDB?.();
       } else {
         try {
+          console.log('ABOUT TO CALL SYNC API');
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
+          console.log('CALLED SYNC API', result.events);
           const queryPromises = result.events.map(
-            async (event) => await handleEventToSyncDB(event, this.client),
+            async (event) => await this.handleEventToSyncDB(event, false),
           );
           const queriesArray = await Promise.all(queryPromises);
-          const queries = queriesArray.flat();
+          const queries = queriesArray.flat() as ExecuteBatchQueriesType;
 
           if (queries.length) {
             // TODO: FIXME
-            // @ts-expect-error since handleEventToSyncDB is mocked right now
             await this.offlineDb.executeSqlBatch(queries);
           }
         } catch (e) {
+          console.log('An error has occurred while syncing the DB.', e);
           // Error will be raised by the sync API if there are too many events.
           // In that case reset the entire DB and start fresh.
           await this.offlineDb.resetDB();
