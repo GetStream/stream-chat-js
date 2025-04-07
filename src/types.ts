@@ -541,13 +541,13 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
   latest_replies: Array<MessageResponse<SCG>>;
   parent_message: MessageResponse<SCG>;
   parent_message_id: string;
+  participant_count?: number;
   title: string;
   updated_at: string;
   active_participant_count?: number;
   created_by?: UserResponse<SCG>;
   deleted_at?: string;
   last_message_at?: string;
-  participant_count?: number;
   read?: Array<ReadResponse<SCG>>;
   reply_count?: number;
   thread_participants?: Array<{
@@ -571,12 +571,12 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
-  filter?: ThreadFilters;
   sort?: ThreadSort;
   watch?: boolean;
 };
