@@ -534,20 +534,18 @@ export interface ThreadResponseCustomData {}
 
 export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics> extends ThreadResponseCustomData {
   // FIXME: according to OpenAPI, `channel` could be undefined but since cid is provided I'll asume that it's wrong
+  active_participant_count?: number;
   channel: ChannelResponse<SCG>;
   channel_cid: string;
   created_at: string;
+  created_by?: UserResponse<SCG>;
   created_by_user_id: string;
+  deleted_at?: string;
+  last_message_at?: string;
   latest_replies: Array<MessageResponse<SCG>>;
   parent_message: MessageResponse<SCG>;
   parent_message_id: string;
   participant_count?: number;
-  title: string;
-  updated_at: string;
-  active_participant_count?: number;
-  created_by?: UserResponse<SCG>;
-  deleted_at?: string;
-  last_message_at?: string;
   read?: Array<ReadResponse<SCG>>;
   reply_count?: number;
   thread_participants?: Array<{
@@ -560,6 +558,8 @@ export interface ThreadResponse<SCG extends ExtendableGenerics = DefaultGenerics
     user?: UserResponse<SCG>;
     user_id?: string;
   }>;
+  title: string;
+  updated_at: string;
   // TODO: when moving to API v2 we should do this instead
   // custom: ThreadResponseCustomData;
 }
@@ -3907,9 +3907,9 @@ export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 export type ThreadSortBase = {
   created_at?: AscDesc;
   last_message_at?: AscDesc;
-  updated_at?: AscDesc;
   participant_count?: AscDesc;
   reply_count?: AscDesc;
+  updated_at?: AscDesc;
 };
 
 export type ThreadFilters = QueryFilters<
