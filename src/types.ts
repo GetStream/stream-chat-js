@@ -577,6 +577,8 @@ export type QueryThreadsOptions = {
   participant_limit?: number;
   reply_limit?: number;
   watch?: boolean;
+  filter?: ThreadFilters;
+  sort?: ThreadSort;
 };
 
 export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -3914,7 +3916,9 @@ export type ThreadFilters = QueryFilters<
   {
     channel_cid?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
   } & {
-    parent_message_id?: RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>> | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+    parent_message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
   } & {
     created_by_user_id?:
       | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>>
@@ -3945,11 +3949,11 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<number>;
   } & {
     deleted_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte' | '$exists'>>
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte' | '$exists'>
+        >
       | PrimitiveFilter<ThreadResponse['deleted_at']>;
   } & {
-    title?:
-      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>>
-      | PrimitiveFilter<string>;
+    title?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
   }
 >;

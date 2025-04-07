@@ -2830,15 +2830,13 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
-   * @param {ThreadFilters} filter MongoDB style filters for threads
-   * @param {ThreadSort} sort MongoDB style sort for threads
+   * @param {ThreadFilters} options.filter MongoDB style filters for threads
+   * @param {ThreadSort} options.sort MongoDB style sort for threads
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
   async queryThreads(
     options: QueryThreadsOptions = {},
-    filter: ThreadFilters = {},
-    sort: ThreadSort = [],
   ) {
     const optionsWithDefaults = {
       limit: 10,
@@ -2852,12 +2850,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...optionsWithDefaults,
     };
 
-    if (Object.keys(filter).length > 0) {
-      requestBody.filter = filter;
+    if (optionsWithDefaults.filter && Object.keys(optionsWithDefaults.filter).length > 0) {
+      requestBody.filter = optionsWithDefaults.filter;
     }
 
-    if (Array.isArray(sort) ? sort.length > 0 : Object.keys(sort).length > 0) {
-      requestBody.sort = normalizeQuerySort(sort);
+    if (optionsWithDefaults.sort && (Array.isArray(optionsWithDefaults.sort) ? optionsWithDefaults.sort.length > 0 : Object.keys(optionsWithDefaults.sort).length > 0)) {
+      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
     }
 
     const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(

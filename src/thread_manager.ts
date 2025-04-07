@@ -3,7 +3,15 @@ import { throttle } from './utils';
 
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
-import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, QueryThreadsOptions, ThreadFilters, ThreadSort } from './types';
+import type {
+  DefaultGenerics,
+  Event,
+  ExtendableGenerics,
+  OwnUserResponse,
+  QueryThreadsOptions,
+  ThreadFilters,
+  ThreadSort,
+} from './types';
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -223,13 +231,9 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         },
       }));
 
-      const response = await this.queryThreads(
-        {
-          limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
-        },
-        {},
-        []
-      );
+      const response = await this.queryThreads({
+        limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
+      });
 
       const currentThreads = this.threadsById;
       const nextThreads: Thread<SCG>[] = [];
@@ -272,7 +276,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public queryThreads = (options: QueryThreadsOptions = {}, filter: ThreadFilters = {} as ThreadFilters, sort: ThreadSort = []) => {
+  public queryThreads = (options: QueryThreadsOptions = {}) => {
     const optionsWithDefaults: QueryThreadsOptions = {
       limit: 25,
       participant_limit: 10,
@@ -280,7 +284,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       watch: true,
       ...options,
     };
-    return this.client.queryThreads(optionsWithDefaults, filter, sort);
+    return this.client.queryThreads(optionsWithDefaults);
   };
 
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
@@ -291,14 +295,10 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     try {
       this.state.partialNext({ pagination: { ...pagination, isLoadingNext: true } });
 
-      const response = await this.queryThreads(
-        {
-          ...options,
-          next: pagination.nextCursor,
-        },
-        {},
-        []
-      );
+      const response = await this.queryThreads({
+        ...options,
+        next: pagination.nextCursor,
+      });
 
       this.state.next((current) => ({
         ...current,

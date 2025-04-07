@@ -18,6 +18,7 @@ import {
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
   ThreadSort,
+  QueryThreadsOptions,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
@@ -1214,7 +1215,7 @@ describe('Threads 2.0', () => {
 
     describe('Methods & Getters', () => {
       let stubbedQueryThreads: sinon.SinonStub<
-        Parameters<StreamChat['queryThreads']>,
+        [options?: QueryThreadsOptions],
         ReturnType<StreamChat['queryThreads']>
       >;
 
@@ -1273,8 +1274,6 @@ describe('Threads 2.0', () => {
           await threadManager.reload();
           expect(stubbedQueryThreads.called).to.be.true;
           expect(stubbedQueryThreads.firstCall.args?.[0]?.limit).to.equal(25);
-          expect(stubbedQueryThreads.firstCall.args?.[1]).to.deep.equal({});
-          expect(stubbedQueryThreads.firstCall.args?.[2]).to.deep.equal([]);
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
@@ -1442,7 +1441,7 @@ describe('Threads 2.0', () => {
               reply_limit: 10,
               next: 'cursor',
               watch: true,
-            }, {} as ThreadFilters, []),
+            }),
           ).to.be.true;
         });
 
@@ -1504,7 +1503,7 @@ describe('Threads 2.0', () => {
               participant_limit: 10,
               reply_limit: 10,
               watch: true,
-            }, {} as ThreadFilters, []),
+            }),
           ).to.be.true;
         });
 
@@ -1515,7 +1514,7 @@ describe('Threads 2.0', () => {
             participant_count: { $lt: 10 },
           };
 
-          await threadManager.queryThreads({}, filter);
+          await threadManager.queryThreads({filter});
 
           expect(
             stubbedQueryThreads.calledWithMatch(
@@ -1524,9 +1523,8 @@ describe('Threads 2.0', () => {
                 participant_limit: 10,
                 reply_limit: 10,
                 watch: true,
+                filter,
               },
-              filter,
-              [],
             ),
           ).to.be.true;
         });
@@ -1538,7 +1536,7 @@ describe('Threads 2.0', () => {
             { participant_count: -1 },
           ];
 
-          await threadManager.queryThreads({}, {}, sort);
+          await threadManager.queryThreads({sort});
 
           expect(
             stubbedQueryThreads.calledWithMatch(
@@ -1547,9 +1545,8 @@ describe('Threads 2.0', () => {
                 participant_limit: 10,
                 reply_limit: 10,
                 watch: true,
+                sort,
               },
-              {},
-              sort,
             ),
           ).to.be.true;
         });
@@ -1564,7 +1561,7 @@ describe('Threads 2.0', () => {
             { participant_count: 1 },
           ];
 
-          await threadManager.queryThreads({}, filter, sort);
+          await threadManager.queryThreads({filter, sort});
 
           expect(
             stubbedQueryThreads.calledWithMatch(
@@ -1573,15 +1570,15 @@ describe('Threads 2.0', () => {
                 participant_limit: 10,
                 reply_limit: 10,
                 watch: true,
+                filter,
+                sort,
               },
-              filter,
-              sort,
             ),
           ).to.be.true;
         });
 
         it('handles empty filter and sort parameters', async () => {
-          await threadManager.queryThreads({}, {}, []);
+          await threadManager.queryThreads({});
 
           expect(
             stubbedQueryThreads.calledWithMatch(
@@ -1591,8 +1588,6 @@ describe('Threads 2.0', () => {
                 reply_limit: 10,
                 watch: true,
               },
-              {},
-              [],
             ),
           ).to.be.true;
         });
