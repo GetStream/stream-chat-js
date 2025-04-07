@@ -17,6 +17,7 @@ import {
   ThreadResponse,
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
+  ThreadSort,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
@@ -1490,6 +1491,110 @@ describe('Threads 2.0', () => {
           expect(threads).to.have.lengthOf(2);
           expect(threads[1]).to.equal(newThread);
           expect(pagination.nextCursor).to.equal('cursor2');
+        });
+      });
+
+      describe('queryThreads', () => {
+        it('forms correct request with default parameters', async () => {
+          await threadManager.queryThreads();
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+            }, {} as ThreadFilters, []),
+          ).to.be.true;
+        });
+
+        it('applies filter parameters correctly', async () => {
+          const filter: ThreadFilters = {
+            created_at: { $gt: '2024-01-01T00:00:00Z' },
+            reply_count: { $gte: 5 },
+            participant_count: { $lt: 10 },
+          };
+
+          await threadManager.queryThreads({}, filter);
+
+          expect(
+            stubbedQueryThreads.calledWithMatch(
+              {
+                limit: 25,
+                participant_limit: 10,
+                reply_limit: 10,
+                watch: true,
+              },
+              filter,
+              [],
+            ),
+          ).to.be.true;
+        });
+
+        it('applies sort parameters correctly', async () => {
+          const sort: ThreadSort = [
+            { created_at: -1 },
+            { reply_count: 1 },
+            { participant_count: -1 },
+          ];
+
+          await threadManager.queryThreads({}, {}, sort);
+
+          expect(
+            stubbedQueryThreads.calledWithMatch(
+              {
+                limit: 25,
+                participant_limit: 10,
+                reply_limit: 10,
+                watch: true,
+              },
+              {},
+              sort,
+            ),
+          ).to.be.true;
+        });
+
+        it('applies both filter and sort parameters correctly', async () => {
+          const filter: ThreadFilters = {
+            created_by_user_id: { $eq: 'user1' },
+            updated_at: { $gte: '2024-01-01T00:00:00Z' },
+          };
+          const sort: ThreadSort = [
+            { last_message_at: -1 },
+            { participant_count: 1 },
+          ];
+
+          await threadManager.queryThreads({}, filter, sort);
+
+          expect(
+            stubbedQueryThreads.calledWithMatch(
+              {
+                limit: 25,
+                participant_limit: 10,
+                reply_limit: 10,
+                watch: true,
+              },
+              filter,
+              sort,
+            ),
+          ).to.be.true;
+        });
+
+        it('handles empty filter and sort parameters', async () => {
+          await threadManager.queryThreads({}, {}, []);
+
+          expect(
+            stubbedQueryThreads.calledWithMatch(
+              {
+                limit: 25,
+                participant_limit: 10,
+                reply_limit: 10,
+                watch: true,
+              },
+              {},
+              [],
+            ),
+          ).to.be.true;
         });
       });
     });
