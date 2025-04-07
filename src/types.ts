@@ -3912,7 +3912,9 @@ export type ThreadSortBase = {
 
 export type ThreadFilters = QueryFilters<
   {
-    id?: RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>> | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+    channel_cid?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?: RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>> | PrimitiveFilter<ThreadResponse['parent_message_id']>;
   } & {
     created_by_user_id?:
       | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>>
@@ -3938,8 +3940,16 @@ export type ThreadFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['participant_count']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ThreadResponse['participant_count']>;
   } & {
+    active_participant_count?:
+      | RequireOnlyOne<Pick<QueryFilter<number>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<number>;
+  } & {
     deleted_at?:
-      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte' | '$exists'>>
       | PrimitiveFilter<ThreadResponse['deleted_at']>;
+  } & {
+    title?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>>
+      | PrimitiveFilter<string>;
   }
 >;
