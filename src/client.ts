@@ -2835,9 +2835,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
-  async queryThreads(
-    options: QueryThreadsOptions = {},
-  ) {
+  async queryThreads(options: QueryThreadsOptions = {}) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -2854,7 +2852,12 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       requestBody.filter = optionsWithDefaults.filter;
     }
 
-    if (optionsWithDefaults.sort && (Array.isArray(optionsWithDefaults.sort) ? optionsWithDefaults.sort.length > 0 : Object.keys(optionsWithDefaults.sort).length > 0)) {
+    if (
+      optionsWithDefaults.sort &&
+      (Array.isArray(optionsWithDefaults.sort)
+        ? optionsWithDefaults.sort.length > 0
+        : Object.keys(optionsWithDefaults.sort).length > 0)
+    ) {
       requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
     }
 

@@ -1214,10 +1214,7 @@ describe('Threads 2.0', () => {
     });
 
     describe('Methods & Getters', () => {
-      let stubbedQueryThreads: sinon.SinonStub<
-        [options?: QueryThreadsOptions],
-        ReturnType<StreamChat['queryThreads']>
-      >;
+      let stubbedQueryThreads: sinon.SinonStub<[options?: QueryThreadsOptions], ReturnType<StreamChat['queryThreads']>>;
 
       beforeEach(() => {
         stubbedQueryThreads = sinon.stub(client, 'queryThreads').resolves({
@@ -1514,40 +1511,32 @@ describe('Threads 2.0', () => {
             participant_count: { $lt: 10 },
           };
 
-          await threadManager.queryThreads({filter});
+          await threadManager.queryThreads({ filter });
 
           expect(
-            stubbedQueryThreads.calledWithMatch(
-              {
-                limit: 25,
-                participant_limit: 10,
-                reply_limit: 10,
-                watch: true,
-                filter,
-              },
-            ),
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              filter,
+            }),
           ).to.be.true;
         });
 
         it('applies sort parameters correctly', async () => {
-          const sort: ThreadSort = [
-            { created_at: -1 },
-            { reply_count: 1 },
-            { participant_count: -1 },
-          ];
+          const sort: ThreadSort = [{ created_at: -1 }, { reply_count: 1 }, { participant_count: -1 }];
 
-          await threadManager.queryThreads({sort});
+          await threadManager.queryThreads({ sort });
 
           expect(
-            stubbedQueryThreads.calledWithMatch(
-              {
-                limit: 25,
-                participant_limit: 10,
-                reply_limit: 10,
-                watch: true,
-                sort,
-              },
-            ),
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              sort,
+            }),
           ).to.be.true;
         });
 
@@ -1556,24 +1545,19 @@ describe('Threads 2.0', () => {
             created_by_user_id: { $eq: 'user1' },
             updated_at: { $gte: '2024-01-01T00:00:00Z' },
           };
-          const sort: ThreadSort = [
-            { last_message_at: -1 },
-            { participant_count: 1 },
-          ];
+          const sort: ThreadSort = [{ last_message_at: -1 }, { participant_count: 1 }];
 
-          await threadManager.queryThreads({filter, sort});
+          await threadManager.queryThreads({ filter, sort });
 
           expect(
-            stubbedQueryThreads.calledWithMatch(
-              {
-                limit: 25,
-                participant_limit: 10,
-                reply_limit: 10,
-                watch: true,
-                filter,
-                sort,
-              },
-            ),
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              filter,
+              sort,
+            }),
           ).to.be.true;
         });
 
@@ -1581,14 +1565,12 @@ describe('Threads 2.0', () => {
           await threadManager.queryThreads({});
 
           expect(
-            stubbedQueryThreads.calledWithMatch(
-              {
-                limit: 25,
-                participant_limit: 10,
-                reply_limit: 10,
-                watch: true,
-              },
-            ),
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+            }),
           ).to.be.true;
         });
       });
