@@ -2836,9 +2836,9 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
   async queryThreads(
+    options: QueryThreadsOptions = {},
     filter: ThreadFilters = {},
     sort: ThreadSort = [],
-    options: QueryThreadsOptions = {},
   ) {
     const optionsWithDefaults = {
       limit: 10,

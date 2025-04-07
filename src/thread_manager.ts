@@ -224,11 +224,11 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       }));
 
       const response = await this.queryThreads(
-        {},
-        [],
         {
           limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
-        }
+        },
+        {},
+        []
       );
 
       const currentThreads = this.threadsById;
@@ -272,7 +272,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  public queryThreads = (filter: ThreadFilters = {}, sort: ThreadSort = [], options: QueryThreadsOptions = {}) => {
+  public queryThreads = (options: QueryThreadsOptions = {}, filter: ThreadFilters = {} as ThreadFilters, sort: ThreadSort = []) => {
     const optionsWithDefaults: QueryThreadsOptions = {
       limit: 25,
       participant_limit: 10,
@@ -280,7 +280,7 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       watch: true,
       ...options,
     };
-    return this.client.queryThreads(filter, sort, optionsWithDefaults);
+    return this.client.queryThreads(optionsWithDefaults, filter, sort);
   };
 
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
@@ -292,12 +292,12 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       this.state.partialNext({ pagination: { ...pagination, isLoadingNext: true } });
 
       const response = await this.queryThreads(
-        {},
-        [],
         {
           ...options,
           next: pagination.nextCursor,
-        }
+        },
+        {},
+        []
       );
 
       this.state.next((current) => ({

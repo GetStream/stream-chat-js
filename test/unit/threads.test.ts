@@ -16,6 +16,7 @@ import {
   ThreadManager,
   ThreadResponse,
   THREAD_MANAGER_INITIAL_STATE,
+  ThreadFilters,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
@@ -1270,9 +1271,9 @@ describe('Threads 2.0', () => {
           });
           await threadManager.reload();
           expect(stubbedQueryThreads.called).to.be.true;
-          expect(stubbedQueryThreads.firstCall.args?.[0]).to.deep.equal({});
-          expect(stubbedQueryThreads.firstCall.args?.[1]).to.deep.equal([]);
-          expect(stubbedQueryThreads.firstCall.args?.[2]?.limit).to.equal(25);
+          expect(stubbedQueryThreads.firstCall.args?.[0]?.limit).to.equal(25);
+          expect(stubbedQueryThreads.firstCall.args?.[1]).to.deep.equal({});
+          expect(stubbedQueryThreads.firstCall.args?.[2]).to.deep.equal([]);
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
@@ -1307,7 +1308,13 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          expect(stubbedQueryThreads.calledWithMatch({}, [], { limit: 2 })).to.be.true;
+          expect(stubbedQueryThreads.calledWithMatch({
+            limit: 25,
+            participant_limit: 10,
+            reply_limit: 10,
+            next: 'cursor',
+            watch: true,
+          }, {} as ThreadFilters, [])).to.be.true;
         });
 
         it('adds new thread instances to the list', async () => {
@@ -1434,13 +1441,13 @@ describe('Threads 2.0', () => {
           await threadManager.loadNextPage();
 
           expect(
-            stubbedQueryThreads.calledWithMatch({}, [], {
+            stubbedQueryThreads.calledWithMatch({
               limit: 25,
               participant_limit: 10,
               reply_limit: 10,
               next: 'cursor',
               watch: true,
-            }),
+            }, {} as ThreadFilters, []),
           ).to.be.true;
         });
 
