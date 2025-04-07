@@ -269,14 +269,13 @@ export class ThreadManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public queryThreads = (options: QueryThreadsOptions = {}) => {
-    const optionsWithDefaults: QueryThreadsOptions = {
+    return this.client.queryThreads({
       limit: 25,
       participant_limit: 10,
       reply_limit: 10,
       watch: true,
       ...options,
-    };
-    return this.client.queryThreads(optionsWithDefaults);
+    });
   };
 
   public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
