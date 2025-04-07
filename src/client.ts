@@ -2848,13 +2848,21 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
+    const requestBody: Record<string, unknown> = {
+      ...optionsWithDefaults,
+    };
+
+    if (Object.keys(filter).length > 0) {
+      requestBody.filter = filter;
+    }
+
+    if (Array.isArray(sort) ? sort.length > 0 : Object.keys(sort).length > 0) {
+      requestBody.sort = normalizeQuerySort(sort);
+    }
+
     const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(
       `${this.baseURL}/threads`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...optionsWithDefaults,
-      },
+      requestBody,
     );
 
     return {

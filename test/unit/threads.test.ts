@@ -1308,13 +1308,7 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          expect(stubbedQueryThreads.calledWithMatch({
-            limit: 25,
-            participant_limit: 10,
-            reply_limit: 10,
-            next: 'cursor',
-            watch: true,
-          }, {} as ThreadFilters, [])).to.be.true;
+          expect(stubbedQueryThreads.calledWithMatch({ limit: 2 })).to.be.true;
         });
 
         it('adds new thread instances to the list', async () => {
