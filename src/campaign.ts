@@ -24,6 +24,8 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
       description: this.data?.description,
       name: this.data?.name,
       user_ids: this.data?.user_ids,
+      skip_webhook: this.data?.skip_webhook,
+      skip_push: this.data?.skip_push,
     };
 
     const result = await this.client.createCampaign(body);
