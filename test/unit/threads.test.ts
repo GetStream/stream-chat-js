@@ -1269,7 +1269,10 @@ describe('Threads 2.0', () => {
             unseenThreadIds: [],
           });
           await threadManager.reload();
-          expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
+          expect(stubbedQueryThreads.called).to.be.true;
+          expect(stubbedQueryThreads.firstCall.args?.[0]).to.deep.equal({});
+          expect(stubbedQueryThreads.firstCall.args?.[1]).to.deep.equal([]);
+          expect(stubbedQueryThreads.firstCall.args?.[2]?.limit).to.equal(25);
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
@@ -1304,7 +1307,7 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          expect(stubbedQueryThreads.calledWithMatch({ limit: 2 })).to.be.true;
+          expect(stubbedQueryThreads.calledWithMatch({}, [], { limit: 2 })).to.be.true;
         });
 
         it('adds new thread instances to the list', async () => {
@@ -1431,7 +1434,7 @@ describe('Threads 2.0', () => {
           await threadManager.loadNextPage();
 
           expect(
-            stubbedQueryThreads.calledWithMatch({
+            stubbedQueryThreads.calledWithMatch({}, [], {
               limit: 25,
               participant_limit: 10,
               reply_limit: 10,
