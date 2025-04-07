@@ -40,6 +40,7 @@ export type MessageComposerState = {
   id: string;
   quotedMessage: LocalMessageBase | null;
   pollId: string | null;
+  draftId: string | null;
 };
 
 export type MessageComposerConfig = {
@@ -82,18 +83,22 @@ const initState = (
       id: MessageComposer.generateId(),
       quotedMessage: null,
       pollId: null,
+      draftId: null,
     };
   }
 
   const quotedMessage = composition.quoted_message;
   let message;
+  let draftId = null;
   if (compositionIsMessageDraft(composition)) {
     message = composition.message;
+    draftId = composition.message.id;
   } else {
     message = composition;
   }
 
   return {
+    draftId,
     id: message.id,
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
@@ -180,6 +185,11 @@ export class MessageComposer {
   get id() {
     return this.state.getLatestValue().id;
   }
+
+  get draftId() {
+    return this.state.getLatestValue().draftId;
+  }
+
   get lastChange() {
     return this.editingAuditState.getLatestValue().lastChange;
   }
@@ -539,12 +549,14 @@ export class MessageComposer {
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
+    this.state.partialNext({ draftId: draft.id });
     this.logDraftUpdateTimestamp();
     await this.channel.createDraft(draft);
   };
 
   deleteDraft = async () => {
-    if (this.editedMessage || !this.config.draftsEnabled) return;
+    if (this.editedMessage || !this.config.draftsEnabled || !this.draftId) return;
+    this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     this.logDraftUpdateTimestamp();
     await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
   };
