@@ -218,6 +218,8 @@ import {
   DraftFilters,
   DraftSort,
   Pager,
+  ThreadFilters,
+  ThreadSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2828,10 +2830,16 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   * @param {ThreadFilters} filter MongoDB style filters for threads
+   * @param {ThreadSort} sort MongoDB style sort for threads
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
-  async queryThreads(options: QueryThreadsOptions = {}) {
+  async queryThreads(
+    filter: ThreadFilters = {},
+    sort: ThreadSort = [],
+    options: QueryThreadsOptions = {},
+  ) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -2842,7 +2850,11 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
 
     const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(
       `${this.baseURL}/threads`,
-      optionsWithDefaults,
+      {
+        filter,
+        sort: normalizeQuerySort(sort),
+        ...optionsWithDefaults,
+      },
     );
 
     return {

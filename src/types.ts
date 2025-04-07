@@ -3899,3 +3899,47 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
   silent?: boolean;
   type?: MessageLabel;
 };
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  created_at?: AscDesc;
+  updated_at?: AscDesc;
+  last_message_at?: AscDesc;
+  reply_count?: AscDesc;
+  participant_count?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    id?: RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>> | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['last_message_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  } & {
+    reply_count?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['reply_count']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['reply_count']>;
+  } & {
+    participant_count?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['participant_count']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['participant_count']>;
+  } & {
+    deleted_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['deleted_at']>;
+  }
+>;
