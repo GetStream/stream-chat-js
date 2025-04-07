@@ -108,7 +108,7 @@ export class Channel {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: PushPreference;
-  private _messageComposer: MessageComposer;
+  public readonly messageComposer: MessageComposer;
 
   /**
    * constructor - Create a channel
@@ -153,7 +153,10 @@ export class Channel {
     this.isTyping = false;
     this.disconnected = false;
 
-    this._messageComposer = new MessageComposer({ channel: this });
+    this.messageComposer = new MessageComposer({
+      client: this._client,
+      compositionContext: this,
+    });
   }
 
   /**
@@ -176,10 +179,6 @@ export class Channel {
   getConfig() {
     const client = this.getClient();
     return client.configs[this.cid];
-  }
-
-  get messageComposer() {
-    return this._messageComposer;
   }
 
   /**
@@ -410,7 +409,9 @@ export class Channel {
 
     const url =
       this.getClient().baseURL +
-      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
+      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(
+        reactionType,
+      )}`;
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<ReactionAPIResponse>(url, { user_id });
@@ -1274,7 +1275,9 @@ export class Channel {
       );
     }
 
-    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
+    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}`;
     if (this.id) {
       queryURL += `/${encodeURIComponent(this.id)}`;
     }
@@ -1908,7 +1911,9 @@ export class Channel {
     if (!this.id) {
       throw new Error('channel id is not defined');
     }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}/${encodeURIComponent(this.id)}`;
+    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}/${encodeURIComponent(this.id)}`;
   };
 
   _checkInitialized() {

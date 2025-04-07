@@ -272,8 +272,6 @@ type MessageComposerSetupState = {
 const INITIAL_MESSAGE_COMPOSER_SETUP_STATE: MessageComposerSetupState = {
   define: ({ constructorParameters }) => new MessageComposer(constructorParameters),
   applyModifications: ({ composer }) => {
-    console.log(composer);
-
     composer.textComposer.upsertMiddleware([
       createMentionsMiddleware(composer.channel),
       createCommandsMiddleware(composer.channel),

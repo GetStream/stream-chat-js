@@ -12,7 +12,8 @@ import { formatMessage, generateUUIDv4 } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import type { AttachmentManagerConfig } from './attachmentManager';
 import type { LinkPreviewsManagerConfig } from './linkPreviewsManager';
-import type { Channel } from '../channel';
+import { Channel } from '../channel';
+import { Thread } from '../thread';
 import type {
   DraftMessage,
   DraftResponse,
@@ -22,6 +23,7 @@ import type {
   MessageResponse,
   MessageResponseBase,
 } from '../types';
+import type { StreamChat } from '../client';
 
 export type ComposerMap = {
   attachmentManager: AttachmentManager;
@@ -35,6 +37,9 @@ type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 type EditingAuditState = {
   lastChange: LastComposerChange;
 };
+
+type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
+type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
 
 export type MessageComposerState = {
   id: string;
@@ -53,11 +58,12 @@ export type MessageComposerConfig = {
 };
 
 export type MessageComposerOptions = {
-  channel: Channel;
+  client: StreamChat;
+  // composer can belong to a channel, thread, legacy thread or a local message (edited message)
+  compositionContext: CompositionContext;
+  // initial state like draft message or edited message
   composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: Partial<MessageComposerConfig>;
-  threadId?: string;
-  tag?: string;
 };
 
 const compositionIsMessageDraft = (composition: unknown): composition is DraftResponse =>
@@ -118,8 +124,7 @@ export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editedMessage?: LocalMessage;
-  readonly threadId: string | null;
-  readonly tag: string;
+  readonly compositionContext: CompositionContext;
 
   config: MessageComposerConfig;
   attachmentManager: AttachmentManager;
@@ -133,17 +138,30 @@ export class MessageComposer {
   private draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
   private editingAuditState: StateStore<EditingAuditState>;
 
-  constructor({ channel, composition, config, threadId, tag }: MessageComposerOptions) {
-    this.channel = channel;
-    this.threadId = threadId ?? null;
+  constructor({
+    composition,
+    config,
+    compositionContext,
+    client,
+  }: MessageComposerOptions) {
+    this.compositionContext = compositionContext;
+
     const {
       attachmentManager: attachmentManagerConfig,
       linkPreviewsManager: linkPreviewsManagerConfig,
       ...messageComposerConfig
     } = config ?? {};
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, messageComposerConfig ?? {});
-    this.tag = tag ?? generateUUIDv4();
 
+    // channel is easily inferable from the context
+    if (compositionContext instanceof Channel) {
+      this.channel = compositionContext;
+    } else if (compositionContext instanceof Thread) {
+      this.channel = compositionContext.channel;
+    } else {
+      this.channel = client.channel(compositionContext.type, compositionContext.id);
+    }
+
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, messageComposerConfig ?? {});
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsMessageDraft(composition)) {
       message = composition.message;
@@ -153,12 +171,12 @@ export class MessageComposer {
     }
 
     this.attachmentManager = new AttachmentManager({
-      channel, // todo: pass composer reference to each manager
+      channel: this.channel, // todo: pass composer reference to each manager
       config: attachmentManagerConfig,
       message,
     });
     this.linkPreviewsManager = new LinkPreviewsManager({
-      client: channel.getClient(),
+      client,
       config: linkPreviewsManagerConfig,
       message,
     });
@@ -176,6 +194,65 @@ export class MessageComposer {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
+  }
+
+  static evaluateContextType(
+    compositionContext: CompositionContext,
+  ) {
+    if (compositionContext instanceof Channel) {
+      return 'channel';
+    }
+
+    if (compositionContext instanceof Thread) {
+      return 'thread';
+    }
+
+    if (typeof compositionContext.legacyThreadId === 'string') {
+      return 'legacy_thread';
+    }
+
+    return 'message';
+  }
+
+  static constructTag(
+    compositionContext: CompositionContext,
+  ): `${ReturnType<typeof MessageComposer.evaluateContextType>}_${string}` {
+    return `${this.evaluateContextType(compositionContext)}_${compositionContext.id}`;
+  }
+
+  get contextType() {
+    return MessageComposer.evaluateContextType(this.compositionContext);
+  }
+
+  get tag() {
+    return MessageComposer.constructTag(this.compositionContext);
+  }
+
+  get threadId() {
+    // TODO: ideally we'd use this.contextType but type narrowing does not work for this.compositionContext
+    // if (this.contextType === 'channel') {
+    //   const context = this.compositionContext; // context is a Channel
+    //   return null
+    // }
+
+    if (this.compositionContext instanceof Channel) {
+      return null;
+    }
+
+    if (this.compositionContext instanceof Thread) {
+      return this.compositionContext.id;
+    }
+
+    if (typeof this.compositionContext.legacyThreadId === 'string') {
+      return this.compositionContext.legacyThreadId;
+    }
+
+    // check if message is a reply, get parentMessageId
+    if (typeof this.compositionContext.parent_id === 'string') {
+      return this.compositionContext.parent_id;
+    }
+
+    return null;
   }
 
   get client() {
@@ -238,8 +315,8 @@ export class MessageComposer {
       typeof composition === 'undefined'
         ? composition
         : compositionIsMessageDraft(composition)
-          ? composition.message
-          : formatMessage(composition);
+        ? composition.message
+        : formatMessage(composition);
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });

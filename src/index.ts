@@ -49,3 +49,4 @@ export {
   formatMessage,
   promoteChannel,
 } from './utils';
+export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';

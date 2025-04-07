@@ -111,11 +111,11 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
 export class Thread {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
+  public readonly messageComposer: MessageComposer;
 
   private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
-  private _messageComposer: MessageComposer;
 
   constructor({
     client,
@@ -173,15 +173,11 @@ export class Thread {
     this.id = threadData.parent_message_id;
     this.client = client;
 
-    this._messageComposer = new MessageComposer({
-      channel,
+    this.messageComposer = new MessageComposer({
+      client,
       composition: threadData.draft,
-      threadId: this.id,
+      compositionContext: this,
     });
-  }
-
-  get messageComposer() {
-    return this._messageComposer;
   }
 
   get channel() {
@@ -630,12 +626,12 @@ const repliesPaginationFromInitialThread = (
     nextCursor: null,
     prevCursor: latestRepliesContainsAllReplies
       ? null
-      : (thread.latest_replies.at(0)?.id ?? null),
+      : thread.latest_replies.at(0)?.id ?? null,
     isLoadingNext: false,
     isLoadingPrev: false,
   };
 };
 
-const ownUnreadCountSelector =
-  (currentUserId: string | undefined) => (state: ThreadState) =>
-    (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
+const ownUnreadCountSelector = (currentUserId: string | undefined) => (
+  state: ThreadState,
+) => (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
