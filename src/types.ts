@@ -576,9 +576,9 @@ export type QueryThreadsOptions = {
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
-  watch?: boolean;
   filter?: ThreadFilters;
   sort?: ThreadSort;
+  watch?: boolean;
 };
 
 export type QueryThreadsAPIResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
@@ -3906,10 +3906,10 @@ export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
 export type ThreadSortBase = {
   created_at?: AscDesc;
-  updated_at?: AscDesc;
   last_message_at?: AscDesc;
-  reply_count?: AscDesc;
+  updated_at?: AscDesc;
   participant_count?: AscDesc;
+  reply_count?: AscDesc;
 };
 
 export type ThreadFilters = QueryFilters<

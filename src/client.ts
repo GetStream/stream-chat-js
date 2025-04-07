@@ -218,8 +218,6 @@ import {
   DraftFilters,
   DraftSort,
   Pager,
-  ThreadFilters,
-  ThreadSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';

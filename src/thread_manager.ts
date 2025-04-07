@@ -3,15 +3,7 @@ import { throttle } from './utils';
 
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
-import type {
-  DefaultGenerics,
-  Event,
-  ExtendableGenerics,
-  OwnUserResponse,
-  QueryThreadsOptions,
-  ThreadFilters,
-  ThreadSort,
-} from './types';
+import type { DefaultGenerics, Event, ExtendableGenerics, OwnUserResponse, QueryThreadsOptions } from './types';
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
