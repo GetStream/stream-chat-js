@@ -49,6 +49,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; // alias to avoid breaking change
@@ -1403,6 +1405,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -3082,6 +3085,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3913,6 +3917,7 @@ export type DraftResponse = {
   parent_message?: MessageResponseBase;
   quoted_message?: MessageResponseBase;
 };
+
 export type CreateDraftResponse = APIResponse & {
   draft: DraftResponse;
 };
@@ -3923,11 +3928,11 @@ export type GetDraftResponse = APIResponse & {
 
 export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
-  next?: string;
-};
+} & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
-  Partial<Pick<DraftMessage, 'id'>>;
+export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+  user_id?: string;
+};
 
 export type DraftMessage = {
   id: string;
