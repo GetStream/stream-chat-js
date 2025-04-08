@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.59.0](https://github.com/GetStream/stream-chat-js/compare/v8.58.0...v8.59.0) (2025-04-08)
+
+
+### Features
+
+* [CHA-660] - Team based roles ([#1499](https://github.com/GetStream/stream-chat-js/issues/1499)) ([dd62cff](https://github.com/GetStream/stream-chat-js/commit/dd62cff38e03678fb04222563e0dae75916ccadb))
+* add show_channels flag to campaigns ([#1513](https://github.com/GetStream/stream-chat-js/issues/1513)) ([5344d2c](https://github.com/GetStream/stream-chat-js/commit/5344d2c6db205063c4e1c73f449e31c6ed6197c5))
+
+
+### Bug Fixes
+
+* [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
+* add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
+
 ## [8.58.0](https://github.com/GetStream/stream-chat-js/compare/v8.57.6...v8.58.0) (2025-04-01)
 
 
