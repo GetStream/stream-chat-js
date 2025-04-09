@@ -1269,8 +1269,7 @@ describe('Threads 2.0', () => {
             unseenThreadIds: [],
           });
           await threadManager.reload();
-          expect(stubbedQueryThreads.called).to.be.true;
-          expect(stubbedQueryThreads.firstCall.args?.[0]?.limit).to.equal(25);
+          expect(stubbedQueryThreads.firstCall.calledWithMatch({ limit: 25 })).to.be.true;
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
