@@ -4381,7 +4381,12 @@ export class StreamChat {
       user_id?: string;
     } = {},
   ) {
-    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', options);
+    const payload = {
+      ...options,
+      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
+    };
+
+    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
 
   // TODO: this might not be needed

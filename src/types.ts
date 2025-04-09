@@ -50,6 +50,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; // alias to avoid breaking change
@@ -876,9 +878,12 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
+  teams_role?: TeamsRole;
   updated_at?: string;
   username?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
@@ -3110,6 +3115,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3941,6 +3947,7 @@ export type DraftResponse = {
   parent_message?: MessageResponseBase;
   quoted_message?: MessageResponseBase;
 };
+
 export type CreateDraftResponse = APIResponse & {
   draft: DraftResponse;
 };
@@ -3951,11 +3958,11 @@ export type GetDraftResponse = APIResponse & {
 
 export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
-  next?: string;
-};
+} & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
-  Partial<Pick<DraftMessage, 'id'>>;
+export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+  user_id?: string;
+};
 
 export type DraftMessage = {
   id: string;
