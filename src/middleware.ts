@@ -1,5 +1,15 @@
 import { withCancellation } from './utils/concurrency';
 
+export type InsertPosition =
+  | {
+      after: string;
+      before?: never;
+    }
+  | {
+      after?: never;
+      before: string;
+    };
+
 export type MiddlewareStatus = 'complete' | 'discard';
 
 export type MiddlewareValue<TState> = {
@@ -25,8 +35,8 @@ export class MiddlewareExecutor<TState> {
     return this;
   }
 
-  // todo: document how to re-arrange the order of middleware using upsert
-  upsert(middleware: Middleware<TState>[]) {
+  // todo: document how to re-arrange the order of middleware using replace
+  replace(middleware: Middleware<TState>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {
       const existingIndex = this.middleware.findIndex(
@@ -40,6 +50,36 @@ export class MiddlewareExecutor<TState> {
     });
     this.middleware = newMiddleware;
     return this;
+  }
+
+  insert({
+    middleware,
+    position,
+    unique,
+  }: {
+    middleware: Middleware<TState>[];
+    position: InsertPosition;
+    unique?: boolean;
+  }) {
+    if (unique) {
+      middleware.forEach((md) => {
+        const existingMiddlewareIndex = this.middleware.findIndex((m) => m.id === md.id);
+        if (existingMiddlewareIndex >= 0) {
+          this.middleware.splice(existingMiddlewareIndex, 1);
+        }
+      });
+    }
+    const targetId = position.after || position.before;
+    const targetIndex = this.middleware.findIndex((m) => m.id === targetId);
+    const insertionIndex = position.after ? targetIndex + 1 : targetIndex;
+    this.middleware.splice(insertionIndex, 0, ...middleware);
+    return this;
+  }
+
+  setOrder(order: string[]) {
+    this.middleware = order
+      .map((id) => this.middleware.find((middleware) => middleware.id === id))
+      .filter(Boolean) as Middleware<TState>[];
   }
 
   protected async executeMiddlewareChain(

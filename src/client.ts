@@ -230,12 +230,8 @@ import type {
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
-import type { MessageComposerOptions, TextComposerMiddleware } from './messageComposer';
-import {
-  createCommandsMiddleware,
-  createMentionsMiddleware,
-  MessageComposer,
-} from './messageComposer';
+import type { MessageComposerOptions } from './messageComposer';
+import { MessageComposer } from './messageComposer';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -271,17 +267,7 @@ type MessageComposerSetupState = {
 
 const INITIAL_MESSAGE_COMPOSER_SETUP_STATE: MessageComposerSetupState = {
   define: ({ constructorParameters }) => new MessageComposer(constructorParameters),
-  applyModifications: ({ composer }) => {
-    composer.textComposer.upsertMiddleware([
-      createMentionsMiddleware(composer.channel),
-      createCommandsMiddleware(composer.channel),
-      // TODO: fix typing
-    ] as TextComposerMiddleware[]);
-
-    return () => {
-      // composer.restore()
-    };
-  },
+  applyModifications: null,
 };
 
 export class StreamChat {

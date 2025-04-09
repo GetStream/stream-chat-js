@@ -2090,10 +2090,16 @@ export type Sort<T> = {
 export type UserSort = Sort<UserResponse> | Array<Sort<UserResponse>>;
 
 export type MemberSort =
-  | Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>
+  | Sort<
+      Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
+        user_id?: string;
+      }
+    >
   | Array<
       Sort<
-        Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>
+        Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
+          user_id?: string;
+        }
       >
     >;
 

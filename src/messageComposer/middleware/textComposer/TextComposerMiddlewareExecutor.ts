@@ -12,8 +12,8 @@ export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextCompo
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
-      createCommandsMiddleware(composer.channel),
       createMentionsMiddleware(composer.channel),
+      createCommandsMiddleware(composer.channel),
     ]);
   }
   async execute(
@@ -29,6 +29,7 @@ export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextCompo
       const searchResult = await withCancellation(
         'textComposer-suggestions-search',
         async () => {
+          // sets the initial searchQuery value and performs the first page query
           await result.state.suggestions?.searchSource.search(
             result.state.suggestions?.query,
           );

@@ -196,9 +196,7 @@ export class MessageComposer {
     });
   }
 
-  static evaluateContextType(
-    compositionContext: CompositionContext,
-  ) {
+  static evaluateContextType(compositionContext: CompositionContext) {
     if (compositionContext instanceof Channel) {
       return 'channel';
     }
@@ -315,8 +313,8 @@ export class MessageComposer {
       typeof composition === 'undefined'
         ? composition
         : compositionIsMessageDraft(composition)
-        ? composition.message
-        : formatMessage(composition);
+          ? composition.message
+          : formatMessage(composition);
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });

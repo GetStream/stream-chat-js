@@ -161,18 +161,38 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     );
   };
 
+  protected getStateBeforeFirstQuery(newSearchString: string): SearchSourceState<T> {
+    return {
+      ...this.initialState,
+      isActive: this.isActive,
+      isLoading: true,
+      searchQuery: newSearchString,
+    };
+  }
+
+  protected getStateAfterQuery(
+    stateUpdate: Partial<SearchSourceState<T>>,
+    isFirstPage: boolean,
+  ): SearchSourceState<T> {
+    const current = this.state.getLatestValue();
+    return {
+      ...current,
+      lastQueryError: undefined, // reset lastQueryError that can be overridden by the stateUpdate
+      ...stateUpdate,
+      isLoading: false,
+      items: isFirstPage
+        ? stateUpdate.items
+        : [...(this.items ?? []), ...(stateUpdate.items || [])],
+    };
+  }
+
   async executeQuery(newSearchString?: string) {
     if (!this.canExecuteQuery(newSearchString)) return;
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
 
     if (hasNewSearchQuery) {
-      this.state.next({
-        ...this.initialState,
-        isActive: this.isActive,
-        isLoading: true,
-        searchQuery: newSearchString ?? '',
-      });
+      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
     } else {
       this.state.partialNext({ isLoading: true });
     }
@@ -195,13 +215,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      this.state.next(({ lastQueryError, ...current }: SearchSourceState<T>) => ({
-        ...current,
-        ...stateUpdate,
-        isLoading: false,
-        items: [...(current.items ?? []), ...(stateUpdate.items || [])],
-      }));
+      this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
   }
 
@@ -213,6 +227,11 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
   resetState() {
     this.state.next(this.initialState);
+  }
+
+  resetStateAndActivate() {
+    this.resetState();
+    this.activate();
   }
 }
 

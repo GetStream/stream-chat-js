@@ -626,12 +626,12 @@ const repliesPaginationFromInitialThread = (
     nextCursor: null,
     prevCursor: latestRepliesContainsAllReplies
       ? null
-      : thread.latest_replies.at(0)?.id ?? null,
+      : (thread.latest_replies.at(0)?.id ?? null),
     isLoadingNext: false,
     isLoadingPrev: false,
   };
 };
 
-const ownUnreadCountSelector = (currentUserId: string | undefined) => (
-  state: ThreadState,
-) => (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;
+const ownUnreadCountSelector =
+  (currentUserId: string | undefined) => (state: ThreadState) =>
+    (currentUserId && state.read[currentUserId]?.unreadMessageCount) || 0;

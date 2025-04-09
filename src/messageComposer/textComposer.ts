@@ -1,11 +1,10 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
+import { mergeWith } from '../utils/mergeWith';
 import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
 import type { MessageComposer } from './messageComposer';
-import type { TextComposerMiddleware } from './middleware';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
-import { mergeWith } from '../utils/mergeWith';
 
 const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {};
 
@@ -54,7 +53,7 @@ export class TextComposer {
   composer: MessageComposer;
   config: TextComposerConfig;
   state: StateStore<TextComposerState>;
-  private middlewareExecutor: TextComposerMiddlewareExecutor;
+  middlewareExecutor: TextComposerMiddlewareExecutor;
 
   constructor({ composer, config = {}, message }: TextComposerOptions) {
     this.composer = composer;
@@ -71,6 +70,14 @@ export class TextComposer {
 
   get mentionedUsers() {
     return this.state.getLatestValue().mentionedUsers;
+  }
+
+  get selection() {
+    return this.state.getLatestValue().selection;
+  }
+
+  get suggestions() {
+    return this.state.getLatestValue().suggestions;
   }
 
   get text() {
@@ -137,27 +144,6 @@ export class TextComposer {
     this.state.partialNext({ suggestions: undefined });
   };
   // --- END STATE API ---
-
-  // --- START MIDDLEWARE API ----
-  /**
-   * const composer = new TextComposer<DefaultGenerics>()
-   *   .use([
-   *      createMentionsMiddleware(channel, { trigger: '@', minChars: 1 }),  // SearchSource<UserResponse>
-   *      createCommandsMiddleware(channel, { trigger: '/' }),               // SearchSource<Command>
-   *      createChannelMiddleware(client, { trigger: '#' }),                // SearchSource<Channel>
-   *      createEmojiMiddleware(emojiSearchSource, { trigger: ':' }),                  // SearchSource<Emoji>
-   *      createCustomMiddleware(customClient, { trigger: '$' }),                 // SearchSource<CustomType>
-   *   ]);
-   * @param middleware
-   */
-  use = (middleware: TextComposerMiddleware | TextComposerMiddleware[]) => {
-    this.middlewareExecutor.use(middleware);
-  };
-
-  upsertMiddleware = (middleware: TextComposerMiddleware[]) => {
-    this.middlewareExecutor.upsert(middleware);
-  };
-  // --- END MIDDLEWARE API ----
 
   // --- START TEXT PROCESSING ----
 

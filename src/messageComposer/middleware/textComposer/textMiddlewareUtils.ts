@@ -1,10 +1,20 @@
 import type { TextSelection } from '../../types';
 
-export const getTriggerCharWithToken = (trigger: string, text: string) => {
+export const getTriggerCharWithToken = ({
+  trigger,
+  text,
+  acceptTrailingSpaces = true,
+}: {
+  trigger: string;
+  text: string;
+  acceptTrailingSpaces?: boolean;
+}) => {
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
   const match = text.match(
     new RegExp(
-      `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`,
+      acceptTrailingSpaces
+        ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
+        : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
       'g',
     ),
   );
@@ -64,3 +74,56 @@ export const replaceWordWithEntity = async ({
   const textAfterCaret = text.slice(caretPosition, -1);
   return textBeforeWord + newWord + spaces + textAfterCaret;
 };
+
+/**
+ * Escapes a string for use in a regular expression
+ * @param text - The string to escape
+ * @returns The escaped string
+ * What does this regex do?
+
+ The regex escapes special regex characters by adding a backslash before them. Here's what it matches:
+ - dash
+ [ ] square brackets
+ { } curly braces
+ ( ) parentheses
+ * asterisk
+ + plus
+ ? question mark
+ . period
+ , comma
+ / forward slash
+ \ backslash
+ ^ caret
+ $ dollar sign
+ | pipe
+ # hash
+
+ The \\$& replacement adds a backslash before any matched character.
+ This is needed when you want to use these characters literally
+ in a regex pattern instead of their special regex meanings.
+ For example:
+ escapeRegExp("hello.world")  // Returns: "hello\.world"
+ escapeRegExp("[test]")       // Returns: "\[test\]"
+
+ This is commonly used when building dynamic regex patterns from user input to prevent special characters from being interpreted as regex syntax.
+ */
+export function escapeRegExp(text: string) {
+  return text.replace(/[-[\]{}()*+?.,/\\^$|#]/g, '\\$&');
+}
+
+export const getTokenizedSuggestionDisplayName = ({
+  displayName,
+  searchToken,
+}: {
+  displayName: string;
+  searchToken: string;
+}): { tokenizedDisplayName: { token: string; tokenizedDisplayName: string[] } } => ({
+  tokenizedDisplayName: {
+    token: searchToken,
+    tokenizedDisplayName: searchToken
+      ? displayName
+          .split(new RegExp(`(${escapeRegExp(searchToken)})`, 'gi'))
+          .filter(Boolean)
+      : [displayName],
+  },
+});

@@ -1,4 +1,8 @@
-import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import {
+  getTokenizedSuggestionDisplayName,
+  getTriggerCharWithToken,
+  insertItemWithTrigger,
+} from './textMiddlewareUtils';
 import type { SearchSourceOptions } from '../../../search_controller';
 import { BaseSearchSource } from '../../../search_controller';
 import { mergeWith } from '../../../utils/mergeWith';
@@ -7,7 +11,14 @@ import type {
   TextComposerMiddlewareParams,
 } from './types';
 import type { StreamChat } from '../../../client';
-import type { UserFilters, UserOptions, UserResponse, UserSort } from '../../../types';
+import type {
+  MemberFilters,
+  MemberSort,
+  UserFilters,
+  UserOptions,
+  UserResponse,
+  UserSort,
+} from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
 import type { TextComposerSuggestion } from '../../types';
@@ -80,8 +91,10 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   readonly type = 'mentions';
   private client: StreamChat;
   private channel: Channel;
-  filters: UserFilters | undefined;
-  sort: UserSort | undefined;
+  userFilters: UserFilters | undefined;
+  memberFilters: MemberFilters | undefined;
+  userSort: UserSort | undefined;
+  memberSort: MemberSort | undefined; // todo: document there are filters and sort options for users and members
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
   config: MentionsSearchSourceOptions;
 
@@ -101,6 +114,15 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   get allMembersLoadedWithInitialChannelQuery() {
     const countLoadedMembers = Object.keys(this.channel.state.members || {}).length;
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
+  }
+
+  protected getStateBeforeFirstQuery(newSearchString: string) {
+    const newState = super.getStateBeforeFirstQuery(newSearchString);
+    const { items } = this.state.getLatestValue();
+    return {
+      ...newState,
+      items, // preserve items to avoid flickering
+    };
   }
 
   canExecuteQuery = (newSearchString?: string) => {
@@ -128,70 +150,102 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     return Object.values(uniqueUsers);
   };
 
-  searchLocalUsers = (searchQuery: string) => {
+  searchMembersLocally = (searchQuery: string) => {
     const { textComposerText } = this.config;
     if (!textComposerText) return { items: [] };
 
     return {
-      items: this.getMembersAndWatchers().filter((user) => {
-        if (user.id === this.client.userID) return false;
-        if (!searchQuery) return true;
+      items: this.getMembersAndWatchers()
+        .filter((user) => {
+          if (user.id === this.client.userID) return false;
+          if (!searchQuery) return true;
 
-        const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
-        const updatedName = this.transliterate(removeDiacritics(user.name)).toLowerCase();
-        const updatedQuery = this.transliterate(
-          removeDiacritics(searchQuery),
-        ).toLowerCase();
+          const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
+          const updatedName = this.transliterate(
+            removeDiacritics(user.name),
+          ).toLowerCase();
+          const updatedQuery = this.transliterate(
+            removeDiacritics(searchQuery),
+          ).toLowerCase();
 
-        const maxDistance = 3;
-        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
+          const maxDistance = 3;
+          const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
 
-        if (updatedName) {
-          const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
-          if (
-            updatedName.includes(updatedQuery) ||
-            (levenshtein <= maxDistance && lastDigits)
-          ) {
-            return true;
+          if (updatedName) {
+            const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
+            if (
+              updatedName.includes(updatedQuery) ||
+              (levenshtein <= maxDistance && lastDigits)
+            ) {
+              return true;
+            }
           }
-        }
 
-        const levenshtein = calculateLevenshtein(updatedQuery, updatedId);
+          const levenshtein = calculateLevenshtein(updatedQuery, updatedId);
 
-        return (
-          updatedId.includes(updatedQuery) || (levenshtein <= maxDistance && lastDigits)
-        );
-      }),
+          return (
+            updatedId.includes(updatedQuery) || (levenshtein <= maxDistance && lastDigits)
+          );
+        })
+        .sort((a, b) => {
+          if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
+
+          // Apply each sort criteria in order
+          for (const [field, direction] of Object.entries(this.memberSort)) {
+            const aValue = a[field as keyof UserResponse];
+            const bValue = b[field as keyof UserResponse];
+
+            if (aValue === bValue) continue;
+            return direction === 1
+              ? String(aValue || '').localeCompare(String(bValue || ''))
+              : String(bValue || '').localeCompare(String(aValue || ''));
+          }
+          return 0;
+        }),
     };
   };
 
-  prepareQueryParams = (searchQuery: string) => ({
+  prepareQueryUsersParams = (searchQuery: string) => ({
     filters: {
       $or: [
         { id: { $autocomplete: searchQuery } },
         { name: { $autocomplete: searchQuery } },
       ],
-      ...this.filters,
+      ...this.userFilters,
     } as UserFilters,
-    sort: { id: 1, ...this.sort } as UserSort,
+    sort: this.userSort ?? ([{ name: 1 }, { id: 1 }] as UserSort), // todo: document the change - the sort is overridden, not merged
     options: { ...this.searchOptions, limit: this.pageSize, offset: this.offset },
   });
 
+  prepareQueryMembersParams = (searchQuery: string) => {
+    // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
+    const maxSortParamsCount = 1;
+    let sort: MemberSort = [{ user_id: 1 }];
+    if (!this.memberSort) {
+      sort = [{ user_id: 1 }];
+    } else if (Array.isArray(this.memberSort)) {
+      sort = this.memberSort[0];
+    } else if (Object.keys(this.memberSort).length === maxSortParamsCount) {
+      sort = this.memberSort;
+    } // todo: document the change - the sort is overridden, not merged
+    return {
+      // todo: document the change - the filter is overridden, not merged
+      filters:
+        this.memberFilters ?? ({ name: { $autocomplete: searchQuery } } as MemberFilters), // autocomplete possible only for name
+      sort,
+      options: { ...this.searchOptions, limit: this.pageSize, offset: this.offset },
+    };
+  };
+
   queryUsers = async (searchQuery: string) => {
-    const { filters, sort, options } = this.prepareQueryParams(searchQuery);
+    const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery);
     const { users } = await this.client.queryUsers(filters, sort, options);
     return { items: users };
   };
 
   queryMembers = async (searchQuery: string) => {
-    const { options } = this.prepareQueryParams(searchQuery);
-    const response = await this.channel.queryMembers(
-      {
-        name: { $autocomplete: searchQuery },
-      },
-      {},
-      options,
-    );
+    const { filters, sort, options } = this.prepareQueryMembersParams(searchQuery);
+    const response = await this.channel.queryMembers(filters, sort, options);
 
     return { items: response.members.map((member) => member.user) as UserResponse[] };
   };
@@ -205,7 +259,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
       this.allMembersLoadedWithInitialChannelQuery || !searchQuery;
 
     if (shouldSearchLocally) {
-      return this.searchLocalUsers(searchQuery);
+      return this.searchMembersLocally(searchQuery);
     }
 
     return await this.queryMembers(searchQuery);
@@ -232,7 +286,13 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   };
 
   filterQueryResults(items: UserResponse[]) {
-    return this.filterMutes(items);
+    return this.filterMutes(items).map((item) => ({
+      ...item,
+      ...getTokenizedSuggestionDisplayName({
+        displayName: item.name || item.id,
+        searchToken: this.searchQuery,
+      }),
+    }));
   }
 }
 
@@ -273,21 +333,27 @@ export const createMentionsMiddleware = (
   }
   searchSource.activate();
   return {
-    id: finalOptions.trigger,
+    id: 'stream-io/mentions-middleware',
     onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
-      const triggerWithToken = getTriggerCharWithToken(
-        finalOptions.trigger,
-        state.text.slice(0, state.selection.end),
-      );
-      if (triggerWithToken === finalOptions.trigger) {
-        searchSource.resetState();
-        searchSource.activate();
+      const triggerWithToken = getTriggerCharWithToken({
+        trigger: finalOptions.trigger,
+        text: state.text.slice(0, state.selection.end),
+      });
+
+      const newSearchTriggerred =
+        triggerWithToken && triggerWithToken.length === finalOptions.minChars;
+
+      if (newSearchTriggerred) {
+        searchSource.resetStateAndActivate();
       }
 
-      if (!triggerWithToken || triggerWithToken.length < finalOptions.minChars) {
+      const triggerWasRemoved =
+        !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
+
+      if (triggerWasRemoved) {
         const hasStaleSuggestions =
           input.state.suggestions?.trigger === finalOptions.trigger;
         const newInput = { ...input };
@@ -321,6 +387,7 @@ export const createMentionsMiddleware = (
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
         return nextHandler(input);
 
+      searchSource.resetStateAndActivate();
       return Promise.resolve({
         state: {
           ...state,

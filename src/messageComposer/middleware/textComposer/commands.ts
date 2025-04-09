@@ -25,6 +25,15 @@ class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
     return this.isActive && !this.isLoading && (this.hasNext || hasNewSearchQuery);
   };
 
+  protected getStateBeforeFirstQuery(newSearchString: string) {
+    const newState = super.getStateBeforeFirstQuery(newSearchString);
+    const { items } = this.state.getLatestValue();
+    return {
+      ...newState,
+      items, // preserve items to avoid flickering
+    };
+  }
+
   query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
@@ -92,23 +101,35 @@ export const createCommandsMiddleware = (
   searchSource.activate();
 
   return {
-    id: finalOptions.trigger,
+    id: 'stream-io/commands-middleware',
     onChange: ({
       input,
       nextHandler,
     }: TextComposerMiddlewareParams<CommandSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);
-      // If the first character is not a command trigger do not process
-      if (state.text.length > 0 && state.text[0] !== finalOptions.trigger)
-        return nextHandler(input);
 
-      const lastToken = getTriggerCharWithToken(
-        finalOptions.trigger,
-        state.text.slice(0, state.selection.end),
-      );
+      const firstCharIsNotCommandTrigger =
+        state.text.length > 0 && state.text[0] !== finalOptions.trigger;
+      if (firstCharIsNotCommandTrigger) return nextHandler(input);
 
-      if (!lastToken || lastToken.length < finalOptions.minChars) {
+      const triggerWithToken = getTriggerCharWithToken({
+        trigger: finalOptions.trigger,
+        text: state.text.slice(0, state.selection.end),
+        acceptTrailingSpaces: false,
+      });
+
+      const newSearchTriggerred =
+        triggerWithToken && triggerWithToken.length === finalOptions.minChars;
+
+      if (newSearchTriggerred) {
+        searchSource.resetStateAndActivate();
+      }
+
+      const triggerWasRemoved =
+        !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
+
+      if (triggerWasRemoved) {
         const hasStaleSuggestions =
           input.state.suggestions?.trigger === finalOptions.trigger;
         const newInput = { ...input };
@@ -122,7 +143,7 @@ export const createCommandsMiddleware = (
         state: {
           ...state,
           suggestions: {
-            query: lastToken.slice(1),
+            query: triggerWithToken.slice(1),
             searchSource,
             trigger: finalOptions.trigger,
           },
@@ -139,6 +160,7 @@ export const createCommandsMiddleware = (
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
         return nextHandler(input);
 
+      searchSource.resetStateAndActivate();
       return Promise.resolve({
         state: {
           ...state,
