@@ -3910,6 +3910,8 @@ export type ThreadSortBase = {
   participant_count?: AscDesc;
   reply_count?: AscDesc;
   updated_at?: AscDesc;
+  active_participant_count?: AscDesc;
+  parent_message_id?: AscDesc;
 };
 
 export type ThreadFilters = QueryFilters<
@@ -3935,24 +3937,6 @@ export type ThreadFilters = QueryFilters<
     last_message_at?:
       | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['last_message_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
-  } & {
-    reply_count?:
-      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['reply_count']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-      | PrimitiveFilter<ThreadResponse['reply_count']>;
-  } & {
-    participant_count?:
-      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['participant_count']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-      | PrimitiveFilter<ThreadResponse['participant_count']>;
-  } & {
-    active_participant_count?:
-      | RequireOnlyOne<Pick<QueryFilter<number>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
-      | PrimitiveFilter<number>;
-  } & {
-    deleted_at?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ThreadResponse['deleted_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte' | '$exists'>
-        >
-      | PrimitiveFilter<ThreadResponse['deleted_at']>;
   } & {
     title?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
   }

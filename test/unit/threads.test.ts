@@ -1507,8 +1507,6 @@ describe('Threads 2.0', () => {
         it('applies filter parameters correctly', async () => {
           const filter: ThreadFilters = {
             created_at: { $gt: '2024-01-01T00:00:00Z' },
-            reply_count: { $gte: 5 },
-            participant_count: { $lt: 10 },
           };
 
           await threadManager.queryThreads({ filter });
@@ -1525,7 +1523,7 @@ describe('Threads 2.0', () => {
         });
 
         it('applies sort parameters correctly', async () => {
-          const sort: ThreadSort = [{ created_at: -1 }, { reply_count: 1 }, { participant_count: -1 }];
+          const sort: ThreadSort = [{ created_at: -1 }, { last_message_at: 1 }];
 
           await threadManager.queryThreads({ sort });
 
@@ -1545,7 +1543,7 @@ describe('Threads 2.0', () => {
             created_by_user_id: { $eq: 'user1' },
             updated_at: { $gte: '2024-01-01T00:00:00Z' },
           };
-          const sort: ThreadSort = [{ last_message_at: -1 }, { participant_count: 1 }];
+          const sort: ThreadSort = [{ last_message_at: -1 }];
 
           await threadManager.queryThreads({ filter, sort });
 
