@@ -1023,6 +1023,8 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   message_retention?: string;
   mutes?: boolean;
   name?: string;
+  partition_size?: number;
+  partition_ttl?: string | null;
   permissions?: PermissionObject[];
   polls?: boolean;
   push_notifications?: boolean;
