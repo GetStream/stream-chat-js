@@ -3905,13 +3905,13 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
 export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
   created_at?: AscDesc;
   last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
   participant_count?: AscDesc;
   reply_count?: AscDesc;
   updated_at?: AscDesc;
-  active_participant_count?: AscDesc;
-  parent_message_id?: AscDesc;
 };
 
 export type ThreadFilters = QueryFilters<

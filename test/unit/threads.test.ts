@@ -1214,7 +1214,10 @@ describe('Threads 2.0', () => {
     });
 
     describe('Methods & Getters', () => {
-      let stubbedQueryThreads: sinon.SinonStub<[options?: QueryThreadsOptions], ReturnType<StreamChat['queryThreads']>>;
+      let stubbedQueryThreads: sinon.SinonStub<
+        Parameters<StreamChat['queryThreads']>,
+        ReturnType<StreamChat['queryThreads']>
+      >;
 
       beforeEach(() => {
         stubbedQueryThreads = sinon.stub(client, 'queryThreads').resolves({
