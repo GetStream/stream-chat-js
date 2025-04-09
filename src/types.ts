@@ -3937,7 +3937,5 @@ export type ThreadFilters = QueryFilters<
     last_message_at?:
       | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['last_message_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
-  } & {
-    title?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
   }
 >;
