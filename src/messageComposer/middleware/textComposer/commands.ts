@@ -100,8 +100,12 @@ export const createCommandsMiddleware = (
       const { state } = input;
       if (!state.selection) return nextHandler(input);
       // If the first character is not a command trigger do not process
-      if (state.text.length > 0 && state.text[0] !== finalOptions.trigger)
-        return nextHandler(input);
+      const isCommandTrigger =
+        state.text.length > 0 &&
+        state.text[0] === finalOptions.trigger &&
+        state.text.split(' ').length <= 1;
+
+      if (!isCommandTrigger) return nextHandler(input);
 
       const lastToken = getTriggerCharWithToken(
         finalOptions.trigger,
