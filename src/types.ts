@@ -524,11 +524,13 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
+  sort?: ThreadSort;
   watch?: boolean;
 };
 
@@ -3949,3 +3951,62 @@ export type DraftMessage = {
   silent?: boolean;
   type?: MessageLabel;
 };
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
+  created_at?: AscDesc;
+  last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
+  participant_count?: AscDesc;
+  reply_count?: AscDesc;
+  updated_at?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>>
+      | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['last_message_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  }
+>;
