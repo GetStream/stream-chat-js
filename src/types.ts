@@ -353,7 +353,7 @@ export type ChannelMemberUpdates<
 export type ChannelMemberResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['memberType'] & {
-  archived_at?: string;
+  archived_at?: string | null;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -363,7 +363,7 @@ export type ChannelMemberResponse<
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   role?: string;
   shadow_banned?: boolean;
   status?: InviteStatus;
