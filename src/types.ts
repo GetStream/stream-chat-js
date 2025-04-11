@@ -32,6 +32,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; //alias to avoid breaking change
@@ -354,7 +356,7 @@ export type ChannelMemberUpdates<
 export type ChannelMemberResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['memberType'] & {
-  archived_at?: string;
+  archived_at?: string | null;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -364,7 +366,7 @@ export type ChannelMemberResponse<
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   role?: string;
   shadow_banned?: boolean;
   status?: InviteStatus;
@@ -573,11 +575,13 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
+  sort?: ThreadSort;
   watch?: boolean;
 };
 
@@ -927,8 +931,11 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
+  teams_role?: TeamsRole;
   updated_at?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
@@ -1321,6 +1328,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse<StreamChatGenerics>;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -3087,6 +3095,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3871,7 +3880,7 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  */
 export type DeviceIdentifier = { os: string; model?: string };
 
-export declare type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_cid: string;
   created_at: string;
   message: DraftMessage<StreamChatGenerics>;
@@ -3880,30 +3889,24 @@ export declare type DraftResponse<StreamChatGenerics extends ExtendableGenerics 
   parent_message?: MessageResponseBase<StreamChatGenerics>;
   quoted_message?: MessageResponseBase<StreamChatGenerics>;
 };
-export declare type CreateDraftResponse<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = APIResponse & {
+export type CreateDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   draft: DraftResponse<StreamChatGenerics>;
 };
 
-export declare type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+export type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   draft: DraftResponse<StreamChatGenerics>;
 };
 
-export declare type QueryDraftsResponse<
-  StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
-> = APIResponse & {
+export type QueryDraftsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
   drafts: DraftResponse<StreamChatGenerics>[];
-  next?: string;
-};
+} & Omit<Pager, 'limit'>;
 
-export declare type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Omit<
+export type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = PartializeKeys<
   DraftMessage<StreamChatGenerics>,
   'id'
-> &
-  Partial<Pick<DraftMessage<StreamChatGenerics>, 'id'>>;
+> & { user_id?: string };
 
-export declare type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   id: string;
   text: string;
   attachments?: Attachment<StreamChatGenerics>[];
@@ -3935,3 +3938,41 @@ export type LiveLocation = {
 export type LiveLocationResponse = APIResponse & {
   live_location: LiveLocation;
 };
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
+  created_at?: AscDesc;
+  last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
+  participant_count?: AscDesc;
+  reply_count?: AscDesc;
+  updated_at?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    channel_cid?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['last_message_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  }
+>;
