@@ -3,18 +3,22 @@ import type { TextSelection } from '../../types';
 export const getTriggerCharWithToken = ({
   trigger,
   text,
+  isCommand = false,
   acceptTrailingSpaces = true,
 }: {
   trigger: string;
   text: string;
+  isCommand?: boolean;
   acceptTrailingSpaces?: boolean;
 }) => {
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
   const match = text.match(
     new RegExp(
-      acceptTrailingSpaces
-        ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
-        : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
+      isCommand
+        ? `^[${trigger}]${triggerNorWhitespace}$`
+        : acceptTrailingSpaces
+          ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
+          : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
       'g',
     ),
   );

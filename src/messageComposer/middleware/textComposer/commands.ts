@@ -117,6 +117,7 @@ export const createCommandsMiddleware = (
         trigger: finalOptions.trigger,
         text: state.text.slice(0, state.selection.end),
         acceptTrailingSpaces: false,
+        isCommand: true,
       });
 
       const newSearchTriggerred =
