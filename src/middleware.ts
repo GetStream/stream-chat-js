@@ -1,4 +1,5 @@
 import { withCancellation } from './utils/concurrency';
+import { generateUUIDv4 } from './utils';
 
 export type InsertPosition =
   | {
@@ -28,7 +29,12 @@ export type Middleware<TState> = {
 };
 
 export class MiddlewareExecutor<TState> {
+  private id: string;
   private middleware: Middleware<TState>[] = [];
+
+  constructor() {
+    this.id = generateUUIDv4();
+  }
 
   use(middleware: Middleware<TState> | Middleware<TState>[]) {
     this.middleware = this.middleware.concat(middleware);
@@ -119,8 +125,14 @@ export class MiddlewareExecutor<TState> {
     };
 
     const result = await withCancellation(
-      'middleware-execution',
-      async () => await execute(0, initialInput),
+      `middleware-execution-${this.id}-${eventName}`,
+      async (abortSignal) => {
+        const result = await execute(0, initialInput);
+        if (abortSignal.aborted) {
+          return 'canceled';
+        }
+        return result;
+      },
     );
 
     return result === 'canceled' ? { ...initialInput, status: 'discard' } : result;
