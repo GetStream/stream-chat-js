@@ -91,13 +91,28 @@ function wrapWithContinuationTracking<T>(tag: string | symbol, cb: () => Promise
 }
 
 /**
- * Wraps an async function with additional functionalilty:
+ * Wraps an async function with additional functionality:
  * 1. Associates an abort signal with every function, that is passed to it
  *    as an argument. When a new function is scheduled to run after the current
  *    one, current signal is aborted.
  * 2. If current function didn't start and was aborted, in will never start.
  * 3. If the function is the last in the queue, it cleans up the whole chain
  *    of promises after finishing.
+ *
+ *    The cb is passed the AbortController instance for a given execution.
+ *    The cb should implement own cancellation logic to reflect that the given AbortController has been aborted.
+ *
+ *  ```
+ *    const cb = async (signal: AbortSignal) => {
+ *         await new Promise(resolve => setTimeout(resolve, 50));
+ *         if (signal.aborted) {
+ *           abortedSignals.push(signal);
+ *           return 'canceled';
+ *         }
+ *         return 1;
+ *       };
+ *   const result = withCancellation('tag-x', cb); // the result variable may acquire value "canceled" or 1
+ *  ```
  */
 function wrapWithCancellation<T>(
   tag: string | symbol,

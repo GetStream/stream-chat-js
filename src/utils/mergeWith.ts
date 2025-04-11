@@ -48,6 +48,22 @@ type PendingMerge = {
   target: object;
 };
 
+const isClassInstance = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object') return false;
+
+  // Arrays are not class instances
+  if (Array.isArray(value)) return false;
+
+  // Get the prototype chain
+  const proto = Object.getPrototypeOf(value);
+
+  // If it's null or Object.prototype, it's a plain object
+  if (proto === null || proto === Object.prototype) return false;
+
+  // Check if it has a constructor that's not Object
+  return value.constructor && value.constructor !== Object;
+};
+
 export function mergeWith<T extends object>(
   target: T,
   source: object | object[],
@@ -73,6 +89,21 @@ export function mergeWith<T extends object>(
 
   function createNewTarget(targetValue: unknown, srcValue: unknown): object {
     if (targetValue && typeof targetValue === 'object') {
+      // Check if it's a class instance (not a plain object)
+      const isTargetClassInstance = isClassInstance(targetValue);
+      const isSourceClassInstance = isClassInstance(srcValue);
+
+      // If either is a class instance, don't try to merge them
+      if (isTargetClassInstance || isSourceClassInstance) {
+        // If source is a class instance, use it
+        if (isSourceClassInstance) {
+          return srcValue as object;
+        }
+        // Otherwise preserve the target
+        return targetValue;
+      }
+
+      // For plain objects, use normal merging
       return Array.isArray(targetValue) ? [...targetValue] : { ...targetValue };
     }
     return Array.isArray(srcValue) ? [] : {};
@@ -96,7 +127,7 @@ export function mergeWith<T extends object>(
       if (!stack.has(srcValue)) {
         const newTarget = createNewTarget(targetValue, srcValue);
         Object.defineProperty(target, key, { value: newTarget });
-
+        if (isClassInstance(newTarget)) return;
         pendingMerges.push({
           target: newTarget,
           source: srcValue,

@@ -1,3 +1,9 @@
+/**
+ * A cache that stores a fixed number of values in a queue.
+ * The most recently added or retrieved value is kept at the front of the queue.
+ * @template K - The type of the keys.
+ * @template T - The type of the values.
+ */
 export class FixedSizeQueueCache<K, T> {
   private keys: Array<K>;
   private size: number;
@@ -9,6 +15,11 @@ export class FixedSizeQueueCache<K, T> {
     this.valueByKey = new Map();
   }
 
+  /**
+   * Adds a new or moves the existing reference to the front of the queue
+   * @param key
+   * @param value
+   */
   add(key: K, value: T) {
     const index = this.keys.indexOf(key);
 
@@ -26,12 +37,20 @@ export class FixedSizeQueueCache<K, T> {
     this.valueByKey.set(key, value);
   }
 
+  /**
+   * Retrieves the value by key.
+   * @param key
+   */
   peek(key: K) {
     const value = this.valueByKey.get(key);
 
     return value;
   }
 
+  /**
+   * Retrieves the value and moves it to the front of the queue.
+   * @param key
+   */
   get(key: K) {
     const foundElement = this.peek(key);
 
