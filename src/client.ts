@@ -230,30 +230,21 @@ import type {
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
-import type { MessageComposerOptions } from './messageComposer';
-import { MessageComposer } from './messageComposer';
+import type { MessageComposer } from './messageComposer';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
-type MessageComposerDefine = ({
-  constructorParameters,
-}: {
-  constructorParameters: MessageComposerOptions;
-}) => MessageComposer;
+type MessageComposerTearDownFunction = () => void;
 
-type MessageComposerApplyModifications = ({
+type MessageComposerSetupFunction = ({
   composer,
 }: {
   composer: MessageComposer;
-}) => void | (() => void);
+}) => void | MessageComposerTearDownFunction;
 
-// TODO: maybe template modifications
-// { template1: { applyModifications... }, template2: {applyModifications} }
-// new MessageComposer({ channel, modificationTemplate: 'template1' })
 type MessageComposerSetupState = {
-  define: MessageComposerDefine;
   /**
    * Each `MessageComposer` runs this function each time its signature changes or
    * whenever you run `MessageComposer.registerSubscriptions`. Function returned
@@ -262,12 +253,7 @@ type MessageComposerSetupState = {
    * modified parts is the general way to go but if your setup gets a bit
    * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
    */
-  applyModifications: MessageComposerApplyModifications | null;
-};
-
-const INITIAL_MESSAGE_COMPOSER_SETUP_STATE: MessageComposerSetupState = {
-  define: ({ constructorParameters }) => new MessageComposer(constructorParameters),
-  applyModifications: null,
+  setupFunction: MessageComposerSetupFunction | null;
 };
 
 export class StreamChat {
@@ -325,8 +311,12 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
-  public _messageComposerSetupState: StateStore<MessageComposerSetupState> =
-    new StateStore(INITIAL_MESSAGE_COMPOSER_SETUP_STATE);
+  /**
+   * @private
+   */
+  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
+    setupFunction: null,
+  });
 
   /**
    * Initialize a client
@@ -4397,13 +4387,9 @@ export class StreamChat {
     return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
 
-  // TODO: this might not be needed
-  public createMessageComposer: MessageComposerDefine = (setup) =>
-    this._messageComposerSetupState.getLatestValue().define(setup);
-
-  public setMessageComposerApplyModifications = (
-    applyModifications: MessageComposerSetupState['applyModifications'],
+  public setMessageComposerSetupFunction = (
+    setupFunction: MessageComposerSetupState['setupFunction'],
   ) => {
-    this._messageComposerSetupState.partialNext({ applyModifications });
+    this._messageComposerSetupState.partialNext({ setupFunction });
   };
 }
