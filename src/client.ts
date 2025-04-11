@@ -3004,6 +3004,8 @@ export class StreamChat {
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   * @param {ThreadFilters} options.filter MongoDB style filters for threads
+   * @param {ThreadSort} options.sort MongoDB style sort for threads
    *
    * @returns {{ threads: Thread[], next: string }} Returns the list of threads and the next cursor.
    */
@@ -3016,9 +3018,29 @@ export class StreamChat {
       ...options,
     };
 
+    const requestBody: Record<string, unknown> = {
+      ...optionsWithDefaults,
+    };
+
+    if (
+      optionsWithDefaults.filter &&
+      Object.keys(optionsWithDefaults.filter).length > 0
+    ) {
+      requestBody.filter = optionsWithDefaults.filter;
+    }
+
+    if (
+      optionsWithDefaults.sort &&
+      (Array.isArray(optionsWithDefaults.sort)
+        ? optionsWithDefaults.sort.length > 0
+        : Object.keys(optionsWithDefaults.sort).length > 0)
+    ) {
+      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    }
+
     const response = await this.post<QueryThreadsAPIResponse>(
       `${this.baseURL}/threads`,
-      optionsWithDefaults,
+      requestBody,
     );
 
     return {
@@ -4367,7 +4389,12 @@ export class StreamChat {
       user_id?: string;
     } = {},
   ) {
-    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', options);
+    const payload = {
+      ...options,
+      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
+    };
+
+    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
 
   // TODO: this might not be needed

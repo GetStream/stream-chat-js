@@ -50,6 +50,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; // alias to avoid breaking change
@@ -535,11 +537,13 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
+  sort?: ThreadSort;
   watch?: boolean;
 };
 
@@ -876,9 +880,12 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
+  teams_role?: TeamsRole;
   updated_at?: string;
   username?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
@@ -3116,6 +3123,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3947,6 +3955,7 @@ export type DraftResponse = {
   parent_message?: MessageResponseBase;
   quoted_message?: MessageResponseBase;
 };
+
 export type CreateDraftResponse = APIResponse & {
   draft: DraftResponse;
 };
@@ -3957,11 +3966,11 @@ export type GetDraftResponse = APIResponse & {
 
 export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
-  next?: string;
-};
+} & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = Omit<DraftMessage, 'id'> &
-  Partial<Pick<DraftMessage, 'id'>>;
+export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+  user_id?: string;
+};
 
 export type DraftMessage = {
   id: string;
@@ -3978,3 +3987,62 @@ export type DraftMessage = {
   silent?: boolean;
   type?: MessageLabel;
 };
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
+  created_at?: AscDesc;
+  last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
+  participant_count?: AscDesc;
+  reply_count?: AscDesc;
+  updated_at?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>>
+      | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['last_message_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  }
+>;
