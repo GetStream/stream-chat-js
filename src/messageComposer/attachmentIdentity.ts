@@ -10,20 +10,21 @@ import type {
   LocalUploadAttachment,
   LocalVideoAttachment,
   LocalVoiceRecordingAttachment,
+  UploadedAttachment,
   VideoAttachment,
   VoiceRecordingAttachment,
 } from './types';
 
 export const isScrapedContent = (attachment: Attachment) =>
-  attachment.og_scrape_url || attachment.title_link;
+  !!attachment?.og_scrape_url || !!attachment?.title_link;
 
 export const isLocalAttachment = (attachment: unknown): attachment is LocalAttachment =>
-  !!(attachment as LocalAttachment).localMetadata?.id;
+  !!(attachment as LocalAttachment)?.localMetadata?.id;
 
 export const isLocalUploadAttachment = (
   attachment: unknown,
 ): attachment is LocalUploadAttachment =>
-  !!(attachment as LocalAttachment).localMetadata?.uploadState;
+  !!(attachment as LocalAttachment)?.localMetadata?.uploadState;
 
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,
@@ -80,3 +81,12 @@ export const isLocalVideoAttachment = (
   attachment: Attachment | LocalAttachment,
 ): attachment is LocalVideoAttachment =>
   isVideoAttachment(attachment) && isLocalAttachment(attachment);
+
+export const isUploadedAttachment = (
+  attachment: Attachment,
+): attachment is UploadedAttachment =>
+  isAudioAttachment(attachment) ||
+  isFileAttachment(attachment) ||
+  isImageAttachment(attachment) ||
+  isVideoAttachment(attachment) ||
+  isVoiceRecordingAttachment(attachment);

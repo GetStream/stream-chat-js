@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 export const isFile = (fileLike: RNFile | File | Blob): fileLike is File =>
-  !!(fileLike as File).lastModified;
+  !!(fileLike as File).lastModified && !('uri' in fileLike);
 
 export const isFileList = (obj: unknown): obj is FileList => {
   if (obj === null || obj === undefined) return false;
@@ -25,12 +25,14 @@ export const isBlobButNotFile = (obj: unknown): obj is Blob =>
   obj instanceof Blob && !(obj instanceof File);
 
 export const isRNFile = (obj: RNFile | FileLike): obj is RNFile =>
+  obj !== null &&
+  typeof obj === 'object' &&
   !isFile(obj) &&
   !isBlobButNotFile(obj) &&
-  !!obj.name &&
-  !!obj.uri &&
-  !!obj.size &&
-  !!obj.type;
+  typeof obj.name === 'string' &&
+  typeof obj.uri === 'string' &&
+  typeof obj.size === 'number' &&
+  typeof obj.type === 'string';
 
 export const createFileFromBlobs = ({
   blobsArray,
@@ -47,7 +49,7 @@ export const createFileFromBlobs = ({
 
 export const getExtensionFromMimeType = (mimeType: string) => {
   const match = mimeType.match(/\/([^/;]+)/);
-  return match && match[1];
+  return match?.[1];
 };
 
 export const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
@@ -64,8 +66,10 @@ export const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
     fileReader.readAsArrayBuffer(file);
   });
 
-export const generateFileName = (mimeType: string) =>
-  `file_${new Date().toISOString()}.${getExtensionFromMimeType(mimeType)}`;
+export const generateFileName = (mimeType: string) => {
+  const extension = getExtensionFromMimeType(mimeType);
+  return `file_${new Date().toISOString()}${extension ? '.' + extension : ''}`;
+};
 
 export const isImageFile = (fileLike: RNFile | FileLike) => {
   const mimeType = fileLike.type;
@@ -81,7 +85,8 @@ export const getAttachmentTypeFromMimeType = (mimeType: string) => {
 
 export const ensureIsLocalAttachment = (
   attachment: Attachment | LocalAttachment,
-): LocalAttachment => {
+): LocalAttachment | null => {
+  if (!attachment) return null;
   if (isLocalAttachment(attachment)) {
     return attachment;
   }

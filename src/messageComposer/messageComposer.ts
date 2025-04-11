@@ -8,7 +8,7 @@ import {
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4 } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import type { AttachmentManagerConfig } from './attachmentManager';
 import type { LinkPreviewsManagerConfig } from './linkPreviewsManager';
@@ -32,9 +32,9 @@ export type ComposerMap = {
   pollComposer: PollComposer;
 };
 
-type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
+export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 
-type EditingAuditState = {
+export type EditingAuditState = {
   lastChange: LastComposerChange;
 };
 
@@ -72,11 +72,17 @@ const compositionIsMessageDraft = (composition: unknown): composition is DraftRe
 const initEditingAuditState = (
   composition?: DraftResponse | MessageResponse | LocalMessage,
 ): EditingAuditState => {
-  const timeStamp = new Date().getTime();
+  let draftUpdate = null;
+  let stateUpdate = new Date().getTime();
+  if (compositionIsMessageDraft(composition)) {
+    stateUpdate = draftUpdate = new Date(composition.created_at).getTime();
+  } else if (composition && isLocalMessage(composition)) {
+    stateUpdate = new Date(composition.updated_at).getTime();
+  }
   return {
     lastChange: {
-      draftUpdate: compositionIsMessageDraft(composition) ? timeStamp : null,
-      stateUpdate: timeStamp,
+      draftUpdate,
+      stateUpdate,
     },
   };
 };
@@ -123,6 +129,7 @@ const noop = () => undefined;
 export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
+  readonly editingAuditState: StateStore<EditingAuditState>;
   readonly editedMessage?: LocalMessage;
   readonly compositionContext: CompositionContext;
 
@@ -136,7 +143,6 @@ export class MessageComposer {
   private unsubscribeFunctions: Set<() => void> = new Set();
   private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
   private draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
-  private editingAuditState: StateStore<EditingAuditState>;
 
   constructor({
     composition,
@@ -147,9 +153,8 @@ export class MessageComposer {
     this.compositionContext = compositionContext;
 
     const {
-      attachmentManager: attachmentManagerConfig,
+      attachmentManager: attachmentManagerConfig, // todo: do not pass config to submanagers. Rather pass composer reference
       linkPreviewsManager: linkPreviewsManagerConfig,
-      ...messageComposerConfig
     } = config ?? {};
 
     // channel is easily inferable from the context
@@ -157,11 +162,16 @@ export class MessageComposer {
       this.channel = compositionContext;
     } else if (compositionContext instanceof Thread) {
       this.channel = compositionContext.channel;
+    } else if (compositionContext.cid) {
+      const [type, id] = compositionContext.cid.split(':');
+      this.channel = client.channel(type, id);
     } else {
-      this.channel = client.channel(compositionContext.type, compositionContext.id);
+      throw new Error(
+        'MessageComposer requires composition context pointing to channel (channel or context.cid)',
+      );
     }
 
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, messageComposerConfig ?? {});
+    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsMessageDraft(composition)) {
       message = composition.message;
@@ -277,19 +287,12 @@ export class MessageComposer {
     return this.state.getLatestValue().pollId;
   }
 
-  get canSendMessage() {
+  get hasSendableData() {
     return (
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
       this.pollId
-    );
-  }
-
-  get lastChangeOriginIsLocal() {
-    return (
-      this.lastChange.draftUpdate === null ||
-      this.lastChange.draftUpdate < this.lastChange.stateUpdate
     );
   }
 
@@ -302,11 +305,27 @@ export class MessageComposer {
     );
   }
 
+  get lastChangeOriginIsLocal() {
+    const initiatedWithoutDraft = this.lastChange.draftUpdate === null;
+    const composingMessageFromScratch = initiatedWithoutDraft && !this.editedMessage;
+
+    // does not mean that the original editted message is different from the current state
+    const editedMessageWasUpdated =
+      !!this.editedMessage?.updated_at &&
+      new Date(this.editedMessage.updated_at).getTime() < this.lastChange.stateUpdate;
+
+    const draftWasChanged =
+      !!this.lastChange.draftUpdate &&
+      this.lastChange.draftUpdate < this.lastChange.stateUpdate;
+
+    return editedMessageWasUpdated || draftWasChanged || composingMessageFromScratch;
+  }
+
   static generateId = generateUUIDv4;
 
   initState = ({
     composition,
-  }: { composition?: DraftResponse | MessageResponse } = {}) => {
+  }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     const message: LocalMessage | DraftMessage | undefined =
@@ -370,14 +389,6 @@ export class MessageComposer {
   public unregisterSubscriptions = () => {
     this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
     this.unsubscribeFunctions.clear();
-  };
-
-  public hydrateState = (composer: MessageComposer) => {
-    if (composer.id !== this.id) return;
-
-    // TODO
-    // this.textComposer.hydrate
-    // this.attachmentManager.hydrate
   };
 
   private subscribeMessageUpdated = () => {
@@ -505,7 +516,8 @@ export class MessageComposer {
       const isActualStateChange =
         !!previousValue &&
         Array.from(nextValue.previews).some(
-          ([url], index) => url !== previousPreviews[index][0],
+          ([url], index) =>
+            !previousPreviews[index] || url !== previousPreviews[index][0],
         );
       if (isActualStateChange) {
         this.logStateUpdateTimestamp();
@@ -519,21 +531,21 @@ export class MessageComposer {
   private subscribePollComposerStateChanged = () =>
     this.pollComposer.state.subscribe((nextValue, previousValue) => {
       const isActualStateChange =
-        !!previousValue &&
-        (nextValue.data.allow_answers !== previousValue.data.allow_answers ||
-          nextValue.data.allow_user_suggested_options !==
-            previousValue.data.allow_user_suggested_options ||
-          nextValue.data.description !== previousValue.data.description ||
-          nextValue.data.enforce_unique_vote !== previousValue.data.enforce_unique_vote ||
-          nextValue.data.id !== previousValue.data.id ||
-          nextValue.data.is_closed !== previousValue.data.is_closed ||
-          nextValue.data.max_votes_allowed !== previousValue.data.max_votes_allowed ||
-          nextValue.data.name !== previousValue.data.name ||
-          nextValue.data.options.some(
-            (option, index) => option.text !== previousValue.data.options[index].text,
-          ) ||
-          nextValue.data.user_id !== previousValue.data.user_id ||
-          nextValue.data.voting_visibility !== previousValue.data.voting_visibility);
+        !previousValue?.data ||
+        nextValue.data.allow_answers !== previousValue.data.allow_answers ||
+        nextValue.data.allow_user_suggested_options !==
+          previousValue.data.allow_user_suggested_options ||
+        nextValue.data.description !== previousValue.data.description ||
+        nextValue.data.enforce_unique_vote !== previousValue.data.enforce_unique_vote ||
+        nextValue.data.id !== previousValue.data.id ||
+        nextValue.data.is_closed !== previousValue.data.is_closed ||
+        nextValue.data.max_votes_allowed !== previousValue.data.max_votes_allowed ||
+        nextValue.data.name !== previousValue.data.name ||
+        nextValue.data.options.some(
+          (option, index) => option.text !== previousValue.data.options[index].text,
+        ) ||
+        nextValue.data.user_id !== previousValue.data.user_id ||
+        nextValue.data.voting_visibility !== previousValue.data.voting_visibility;
       if (isActualStateChange) {
         this.logStateUpdateTimestamp();
         if (this.compositionIsEmpty) {
@@ -571,6 +583,15 @@ export class MessageComposer {
     this.initState();
   };
 
+  restore = () => {
+    const { editedMessage } = this;
+    if (editedMessage) {
+      this.initState({ composition: editedMessage });
+      return;
+    }
+    this.clear();
+  };
+
   compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
     const created_at = this.editedMessage?.created_at ?? new Date();
     const text = '';
@@ -591,7 +612,7 @@ export class MessageComposer {
           parent_id: this.threadId ?? undefined,
           pinned_at: null,
           reaction_groups: null,
-          status: 'sending',
+          status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
           type: 'regular',
           updated_at: created_at,

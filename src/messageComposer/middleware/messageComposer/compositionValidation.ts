@@ -5,7 +5,7 @@ import type {
 import { textIsEmpty } from '../../textComposer';
 import type { MessageComposer } from '../../messageComposer';
 
-export const createCompositionValidationMiddleware = () => ({
+export const createCompositionValidationMiddleware = (composer: MessageComposer) => ({
   id: 'validation',
   compose: async ({
     input,
@@ -21,7 +21,7 @@ export const createCompositionValidationMiddleware = () => ({
       !input.state.message.attachments?.length &&
       !input.state.message.poll_id;
 
-    if (isEmptyMessage) {
+    if (isEmptyMessage || !composer.lastChangeOriginIsLocal) {
       return await nextHandler({ ...input, status: 'discard' });
     }
 

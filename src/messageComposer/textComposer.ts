@@ -125,8 +125,8 @@ export class TextComposer {
 
   insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
     const finalSelection: TextSelection = selection ?? {
-      start: text.length,
-      end: text.length,
+      start: this.text.length,
+      end: this.text.length,
     };
     const { maxTextLength } = this.composer.config;
     const currentText = this.text;

@@ -50,6 +50,13 @@ export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
 export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
   CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
 
+export type UploadedAttachment =
+  | AudioAttachment
+  | FileAttachment
+  | ImageAttachment
+  | VideoAttachment
+  | VoiceRecordingAttachment;
+
 export type VoiceRecordingAttachment = Attachment & {
   asset_url: string;
   type: 'voiceRecording';

@@ -1,4 +1,4 @@
-import { isLocalImageAttachment } from './attachmentIdentity';
+import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
 import {
   createFileFromBlobs,
   ensureIsLocalAttachment,
@@ -47,7 +47,6 @@ export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean
 
 export type AttachmentManagerState = {
   attachments: LocalAttachment[];
-  hasUploadPermission: boolean;
 };
 
 export type AttachmentManagerConfig = {
@@ -76,7 +75,6 @@ const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
 };
 
 const initState = ({
-  channel,
   message,
 }: {
   channel: Channel;
@@ -84,16 +82,15 @@ const initState = ({
 }): AttachmentManagerState => ({
   attachments: (message?.attachments ?? [])
     ?.filter(({ og_scrape_url }) => !og_scrape_url)
-    .map(
-      (att) =>
-        ({
-          ...att,
-          localMetadata: { id: generateUUIDv4() },
-        }) as LocalAttachment,
-    ),
-  hasUploadPermission: !!(
-    channel.data?.own_capabilities as ChannelResponse['own_capabilities']
-  )?.includes('upload-file'), // todo: in the future move to Channel's reactive permissions state
+    .map((att) => {
+      const localMetadata = isUploadedAttachment(att)
+        ? { id: generateUUIDv4(), uploadState: 'finished' }
+        : { id: generateUUIDv4() };
+      return {
+        ...att,
+        localMetadata,
+      } as LocalAttachment;
+    }),
 });
 
 export class AttachmentManager {
@@ -118,20 +115,22 @@ export class AttachmentManager {
     return this.configState.getLatestValue();
   }
 
-  get fileUploadFilter() {
-    return this.configState.getLatestValue().fileUploadFilter;
-  }
-  get maxNumberOfFilesPerMessage() {
-    return this.configState.getLatestValue().maxNumberOfFilesPerMessage;
-  }
-
   set config(config: AttachmentManagerConfig) {
     this.configState.next(config);
+  }
+
+  get fileUploadFilter() {
+    return this.configState.getLatestValue().fileUploadFilter;
   }
 
   set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
     this.configState.partialNext({ fileUploadFilter });
   }
+
+  get maxNumberOfFilesPerMessage() {
+    return this.configState.getLatestValue().maxNumberOfFilesPerMessage;
+  }
+
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
@@ -143,7 +142,9 @@ export class AttachmentManager {
   }
 
   get hasUploadPermission() {
-    return this.state.getLatestValue().hasUploadPermission;
+    return !!(
+      this.channel.data?.own_capabilities as ChannelResponse['own_capabilities']
+    )?.includes('upload-file');
   }
 
   get isUploadEnabled() {
@@ -204,18 +205,16 @@ export class AttachmentManager {
       );
 
       if (attachmentIndex === -1) {
-        attachments.push(ensureIsLocalAttachment(upsertedAttachment));
+        const localAttachment = ensureIsLocalAttachment(upsertedAttachment);
+        if (localAttachment) attachments.push(localAttachment);
       } else {
-        attachments.splice(
-          attachmentIndex,
-          1,
-          ensureIsLocalAttachment(
-            mergeWith<LocalAttachment>(
-              stateAttachments[attachmentIndex] ?? {},
-              upsertedAttachment,
-            ),
+        const localAttachment = ensureIsLocalAttachment(
+          mergeWith<LocalAttachment>(
+            stateAttachments[attachmentIndex] ?? {},
+            upsertedAttachment,
           ),
         );
+        if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
       }
     });
 

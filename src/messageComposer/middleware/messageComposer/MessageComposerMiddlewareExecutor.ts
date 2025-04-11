@@ -38,7 +38,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<Messag
       createAttachmentsMiddleware(composer),
       createLinkPreviewsMiddleware(composer),
       createMessageComposerStateMiddleware(composer),
-      createCompositionValidationMiddleware(),
+      createCompositionValidationMiddleware(composer),
       createCleanDataMiddleware(composer),
     ]);
   }

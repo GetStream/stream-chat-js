@@ -220,11 +220,20 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   set debounceURLEnrichmentMs(
     debounceURLEnrichmentMs: LinkPreviewsManagerConfig['debounceURLEnrichmentMs'],
   ) {
+    this.cancelURLEnrichment();
+
+    this.findAndEnrichUrls = debounce(
+      this._findAndEnrichUrls.bind(this),
+      this.config.debounceURLEnrichmentMs,
+    );
+
     this.configState.partialNext({ debounceURLEnrichmentMs });
   }
+
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
     this.configState.partialNext({ enabled });
   }
+
   set findURLFn(fn: LinkPreviewsManagerConfig['findURLFn']) {
     this.configState.partialNext({ findURLFn: fn });
   }
