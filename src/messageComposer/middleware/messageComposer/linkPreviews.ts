@@ -25,10 +25,7 @@ export const createLinkPreviewsMiddleware = (composer: MessageComposer) => ({
     const linkPreviews =
       linkPreviewsManager.loadingPreviews.length > 0
         ? []
-        : linkPreviewsManager.loadedPreviews.map(
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            ({ state: linkPreviewState, ...ogAttachment }) => ogAttachment as Attachment,
-          );
+        : linkPreviewsManager.loadedPreviews.map((preview) => preview.data);
 
     const attachments: Attachment[] = (input.state.message.attachments ?? []).concat(
       linkPreviews,

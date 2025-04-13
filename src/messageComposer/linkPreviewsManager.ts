@@ -30,6 +30,12 @@ export class LinkPreview {
     this.config = mergeWith<LinkPreviewConfig>({}, config ?? ({} as LinkPreviewConfig));
   }
 
+  get data(): OGAttachment {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { status, ...data } = this.state.getLatestValue();
+    return data;
+  }
+
   get asset_url() {
     return this.state.getLatestValue().asset_url;
   }
