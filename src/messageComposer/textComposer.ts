@@ -38,12 +38,13 @@ const initState = (message?: DraftMessage | LocalMessage): TextComposerState => 
       selection: { start: 0, end: 0 },
     };
   }
+  const text = message.text ?? '';
   return {
     mentionedUsers: (message.mentioned_users ?? []).map((item: string | UserResponse) =>
       typeof item === 'string' ? ({ id: item } as UserResponse) : item,
     ),
-    text: message.text ?? '',
-    selection: { start: 0, end: 0 },
+    text,
+    selection: { start: text.length, end: text.length },
   };
 };
 
