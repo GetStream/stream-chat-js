@@ -11,7 +11,8 @@ import type { Channel } from '../../../channel';
 import type { TextComposerSuggestion } from '../../types';
 
 type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
-class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
+
+export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
   readonly type = 'commands';
   private channel: Channel;
 
@@ -25,7 +26,7 @@ class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
     return this.isActive && !this.isLoading && (this.hasNext || hasNewSearchQuery);
   };
 
-  protected getStateBeforeFirstQuery(newSearchString: string) {
+  getStateBeforeFirstQuery(newSearchString: string) {
     const newState = super.getStateBeforeFirstQuery(newSearchString);
     const { items } = this.state.getLatestValue();
     return {
@@ -39,7 +40,10 @@ class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
     const commands = channelConfig?.commands || [];
     const selectedCommands: (CommandResponse & { name: string })[] = commands.filter(
       (command): command is CommandResponse & { name: string } =>
-        !!(command.name && command.name.indexOf(searchQuery) !== -1),
+        !!(
+          command.name &&
+          command.name.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1
+        ),
     );
 
     // sort alphabetically unless you're matching the first char
@@ -94,10 +98,16 @@ const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '
 
 export const createCommandsMiddleware = (
   channel: Channel,
-  options?: TextComposerMiddlewareOptions,
+  options?: Partial<TextComposerMiddlewareOptions> & {
+    searchSource?: CommandSearchSource;
+  },
 ) => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
-  const searchSource = new CommandSearchSource(channel);
+  let searchSource = new CommandSearchSource(channel);
+  if (options?.searchSource) {
+    searchSource = options.searchSource;
+    searchSource.resetState();
+  }
   searchSource.activate();
 
   return {
