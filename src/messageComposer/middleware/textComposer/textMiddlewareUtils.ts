@@ -45,14 +45,13 @@ export const insertItemWithTrigger = ({
   const newText = beforeCursor.slice(0, lastIndex) + insertText + afterCursor;
   return {
     text: newText,
-    selections: {
+    selection: {
       start: lastIndex + insertText.length,
       end: lastIndex + insertText.length,
     },
   };
 };
 
-// todo: implement the use according to the original in stream-chat-react
 export const replaceWordWithEntity = async ({
   caretPosition,
   getEntityString,
