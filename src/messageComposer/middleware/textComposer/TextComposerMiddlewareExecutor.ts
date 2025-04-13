@@ -26,16 +26,26 @@ export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextCompo
     });
 
     if (result && result.state.suggestions) {
-      const searchResult = await withCancellation(
-        'textComposer-suggestions-search',
-        async () => {
-          // sets the initial searchQuery value and performs the first page query
-          await result.state.suggestions?.searchSource.search(
-            result.state.suggestions?.query,
-          );
-        },
-      );
-      if (searchResult === 'canceled') return { ...result, status: 'discard' };
+      try {
+        const searchResult = await withCancellation(
+          'textComposer-suggestions-search',
+          async () => {
+            await result.state.suggestions?.searchSource.search(
+              result.state.suggestions?.query,
+            );
+          },
+        );
+        if (searchResult === 'canceled') return { ...result, status: 'discard' };
+      } catch (error) {
+        // Clear suggestions on search error
+        return {
+          ...result,
+          state: {
+            ...result.state,
+            suggestions: undefined,
+          },
+        };
+      }
     }
 
     return result;
