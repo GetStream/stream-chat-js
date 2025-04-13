@@ -130,9 +130,9 @@ export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
-  readonly editedMessage?: LocalMessage;
   readonly compositionContext: CompositionContext;
 
+  editedMessage?: LocalMessage;
   config: MessageComposerConfig;
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
@@ -338,6 +338,14 @@ export class MessageComposer {
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
     this.state.next(initState(composition));
+    if (
+      message &&
+      isLocalMessage(message) &&
+      composition &&
+      !compositionIsMessageDraft(composition)
+    ) {
+      this.editedMessage = message;
+    }
   };
 
   initEditingAuditState = (
