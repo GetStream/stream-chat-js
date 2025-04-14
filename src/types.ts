@@ -43,6 +43,7 @@ export type DefaultGenerics = {
   channelType: UR;
   commandType: LiteralStringForUnion;
   eventType: UR;
+  liveLocationType: UR;
   memberType: UR;
   messageType: UR;
   pollOptionType: UR;
@@ -56,6 +57,7 @@ export type ExtendableGenerics = {
   channelType: UR;
   commandType: string;
   eventType: UR;
+  liveLocationType: UR;
   memberType: UR;
   messageType: UR;
   pollOptionType: UR;
@@ -323,6 +325,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
+  live_locations?: LiveLocation[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
@@ -496,6 +499,7 @@ export type FormatMessageResponse<StreamChatGenerics extends ExtendableGenerics 
     channelType: StreamChatGenerics['channelType'];
     commandType: StreamChatGenerics['commandType'];
     eventType: StreamChatGenerics['eventType'];
+    liveLocationType: StreamChatGenerics['liveLocationType'];
     memberType: StreamChatGenerics['memberType'];
     messageType: {};
     pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -714,10 +718,14 @@ export type MessageResponseBase<
     language: TranslationLanguages;
   };
   latest_reactions?: ReactionResponse<StreamChatGenerics>[];
+  live_location?: LiveLocation | null;
+  live_location_id?: string;
   mentioned_users?: UserResponse<StreamChatGenerics>[];
   message_text_updated_at?: string;
-  moderation?: ModerationResponse; // present only with Moderation v2
-  moderation_details?: ModerationDetailsResponse; // present only with Moderation v1
+  moderation?: ModerationResponse;
+  // present only with Moderation v2
+  moderation_details?: ModerationDetailsResponse;
+  // present only with Moderation v1
   own_reactions?: ReactionResponse<StreamChatGenerics>[] | null;
   pin_expires?: string | null;
   pinned_at?: string | null;
@@ -1327,6 +1335,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
+  live_location?: LiveLocation;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse<StreamChatGenerics>;
   member?: ChannelMemberResponse<StreamChatGenerics>;
@@ -1560,6 +1569,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           channelType: {};
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
+          liveLocationType: StreamChatGenerics['liveLocationType'];
           memberType: StreamChatGenerics['memberType'];
           messageType: StreamChatGenerics['messageType'];
           pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1576,6 +1586,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 channelType: {};
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
+                liveLocationType: StreamChatGenerics['liveLocationType'];
                 memberType: StreamChatGenerics['memberType'];
                 messageType: StreamChatGenerics['messageType'];
                 pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1591,6 +1602,7 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               channelType: {};
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
+              liveLocationType: StreamChatGenerics['liveLocationType'];
               memberType: StreamChatGenerics['memberType'];
               messageType: StreamChatGenerics['messageType'];
               pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1742,6 +1754,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
           channelType: StreamChatGenerics['channelType'];
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
+          liveLocationType: StreamChatGenerics['liveLocationType'];
           memberType: StreamChatGenerics['memberType'];
           messageType: {};
           pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1758,6 +1771,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
                 channelType: StreamChatGenerics['channelType'];
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
+                liveLocationType: StreamChatGenerics['liveLocationType'];
                 memberType: StreamChatGenerics['memberType'];
                 messageType: {};
                 pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1773,6 +1787,7 @@ export type MessageFilters<StreamChatGenerics extends ExtendableGenerics = Defau
               channelType: StreamChatGenerics['channelType'];
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
+              liveLocationType: StreamChatGenerics['liveLocationType'];
               memberType: StreamChatGenerics['memberType'];
               messageType: {};
               pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1875,6 +1890,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
           channelType: StreamChatGenerics['channelType'];
           commandType: StreamChatGenerics['commandType'];
           eventType: StreamChatGenerics['eventType'];
+          liveLocationType: StreamChatGenerics['liveLocationType'];
           memberType: StreamChatGenerics['memberType'];
           messageType: StreamChatGenerics['messageType'];
           pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1891,6 +1907,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
                 channelType: StreamChatGenerics['channelType'];
                 commandType: StreamChatGenerics['commandType'];
                 eventType: StreamChatGenerics['eventType'];
+                liveLocationType: StreamChatGenerics['liveLocationType'];
                 memberType: StreamChatGenerics['memberType'];
                 messageType: StreamChatGenerics['messageType'];
                 pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -1906,6 +1923,7 @@ export type UserFilters<StreamChatGenerics extends ExtendableGenerics = DefaultG
               channelType: StreamChatGenerics['channelType'];
               commandType: StreamChatGenerics['commandType'];
               eventType: StreamChatGenerics['eventType'];
+              liveLocationType: StreamChatGenerics['liveLocationType'];
               memberType: StreamChatGenerics['memberType'];
               messageType: StreamChatGenerics['messageType'];
               pollOptionType: StreamChatGenerics['pollOptionType'];
@@ -2222,6 +2240,7 @@ export type Attachment<
   author_name?: string;
   color?: string;
   duration?: number;
+  end_at?: string;
   fallback?: string;
   fields?: Field[];
   file_size?: number | string;
@@ -3901,6 +3920,19 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
   show_in_channel?: boolean;
   silent?: boolean;
   type?: MessageLabel;
+};
+
+export type LiveLocation = {
+  channel_cid: string;
+  created_at: string;
+  created_by_device_id: string;
+  end_at: string;
+  id: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
 };
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
