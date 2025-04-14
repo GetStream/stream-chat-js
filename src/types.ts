@@ -325,7 +325,7 @@ export type ChannelAPIResponse<StreamChatGenerics extends ExtendableGenerics = D
   members: ChannelMemberResponse<StreamChatGenerics>[];
   messages: MessageResponse<StreamChatGenerics>[];
   pinned_messages: MessageResponse<StreamChatGenerics>[];
-  active_live_locations?: LiveLocationResponse[];
+  live_locations?: LiveLocation[];
   hidden?: boolean;
   membership?: ChannelMemberResponse<StreamChatGenerics> | null;
   pending_messages?: PendingMessageResponse<StreamChatGenerics>[];
@@ -3933,10 +3933,6 @@ export type LiveLocation = {
   message_id: string;
   updated_at: string;
   user_id: string;
-};
-
-export type LiveLocationResponse = APIResponse & {
-  live_location: LiveLocation;
 };
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;

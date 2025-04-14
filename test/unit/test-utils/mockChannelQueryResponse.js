@@ -112,7 +112,7 @@ export const mockChannelQueryResponse = {
 	},
 	messages: [],
 	pinned_messages: [],
-	active_live_locations: [],
+	live_locations: [],
 	members: [
 		{
 			user_id: 'sara-angular-test',
