@@ -18,10 +18,13 @@ export type MiddlewareValue<TState> = {
   status?: MiddlewareStatus;
 };
 
-export type MiddlewareHandler<TState> = (params: {
+export type MiddlewareHandlerParams<TState> = {
   input: MiddlewareValue<TState>;
   nextHandler: (input: MiddlewareValue<TState>) => Promise<MiddlewareValue<TState>>;
-}) => Promise<MiddlewareValue<TState>>;
+};
+export type MiddlewareHandler<TState> = (
+  params: MiddlewareHandlerParams<TState>,
+) => Promise<MiddlewareValue<TState>>;
 
 export type Middleware<TState> = {
   id: string;

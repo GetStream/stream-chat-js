@@ -1,21 +1,17 @@
-import type {
-  MessageComposerMiddlewareValue,
-  MessageDraftComposerMiddlewareValue,
-} from './types';
-import type { MessageComposer } from '../../messageComposer';
+import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { Attachment } from '../../../types';
+import type { MessageComposer } from '../../messageComposer';
+import type {
+  MessageComposerMiddlewareValueState,
+  MessageDraftComposerMiddlewareValueState,
+} from './types';
 
 export const createLinkPreviewsCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/link-previews',
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageComposerMiddlewareValue,
-    ) => Promise<MessageComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { linkPreviewsManager } = composer;
     if (!linkPreviewsManager) return nextHandler(input);
 
@@ -66,12 +62,7 @@ export const createDraftLinkPreviewsCompositionMiddleware = (
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageDraftComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageDraftComposerMiddlewareValue,
-    ) => Promise<MessageDraftComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const { linkPreviewsManager } = composer;
     if (!linkPreviewsManager) return nextHandler(input);
 

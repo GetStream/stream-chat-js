@@ -25,9 +25,6 @@ export type MessageDraftComposerMiddlewareValueState = {
   draft: DraftMessagePayload;
 };
 
-export type MessageDraftComposerMiddlewareValue =
-  MiddlewareValue<MessageDraftComposerMiddlewareValueState>;
-
 export type MessageDraftComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
 };

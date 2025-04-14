@@ -1,21 +1,17 @@
-import type {
-  MessageComposerMiddlewareValue,
-  MessageDraftComposerMiddlewareValue,
-} from './types';
 import { textIsEmpty } from '../../textComposer';
+import type {
+  MessageComposerMiddlewareValueState,
+  MessageDraftComposerMiddlewareValueState,
+} from './types';
 import type { MessageComposer } from '../../messageComposer';
+import type { MiddlewareHandlerParams } from '../../../middleware';
 
 export const createCompositionValidationMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/data-validation',
   compose: async ({
     input,
     nextHandler,
-  }: {
-    input: MessageComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageComposerMiddlewareValue,
-    ) => Promise<MessageComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { maxLengthOnSend } = composer.config.text ?? {};
     const inputText = input.state.message.text ?? '';
     const isEmptyMessage =
@@ -41,12 +37,7 @@ export const createDraftCompositionValidationMiddleware = (
   compose: async ({
     input,
     nextHandler,
-  }: {
-    input: MessageDraftComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageDraftComposerMiddlewareValue,
-    ) => Promise<MessageDraftComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const hasData =
       !textIsEmpty(input.state.draft.text ?? '') ||
       input.state.draft.attachments?.length ||
