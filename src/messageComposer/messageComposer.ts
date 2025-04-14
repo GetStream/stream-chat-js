@@ -339,10 +339,10 @@ export class MessageComposer {
     this.textComposer.initState({ message });
     this.state.next(initState(composition));
     if (
-      message &&
-      isLocalMessage(message) &&
       composition &&
-      !compositionIsMessageDraft(composition)
+      !compositionIsMessageDraft(composition) &&
+      message &&
+      isLocalMessage(message)
     ) {
       this.editedMessage = message;
     }
