@@ -6,6 +6,15 @@ import {
 import type { DraftMessage, LocalMessage } from '../../../src';
 import { AppSettings, AttachmentManager } from '../../../src';
 
+// Add FileList mock
+vi.mock('../../../src/messageComposer/fileUtils', async (importOriginal) => {
+  const original: object = await importOriginal();
+  return {
+    ...original,
+    isFileList: vi.fn().mockReturnValue(false), // FileList is Web specific so for now we avoid testing for it
+  };
+});
+
 const defaultAppSettings = {
   app: {
     image_upload_config: {
@@ -138,8 +147,19 @@ describe('AttachmentManager', () => {
 
       // Create a test file and upload it to populate the state
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      await attachmentManager.uploadFiles([file]);
-
+      attachmentManager.state.next({
+        attachments: [
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'finished',
+              file,
+            },
+          },
+        ],
+      });
       // Now check the getters
       expect(attachmentManager.attachments.length).toBe(1);
       expect(attachmentManager.hasUploadPermission).toBe(true);
@@ -200,15 +220,61 @@ describe('AttachmentManager', () => {
       const file4 = new File([''], 'test4.jpg', { type: 'image/jpeg' });
       const file5 = new File([''], 'test5.jpg', { type: 'image/jpeg' });
 
-      // Upload files to populate the state
-      await attachmentManager.uploadFiles([file1, file2, file3, file4, file5]);
-
+      attachmentManager.state.next({
+        attachments: [
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'finished',
+              file: file1,
+            },
+          },
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'uploading',
+              file: file2,
+            },
+          },
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'failed',
+              file: file3,
+            },
+          },
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'blocked',
+              file: file4,
+            },
+          },
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'pending',
+              file: file5,
+            },
+          },
+        ],
+      });
       // Check the upload counts
-      expect(attachmentManager.successfulUploadsCount).toBeGreaterThanOrEqual(0);
-      expect(attachmentManager.uploadsInProgressCount).toBeGreaterThanOrEqual(0);
-      expect(attachmentManager.failedUploadsCount).toBeGreaterThanOrEqual(0);
-      expect(attachmentManager.blockedUploadsCount).toBeGreaterThanOrEqual(0);
-      expect(attachmentManager.pendingUploadsCount).toBeGreaterThanOrEqual(0);
+      expect(attachmentManager.successfulUploadsCount).toBeGreaterThanOrEqual(1);
+      expect(attachmentManager.uploadsInProgressCount).toBeGreaterThanOrEqual(1);
+      expect(attachmentManager.failedUploadsCount).toBeGreaterThanOrEqual(1);
+      expect(attachmentManager.blockedUploadsCount).toBeGreaterThanOrEqual(1);
+      expect(attachmentManager.pendingUploadsCount).toBeGreaterThanOrEqual(1);
     });
 
     it('should return correct available upload slots', async () => {
@@ -221,8 +287,19 @@ describe('AttachmentManager', () => {
 
       // Create and upload a file to reduce available slots
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
-      await attachmentManager.uploadFiles([file]);
-
+      attachmentManager.state.next({
+        attachments: [
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid',
+              uploadState: 'finished',
+              file,
+            },
+          },
+        ],
+      });
       // Should have one less slot available
       expect(attachmentManager.availableUploadSlots).toBe(
         API_MAX_FILES_ALLOWED_PER_MESSAGE - 1,
