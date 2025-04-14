@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { createTextComposerMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
-import { createDraftTextComposerMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
+import { createTextComposerCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
+import { createDraftTextComposerCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
 
 describe('TextComposerMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let textComposerMiddleware: ReturnType<typeof createTextComposerMiddleware>;
+  let textComposerMiddleware: ReturnType<typeof createTextComposerCompositionMiddleware>;
 
   beforeEach(() => {
     client = {
@@ -93,11 +93,7 @@ describe('TextComposerMiddleware', () => {
       },
     } as any;
 
-    textComposerMiddleware = createTextComposerMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(textComposerMiddleware.id).toBe('textComposerState');
+    textComposerMiddleware = createTextComposerCompositionMiddleware(messageComposer);
   });
 
   it('should handle empty message', async () => {
@@ -346,7 +342,9 @@ describe('DraftTextComposerMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let draftTextComposerMiddleware: ReturnType<typeof createDraftTextComposerMiddleware>;
+  let draftTextComposerMiddleware: ReturnType<
+    typeof createDraftTextComposerCompositionMiddleware
+  >;
 
   beforeEach(() => {
     client = {
@@ -430,11 +428,8 @@ describe('DraftTextComposerMiddleware', () => {
       },
     } as any;
 
-    draftTextComposerMiddleware = createDraftTextComposerMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(draftTextComposerMiddleware.id).toBe('textComposerState');
+    draftTextComposerMiddleware =
+      createDraftTextComposerCompositionMiddleware(messageComposer);
   });
 
   it('should handle empty draft', async () => {

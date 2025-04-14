@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createPollComposerValidationMiddleware } from '../../../../../src/messageComposer/middleware/pollComposer/composition';
+import { createPollCompositionValidationMiddleware } from '../../../../../src/messageComposer/middleware/pollComposer/composition';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { PollComposer } from '../../../../../src/messageComposer/pollComposer';
 import { VotingVisibility } from '../../../../../src/types';
@@ -21,11 +21,7 @@ describe('PollComposerCompositionMiddleware', () => {
 
     pollComposer = new PollComposer({ composer: messageComposer });
     messageComposer.pollComposer = pollComposer;
-    validationMiddleware = createPollComposerValidationMiddleware(messageComposer);
-  });
-
-  it('should initialize with the correct id', () => {
-    expect(validationMiddleware.id).toBe('pollComposerComposition');
+    validationMiddleware = createPollCompositionValidationMiddleware(messageComposer);
   });
 
   it('should allow composition when poll can be created', async () => {

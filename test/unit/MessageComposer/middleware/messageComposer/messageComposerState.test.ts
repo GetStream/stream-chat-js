@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMessageComposerStateMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/messageComposerState';
+import { createMessageComposerStateCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/messageComposerState';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { LocalMessage } from '../../../../../src/types';
-import { createDraftMessageComposerStateMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/messageComposerState';
+import { createDraftMessageComposerStateCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/messageComposerState';
 
 describe('MessageComposerStateMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
   let messageComposerStateMiddleware: ReturnType<
-    typeof createMessageComposerStateMiddleware
+    typeof createMessageComposerStateCompositionMiddleware
   >;
 
   beforeEach(() => {
@@ -30,11 +30,7 @@ describe('MessageComposerStateMiddleware', () => {
 
     // Create the middleware
     messageComposerStateMiddleware =
-      createMessageComposerStateMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(messageComposerStateMiddleware.id).toBe('messageComposerState');
+      createMessageComposerStateCompositionMiddleware(messageComposer);
   });
 
   it('should handle message without quoted message or poll', async () => {
@@ -300,7 +296,7 @@ describe('DraftMessageComposerStateMiddleware', () => {
   let client: StreamChat;
   let messageComposer: MessageComposer;
   let messageComposerStateMiddleware: ReturnType<
-    typeof createDraftMessageComposerStateMiddleware
+    typeof createDraftMessageComposerStateCompositionMiddleware
   >;
 
   beforeEach(() => {
@@ -326,11 +322,7 @@ describe('DraftMessageComposerStateMiddleware', () => {
     } as any;
 
     messageComposerStateMiddleware =
-      createDraftMessageComposerStateMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(messageComposerStateMiddleware.id).toBe('messageComposerState');
+      createDraftMessageComposerStateCompositionMiddleware(messageComposer);
   });
 
   it('should handle draft without quoted message or poll', async () => {

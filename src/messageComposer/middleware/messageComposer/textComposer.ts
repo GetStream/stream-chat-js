@@ -4,8 +4,8 @@ import type {
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 
-export const createTextComposerMiddleware = (composer: MessageComposer) => ({
-  id: 'textComposerState',
+export const createTextComposerCompositionMiddleware = (composer: MessageComposer) => ({
+  id: 'stream-io/message-composer-middleware/text-composition',
   compose: ({
     input,
     nextHandler,
@@ -50,8 +50,10 @@ export const createTextComposerMiddleware = (composer: MessageComposer) => ({
   },
 });
 
-export const createDraftTextComposerMiddleware = (composer: MessageComposer) => ({
-  id: 'textComposerState',
+export const createDraftTextComposerCompositionMiddleware = (
+  composer: MessageComposer,
+) => ({
+  id: 'stream-io/message-composer-middleware/draft-text-composition',
   compose: ({
     input,
     nextHandler,

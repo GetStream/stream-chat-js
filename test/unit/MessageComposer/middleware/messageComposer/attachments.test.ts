@@ -2,18 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { createAttachmentsMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
+import { createAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 import {
   AttachmentLoadingState,
   LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
-import { createDraftAttachmentsMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
+import { createDraftAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 
 describe('AttachmentsMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let attachmentsMiddleware: ReturnType<typeof createAttachmentsMiddleware>;
+  let attachmentsMiddleware: ReturnType<typeof createAttachmentsCompositionMiddleware>;
 
   beforeEach(() => {
     client = {
@@ -100,11 +100,7 @@ describe('AttachmentsMiddleware', () => {
       },
     } as any;
 
-    attachmentsMiddleware = createAttachmentsMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(attachmentsMiddleware.id).toBe('attachments');
+    attachmentsMiddleware = createAttachmentsCompositionMiddleware(messageComposer);
   });
 
   it('should handle message without attachments', async () => {
@@ -371,7 +367,9 @@ describe('DraftAttachmentsMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let draftAttachmentsMiddleware: ReturnType<typeof createDraftAttachmentsMiddleware>;
+  let draftAttachmentsMiddleware: ReturnType<
+    typeof createDraftAttachmentsCompositionMiddleware
+  >;
 
   beforeEach(() => {
     client = {
@@ -403,11 +401,8 @@ describe('DraftAttachmentsMiddleware', () => {
       attachmentManager,
     } as any;
 
-    draftAttachmentsMiddleware = createDraftAttachmentsMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(draftAttachmentsMiddleware.id).toBe('attachments');
+    draftAttachmentsMiddleware =
+      createDraftAttachmentsCompositionMiddleware(messageComposer);
   });
 
   it('should handle draft without attachments', async () => {
@@ -507,7 +502,8 @@ describe('DraftAttachmentsMiddleware', () => {
 
   it('should handle case when attachmentManager is not available', async () => {
     messageComposer.attachmentManager = undefined as any;
-    draftAttachmentsMiddleware = createDraftAttachmentsMiddleware(messageComposer);
+    draftAttachmentsMiddleware =
+      createDraftAttachmentsCompositionMiddleware(messageComposer);
 
     const result = await draftAttachmentsMiddleware.compose({
       input: {

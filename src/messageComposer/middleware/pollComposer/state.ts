@@ -120,7 +120,7 @@ const processors: Partial<Record<keyof PollComposerState['data'], Processor>> = 
 
 export const createPollComposerStateMiddleware =
   (): Middleware<PollComposerStateMiddlewareValueState> => ({
-    id: 'pollComposerStateProcessing',
+    id: 'stream-io/poll-composer-state-processing',
     handleFieldChange: ({ input, nextHandler }) => {
       if (!input.state.targetFields) return nextHandler(input);
       const {

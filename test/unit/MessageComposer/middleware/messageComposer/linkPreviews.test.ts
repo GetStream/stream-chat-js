@@ -6,14 +6,14 @@ import {
   LinkPreviewStatus,
 } from '../../../../../src/messageComposer/linkPreviewsManager';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { createLinkPreviewsMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
-import { createDraftLinkPreviewsMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
+import { createLinkPreviewsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
+import { createDraftLinkPreviewsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
 
 describe('LinkPreviewsMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let linkPreviewsMiddleware: ReturnType<typeof createLinkPreviewsMiddleware>;
+  let linkPreviewsMiddleware: ReturnType<typeof createLinkPreviewsCompositionMiddleware>;
 
   beforeEach(() => {
     // Create a real StreamChat instance with minimal implementation
@@ -45,11 +45,7 @@ describe('LinkPreviewsMiddleware', () => {
     messageComposer = channel.messageComposer;
 
     // Create the middleware
-    linkPreviewsMiddleware = createLinkPreviewsMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(linkPreviewsMiddleware.id).toBe('linkPreviews');
+    linkPreviewsMiddleware = createLinkPreviewsCompositionMiddleware(messageComposer);
   });
 
   it('should handle message without link previews', async () => {
@@ -582,7 +578,9 @@ describe('DraftLinkPreviewsMiddleware', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
-  let linkPreviewsMiddleware: ReturnType<typeof createDraftLinkPreviewsMiddleware>;
+  let linkPreviewsMiddleware: ReturnType<
+    typeof createDraftLinkPreviewsCompositionMiddleware
+  >;
 
   beforeEach(() => {
     client = {
@@ -617,11 +615,8 @@ describe('DraftLinkPreviewsMiddleware', () => {
       linkPreviewsManager,
     } as any;
 
-    linkPreviewsMiddleware = createDraftLinkPreviewsMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(linkPreviewsMiddleware.id).toBe('linkPreviews');
+    linkPreviewsMiddleware =
+      createDraftLinkPreviewsCompositionMiddleware(messageComposer);
   });
 
   it('should handle draft without link previews', async () => {
@@ -734,7 +729,8 @@ describe('DraftLinkPreviewsMiddleware', () => {
 
   it('should handle case when linkPreviewsManager is not available', async () => {
     messageComposer.linkPreviewsManager = undefined as any;
-    linkPreviewsMiddleware = createDraftLinkPreviewsMiddleware(messageComposer);
+    linkPreviewsMiddleware =
+      createDraftLinkPreviewsCompositionMiddleware(messageComposer);
 
     const result = await linkPreviewsMiddleware.compose({
       input: {

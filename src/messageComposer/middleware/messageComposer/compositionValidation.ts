@@ -6,7 +6,7 @@ import { textIsEmpty } from '../../textComposer';
 import type { MessageComposer } from '../../messageComposer';
 
 export const createCompositionValidationMiddleware = (composer: MessageComposer) => ({
-  id: 'validation',
+  id: 'stream-io/message-composer-middleware/data-validation',
   compose: async ({
     input,
     nextHandler,
@@ -32,7 +32,7 @@ export const createCompositionValidationMiddleware = (composer: MessageComposer)
 export const createDraftCompositionValidationMiddleware = (
   composer: MessageComposer,
 ) => ({
-  id: 'validation',
+  id: 'stream-io/message-composer-middleware/draft-data-validation',
   compose: async ({
     input,
     nextHandler,

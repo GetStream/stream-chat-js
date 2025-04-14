@@ -2,8 +2,8 @@ import { formatMessage, toUpdatedMessagePayload } from '../../../utils';
 import type { MessageComposer } from '../../messageComposer';
 import type { MessageComposerMiddlewareValue } from './types';
 
-export const createCleanDataMiddleware = (composer: MessageComposer) => ({
-  id: 'cleanData',
+export const createCompositionDataCleanupMiddleware = (composer: MessageComposer) => ({
+  id: 'stream-io/message-composer-middleware/data-cleanup',
   compose: ({
     input,
     nextHandler,

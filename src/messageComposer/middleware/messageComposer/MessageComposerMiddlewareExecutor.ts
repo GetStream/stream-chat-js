@@ -1,25 +1,25 @@
 import { MiddlewareExecutor } from '../../../middleware';
 import {
-  createDraftTextComposerMiddleware,
-  createTextComposerMiddleware,
+  createDraftTextComposerCompositionMiddleware,
+  createTextComposerCompositionMiddleware,
 } from './textComposer';
 import {
-  createAttachmentsMiddleware,
-  createDraftAttachmentsMiddleware,
+  createAttachmentsCompositionMiddleware,
+  createDraftAttachmentsCompositionMiddleware,
 } from './attachments';
 import {
-  createDraftLinkPreviewsMiddleware,
-  createLinkPreviewsMiddleware,
+  createDraftLinkPreviewsCompositionMiddleware,
+  createLinkPreviewsCompositionMiddleware,
 } from './linkPreviews';
 import {
-  createDraftMessageComposerStateMiddleware,
-  createMessageComposerStateMiddleware,
+  createDraftMessageComposerStateCompositionMiddleware,
+  createMessageComposerStateCompositionMiddleware,
 } from './messageComposerState';
 import {
   createCompositionValidationMiddleware,
   createDraftCompositionValidationMiddleware,
 } from './compositionValidation';
-import { createCleanDataMiddleware } from './cleanData';
+import { createCompositionDataCleanupMiddleware } from './cleanData';
 import type {
   MessageComposerMiddlewareExecutorOptions,
   MessageComposerMiddlewareValueState,
@@ -34,12 +34,12 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<Messag
     // todo: document how to add custom data to a composed message using middleware
     //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
     this.use([
-      createTextComposerMiddleware(composer),
-      createAttachmentsMiddleware(composer),
-      createLinkPreviewsMiddleware(composer),
-      createMessageComposerStateMiddleware(composer),
+      createTextComposerCompositionMiddleware(composer),
+      createAttachmentsCompositionMiddleware(composer),
+      createLinkPreviewsCompositionMiddleware(composer),
+      createMessageComposerStateCompositionMiddleware(composer),
       createCompositionValidationMiddleware(composer),
-      createCleanDataMiddleware(composer),
+      createCompositionDataCleanupMiddleware(composer),
     ]);
   }
 }
@@ -50,10 +50,10 @@ export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<M
     // todo: document how to add custom data to a composed message using middleware
     //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
     this.use([
-      createDraftTextComposerMiddleware(composer),
-      createDraftAttachmentsMiddleware(composer),
-      createDraftLinkPreviewsMiddleware(composer),
-      createDraftMessageComposerStateMiddleware(composer),
+      createDraftTextComposerCompositionMiddleware(composer),
+      createDraftAttachmentsCompositionMiddleware(composer),
+      createDraftLinkPreviewsCompositionMiddleware(composer),
+      createDraftMessageComposerStateCompositionMiddleware(composer),
       createDraftCompositionValidationMiddleware(composer),
     ]);
   }

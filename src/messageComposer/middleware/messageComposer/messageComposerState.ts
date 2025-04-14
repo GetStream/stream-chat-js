@@ -5,8 +5,10 @@ import type {
 import type { MessageComposer } from '../../messageComposer';
 import type { LocalMessage, LocalMessageBase } from '../../../types';
 
-export const createMessageComposerStateMiddleware = (composer: MessageComposer) => ({
-  id: 'messageComposerState',
+export const createMessageComposerStateCompositionMiddleware = (
+  composer: MessageComposer,
+) => ({
+  id: 'stream-io/message-composer-middleware/own-state',
   compose: ({
     input,
     nextHandler,
@@ -42,8 +44,10 @@ export const createMessageComposerStateMiddleware = (composer: MessageComposer) 
   },
 });
 
-export const createDraftMessageComposerStateMiddleware = (composer: MessageComposer) => ({
-  id: 'messageComposerState',
+export const createDraftMessageComposerStateCompositionMiddleware = (
+  composer: MessageComposer,
+) => ({
+  id: 'stream-io/message-composer-middleware/draft-own-state',
   compose: ({
     input,
     nextHandler,

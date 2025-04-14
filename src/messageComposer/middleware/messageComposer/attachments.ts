@@ -12,8 +12,8 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
   return attachment as Attachment;
 };
 
-export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
-  id: 'attachments',
+export const createAttachmentsCompositionMiddleware = (composer: MessageComposer) => ({
+  id: 'stream-io/message-composer-middleware/attachments',
   compose: ({
     input,
     nextHandler,
@@ -61,8 +61,10 @@ export const createAttachmentsMiddleware = (composer: MessageComposer) => ({
   },
 });
 
-export const createDraftAttachmentsMiddleware = (composer: MessageComposer) => ({
-  id: 'attachments',
+export const createDraftAttachmentsCompositionMiddleware = (
+  composer: MessageComposer,
+) => ({
+  id: 'stream-io/message-composer-middleware/draft-attachments',
   compose: ({
     input,
     nextHandler,

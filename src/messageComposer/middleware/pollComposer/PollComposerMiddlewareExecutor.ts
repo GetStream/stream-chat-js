@@ -1,6 +1,6 @@
 import { MiddlewareExecutor } from '../../../middleware';
 import { createPollComposerStateMiddleware } from './state';
-import { createPollComposerValidationMiddleware } from './composition';
+import { createPollCompositionValidationMiddleware } from './composition';
 import type {
   PollComposerCompositionMiddlewareValueState,
   PollComposerStateMiddlewareValueState,
@@ -14,7 +14,7 @@ export type PollComposerMiddlewareExecutorOptions = {
 export class PollComposerCompositionMiddlewareExecutor extends MiddlewareExecutor<PollComposerCompositionMiddlewareValueState> {
   constructor({ composer }: PollComposerMiddlewareExecutorOptions) {
     super();
-    this.use([createPollComposerValidationMiddleware(composer)]);
+    this.use([createPollCompositionValidationMiddleware(composer)]);
   }
 }
 

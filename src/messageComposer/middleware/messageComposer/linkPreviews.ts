@@ -5,8 +5,8 @@ import type {
 import type { MessageComposer } from '../../messageComposer';
 import type { Attachment } from '../../../types';
 
-export const createLinkPreviewsMiddleware = (composer: MessageComposer) => ({
-  id: 'linkPreviews',
+export const createLinkPreviewsCompositionMiddleware = (composer: MessageComposer) => ({
+  id: 'stream-io/message-composer-middleware/link-previews',
   compose: ({
     input,
     nextHandler,
@@ -59,8 +59,10 @@ export const createLinkPreviewsMiddleware = (composer: MessageComposer) => ({
   },
 });
 
-export const createDraftLinkPreviewsMiddleware = (composer: MessageComposer) => ({
-  id: 'linkPreviews',
+export const createDraftLinkPreviewsCompositionMiddleware = (
+  composer: MessageComposer,
+) => ({
+  id: 'stream-io/message-composer-middleware/draft-link-previews',
   compose: ({
     input,
     nextHandler,

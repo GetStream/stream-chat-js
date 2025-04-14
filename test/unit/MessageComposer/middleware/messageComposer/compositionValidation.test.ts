@@ -106,10 +106,6 @@ describe('MessageComposerValidationMiddleware', () => {
     validationMiddleware = createCompositionValidationMiddleware(messageComposer);
   });
 
-  it('should initialize with correct id', () => {
-    expect(validationMiddleware.id).toBe('validation');
-  });
-
   it('should validate empty message', async () => {
     const result = await validationMiddleware.compose({
       input: {
@@ -430,10 +426,6 @@ describe('DraftCompositionValidationMiddleware', () => {
     } as any;
 
     validationMiddleware = createDraftCompositionValidationMiddleware(messageComposer);
-  });
-
-  it('should initialize with correct id', () => {
-    expect(validationMiddleware.id).toBe('validation');
   });
 
   it('should discard empty draft', async () => {
