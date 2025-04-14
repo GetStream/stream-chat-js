@@ -119,9 +119,9 @@ export const createCommandsMiddleware = (
       const { state } = input;
       if (!state.selection) return nextHandler(input);
 
-      const firstCharIsNotCommandTrigger =
-        state.text.length === 0 || state.text[0] !== finalOptions.trigger;
-      if (firstCharIsNotCommandTrigger) return nextHandler(input);
+      // const firstCharIsNotCommandTrigger =
+      //   state.text.length === 0 || state.text[0] !== finalOptions.trigger;
+      // if (firstCharIsNotCommandTrigger) return nextHandler(input);
 
       const triggerWithToken = getTriggerCharWithToken({
         trigger: finalOptions.trigger,
