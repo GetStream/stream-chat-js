@@ -106,7 +106,10 @@ describe('TextComposer', () => {
       const { textComposer } = setup({ message });
 
       expect(textComposer.text).toBe('Hello world');
-      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(textComposer.selection).toEqual({
+        start: message.text.length,
+        end: message.text.length,
+      });
       expect(textComposer.mentionedUsers).toEqual([
         { id: 'user-1' },
         { id: 'user-2', name: 'User 2' },
