@@ -1835,9 +1835,6 @@ export class StreamChat {
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
-      if (channelState.draft) {
-        c.state.messageDraft = channelState.draft;
-      }
 
       let updatedMessagesSet;
       if (skipInitialization === undefined) {
