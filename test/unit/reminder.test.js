@@ -293,13 +293,13 @@ describe('Reminder', () => {
 		beforeEach(async () => {
 			// Create a unique channel type name
 			channelType = 'reminders-test-' + Math.random().toString(36).substring(2, 10);
-			
+
 			// Create a new channel type
 			sinon.stub(client, 'createChannelType').resolves({
 				name: channelType,
 				user_message_reminders: false, // Initially disabled
 			});
-			
+
 			await client.createChannelType({
 				name: channelType,
 				user_message_reminders: false,
@@ -307,7 +307,7 @@ describe('Reminder', () => {
 
 			// Create a channel with this type
 			channel = client.channel(channelType, 'test-channel');
-			
+
 			// Mock the channel.create method
 			sinon.stub(channel, 'create').resolves({
 				channel: {
@@ -316,19 +316,19 @@ describe('Reminder', () => {
 					cid: `${channelType}:test-channel`,
 					config: {
 						user_message_reminders: false, // Feature flag disabled
-					}
-				}
+					},
+				},
 			});
-			
+
 			await channel.create();
-			
+
 			// Mock the client.configs to return the channel config
 			client.configs = {
 				[`${channelType}:test-channel`]: {
 					user_message_reminders: false, // Feature flag disabled
-				}
+				},
 			};
-			
+
 			// Create a test message
 			message = {
 				id: 'test-message',
@@ -366,18 +366,18 @@ describe('Reminder', () => {
 				name: channelType,
 				user_message_reminders: true, // Now enabled
 			});
-			
+
 			await client.updateChannelType(channelType, {
 				user_message_reminders: true,
 			});
-			
+
 			// Update the client.configs to reflect the updated channel config
 			client.configs = {
 				[`${channelType}:test-channel`]: {
 					user_message_reminders: true, // Feature flag enabled
-				}
+				},
 			};
-			
+
 			// Mock the post method to simulate a successful response
 			const postStub = sinon.stub(client, 'post').resolves({
 				...reminderResponse,
