@@ -120,10 +120,10 @@ export const getTokenizedSuggestionDisplayName = ({
 }: {
   displayName: string;
   searchToken: string;
-}): { tokenizedDisplayName: { token: string; tokenizedDisplayName: string[] } } => ({
+}): { tokenizedDisplayName: { token: string; parts: string[] } } => ({
   tokenizedDisplayName: {
     token: searchToken,
-    tokenizedDisplayName: searchToken
+    parts: searchToken
       ? displayName
           .split(new RegExp(`(${escapeRegExp(searchToken)})`, 'gi'))
           .filter(Boolean)
