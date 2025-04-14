@@ -794,7 +794,7 @@ describe('MessageComposer', () => {
 
         messageComposer.registerSubscriptions();
         mockClient._messageComposerSetupState.next({
-          applyModifications: mockModifications,
+          setupFunction: mockModifications,
         });
 
         expect(mockModifications).toHaveBeenCalledWith({ composer: messageComposer });
