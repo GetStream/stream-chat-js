@@ -8,7 +8,6 @@ import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
-import { generateMessageDraft } from './test-utils/generateMessageDraft';
 
 import { describe, beforeEach, it, expect, beforeAll, afterAll } from 'vitest';
 
@@ -663,30 +662,6 @@ describe('StreamChat.queryChannels', async () => {
 		await client.queryChannels();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
 		expect(Object.keys(client.configs).length).to.be.equal(0);
-		mock.restore();
-	});
-
-	it('should store drafts', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const drafts = {
-			1: generateMessageDraft({ channel: mockChannelQueryResponse.channel }),
-			5: generateMessageDraft({ channel: mockChannelQueryResponse.channel }),
-		};
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, (_, i) => ({
-			...mockChannelQueryResponse,
-			draft: drafts[i],
-		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
-		await client.queryChannels();
-		Object.values(client.activeChannels).forEach((channel, index) => {
-			if ([1, 5].includes(index)) {
-				expect(channel.state.messageDraft).to.eql(drafts[index]);
-			} else {
-				expect(channel.state.messageDraft).to.be.undefined;
-			}
-		});
 		mock.restore();
 	});
 

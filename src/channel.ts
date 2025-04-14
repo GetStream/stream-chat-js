@@ -25,7 +25,6 @@ import type {
   CreateDraftResponse,
   DeleteChannelAPIResponse,
   DraftMessagePayload,
-  DraftResponse,
   Event,
   EventAPIResponse,
   EventHandler,
@@ -1656,24 +1655,6 @@ export class Channel {
           delete channelState.watchers[event.user.id];
         }
         break;
-      case 'draft.updated':
-        if (
-          this.getClient().options.drafts &&
-          event.draft &&
-          !(event.draft as DraftResponse).parent_id
-        ) {
-          channelState.messageDraft = event.draft as DraftResponse;
-        }
-        break;
-      case 'draft.deleted':
-        if (
-          this.getClient().options.drafts &&
-          event.draft &&
-          !(event.draft as DraftResponse).parent_id
-        ) {
-          channelState.messageDraft = null;
-        }
-        break;
       case 'message.deleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
@@ -1933,10 +1914,6 @@ export class Channel {
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
     const { state: clientState, user, userID } = this.getClient();
-
-    if (state.draft) {
-      this.state.messageDraft = state.draft;
-    }
 
     // add the members and users
     if (state.members) {
