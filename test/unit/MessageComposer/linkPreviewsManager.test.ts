@@ -6,7 +6,10 @@ import {
 } from '../../../src/messageComposer/linkPreviewsManager';
 import { StateStore } from '../../../src/store';
 import { DraftMessage, LocalMessage, Message } from '../../../src/types';
-import { LinkPreviewsManagerConfig } from '../../../src';
+import {
+  DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
+  LinkPreviewsManagerConfig,
+} from '../../../src';
 
 const linkUrl = 'https://example.com';
 // Mock dependencies
@@ -85,7 +88,9 @@ describe('LinkPreviewsManager', () => {
     it('should initialize with default config', () => {
       const { manager } = setup();
       expect(manager.config.enabled).toBe(true);
-      expect(manager.config.debounceURLEnrichmentMs).toBe(1500);
+      expect(manager.config.debounceURLEnrichmentMs).toBe(
+        DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
+      );
     });
 
     it('should initialize with custom config', () => {
