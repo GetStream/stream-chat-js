@@ -425,19 +425,19 @@ export class MessageComposer {
   };
 
   private subscribeMessageComposerSetupStateChange = () => {
-    let cleanupBefore: (() => void) | null = null;
+    let tearDown: (() => void) | null = null;
     const unsubscribe = this.client._messageComposerSetupState.subscribeWithSelector(
-      ({ applyModifications }) => ({
-        applyModifications,
+      ({ setupFunction: setup }) => ({
+        setup,
       }),
-      ({ applyModifications }) => {
-        cleanupBefore?.();
-        cleanupBefore = applyModifications?.({ composer: this }) ?? null;
+      ({ setup }) => {
+        tearDown?.();
+        tearDown = setup?.({ composer: this }) ?? null;
       },
     );
 
     return () => {
-      cleanupBefore?.();
+      tearDown?.();
       unsubscribe();
     };
   };

@@ -341,7 +341,7 @@ export type ChannelMemberUpdates = CustomMemberData & {
 };
 
 export type ChannelMemberResponse = CustomMemberData & {
-  archived_at?: string;
+  archived_at?: string | null;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -351,7 +351,7 @@ export type ChannelMemberResponse = CustomMemberData & {
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   role?: string;
   shadow_banned?: boolean;
   status?: InviteStatus;
