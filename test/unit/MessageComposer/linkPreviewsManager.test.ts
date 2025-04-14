@@ -5,7 +5,7 @@ import {
   LinkPreviewStatus,
 } from '../../../src/messageComposer/linkPreviewsManager';
 import { StateStore } from '../../../src/store';
-import { DraftMessage, LocalMessage, Message } from '../../../src/types';
+import { DraftMessage, LocalMessage } from '../../../src/types';
 import {
   DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   LinkPreviewsManagerConfig,
@@ -277,7 +277,7 @@ describe('LinkPreviewsManager', () => {
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation((fn) => {
+      mockClient.enrichURL = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });

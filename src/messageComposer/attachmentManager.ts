@@ -6,8 +6,8 @@ import {
   getAttachmentTypeFromMimeType,
   isFile,
   isFileList,
+  isFileReference,
   isImageFile,
-  isRNFile,
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
@@ -279,7 +279,7 @@ export class AttachmentManager {
     fileLike: FileReference | FileLike,
   ): Promise<LocalUploadAttachment> => {
     const file =
-      isRNFile(fileLike) || isFile(fileLike)
+      isFileReference(fileLike) || isFile(fileLike)
         ? fileLike
         : createFileFromBlobs({
             blobsArray: [fileLike],
@@ -304,17 +304,17 @@ export class AttachmentManager {
     localAttachment[isImageFile(file) ? 'fallback' : 'title'] = file.name;
 
     if (isImageFile(file)) {
-      localAttachment.localMetadata.previewUri = isRNFile(fileLike)
+      localAttachment.localMetadata.previewUri = isFileReference(fileLike)
         ? fileLike.uri
         : URL.createObjectURL?.(fileLike);
 
-      if (isRNFile(fileLike) && fileLike.height && fileLike.width) {
+      if (isFileReference(fileLike) && fileLike.height && fileLike.width) {
         localAttachment.original_height = fileLike.height;
         localAttachment.original_width = fileLike.width;
       }
     }
 
-    if (isRNFile(fileLike) && fileLike.thumb_url) {
+    if (isFileReference(fileLike) && fileLike.thumb_url) {
       localAttachment.thumb_url = fileLike.thumb_url;
     }
 
@@ -341,9 +341,6 @@ export class AttachmentManager {
 
   /**
    * todo: docs how to customize the image and file upload by overriding do
-   * const attachmentManager = new AttachmentManager({channel});
-   * attachmentManager.doUploadRequest = () => null;
-   * const messageComposer = new MessageComposer({attachmentManager, channel })
    */
 
   doUploadRequest = (fileLike: FileReference | FileLike) => {
@@ -351,7 +348,7 @@ export class AttachmentManager {
       return this.config.doUploadRequest(fileLike);
     }
 
-    if (isRNFile(fileLike)) {
+    if (isFileReference(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
         fileLike.name,

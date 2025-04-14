@@ -9,7 +9,7 @@ import {
   isFile,
   isFileList,
   isImageFile,
-  isRNFile,
+  isFileReference,
   readFileAsArrayBuffer,
 } from '../../../src/messageComposer/fileUtils';
 import type { LocalAttachment } from '../../../src/messageComposer/types';
@@ -174,7 +174,7 @@ describe('fileUtils', () => {
     });
   });
 
-  describe('isRNFile', () => {
+  describe('isFileReference', () => {
     it('should return true for RNFile objects', () => {
       const rnFile = {
         name: 'test.txt',
@@ -182,33 +182,37 @@ describe('fileUtils', () => {
         size: 0,
         type: 'text/plain',
       };
-      expect(isRNFile(rnFile)).toBe(true);
+      expect(isFileReference(rnFile)).toBe(true);
     });
 
     it('should return false for File objects', () => {
       const file = new File([''], 'test.txt', { type: 'text/plain' });
-      expect(isRNFile(file)).toBe(false);
+      expect(isFileReference(file)).toBe(false);
     });
 
     it('should return false for Blob objects', () => {
       const blob = new Blob([''], { type: 'text/plain' });
-      expect(isRNFile(blob)).toBe(false);
+      expect(isFileReference(blob)).toBe(false);
     });
 
     it('should return false for incomplete RNFile objects', () => {
       // These objects are missing required properties for RNFile
-      expect(isRNFile({ name: 'test.txt', type: 'text/plain', size: 0 } as any)).toBe(
-        false,
-      );
       expect(
-        isRNFile({ uri: 'file://test.txt', type: 'text/plain', size: 0 } as any),
+        isFileReference({ name: 'test.txt', type: 'text/plain', size: 0 } as any),
       ).toBe(false);
       expect(
-        isRNFile({ name: 'test.txt', uri: 'file://test.txt', type: 'text/plain' } as any),
+        isFileReference({ uri: 'file://test.txt', type: 'text/plain', size: 0 } as any),
       ).toBe(false);
-      expect(isRNFile({ name: 'test.txt', uri: 'file://test.txt', size: 0 } as any)).toBe(
-        false,
-      );
+      expect(
+        isFileReference({
+          name: 'test.txt',
+          uri: 'file://test.txt',
+          type: 'text/plain',
+        } as any),
+      ).toBe(false);
+      expect(
+        isFileReference({ name: 'test.txt', uri: 'file://test.txt', size: 0 } as any),
+      ).toBe(false);
     });
   });
 

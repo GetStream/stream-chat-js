@@ -24,7 +24,7 @@ export const isFileList = (obj: unknown): obj is FileList => {
 export const isBlobButNotFile = (obj: unknown): obj is Blob =>
   obj instanceof Blob && !(obj instanceof File);
 
-export const isRNFile = (obj: FileReference | FileLike): obj is FileReference =>
+export const isFileReference = (obj: FileReference | FileLike): obj is FileReference =>
   obj !== null &&
   typeof obj === 'object' &&
   !isFile(obj) &&
