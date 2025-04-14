@@ -75,9 +75,10 @@ export const createDraftLinkPreviewsMiddleware = (composer: MessageComposer) => 
 
     linkPreviewsManager.cancelURLEnrichment();
     const linkPreviews = linkPreviewsManager.loadedPreviews.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ state: linkPreviewState, ...ogAttachment }) => ogAttachment as Attachment,
+      (preview) => preview.data,
     );
+
+    if (!linkPreviews.length) return nextHandler(input);
 
     return nextHandler({
       ...input,
