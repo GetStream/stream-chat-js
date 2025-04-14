@@ -116,7 +116,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
   }
 
-  protected getStateBeforeFirstQuery(newSearchString: string) {
+  getStateBeforeFirstQuery(newSearchString: string) {
     const newState = super.getStateBeforeFirstQuery(newSearchString);
     const { items } = this.state.getLatestValue();
     return {
@@ -319,7 +319,7 @@ const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '
 
 export const createMentionsMiddleware = (
   channel: Channel,
-  options?: TextComposerMiddlewareOptions & {
+  options?: Partial<TextComposerMiddlewareOptions> & {
     searchSource?: MentionsSearchSource;
   },
 ) => {
@@ -343,10 +343,10 @@ export const createMentionsMiddleware = (
         text: state.text.slice(0, state.selection.end),
       });
 
-      const newSearchTriggerred =
+      const newSearchTriggered =
         triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
-      if (newSearchTriggerred) {
+      if (newSearchTriggered) {
         searchSource.resetStateAndActivate();
       }
 
