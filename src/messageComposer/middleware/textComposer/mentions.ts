@@ -333,7 +333,7 @@ export const createMentionsMiddleware = (
   }
   searchSource.activate();
   return {
-    id: 'stream-io/mentions-middleware',
+    id: 'stream-io/text-composer/mentions-middleware',
     onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserSuggestion>) => {
       const { state } = input;
       if (!state.selection) return nextHandler(input);

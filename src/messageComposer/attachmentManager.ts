@@ -11,10 +11,7 @@ import {
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
-import {
-  API_MAX_FILES_ALLOWED_PER_MESSAGE,
-  DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
-} from '../constants';
+import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type { Channel } from '../channel';
 import type {
   AttachmentLoadingState,
@@ -28,7 +25,6 @@ import type {
   RNFile,
   UploadPermissionCheckResult,
 } from './types';
-import type { StreamChat } from '../client';
 import type {
   ChannelResponse,
   DraftMessage,
@@ -36,6 +32,8 @@ import type {
   SendFileAPIResponse,
 } from '../types';
 import { mergeWith } from '../utils/mergeWith';
+import { DEFAULT_ATTACHMENT_MANAGER_CONFIG } from './configuration/configuration';
+import type { AttachmentManagerConfig } from './configuration/types';
 
 type LocalNotImageAttachment =
   | LocalFileAttachment
@@ -49,29 +47,10 @@ export type AttachmentManagerState = {
   attachments: LocalAttachment[];
 };
 
-export type AttachmentManagerConfig = {
-  // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
-  /**
-   * Function that allows to prevent uploading files based on the functions output.
-   * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
-   */
-  fileUploadFilter: FileUploadFilter;
-  /** Maximum number of attachments allowed per message */
-  maxNumberOfFilesPerMessage: number;
-  // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
-  /** Function that allows to customize the upload request. */
-  doUploadRequest?: (fileLike: RNFile | FileLike) => ReturnType<StreamChat['sendFile']>;
-};
-
 export type AttachmentManagerOptions = {
   channel: Channel;
   config?: Partial<AttachmentManagerConfig>;
   message?: DraftMessage | LocalMessage;
-};
-
-const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
-  fileUploadFilter: () => true,
-  maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
 };
 
 const initState = ({

@@ -16,12 +16,17 @@ export const createCompositionValidationMiddleware = (composer: MessageComposer)
       input: MessageComposerMiddlewareValue,
     ) => Promise<MessageComposerMiddlewareValue>;
   }) => {
+    const { maxLengthOnSend } = composer.config.text ?? {};
+    const inputText = input.state.message.text ?? '';
     const isEmptyMessage =
-      textIsEmpty(input.state.message.text ?? '') &&
+      textIsEmpty(inputText) &&
       !input.state.message.attachments?.length &&
       !input.state.message.poll_id;
 
-    if (isEmptyMessage || !composer.lastChangeOriginIsLocal) {
+    const hasExceededMaxLength =
+      typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
+
+    if (isEmptyMessage || !composer.lastChangeOriginIsLocal || hasExceededMaxLength) {
       return await nextHandler({ ...input, status: 'discard' });
     }
 

@@ -610,7 +610,9 @@ describe('MessageComposer', () => {
     });
 
     it('should create draft', async () => {
-      const { messageComposer, mockChannel } = setup();
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
       const mockDraft = {
         id: 'test-draft-id',
         text: 'Test draft',
@@ -653,7 +655,9 @@ describe('MessageComposer', () => {
     });
 
     it('should delete draft', async () => {
-      const { messageComposer, mockChannel } = setup();
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
       const draftId = 'test-draft-id';
 
       messageComposer.state.next({
@@ -837,7 +841,9 @@ describe('MessageComposer', () => {
 
     describe('subscribeDraftUpdated', () => {
       it('should update state when draft is updated', () => {
-        const { messageComposer, mockClient } = setup();
+        const { messageComposer, mockClient } = setup({
+          config: { drafts: { enabled: true } },
+        });
         const draft = {
           message: {
             id: 'test-draft-id',
@@ -857,7 +863,9 @@ describe('MessageComposer', () => {
 
     describe('subscribeDraftDeleted', () => {
       it('should clear state when draft is deleted and composition is empty', () => {
-        const { messageComposer, mockChannel, mockClient } = setup();
+        const { messageComposer, mockChannel, mockClient } = setup({
+          config: { drafts: { enabled: true } },
+        });
         const draft = {
           message: {
             id: messageComposer.id,
@@ -893,7 +901,7 @@ describe('MessageComposer', () => {
 
       it('should find and enrich URLs when text changes and link previews are enabled', () => {
         const { messageComposer } = setup({
-          config: { linkPreviewsManager: { enabled: true } },
+          config: { linkPreviews: { enabled: true } },
         });
         const spy = vi.spyOn(messageComposer.linkPreviewsManager, 'findAndEnrichUrls');
 

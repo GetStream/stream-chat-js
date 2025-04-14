@@ -2,6 +2,7 @@ import { AttachmentManager } from './attachmentManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
+import { DEFAULT_COMPOSER_CONFIG } from './configuration/configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
@@ -10,8 +11,6 @@ import {
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
-import type { AttachmentManagerConfig } from './attachmentManager';
-import type { LinkPreviewsManagerConfig } from './linkPreviewsManager';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
@@ -24,6 +23,7 @@ import type {
   MessageResponseBase,
 } from '../types';
 import type { StreamChat } from '../client';
+import type { MessageComposerConfig } from './configuration/types';
 
 export type ComposerMap = {
   attachmentManager: AttachmentManager;
@@ -46,15 +46,6 @@ export type MessageComposerState = {
   quotedMessage: LocalMessageBase | null;
   pollId: string | null;
   draftId: string | null;
-};
-
-export type MessageComposerConfig = {
-  /** If true, triggers typing events on text input keystroke */
-  publishTypingEvents: boolean;
-  attachmentManager?: Partial<AttachmentManagerConfig>;
-  draftsEnabled?: boolean;
-  linkPreviewsManager?: Partial<LinkPreviewsManagerConfig>;
-  maxTextLength?: number;
 };
 
 export type MessageComposerOptions = {
@@ -119,11 +110,6 @@ const initState = (
   };
 };
 
-const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
-  draftsEnabled: true,
-  publishTypingEvents: true,
-};
-
 const noop = () => undefined;
 
 export class MessageComposer {
@@ -153,8 +139,8 @@ export class MessageComposer {
     this.compositionContext = compositionContext;
 
     const {
-      attachmentManager: attachmentManagerConfig, // todo: do not pass config to submanagers. Rather pass composer reference
-      linkPreviewsManager: linkPreviewsManagerConfig,
+      attachments: attachmentManagerConfig, // todo: do not pass config to submanagers. Rather pass composer reference
+      linkPreviews: linkPreviewsManagerConfig,
     } = config ?? {};
 
     // channel is easily inferable from the context
@@ -352,7 +338,7 @@ export class MessageComposer {
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) =>
     initEditingAuditState(
-      this.config?.draftsEnabled || !compositionIsMessageDraft(composition)
+      this.config?.drafts.enabled || !compositionIsMessageDraft(composition)
         ? composition
         : undefined,
     );
@@ -363,7 +349,7 @@ export class MessageComposer {
     });
   }
   private logDraftUpdateTimestamp() {
-    if (!this.config.draftsEnabled) return;
+    if (!this.config.drafts.enabled) return;
     const timestamp = new Date().getTime();
     this.editingAuditState.partialNext({
       lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
@@ -385,7 +371,7 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribePollComposerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeMessageComposerStateChanged());
 
-    if (this.config.draftsEnabled) {
+    if (this.config.drafts.enabled) {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
     }
@@ -491,7 +477,7 @@ export class MessageComposer {
         }
       }
       if (
-        !this.config.linkPreviewsManager?.enabled ||
+        !this.config.linkPreviews?.enabled ||
         !nextValue.text ||
         nextValue.text === previousValue?.text
       )
@@ -649,7 +635,7 @@ export class MessageComposer {
   createDraft = async () => {
     // server-side drafts are not stored on message level but on thread and channel level
     // therefore we don't need to create a draft if the message is edited
-    if (this.editedMessage || !this.config.draftsEnabled) return;
+    if (this.editedMessage || !this.config.drafts.enabled) return;
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
@@ -659,7 +645,7 @@ export class MessageComposer {
   };
 
   deleteDraft = async () => {
-    if (this.editedMessage || !this.config.draftsEnabled || !this.draftId) return;
+    if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     this.logDraftUpdateTimestamp();
     await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });

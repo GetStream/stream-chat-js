@@ -111,7 +111,7 @@ export const createCommandsMiddleware = (
   searchSource.activate();
 
   return {
-    id: 'stream-io/commands-middleware',
+    id: 'stream-io/text-composer/commands-middleware',
     onChange: ({
       input,
       nextHandler,

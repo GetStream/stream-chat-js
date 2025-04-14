@@ -1,5 +1,6 @@
 export * from './attachmentIdentity';
 export * from './attachmentManager';
+export * from './configuration';
 export * from './fileUtils';
 export * from './linkPreviewsManager';
 export * from './messageComposer';

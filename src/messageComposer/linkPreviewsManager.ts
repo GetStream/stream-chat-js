@@ -1,18 +1,14 @@
-import { find } from 'linkifyjs';
 import { StateStore } from '../store';
+import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
-import type { DebouncedFunc } from '../utils';
 import type { StreamChat } from '../client';
 import type { DraftMessage, LocalMessage, OGAttachment } from '../types';
+import { DEFAULT_LINK_PREVIEW_MANAGER_CONFIG } from './configuration/configuration';
+import type { LinkPreviewConfig, LinkPreviewsManagerConfig } from './configuration/types';
 
 export type LinkPreviewState = OGAttachment & {
   status: LinkPreviewStatus;
-};
-
-export type LinkPreviewConfig = {
-  /** Custom function to react to link preview dismissal */
-  onLinkPreviewDismissed?: (linkPreview: LinkPreview) => void;
 };
 
 export type LinkPreviewOptions = {
@@ -124,15 +120,6 @@ export type LinkPreviewsManagerState = {
   previews: LinkPreviewMap;
 };
 
-export type LinkPreviewsManagerConfig = LinkPreviewConfig & {
-  /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
-  debounceURLEnrichmentMs: number;
-  /** Allows for toggling the URL enrichment and link previews in `MessageInput`. By default, the feature is disabled. */
-  enabled: boolean;
-  /** Custom function to identify URLs in a string and request OG data */
-  findURLFn: (text: string) => string[];
-};
-
 export type LinkPreviewsManagerOptions = {
   client: StreamChat;
   config?: Partial<LinkPreviewsManagerConfig>;
@@ -159,15 +146,6 @@ const initState = (message?: DraftMessage | LocalMessage): LinkPreviewsManagerSt
         previews: new Map<LinkURL, LinkPreview>(),
       };
 
-const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
-  debounceURLEnrichmentMs: 1500,
-  enabled: true,
-  findURLFn: (text: string): string[] =>
-    find(text, 'url').reduce<string[]>((acc, link) => {
-      if (link.isLink) acc.push(link.href);
-      return acc;
-    }, []),
-};
 /*
 docs:
 You can customize  function to identify URLs in a string and request OG data by overriding findURLFn?: (text: string) => string[];

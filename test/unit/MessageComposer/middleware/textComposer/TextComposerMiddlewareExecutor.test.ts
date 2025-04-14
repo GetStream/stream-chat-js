@@ -5,6 +5,8 @@ import { MessageComposer } from '../../../../../src/messageComposer/messageCompo
 import { TextComposerMiddlewareExecutor } from '../../../../../src/messageComposer/middleware/textComposer/TextComposerMiddlewareExecutor';
 import { TextComposer } from '../../../../../src/messageComposer/textComposer';
 import { createMentionsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
+import { createCommandsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commands';
+import { createTextComposerPreValidationMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/validation';
 import type { TextComposerSuggestion } from '../../../../../src/messageComposer/types';
 import type { UserResponse, CommandResponse } from '../../../../../src/types';
 
@@ -43,9 +45,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   it('should initialize with default middleware', () => {
     const middleware = (middlewareExecutor as any).middleware;
-    expect(middleware.length).toBe(2);
-    expect(middleware[0].id).toBe('stream-io/mentions-middleware');
-    expect(middleware[1].id).toBe('stream-io/commands-middleware');
+    expect(middleware.length).toBe(3);
+    expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
+    expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
+    expect(middleware[2].id).toBe('stream-io/text-composer/commands-middleware');
   });
 
   it('should handle onChange event with mentions', async () => {
@@ -378,5 +381,119 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions).toBeDefined();
     expect(result.state.suggestions?.trigger).toBe('@');
     expect(result.state.suggestions?.query).toBe('jo /ban');
+  });
+
+  describe('validation middleware', () => {
+    it('should truncate text exceeding max length', async () => {
+      // Set max text length
+      messageComposer.config.text = { maxLengthOnEdit: 10 };
+
+      // Create middleware executor with validation middleware
+      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
+        composer: messageComposer,
+      });
+
+      // Add validation middleware
+      validationMiddlewareExecutor.insert({
+        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
+        position: { before: 'stream-io/text-composer/mentions-middleware' },
+      });
+
+      // Test with text exceeding max length
+      const result = await validationMiddlewareExecutor.execute('onChange', {
+        state: {
+          text: 'Hello World This Is Too Long',
+          selection: { start: 30, end: 30 },
+          mentionedUsers: [],
+        },
+      });
+
+      // Text should be truncated to maxTextLength
+      expect(result.state.text).toBe('Hello Worl');
+    });
+
+    it('should not truncate text under max length', async () => {
+      // Set max text length
+      messageComposer.config.text = { maxLengthOnEdit: 20 };
+
+      // Create middleware executor with validation middleware
+      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
+        composer: messageComposer,
+      });
+
+      // Add validation middleware
+      validationMiddlewareExecutor.insert({
+        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
+        position: { before: 'stream-io/text-composer/mentions-middleware' },
+      });
+
+      // Test with text under max length
+      const result = await validationMiddlewareExecutor.execute('onChange', {
+        state: {
+          text: 'Hello World',
+          selection: { start: 11, end: 11 },
+          mentionedUsers: [],
+        },
+      });
+
+      // Text should not be truncated
+      expect(result.state.text).toBe('Hello World');
+    });
+
+    it('should handle validation with other middleware', async () => {
+      // Set max text length
+      messageComposer.config.text = { maxLengthOnEdit: 15 };
+
+      // Create middleware executor with validation middleware and other middleware
+      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
+        composer: messageComposer,
+      });
+
+      // Add validation middleware
+      validationMiddlewareExecutor.insert({
+        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
+        position: { before: 'stream-io/text-composer/mentions-middleware' },
+      });
+
+      // Test with text exceeding max length and containing a mention
+      const result = await validationMiddlewareExecutor.execute('onChange', {
+        state: {
+          text: 'Hello @World This Is Too Long',
+          selection: { start: 30, end: 30 },
+          mentionedUsers: [],
+        },
+      });
+
+      // Text should be truncated to maxTextLength
+      expect(result.state.text).toBe('Hello @World Th');
+    });
+
+    it('should handle validation with zero max length', async () => {
+      // Set max text length to zero
+      messageComposer.config.text = { maxLengthOnEdit: 0 };
+
+      // Create middleware executor with validation middleware
+      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
+        composer: messageComposer,
+      });
+
+      // Add validation middleware
+      validationMiddlewareExecutor.insert({
+        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
+        position: { before: 'stream-io/text-composer/mentions-middleware' },
+      });
+
+      // Test with any text
+      const result = await validationMiddlewareExecutor.execute('onChange', {
+        state: {
+          text: 'Hello World',
+          selection: { start: 11, end: 11 },
+          mentionedUsers: [],
+        },
+      });
+
+      // Text should be empty
+      expect(result.state.text).toBe('');
+    });
   });
 });

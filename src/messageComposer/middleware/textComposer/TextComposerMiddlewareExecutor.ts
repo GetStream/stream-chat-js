@@ -1,5 +1,6 @@
 import { createCommandsMiddleware } from './commands';
 import { createMentionsMiddleware } from './mentions';
+import { createTextComposerPreValidationMiddleware } from './validation';
 import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type {
@@ -12,6 +13,7 @@ export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextCompo
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
+      createTextComposerPreValidationMiddleware(composer),
       createMentionsMiddleware(composer.channel),
       createCommandsMiddleware(composer.channel),
     ]);

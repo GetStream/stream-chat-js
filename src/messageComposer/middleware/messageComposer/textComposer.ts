@@ -64,7 +64,8 @@ export const createDraftTextComposerCompositionMiddleware = (
     ) => Promise<MessageDraftComposerMiddlewareValue>;
   }) => {
     if (!composer.textComposer) return nextHandler(input);
-    const { mentionedUsers, text } = composer.textComposer;
+    const { maxLengthOnSend } = composer.config.text ?? {};
+    const { mentionedUsers, text: inputText } = composer.textComposer;
     // Instead of checking if a user is still mentioned every time the text changes,
     // just filter out non-mentioned users before submit, which is cheaper
     // and allows users to easily undo any accidental deletion
@@ -72,11 +73,17 @@ export const createDraftTextComposerCompositionMiddleware = (
       ? Array.from(
           new Set(
             mentionedUsers.filter(
-              ({ id, name }) => text.includes(`@${id}`) || text.includes(`@${name}`),
+              ({ id, name }) =>
+                inputText.includes(`@${id}`) || inputText.includes(`@${name}`),
             ),
           ),
         )
       : undefined;
+
+    const text =
+      typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend
+        ? inputText.slice(0, maxLengthOnSend)
+        : inputText;
 
     return nextHandler({
       ...input,

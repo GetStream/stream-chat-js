@@ -129,14 +129,19 @@ export class TextComposer {
       start: this.text.length,
       end: this.text.length,
     };
-    const { maxTextLength } = this.composer.config;
+    const { maxLengthOnEdit } = this.composer.config.text ?? {};
     const currentText = this.text;
     const newText = [
       currentText.slice(0, finalSelection.start),
       text,
       currentText.slice(finalSelection.end),
     ].join('');
-    this.state.partialNext({ text: newText.slice(0, maxTextLength ?? newText.length) });
+    this.state.partialNext({
+      text: newText.slice(
+        0,
+        typeof maxLengthOnEdit === 'number' ? maxLengthOnEdit : newText.length,
+      ),
+    });
   };
 
   closeSuggestions = () => {

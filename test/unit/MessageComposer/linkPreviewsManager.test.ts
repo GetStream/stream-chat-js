@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LinkPreview,
   LinkPreviewsManager,
-  LinkPreviewsManagerConfig,
   LinkPreviewStatus,
 } from '../../../src/messageComposer/linkPreviewsManager';
 import { StateStore } from '../../../src/store';
 import { DraftMessage, LocalMessage, Message } from '../../../src/types';
+import { LinkPreviewsManagerConfig } from '../../../src';
 
 const linkUrl = 'https://example.com';
 // Mock dependencies

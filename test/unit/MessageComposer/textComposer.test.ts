@@ -45,7 +45,7 @@ const setup = ({
       }),
     },
     config: {
-      maxTextLength: 1000,
+      text: { maxLengthOnEdit: 1000 },
       publishTypingEvents: true,
       ...config,
     },
@@ -301,13 +301,16 @@ describe('TextComposer', () => {
       expect(textComposer.text).toBe('Hello world!');
     });
 
-    it('should respect maxTextLength', () => {
+    it('should respect maxLengthOnEdit', () => {
       const message = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello',
       };
-      const { textComposer } = setup({ config: { maxTextLength: 8 }, message });
+      const { textComposer } = setup({
+        config: { text: { maxLengthOnEdit: 8 } },
+        message,
+      });
       textComposer.insertText({ text: ' beautiful world' });
       expect(textComposer.text).toBe('Hello be');
     });
