@@ -75,9 +75,6 @@ export const createDraftAttachmentsMiddleware = (composer: MessageComposer) => (
     const { attachmentManager } = composer;
     if (!attachmentManager) return nextHandler(input);
 
-    if (attachmentManager.uploadsInProgressCount > 0) {
-      return nextHandler({ ...input, status: 'discard' });
-    }
     const successfulUploads = attachmentManager.successfulUploads;
     const attachments = successfulUploads.length
       ? (input.state.draft.attachments ?? []).concat(
