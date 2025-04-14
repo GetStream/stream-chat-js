@@ -4,11 +4,11 @@ import { isLocalAttachment } from './attachmentIdentity';
 import type {
   BaseLocalAttachmentMetadata,
   FileLike,
+  FileReference,
   LocalAttachment,
-  RNFile,
 } from './types';
 
-export const isFile = (fileLike: RNFile | File | Blob): fileLike is File =>
+export const isFile = (fileLike: FileReference | File | Blob): fileLike is File =>
   !!(fileLike as File).lastModified && !('uri' in fileLike);
 
 export const isFileList = (obj: unknown): obj is FileList => {
@@ -24,7 +24,7 @@ export const isFileList = (obj: unknown): obj is FileList => {
 export const isBlobButNotFile = (obj: unknown): obj is Blob =>
   obj instanceof Blob && !(obj instanceof File);
 
-export const isRNFile = (obj: RNFile | FileLike): obj is RNFile =>
+export const isRNFile = (obj: FileReference | FileLike): obj is FileReference =>
   obj !== null &&
   typeof obj === 'object' &&
   !isFile(obj) &&
@@ -71,7 +71,7 @@ export const generateFileName = (mimeType: string) => {
   return `file_${new Date().toISOString()}${extension ? '.' + extension : ''}`;
 };
 
-export const isImageFile = (fileLike: RNFile | FileLike) => {
+export const isImageFile = (fileLike: FileReference | FileLike) => {
   const mimeType = fileLike.type;
   return mimeType.startsWith('image/') && !mimeType.endsWith('.photoshop'); // photoshop files begin with 'image/'
 };

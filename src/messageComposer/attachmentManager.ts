@@ -16,13 +16,13 @@ import type { Channel } from '../channel';
 import type {
   AttachmentLoadingState,
   FileLike,
+  FileReference,
   LocalAttachment,
   LocalAudioAttachment,
   LocalFileAttachment,
   LocalUploadAttachment,
   LocalVideoAttachment,
   LocalVoiceRecordingAttachment,
-  RNFile,
   UploadPermissionCheckResult,
 } from './types';
 import type {
@@ -209,7 +209,7 @@ export class AttachmentManager {
   };
 
   getUploadConfigCheck = async (
-    fileLike: RNFile | FileLike,
+    fileLike: FileReference | FileLike,
   ): Promise<UploadPermissionCheckResult> => {
     const client = this.channel.getClient();
     let appSettings;
@@ -276,7 +276,7 @@ export class AttachmentManager {
   };
 
   fileToLocalUploadAttachment = async (
-    fileLike: RNFile | FileLike,
+    fileLike: FileReference | FileLike,
   ): Promise<LocalUploadAttachment> => {
     const file =
       isRNFile(fileLike) || isFile(fileLike)
@@ -346,7 +346,7 @@ export class AttachmentManager {
    * const messageComposer = new MessageComposer({attachmentManager, channel })
    */
 
-  doUploadRequest = (fileLike: RNFile | FileLike) => {
+  doUploadRequest = (fileLike: FileReference | FileLike) => {
     if (this.config.doUploadRequest) {
       return this.config.doUploadRequest(fileLike);
     }
@@ -459,9 +459,9 @@ export class AttachmentManager {
     return uploadedAttachment;
   };
 
-  uploadFiles = async (files: RNFile[] | FileList | FileLike[]) => {
+  uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
     if (!this.isUploadEnabled) return;
-    const iterableFiles: RNFile[] | FileLike[] = isFileList(files)
+    const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
       ? Array.from(files)
       : files;
     const attachments = await Promise.all(

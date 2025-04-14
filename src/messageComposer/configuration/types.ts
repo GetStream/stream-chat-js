@@ -1,6 +1,6 @@
 import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
-import type { FileLike, RNFile } from '../types';
+import type { FileLike, FileReference } from '../types';
 import type { StreamChat } from '../../client';
 
 export type DraftsConfiguration = {
@@ -23,7 +23,9 @@ export type AttachmentManagerConfig = {
   maxNumberOfFilesPerMessage: number;
   // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
   /** Function that allows to customize the upload request. */
-  doUploadRequest?: (fileLike: RNFile | FileLike) => ReturnType<StreamChat['sendFile']>;
+  doUploadRequest?: (
+    fileLike: FileReference | FileLike,
+  ) => ReturnType<StreamChat['sendFile']>;
 };
 export type LinkPreviewConfig = {
   /** Custom function to react to link preview dismissal */

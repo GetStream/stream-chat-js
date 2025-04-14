@@ -105,7 +105,7 @@ export type BaseLocalAttachmentMetadata = {
 };
 
 export type LocalAttachmentUploadMetadata = {
-  file: File | RNFile;
+  file: File | FileReference;
   uploadState: AttachmentLoadingState;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
 };
@@ -129,7 +129,7 @@ export type UploadPermissionCheckResult = {
 export type FileLike = File | Blob;
 
 // todo: make sure that RN SDK passes MIME type in the type field
-export type RNFile = Pick<File, 'name' | 'size' | 'type'> & {
+export type FileReference = Pick<File, 'name' | 'size' | 'type'> & {
   uri: string;
   // For images
   height?: number;
