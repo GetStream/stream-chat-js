@@ -1,20 +1,16 @@
 import type {
-  MessageComposerMiddlewareValue,
-  MessageDraftComposerMiddlewareValue,
+  MessageComposerMiddlewareValueState,
+  MessageDraftComposerMiddlewareValueState,
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
+import type { MiddlewareHandlerParams } from '../../../middleware';
 
 export const createTextComposerCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/text-composition',
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageComposerMiddlewareValue,
-    ) => Promise<MessageComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     if (!composer.textComposer) return nextHandler(input);
     const { mentionedUsers, text } = composer.textComposer;
     // Instead of checking if a user is still mentioned every time the text changes,
@@ -57,12 +53,7 @@ export const createDraftTextComposerCompositionMiddleware = (
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageDraftComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageDraftComposerMiddlewareValue,
-    ) => Promise<MessageDraftComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     if (!composer.textComposer) return nextHandler(input);
     const { maxLengthOnSend } = composer.config.text ?? {};
     const { mentionedUsers, text: inputText } = composer.textComposer;

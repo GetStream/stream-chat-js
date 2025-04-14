@@ -5,7 +5,7 @@ import type {
 } from './types';
 import { generateUUIDv4 } from '../../../utils';
 import type { Middleware } from '../../../middleware';
-
+import type { MiddlewareHandlerParams } from '../../../middleware';
 export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
 export const MAX_POLL_OPTIONS = 100 as const;
@@ -121,7 +121,10 @@ const processors: Partial<Record<keyof PollComposerState['data'], Processor>> = 
 export const createPollComposerStateMiddleware =
   (): Middleware<PollComposerStateMiddlewareValueState> => ({
     id: 'stream-io/poll-composer-state-processing',
-    handleFieldChange: ({ input, nextHandler }) => {
+    handleFieldChange: ({
+      input,
+      nextHandler,
+    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
       if (!input.state.targetFields) return nextHandler(input);
       const {
         state: { previousState, targetFields },
@@ -167,7 +170,10 @@ export const createPollComposerStateMiddleware =
         },
       });
     },
-    handleFieldBlur: ({ input, nextHandler }) => {
+    handleFieldBlur: ({
+      input,
+      nextHandler,
+    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
       const {
         state: { previousState, targetFields },
       } = input;

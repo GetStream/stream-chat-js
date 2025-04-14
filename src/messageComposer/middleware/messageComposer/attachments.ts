@@ -1,10 +1,11 @@
-import type {
-  MessageComposerMiddlewareValue,
-  MessageDraftComposerMiddlewareValue,
-} from './types';
-import type { MessageComposer } from '../../messageComposer';
+import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { Attachment } from '../../../types';
+import type { MessageComposer } from '../../messageComposer';
 import type { LocalAttachment } from '../../types';
+import type {
+  MessageComposerMiddlewareValueState,
+  MessageDraftComposerMiddlewareValueState,
+} from './types';
 
 const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -17,12 +18,7 @@ export const createAttachmentsCompositionMiddleware = (composer: MessageComposer
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageComposerMiddlewareValue,
-    ) => Promise<MessageComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { attachmentManager } = composer;
     if (!attachmentManager) return nextHandler(input);
 
@@ -68,12 +64,7 @@ export const createDraftAttachmentsCompositionMiddleware = (
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageDraftComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageDraftComposerMiddlewareValue,
-    ) => Promise<MessageDraftComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const { attachmentManager } = composer;
     if (!attachmentManager) return nextHandler(input);
 

@@ -1,18 +1,14 @@
+import type { MiddlewareHandlerParams } from '../../../middleware';
 import { formatMessage, toUpdatedMessagePayload } from '../../../utils';
 import type { MessageComposer } from '../../messageComposer';
-import type { MessageComposerMiddlewareValue } from './types';
+import type { MessageComposerMiddlewareValueState } from './types';
 
 export const createCompositionDataCleanupMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/data-cleanup',
   compose: ({
     input,
     nextHandler,
-  }: {
-    input: MessageComposerMiddlewareValue;
-    nextHandler: (
-      input: MessageComposerMiddlewareValue,
-    ) => Promise<MessageComposerMiddlewareValue>;
-  }) => {
+  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const common = {
       type: composer.editedMessage?.type ?? 'regular',
     };
