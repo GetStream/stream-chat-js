@@ -32,6 +32,8 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Pick<T, Exclude<
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
 /* Unknown Record */
 export type UR = Record<string, unknown>;
 export type UnknownType = UR; //alias to avoid breaking change
@@ -352,7 +354,7 @@ export type ChannelMemberUpdates<
 export type ChannelMemberResponse<
   StreamChatGenerics extends ExtendableGenerics = DefaultGenerics
 > = StreamChatGenerics['memberType'] & {
-  archived_at?: string;
+  archived_at?: string | null;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -362,7 +364,7 @@ export type ChannelMemberResponse<
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   role?: string;
   shadow_banned?: boolean;
   status?: InviteStatus;
@@ -570,11 +572,13 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
+  sort?: ThreadSort;
   watch?: boolean;
 };
 
@@ -920,8 +924,11 @@ export type UserResponse<StreamChatGenerics extends ExtendableGenerics = Default
   push_notifications?: PushNotificationSettings;
   revoke_tokens_issued_before?: string;
   shadow_banned?: boolean;
+  teams_role?: TeamsRole;
   updated_at?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
@@ -1243,6 +1250,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * not be used in production apps.
    */
   wsConnection?: StableWSConnection;
+  /**
+   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
+   * used purely in testing suites and should not be used in production apps.
+   */
+  wsUrlParams?: URLSearchParams;
 };
 
 export type SyncOptions = {
@@ -1310,6 +1322,7 @@ export type Event<StreamChatGenerics extends ExtendableGenerics = DefaultGeneric
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse<StreamChatGenerics>;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -1593,6 +1606,18 @@ export type ChannelFilters<StreamChatGenerics extends ExtendableGenerics = Defau
       pinned?: boolean;
     }
 >;
+
+export type DraftFilters<SCG extends ExtendableGenerics = DefaultGenerics> = {
+  channel_cid?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['channel_cid']>, '$in' | '$eq'>>
+    | PrimitiveFilter<DraftResponse<SCG>['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+    | PrimitiveFilter<DraftResponse<SCG>['created_at']>;
+  parent_id?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse<SCG>['created_at']>, '$in' | '$eq' | '$exists'>>
+    | PrimitiveFilter<DraftResponse<SCG>['parent_id']>;
+};
 
 export type QueryPollsParams = {
   filter?: QueryPollsFilters;
@@ -2042,6 +2067,12 @@ export type SearchMessageSortBase<StreamChatGenerics extends ExtendableGenerics 
 export type SearchMessageSort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | SearchMessageSortBase<StreamChatGenerics>
   | Array<SearchMessageSortBase<StreamChatGenerics>>;
+
+export type DraftSortBase = {
+  created_at?: AscDesc;
+};
+
+export type DraftSort = DraftSortBase | Array<DraftSortBase>;
 
 export type QuerySort<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> =
   | BannedUsersSort
@@ -3048,6 +3079,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3831,6 +3863,86 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
 export type DeviceIdentifier = { os: string; model?: string };
+
+export type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  channel_cid: string;
+  created_at: string;
+  message: DraftMessage<StreamChatGenerics>;
+  channel?: ChannelResponse<StreamChatGenerics>;
+  parent_id?: string;
+  parent_message?: MessageResponseBase<StreamChatGenerics>;
+  quoted_message?: MessageResponseBase<StreamChatGenerics>;
+};
+export type CreateDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  draft: DraftResponse<StreamChatGenerics>;
+};
+
+export type GetDraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  draft: DraftResponse<StreamChatGenerics>;
+};
+
+export type QueryDraftsResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = APIResponse & {
+  drafts: DraftResponse<StreamChatGenerics>[];
+} & Omit<Pager, 'limit'>;
+
+export type DraftMessagePayload<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = PartializeKeys<
+  DraftMessage<StreamChatGenerics>,
+  'id'
+> & { user_id?: string };
+
+export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  id: string;
+  text: string;
+  attachments?: Attachment<StreamChatGenerics>[];
+  custom?: {};
+  html?: string;
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  poll_id?: string;
+  quoted_message_id?: string;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
+  created_at?: AscDesc;
+  last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
+  participant_count?: AscDesc;
+  reply_count?: AscDesc;
+  updated_at?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    channel_cid?: RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>> | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['created_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['updated_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<Pick<QueryFilter<ThreadResponse['last_message_at']>, '$eq' | '$gt' | '$lt' | '$gte' | '$lte'>>
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  }
+>;
 
 export type ReminderResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   reminder: Reminder<StreamChatGenerics>;

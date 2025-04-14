@@ -214,6 +214,10 @@ import {
   UserResponse,
   UserSort,
   VoteSort,
+  QueryDraftsResponse,
+  DraftFilters,
+  DraftSort,
+  Pager,
   CreateReminderOptions,
   UpdateReminderOptions,
   QueryRemindersOptions,
@@ -335,6 +339,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
+      wsUrlParams: new URLSearchParams({}),
       ...inputOptions,
     };
 
@@ -2828,6 +2833,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   * @param {ThreadFilters} options.filter MongoDB style filters for threads
+   * @param {ThreadSort} options.sort MongoDB style sort for threads
    *
    * @returns {{ threads: Thread<StreamChatGenerics>[], next: string }} Returns the list of threads and the next cursor.
    */
@@ -2840,9 +2847,26 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       ...options,
     };
 
+    const requestBody: Record<string, unknown> = {
+      ...optionsWithDefaults,
+    };
+
+    if (optionsWithDefaults.filter && Object.keys(optionsWithDefaults.filter).length > 0) {
+      requestBody.filter = optionsWithDefaults.filter;
+    }
+
+    if (
+      optionsWithDefaults.sort &&
+      (Array.isArray(optionsWithDefaults.sort)
+        ? optionsWithDefaults.sort.length > 0
+        : Object.keys(optionsWithDefaults.sort).length > 0)
+    ) {
+      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    }
+
     const response = await this.post<QueryThreadsAPIResponse<StreamChatGenerics>>(
       `${this.baseURL}/threads`,
-      optionsWithDefaults,
+      requestBody,
     );
 
     return {
@@ -4049,6 +4073,34 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
       reviewed_by,
       ...options,
     });
+  }
+
+  /**
+   * queryDrafts - Queries drafts for the current user
+   *
+   * @param {object} [options] Query options
+   * @param {object} [options.filter] Filters for the query
+   * @param {number} [options.sort] Sort parameters
+   * @param {number} [options.limit] Limit the number of results
+   * @param {string} [options.next] Pagination parameter
+   * @param {string} [options.prev] Pagination parameter
+   * @param {string} [options.user_id] Has to be provided when called server-side
+   *
+   * @return {Promise<APIResponse & { drafts: DraftResponse<StreamChatGenerics>[]; next?: string }>} Response containing the drafts
+   */
+  async queryDrafts(
+    options: Pager & {
+      filter?: DraftFilters<StreamChatGenerics>;
+      sort?: DraftSort;
+      user_id?: string;
+    } = {},
+  ) {
+    const payload = {
+      ...options,
+      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
+    };
+
+    return await this.post<QueryDraftsResponse<StreamChatGenerics>>(this.baseURL + '/drafts/query', payload);
   }
 
   /**

@@ -184,14 +184,20 @@ export class StableWSConnection<StreamChatGenerics extends ExtendableGenerics = 
    * @returns url string
    */
   _buildUrl = () => {
-    const qs = encodeURIComponent(this.client._buildWSPayload(this.requestID));
+    const qs = this.client._buildWSPayload(this.requestID);
     const token = this.client.tokenManager.getToken();
+    const wsUrlParams = this.client.options.wsUrlParams;
 
-    return `${this.client.wsBaseURL}/connect?json=${qs}&api_key=${
-      this.client.key
-    }&authorization=${token}&stream-auth-type=${this.client.getAuthType()}&X-Stream-Client=${encodeURIComponent(
-      this.client.getUserAgent(),
-    )}`;
+    const params = new URLSearchParams(wsUrlParams);
+    params.set('json', qs);
+    params.set('api_key', this.client.key);
+    // it is expected that the autorization parameter exists even if
+    // the token is undefined, so we interpolate it to be safe
+    params.set('authorization', `${token}`);
+    params.set('stream-auth-type', this.client.getAuthType());
+    params.set('X-Stream-Client', this.client.getUserAgent());
+
+    return `${this.client.wsBaseURL}/connect?${params.toString()}`;
   };
 
   /**
