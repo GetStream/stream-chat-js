@@ -1,4 +1,5 @@
 import { AttachmentManager } from './attachmentManager';
+import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
@@ -124,6 +125,7 @@ export class MessageComposer {
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
   pollComposer: PollComposer;
+  customDataManager: CustomDataManager;
   // todo: mediaRecorder: MediaRecorderController;
 
   private unsubscribeFunctions: Set<() => void> = new Set();
@@ -178,6 +180,7 @@ export class MessageComposer {
     });
     this.textComposer = new TextComposer({ composer: this, message });
     this.pollComposer = new PollComposer({ composer: this });
+    this.customDataManager = new CustomDataManager({ composer: this, message });
 
     this.editingAuditState = new StateStore<EditingAuditState>(
       this.initEditingAuditState(composition),
@@ -274,7 +277,7 @@ export class MessageComposer {
   }
 
   get hasSendableData() {
-    return (
+    return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
@@ -323,6 +326,7 @@ export class MessageComposer {
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
+    this.customDataManager.initState({ message });
     this.state.next(initState(composition));
     if (
       composition &&
@@ -369,6 +373,7 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribeAttachmentManagerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeLinkPreviewsManagerStateChanged());
     this.unsubscribeFunctions.add(this.subscribePollComposerStateChanged());
+    this.unsubscribeFunctions.add(this.subscribeCustomDataManagerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeMessageComposerStateChanged());
 
     if (this.config.drafts.enabled) {
@@ -549,6 +554,13 @@ export class MessageComposer {
       }
     });
 
+  private subscribeCustomDataManagerStateChanged = () =>
+    this.customDataManager.state.subscribe((nextValue, previousValue) => {
+      if (!this.customDataManager.isDataEqual(nextValue, previousValue)) {
+        this.logStateUpdateTimestamp();
+      }
+    });
+
   private subscribeMessageComposerStateChanged = () =>
     this.state.subscribe((nextValue, previousValue) => {
       const isActualStateChange =
@@ -574,6 +586,7 @@ export class MessageComposer {
     this.linkPreviewsManager.initState();
     this.textComposer.initState();
     this.pollComposer.initState();
+    this.customDataManager.initState();
     this.initState();
   };
 

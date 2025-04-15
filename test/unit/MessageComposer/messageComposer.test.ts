@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Channel } from '../../../src/channel';
-import { StreamChat } from '../../../src/client';
 import {
-  MessageComposer,
+  Channel,
+  LocalMessage,
   MessageComposerConfig,
-} from '../../../src/messageComposer/messageComposer';
+  StreamChat,
+  Thread,
+} from '../../../src';
+import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { StateStore } from '../../../src/store';
-import { LocalMessage, Thread } from '../../../src';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 
 const generateUuidV4Output = 'test-uuid';
@@ -60,6 +61,16 @@ vi.mock('../../../src/messageComposer/pollComposer', () => ({
     initState: vi.fn(),
     clear: vi.fn(),
     compose: vi.fn(),
+  })),
+}));
+
+vi.mock('../../../src/messageComposer/CustomDataManager', () => ({
+  CustomDataManager: vi.fn().mockImplementation(() => ({
+    state: new StateStore({ data: {} }),
+    initState: vi.fn(),
+    isDataEqual: vi.fn().mockReturnValue(true),
+    setData: vi.fn(),
+    data: {},
   })),
 }));
 
@@ -163,18 +174,21 @@ describe('MessageComposer', () => {
       expect(messageComposer.linkPreviewsManager).toBeDefined();
       expect(messageComposer.textComposer).toBeDefined();
       expect(messageComposer.pollComposer).toBeDefined();
+      expect(messageComposer.customDataManager).toBeDefined();
     });
 
     it('should initialize with custom config', () => {
       const customConfig = {
         publishTypingEvents: false,
-        maxTextLength: 1000,
+        text: {
+          maxLengthOnEdit: 1000,
+        },
       };
 
       const { messageComposer } = setup({ config: customConfig });
 
       expect(messageComposer.config.publishTypingEvents).toBe(false);
-      expect(messageComposer.config.maxTextLength).toBe(1000);
+      expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
     });
 
     it('should initialize with message', () => {
@@ -478,6 +492,10 @@ describe('MessageComposer', () => {
       );
       const spyTextComposer = vi.spyOn(messageComposer.textComposer, 'initState');
       const spyPollComposer = vi.spyOn(messageComposer.pollComposer, 'initState');
+      const spyCustomDataManager = vi.spyOn(
+        messageComposer.customDataManager,
+        'initState',
+      );
       const spyInitState = vi.spyOn(messageComposer, 'initState');
 
       messageComposer.clear();
@@ -486,6 +504,7 @@ describe('MessageComposer', () => {
       expect(spyLinkPreviewsManager).toHaveBeenCalled();
       expect(spyTextComposer).toHaveBeenCalled();
       expect(spyPollComposer).toHaveBeenCalled();
+      expect(spyCustomDataManager).toHaveBeenCalled();
       expect(spyInitState).toHaveBeenCalled();
     });
 
@@ -966,6 +985,22 @@ describe('MessageComposer', () => {
             max_votes_allowed: 1,
             user_id: 'user-id',
             voting_visibility: 'public',
+          },
+        });
+
+        expect(spy).toHaveBeenCalled();
+      });
+    });
+
+    describe('subscribeCustomDataManagerStateChanged', () => {
+      it('should log state update timestamp when custom data changes', () => {
+        const { messageComposer } = setup();
+        const spy = vi.spyOn(messageComposer, 'logStateUpdateTimestamp');
+
+        messageComposer.registerSubscriptions();
+        messageComposer.customDataManager.state.next({
+          data: {
+            field1: 'value1',
           },
         });
 

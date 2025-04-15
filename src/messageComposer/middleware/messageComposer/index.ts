@@ -1,5 +1,6 @@
 export * from './attachments';
 export * from './cleanData';
+export * from './customData';
 export * from './compositionValidation';
 export * from './linkPreviews';
 export * from './MessageComposerMiddlewareExecutor';

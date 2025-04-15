@@ -1,7 +1,12 @@
 import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
 import type { FileLike, FileReference } from '../types';
-import type { StreamChat } from '../../client';
+
+export type MinimumUploadRequestResult = { file: string; thumb_url?: string };
+
+export type UploadRequestFn = (
+  fileLike: FileReference | FileLike,
+) => Promise<MinimumUploadRequestResult>;
 
 export type DraftsConfiguration = {
   enabled: boolean;
@@ -23,9 +28,7 @@ export type AttachmentManagerConfig = {
   maxNumberOfFilesPerMessage: number;
   // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
   /** Function that allows to customize the upload request. */
-  doUploadRequest?: (
-    fileLike: FileReference | FileLike,
-  ) => ReturnType<StreamChat['sendFile']>;
+  doUploadRequest?: UploadRequestFn;
 };
 export type LinkPreviewConfig = {
   /** Custom function to react to link preview dismissal */

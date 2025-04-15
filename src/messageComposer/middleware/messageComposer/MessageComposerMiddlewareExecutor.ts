@@ -26,7 +26,10 @@ import type {
   MessageDraftComposerMiddlewareExecutorOptions,
   MessageDraftComposerMiddlewareValueState,
 } from './types';
-import {} from './types';
+import {
+  createCustomDataCompositionMiddleware,
+  createDraftCustomDataCompositionMiddleware,
+} from './customData';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<MessageComposerMiddlewareValueState> {
   constructor({ composer }: MessageComposerMiddlewareExecutorOptions) {
@@ -38,6 +41,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<Messag
       createAttachmentsCompositionMiddleware(composer),
       createLinkPreviewsCompositionMiddleware(composer),
       createMessageComposerStateCompositionMiddleware(composer),
+      createCustomDataCompositionMiddleware(composer),
       createCompositionValidationMiddleware(composer),
       createCompositionDataCleanupMiddleware(composer),
     ]);
@@ -54,6 +58,7 @@ export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<M
       createDraftAttachmentsCompositionMiddleware(composer),
       createDraftLinkPreviewsCompositionMiddleware(composer),
       createDraftMessageComposerStateCompositionMiddleware(composer),
+      createDraftCustomDataCompositionMiddleware(composer),
       createDraftCompositionValidationMiddleware(composer),
     ]);
   }
