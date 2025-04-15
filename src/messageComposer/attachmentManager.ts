@@ -1,3 +1,4 @@
+import { DEFAULT_ATTACHMENT_MANAGER_CONFIG } from './configuration';
 import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
 import {
   createFileFromBlobs,
@@ -11,6 +12,7 @@ import {
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
+import { mergeWith } from '../utils/mergeWith';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type { Channel } from '../channel';
 import type {
@@ -25,15 +27,12 @@ import type {
   LocalVoiceRecordingAttachment,
   UploadPermissionCheckResult,
 } from './types';
+import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type {
-  ChannelResponse,
-  DraftMessage,
-  LocalMessage,
-  SendFileAPIResponse,
-} from '../types';
-import { mergeWith } from '../utils/mergeWith';
-import { DEFAULT_ATTACHMENT_MANAGER_CONFIG } from './configuration/configuration';
-import type { AttachmentManagerConfig } from './configuration/types';
+  AttachmentManagerConfig,
+  MinimumUploadRequestResult,
+  UploadRequestFn,
+} from './configuration';
 
 type LocalNotImageAttachment =
   | LocalFileAttachment
@@ -155,7 +154,11 @@ export class AttachmentManager {
   }
 
   get availableUploadSlots() {
-    return this.config.maxNumberOfFilesPerMessage - this.successfulUploadsCount;
+    return (
+      this.config.maxNumberOfFilesPerMessage -
+      this.successfulUploadsCount -
+      this.uploadsInProgressCount
+    );
   }
 
   getUploadsByState(state: AttachmentLoadingState) {
@@ -336,18 +339,24 @@ export class AttachmentManager {
     // the following is substitute for: if (noFiles && !isImage) return att
     if (!this.fileUploadFilter(attachment)) return;
 
-    return await this.fileToLocalUploadAttachment(attachment.localMetadata.file);
+    const newAttachment = await this.fileToLocalUploadAttachment(
+      attachment.localMetadata.file,
+    );
+    if (attachment.localMetadata.id) {
+      newAttachment.localMetadata.id = attachment.localMetadata.id;
+    }
+    return newAttachment;
+  };
+
+  setCustomUploadFn = (doUploadRequest: UploadRequestFn) => {
+    this.configState.partialNext({ doUploadRequest });
   };
 
   /**
-   * todo: docs how to customize the image and file upload by overriding do
+   * Method to perform the default upload behavior without checking for custom upload functions
+   * to prevent recursive calls
    */
-
-  doUploadRequest = (fileLike: FileReference | FileLike) => {
-    if (this.config.doUploadRequest) {
-      return this.config.doUploadRequest(fileLike);
-    }
-
+  doDefaultUploadRequest = async (fileLike: FileReference | FileLike) => {
     if (isFileReference(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
@@ -364,7 +373,23 @@ export class AttachmentManager {
           mimeType: fileLike.type,
         });
 
-    return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](file);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { duration, ...result } =
+      await this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](file);
+    return result;
+  };
+
+  /**
+   * todo: docs how to customize the image and file upload by overriding do
+   */
+
+  doUploadRequest = async (fileLike: FileReference | FileLike) => {
+    const customUploadFn = this.config.doUploadRequest;
+    if (customUploadFn) {
+      return await customUploadFn(fileLike);
+    }
+
+    return this.doDefaultUploadRequest(fileLike);
   };
 
   uploadAttachment = async (attachment: LocalUploadAttachment) => {
@@ -376,7 +401,11 @@ export class AttachmentManager {
 
     if (localAttachment.localMetadata.uploadState === 'blocked') {
       this.upsertAttachments([localAttachment]);
-      return;
+      this.client.notifications.addError({
+        message: 'Error uploading attachment',
+        origin: { emitter: 'AttachmentManager', context: { attachment } },
+      });
+      return localAttachment;
     }
 
     this.upsertAttachments([
@@ -389,7 +418,7 @@ export class AttachmentManager {
       },
     ]);
 
-    let response: SendFileAPIResponse;
+    let response: MinimumUploadRequestResult;
     try {
       response = await this.doUploadRequest(localAttachment.localMetadata.file);
     } catch (error) {
@@ -417,8 +446,7 @@ export class AttachmentManager {
       };
 
       this.upsertAttachments([failedAttachment]);
-
-      throw finalError;
+      return failedAttachment;
     }
 
     if (!response) {

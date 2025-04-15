@@ -325,6 +325,39 @@ describe('AttachmentManager', () => {
       // Should have max slots minus the number of attachments in the message
       expect(manager.availableUploadSlots).toBe(API_MAX_FILES_ALLOWED_PER_MESSAGE - 2);
     });
+
+    it('should take into consideration uploads in progress', () => {
+      const { attachmentManager } = setup();
+
+      // Set up state with successful uploads and uploads in progress
+      attachmentManager.state.next({
+        attachments: [
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid-1',
+              uploadState: 'finished',
+              file: new File([''], 'test1.jpg', { type: 'image/jpeg' }),
+            },
+          },
+          {
+            type: 'image',
+            image_url: 'test-image-url',
+            localMetadata: {
+              id: 'test-uuid-2',
+              uploadState: 'uploading',
+              file: new File([''], 'test2.jpg', { type: 'image/jpeg' }),
+            },
+          },
+        ],
+      });
+
+      // Should have max slots minus successful uploads (1) minus uploads in progress (1)
+      expect(attachmentManager.availableUploadSlots).toBe(
+        API_MAX_FILES_ALLOWED_PER_MESSAGE - 2,
+      );
+    });
   });
 
   describe('initState', () => {
@@ -691,7 +724,23 @@ describe('AttachmentManager', () => {
       mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
-      await expect(attachmentManager.uploadFiles([file])).rejects.toThrowError();
+      await expect(attachmentManager.uploadFiles([file])).resolves.toEqual([
+        {
+          fallback: 'test.jpg',
+          file_size: 0,
+          localMetadata: {
+            id: 'test-uuid',
+            file,
+            uploadState: 'failed',
+            previewUri: expect.any(String),
+            uploadPermissionCheck: {
+              uploadBlocked: false,
+            },
+          },
+          mime_type: 'image/jpeg',
+          type: 'image',
+        },
+      ]);
 
       expect(attachmentManager.failedUploadsCount).toBe(1);
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
@@ -701,6 +750,70 @@ describe('AttachmentManager', () => {
           context: { attachment: expect.any(Object) },
         },
       });
+    });
+
+    it('should register notification for blocked file', async () => {
+      const { attachmentManager, mockClient } = setup();
+
+      // Create a blocked attachment
+      const blockedAttachment = {
+        type: 'image',
+        localMetadata: {
+          id: 'test-id',
+          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
+        },
+      };
+
+      // Mock getUploadConfigCheck to return blocked
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: true,
+        reason: 'size_limit',
+      });
+
+      await attachmentManager.uploadAttachment(blockedAttachment);
+
+      // Verify notification was added
+      expect(mockClient.notifications.addError).toHaveBeenCalledWith({
+        message: 'Error uploading attachment',
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment: blockedAttachment },
+        },
+      });
+    });
+
+    it('should use custom upload function when provided', async () => {
+      const { attachmentManager, mockChannel } = setup();
+
+      // Create a custom upload function
+      const customUploadFn = vi.fn().mockResolvedValue({ file: 'custom-upload-url' });
+
+      // Set the custom upload function
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      // Create a file to upload
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      // Mock fileToLocalUploadAttachment to return a valid attachment
+      const attachment = {
+        type: 'image',
+        localMetadata: {
+          id: 'test-id',
+          file,
+          uploadState: 'pending',
+        },
+      };
+
+      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
+        attachment,
+      );
+
+      // Upload the attachment
+      await attachmentManager.uploadAttachment(attachment);
+
+      // Verify the custom upload function was called
+      expect(customUploadFn).toHaveBeenCalledWith(file);
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
     it('should respect maxNumberOfFilesPerMessage', async () => {
@@ -847,6 +960,45 @@ describe('AttachmentManager', () => {
       });
 
       expect(result).toEqual(expectedAttachment);
+    });
+
+    it('should preserve original ID if it exists', async () => {
+      const { attachmentManager } = setup();
+      const ensureLocalUploadAttachment = (attachmentManager as any)
+        .ensureLocalUploadAttachment;
+
+      // Set a fileUploadFilter that allows all files
+      attachmentManager.fileUploadFilter = () => true;
+
+      // Create an attachment with an ID
+      const originalId = 'original-test-id';
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      // Mock fileToLocalUploadAttachment to return a new attachment
+      const newAttachment = {
+        type: 'image',
+        image_url: 'test-url',
+        localMetadata: {
+          id: 'new-test-id', // Different ID
+          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
+          uploadState: 'finished',
+        },
+      };
+
+      vi.spyOn(attachmentManager, 'fileToLocalUploadAttachment').mockResolvedValue(
+        newAttachment,
+      );
+
+      // Call with original ID
+      const result = await ensureLocalUploadAttachment({
+        localMetadata: {
+          id: originalId,
+          file,
+        },
+      });
+
+      // Verify the original ID was preserved
+      expect(result.localMetadata.id).toBe(originalId);
     });
   });
 });
