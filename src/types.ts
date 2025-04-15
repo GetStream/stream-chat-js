@@ -2701,6 +2701,7 @@ export type MessageBase<
   text?: string;
   user?: UserResponse<StreamChatGenerics> | null;
   user_id?: string;
+  live_location?: LiveLocation<StreamChatGenerics>;
 };
 
 export type MessageLabel = 'deleted' | 'ephemeral' | 'error' | 'regular' | 'reply' | 'system';
@@ -3922,7 +3923,7 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
   type?: MessageLabel;
 };
 
-export type LiveLocation = {
+export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['liveLocationType'] & {
   channel_cid: string;
   created_at: string;
   created_by_device_id: string;
