@@ -4,6 +4,7 @@ import { createTextComposerPreValidationMiddleware } from './validation';
 import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type {
+  TextComposerMiddleware,
   TextComposerMiddlewareExecutorOptions,
   TextComposerMiddlewareValue,
 } from './types';
@@ -16,7 +17,7 @@ export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextCompo
       createTextComposerPreValidationMiddleware(composer),
       createMentionsMiddleware(composer.channel),
       createCommandsMiddleware(composer.channel),
-    ]);
+    ] as TextComposerMiddleware[]);
   }
   async execute(
     eventName: string,

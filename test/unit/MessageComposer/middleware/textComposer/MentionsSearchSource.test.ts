@@ -254,8 +254,8 @@ describe('MentionsSearchSource', () => {
     channel.state.members = mockMembers;
 
     const result = source.searchMembersLocally('valid');
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].name).toBe('Valid Name');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Valid Name');
   });
 
   it('should handle errors in API queries', async () => {
@@ -289,7 +289,7 @@ describe('MentionsSearchSource', () => {
     };
 
     const result = source.searchMembersLocally('joh');
-    expect(result.items).toHaveLength(2); // Should match John and Johnny
-    expect(result.items.map((i) => i.name)).toEqual(['John', 'Johnny']);
+    expect(result).toHaveLength(2); // Should match John and Johnny
+    expect(result.map((i) => i.name)).toEqual(['John', 'Johnny']);
   });
 });

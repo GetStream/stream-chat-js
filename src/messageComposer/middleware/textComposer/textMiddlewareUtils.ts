@@ -114,13 +114,17 @@ export function escapeRegExp(text: string) {
   return text.replace(/[-[\]{}()*+?.,/\\^$|#]/g, '\\$&');
 }
 
+export type TokenizationPayload = {
+  tokenizedDisplayName: { token: string; parts: string[] };
+};
+
 export const getTokenizedSuggestionDisplayName = ({
   displayName,
   searchToken,
 }: {
   displayName: string;
   searchToken: string;
-}): { tokenizedDisplayName: { token: string; parts: string[] } } => ({
+}): TokenizationPayload => ({
   tokenizedDisplayName: {
     token: searchToken,
     parts: searchToken

@@ -1,3 +1,4 @@
+import type { TokenizationPayload } from './textMiddlewareUtils';
 import {
   getTokenizedSuggestionDisplayName,
   getTriggerCharWithToken,
@@ -23,7 +24,7 @@ import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
 import type { TextComposerSuggestion } from '../../types';
 
-export type UserSuggestion = TextComposerSuggestion<UserResponse>;
+export type UserSuggestion = TextComposerSuggestion<UserResponse & TokenizationPayload>;
 
 // todo: the map is too small - Slavic letters with diacritics are missing for example
 export const accentsMap: { [key: string]: string } = {
@@ -152,57 +153,53 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
 
   searchMembersLocally = (searchQuery: string) => {
     const { textComposerText } = this.config;
-    if (!textComposerText) return { items: [] };
+    if (!textComposerText) return [];
 
-    return {
-      items: this.getMembersAndWatchers()
-        .filter((user) => {
-          if (user.id === this.client.userID) return false;
-          if (!searchQuery) return true;
+    return this.getMembersAndWatchers()
+      .filter((user) => {
+        if (user.id === this.client.userID) return false;
+        if (!searchQuery) return true;
 
-          const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
-          const updatedName = this.transliterate(
-            removeDiacritics(user.name),
-          ).toLowerCase();
-          const updatedQuery = this.transliterate(
-            removeDiacritics(searchQuery),
-          ).toLowerCase();
+        const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
+        const updatedName = this.transliterate(removeDiacritics(user.name)).toLowerCase();
+        const updatedQuery = this.transliterate(
+          removeDiacritics(searchQuery),
+        ).toLowerCase();
 
-          const maxDistance = 3;
-          const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
+        const maxDistance = 3;
+        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
 
-          if (updatedName) {
-            const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
-            if (
-              updatedName.includes(updatedQuery) ||
-              (levenshtein <= maxDistance && lastDigits)
-            ) {
-              return true;
-            }
+        if (updatedName) {
+          const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
+          if (
+            updatedName.includes(updatedQuery) ||
+            (levenshtein <= maxDistance && lastDigits)
+          ) {
+            return true;
           }
+        }
 
-          const levenshtein = calculateLevenshtein(updatedQuery, updatedId);
+        const levenshtein = calculateLevenshtein(updatedQuery, updatedId);
 
-          return (
-            updatedId.includes(updatedQuery) || (levenshtein <= maxDistance && lastDigits)
-          );
-        })
-        .sort((a, b) => {
-          if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
+        return (
+          updatedId.includes(updatedQuery) || (levenshtein <= maxDistance && lastDigits)
+        );
+      })
+      .sort((a, b) => {
+        if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
 
-          // Apply each sort criteria in order
-          for (const [field, direction] of Object.entries(this.memberSort)) {
-            const aValue = a[field as keyof UserResponse];
-            const bValue = b[field as keyof UserResponse];
+        // Apply each sort criteria in order
+        for (const [field, direction] of Object.entries(this.memberSort)) {
+          const aValue = a[field as keyof UserResponse];
+          const bValue = b[field as keyof UserResponse];
 
-            if (aValue === bValue) continue;
-            return direction === 1
-              ? String(aValue || '').localeCompare(String(bValue || ''))
-              : String(bValue || '').localeCompare(String(aValue || ''));
-          }
-          return 0;
-        }),
-    };
+          if (aValue === bValue) continue;
+          return direction === 1
+            ? String(aValue || '').localeCompare(String(bValue || ''))
+            : String(bValue || '').localeCompare(String(aValue || ''));
+        }
+        return 0;
+      });
   };
 
   prepareQueryUsersParams = (searchQuery: string) => ({
@@ -240,32 +237,44 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   queryUsers = async (searchQuery: string) => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery);
     const { users } = await this.client.queryUsers(filters, sort, options);
-    return { items: users };
+    return users;
   };
 
   queryMembers = async (searchQuery: string) => {
     const { filters, sort, options } = this.prepareQueryMembersParams(searchQuery);
     const response = await this.channel.queryMembers(filters, sort, options);
 
-    return { items: response.members.map((member) => member.user) as UserResponse[] };
+    return response.members.map((member) => member.user) as UserResponse[];
   };
 
   async query(searchQuery: string) {
-    if (this.config.mentionAllAppUsers) {
-      return await this.queryUsers(searchQuery);
-    }
-
+    let users: UserResponse[];
     const shouldSearchLocally =
       this.allMembersLoadedWithInitialChannelQuery || !searchQuery;
 
-    if (shouldSearchLocally) {
-      return this.searchMembersLocally(searchQuery);
+    if (this.config.mentionAllAppUsers) {
+      users = await this.queryUsers(searchQuery);
+    } else if (shouldSearchLocally) {
+      users = this.searchMembersLocally(searchQuery);
+    } else {
+      users = await this.queryMembers(searchQuery);
     }
 
-    return await this.queryMembers(searchQuery);
+    return {
+      items: users.map(
+        (user) =>
+          ({
+            ...user,
+            ...getTokenizedSuggestionDisplayName({
+              displayName: user.name || user.id,
+              searchToken: this.searchQuery,
+            }),
+          }) as UserSuggestion,
+      ),
+    };
   }
 
-  filterMutes = (data: UserResponse[]) => {
+  filterMutes = (data: UserSuggestion[]) => {
     const { textComposerText } = this.config;
     if (!textComposerText) return [];
 
@@ -285,18 +294,18 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     );
   };
 
-  filterQueryResults(items: UserResponse[]) {
-    return this.filterMutes(items).map((item) => ({
-      ...item,
-      ...getTokenizedSuggestionDisplayName({
-        displayName: item.name || item.id,
-        searchToken: this.searchQuery,
-      }),
-    }));
+  filterQueryResults(items: UserSuggestion[]) {
+    return this.filterMutes(items);
   }
 }
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '@' };
+
+const userSuggestionToUserResponse = (suggestion: UserSuggestion): UserResponse => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { tokenizedDisplayName, ...userResponse } = suggestion;
+  return userResponse;
+};
 
 /**
  * TextComposer middleware for mentions
@@ -397,7 +406,9 @@ export const createMentionsMiddleware = (
             text: state.text,
             trigger: finalOptions.trigger,
           }),
-          mentionedUsers: state.mentionedUsers.concat(selectedSuggestion),
+          mentionedUsers: state.mentionedUsers.concat(
+            userSuggestionToUserResponse(selectedSuggestion),
+          ),
           suggestions: undefined, // Clear suggestions after selection
         },
       });
