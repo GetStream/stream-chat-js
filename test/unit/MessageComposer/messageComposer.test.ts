@@ -6,6 +6,7 @@ import {
   StreamChat,
   Thread,
 } from '../../../src';
+import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { StateStore } from '../../../src/store';
 import { DraftResponse, MessageResponse } from '../../../src/types';
@@ -20,13 +21,31 @@ vi.mock('../../../src/utils', () => ({
   isArray: vi.fn(),
   isDate: vi.fn(),
   isNumber: vi.fn(),
-
+  debounce: vi.fn().mockImplementation((fn) => fn),
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
 }));
+
+// // Mock dependencies
+// vi.mock('../../../src/utils', () => ({
+//   axiosParamsSerializer: vi.fn(),
+//   isFunction: vi.fn(),
+//   isString: vi.fn(),
+//   isObject: vi.fn(),
+//   isArray: vi.fn(),
+//   isDate: vi.fn(),
+//   isNumber: vi.fn(),
+//   logChatPromiseExecution: vi.fn(),
+//   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+//   debounce: vi.fn().mockImplementation((fn) => fn),
+//   randomId: vi.fn().mockReturnValue('test-uuid'),
+//   isLocalMessage: vi.fn().mockReturnValue(true),
+//   formatMessage: vi.fn().mockImplementation((msg) => msg),
+//   throttle: vi.fn().mockImplementation((fn) => fn),
+// }));
 
 vi.mock('../../../src/messageComposer/attachmentManager', () => ({
   AttachmentManager: vi.fn().mockImplementation(() => ({
@@ -46,14 +65,14 @@ vi.mock('../../../src/messageComposer/linkPreviewsManager', () => ({
   })),
 }));
 
-vi.mock('../../../src/messageComposer/textComposer', () => ({
-  TextComposer: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ text: '', mentionedUsers: [] }),
-    initState: vi.fn(),
-    clear: vi.fn(),
-    textIsEmpty: vi.fn().mockReturnValue(true),
-  })),
-}));
+// vi.mock('../../../src/messageComposer/textComposer', () => ({
+//   TextComposer: vi.fn().mockImplementation(() => ({
+//     state: new StateStore({ text: '', mentionedUsers: [] }),
+//     initState: vi.fn(),
+//     clear: vi.fn(),
+//     textIsEmpty: vi.fn().mockReturnValue(true),
+//   })),
+// }));
 
 vi.mock('../../../src/messageComposer/pollComposer', () => ({
   PollComposer: vi.fn().mockImplementation(() => ({
@@ -74,7 +93,7 @@ vi.mock('../../../src/messageComposer/CustomDataManager', () => ({
   })),
 }));
 
-vi.mock('../../../src/messageComposer/middleware', () => ({
+vi.mock('../../../src/messageComposer/middleware/messageComposer', () => ({
   MessageComposerMiddlewareExecutor: vi.fn().mockImplementation(() => ({
     execute: vi.fn().mockResolvedValue({ state: {} }),
   })),
@@ -134,7 +153,7 @@ const setup = ({
 }: {
   composition?: LocalMessage | DraftResponse | MessageResponse | undefined;
   compositionContext?: Channel | Thread | LocalMessage | undefined;
-  config?: Partial<MessageComposerConfig>;
+  config?: DeepPartial<MessageComposerConfig>;
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
@@ -379,21 +398,26 @@ describe('MessageComposer', () => {
 
     it('should return the correct compositionIsEmpty', () => {
       const { messageComposer } = setup();
-      const textComposerMock = messageComposer.textComposer as any;
-
+      const spyTextComposerTextIsEmpty = vi
+        .spyOn(messageComposer.textComposer, 'textIsEmpty', 'get')
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
       // First case - empty composition
-      Object.defineProperty(textComposerMock, 'textIsEmpty', {
-        get: () => true,
+      messageComposer.textComposer.state.partialNext({
+        text: '',
+        mentionedUsers: [],
+        selection: { start: 0, end: 0 },
       });
-      textComposerMock.state.next({ text: '' });
       expect(messageComposer.compositionIsEmpty).toBe(true);
 
       // Second case - non-empty composition
-      Object.defineProperty(textComposerMock, 'textIsEmpty', {
-        get: () => false,
+      messageComposer.textComposer.state.partialNext({
+        text: 'Hello world',
+        mentionedUsers: [],
+        selection: { start: 0, end: 0 },
       });
-      textComposerMock.state.next({ text: 'Hello world' });
       expect(messageComposer.compositionIsEmpty).toBe(false);
+      spyTextComposerTextIsEmpty.mockRestore();
     });
   });
 
@@ -982,7 +1006,7 @@ describe('MessageComposer', () => {
             description: '',
             enforce_unique_vote: false,
             is_closed: false,
-            max_votes_allowed: 1,
+            max_votes_allowed: '1',
             user_id: 'user-id',
             voting_visibility: 'public',
           },
@@ -1022,6 +1046,43 @@ describe('MessageComposer', () => {
         });
 
         expect(spy).toHaveBeenCalled();
+      });
+    });
+
+    describe('subscribeMessageComposerConfigStateChanged', () => {
+      const defaultValue = 'Default text';
+
+      it('should insert default text when text is empty and config has a default value', () => {
+        const { messageComposer } = setup();
+        const spy = vi.spyOn(messageComposer.textComposer, 'insertText');
+        messageComposer.registerSubscriptions();
+        expect(spy).not.toHaveBeenCalled();
+
+        messageComposer.textComposer.defaultValue = defaultValue;
+
+        expect(spy).toHaveBeenCalledWith({
+          text: defaultValue,
+          selection: { start: 0, end: 0 },
+        });
+        spy.mockRestore();
+      });
+
+      it('should not insert default text when text is not empty', () => {
+        const { messageComposer } = setup();
+        messageComposer.registerSubscriptions();
+        const spy = vi.spyOn(messageComposer.textComposer, 'insertText');
+
+        messageComposer.textComposer.state.next({
+          text: 'Hello world',
+          mentionedUsers: [],
+          selection: { start: 0, end: 0 },
+        });
+        expect(spy).not.toHaveBeenCalled();
+
+        messageComposer.textComposer.defaultValue = defaultValue;
+
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
       });
     });
   });

@@ -443,6 +443,23 @@ describe('TextComposer', () => {
       textComposer.insertText({ text: 'Hi', selection: { start: 0, end: 5 } });
       expect(textComposer.text).toBe('Hi world');
     });
+
+    it('should handle insertion with multi-character selection and maxLengthOnEdit restricting the size', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({
+        config: { maxLengthOnEdit: 10 },
+        composition: message,
+      });
+      const insertedText = 'Hi world';
+      textComposer.insertText({ text: insertedText, selection: { start: 7, end: 9 } });
+      expect(textComposer.text).toBe('Hello wHi ');
+    });
   });
 
   describe('closeSuggestions', () => {

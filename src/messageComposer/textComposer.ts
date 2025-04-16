@@ -148,16 +148,28 @@ export class TextComposer {
     };
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
     const currentText = this.text;
-    const newText = [
+    const textBeforeTrim = [
       currentText.slice(0, finalSelection.start),
       text,
       currentText.slice(finalSelection.end),
     ].join('');
+    const finalText = textBeforeTrim.slice(
+      0,
+      typeof maxLengthOnEdit === 'number' ? maxLengthOnEdit : textBeforeTrim.length,
+    );
+    const expectedCursorPosition =
+      currentText.slice(0, finalSelection.start).length + text.length;
+    const cursorPosition =
+      expectedCursorPosition >= finalText.length
+        ? finalText.length
+        : currentText.slice(0, expectedCursorPosition).length;
+
     this.state.partialNext({
-      text: newText.slice(
-        0,
-        typeof maxLengthOnEdit === 'number' ? maxLengthOnEdit : newText.length,
-      ),
+      text: finalText,
+      selection: {
+        start: cursorPosition,
+        end: cursorPosition,
+      },
     });
   };
 

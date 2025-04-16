@@ -25,11 +25,7 @@ import type {
 } from '../types';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
-
-// todo: move to a more global place to be reused
-type DeepPartial<T> = {
-  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
-};
+import type { DeepPartial } from '../types.utility';
 
 export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 
@@ -371,7 +367,7 @@ export class MessageComposer {
     this.unsubscribeFunctions.add(this.subscribePollComposerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeCustomDataManagerStateChanged());
     this.unsubscribeFunctions.add(this.subscribeMessageComposerStateChanged());
-
+    this.unsubscribeFunctions.add(this.subscribeMessageComposerConfigStateChanged());
     if (this.config.drafts.enabled) {
       this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
       this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
@@ -570,6 +566,17 @@ export class MessageComposer {
           this.deleteDraft();
           return;
         }
+      }
+    });
+
+  private subscribeMessageComposerConfigStateChanged = () =>
+    this.configState.subscribe((nextValue) => {
+      const { text } = nextValue;
+      if (this.textComposer.text === '' && text.defaultValue) {
+        this.textComposer.insertText({
+          text: text.defaultValue,
+          selection: { start: 0, end: 0 },
+        });
       }
     });
 
