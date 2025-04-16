@@ -3,7 +3,14 @@ import {
   API_MAX_FILES_ALLOWED_PER_MESSAGE,
   DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
 } from '../../../src/constants';
-import type { DraftMessage, LocalMessage } from '../../../src';
+import {
+  AttachmentManagerConfig,
+  DraftMessage,
+  DraftResponse,
+  LocalMessage,
+  MessageComposer,
+  StreamChat,
+} from '../../../src';
 import { AppSettings, AttachmentManager } from '../../../src';
 
 // Add FileList mock
@@ -12,6 +19,15 @@ vi.mock('../../../src/messageComposer/fileUtils', async (importOriginal) => {
   return {
     ...original,
     isFileList: vi.fn().mockReturnValue(false), // FileList is Web specific so for now we avoid testing for it
+  };
+});
+vi.mock('../../../src/utils', async (importOriginal) => {
+  const original: object = await importOriginal();
+  return {
+    ...original,
+    generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+    mergeWith: vi.fn().mockImplementation((target, source) => ({ ...target, ...source })),
+    randomId: vi.fn().mockReturnValue('test-uuid'),
   };
 });
 
@@ -30,72 +46,88 @@ const defaultAppSettings = {
   },
 };
 
-const setup = ({ appSettings }: { appSettings?: Partial<AppSettings> } = {}) => {
-  const mockClient = {
-    appSettingsPromise: Promise.resolve(
-      appSettings ? { app: appSettings } : defaultAppSettings,
-    ),
-    getAppSettings: vi
-      .fn()
-      .mockResolvedValue(appSettings ? { app: appSettings } : defaultAppSettings),
-    notifications: {
-      addError: vi.fn(),
-    },
-  };
+const setup = ({
+  appSettings,
+  composition,
+  config,
+}: {
+  appSettings?: Partial<AppSettings>;
+  composition?: DraftResponse | LocalMessage;
+  config?: Partial<AttachmentManagerConfig>;
+} = {}) => {
+  // Reset mocks
+  vi.clearAllMocks();
 
-  const mockChannel = {
-    getClient: vi.fn().mockReturnValue(mockClient),
-    sendFile: vi
-      .fn()
-      .mockResolvedValue({ file: 'test-file-url', thumb_url: 'thumb_url-file' }),
-    sendImage: vi
-      .fn()
-      .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' }),
-    data: {
-      own_capabilities: ['upload-file'],
-    },
-  };
-  const attachmentManager = new AttachmentManager({ channel: mockChannel });
-  return { mockClient, mockChannel, attachmentManager };
+  // Setup mocks
+  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  mockClient.appSettingsPromise = Promise.resolve(
+    appSettings ? { app: appSettings } : defaultAppSettings,
+  );
+  (mockClient.getAppSettings = vi
+    .fn()
+    .mockResolvedValue(appSettings ? { app: appSettings } : defaultAppSettings)),
+    (mockClient.notifications = { addError: vi.fn() });
+
+  mockClient.user = { id: 'user-id', name: 'Test User' };
+
+  const mockChannel = mockClient.channel('channelType', 'channelId');
+  mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
+  mockChannel.sendFile = vi
+    .fn()
+    .mockResolvedValue({ file: 'test-file-url', thumb_url: 'thumb_url-file' });
+  mockChannel.sendImage = vi
+    .fn()
+    .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' });
+  mockChannel.data = { own_capabilities: ['upload-file'] };
+  const messageComposer = new MessageComposer({
+    client: mockClient,
+    composition,
+    compositionContext: mockChannel,
+    config: { attachments: config },
+  });
+  return { mockClient, mockChannel, messageComposer };
 };
-
-vi.mock('../../../src/utils', () => ({
-  generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
-  mergeWith: vi.fn().mockImplementation((target, source) => ({ ...target, ...source })),
-}));
 
 describe('AttachmentManager', () => {
   describe('constructor', () => {
     it('should initialize with default config', () => {
-      const { attachmentManager, mockChannel } = setup();
-      // ts-expect-error access private property
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
       expect(attachmentManager.channel).toBe(mockChannel);
       expect(attachmentManager.state.getLatestValue()).toEqual({
         attachments: [],
       });
-      const config = attachmentManager.configState.getLatestValue();
-      expect(typeof config.fileUploadFilter).toBe('function');
+      const config = attachmentManager.config;
+      expect(typeof attachmentManager.config.fileUploadFilter).toBe('function');
       expect(config.maxNumberOfFilesPerMessage).toBe(API_MAX_FILES_ALLOWED_PER_MESSAGE);
     });
 
     it('should initialize with draft message', () => {
-      const { mockChannel } = setup();
-      const message: DraftMessage = {
-        id: 'test-message-id',
-        text: '',
-        type: 'regular',
-        attachments: [
-          {
-            type: 'image',
-            image_url: 'test-image-url',
-          },
-        ],
+      const message: DraftResponse = {
+        message: {
+          id: 'test-message-id',
+          text: '',
+          type: 'regular',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'test-image-url',
+            },
+          ],
+        },
+        channel_cid: 'channel-cid',
+        created_at: new Date().toISOString(),
       };
 
       // ts-expect-error mocked channel
-      const manager = new AttachmentManager({ channel: mockChannel, message });
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ composition: message });
 
-      expect(manager.attachments).toEqual([
+      expect(attachmentManager.attachments).toEqual([
         {
           type: 'image',
           image_url: 'test-image-url',
@@ -108,7 +140,6 @@ describe('AttachmentManager', () => {
     });
 
     it('should initialize with message', () => {
-      const { mockChannel } = setup();
       const message: LocalMessage = {
         id: 'test-message-id',
         text: '',
@@ -125,10 +156,12 @@ describe('AttachmentManager', () => {
           },
         ],
       };
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ composition: message });
 
-      const manager = new AttachmentManager({ channel: mockChannel, message });
-
-      expect(manager.attachments).toEqual([
+      expect(attachmentManager.attachments).toEqual([
         {
           type: 'image',
           image_url: 'test-image-url',
@@ -142,8 +175,24 @@ describe('AttachmentManager', () => {
   });
 
   describe('getters', () => {
+    it('should retrieve attachments config from composer', () => {
+      const config: AttachmentManagerConfig = {
+        doUploadRequest: () => {
+          return Promise.resolve({ file: 'x' });
+        },
+        fileUploadFilter: () => false,
+        maxNumberOfFilesPerMessage: 3000,
+      };
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ config });
+      expect(attachmentManager.config).toEqual(config);
+    });
+
     it('should return the correct values from state', async () => {
-      const { attachmentManager, mockChannel } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       // Create a test file and upload it to populate the state
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
@@ -167,51 +216,48 @@ describe('AttachmentManager', () => {
     });
 
     it('should return false for isUploadEnabled when uploads are disabled', () => {
-      const { mockChannel } = setup();
-
-      // Create a channel without upload capabilities
-      const channelWithoutUploadCapability = {
-        ...mockChannel,
-        data: {
-          ...mockChannel.data,
-          own_capabilities: [], // No upload-file capability
-        },
-      };
-
-      const manager = new AttachmentManager({ channel: channelWithoutUploadCapability });
-
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
       // isUploadEnabled should be false when the channel doesn't have upload-file capability
-      expect(manager.isUploadEnabled).toBe(false);
-
+      expect(attachmentManager.isUploadEnabled).toBe(false);
       // hasUploadPermission should also be false
-      expect(manager.hasUploadPermission).toBe(false);
+      expect(attachmentManager.hasUploadPermission).toBe(false);
     });
 
     it('should return false for isUploadEnabled when no upload slots are available', () => {
-      const { mockChannel } = setup();
-
       // Create a message with maximum number of attachments
-      const message: DraftMessage = {
-        id: 'test-message-id',
-        text: '',
-        attachments: Array(API_MAX_FILES_ALLOWED_PER_MESSAGE).fill({
-          type: 'image',
-          image_url: 'test-image-url',
-        }),
+      const composition: DraftResponse = {
+        message: {
+          id: 'test-message-id',
+          text: '',
+          attachments: Array(API_MAX_FILES_ALLOWED_PER_MESSAGE).fill({
+            type: 'image',
+            image_url: 'test-image-url',
+          }),
+        },
+        channel_cid: 'channel-cid',
+        created_at: new Date().toISOString(),
       };
 
       // Initialize with message containing maximum attachments
-      const manager = new AttachmentManager({ channel: mockChannel, message });
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ composition });
 
       // Should have 0 slots available
-      expect(manager.availableUploadSlots).toBe(0);
+      expect(attachmentManager.availableUploadSlots).toBe(0);
 
       // isUploadEnabled should be false when no slots are available
-      expect(manager.isUploadEnabled).toBe(false);
+      expect(attachmentManager.isUploadEnabled).toBe(false);
     });
 
     it('should return correct upload counts', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       // Create test files with different states
       const file1 = new File([''], 'test1.jpg', { type: 'image/jpeg' });
@@ -278,7 +324,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should return correct available upload slots', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       // Initially should have max slots available
       expect(attachmentManager.availableUploadSlots).toBe(
@@ -307,27 +355,35 @@ describe('AttachmentManager', () => {
     });
 
     it('should calculate available upload slots based on message attachments', () => {
-      const { mockChannel } = setup();
-
       // Create a message with 2 attachments
-      const message: DraftMessage = {
-        id: 'test-message-id',
-        text: '',
-        attachments: [
-          { type: 'image', image_url: 'test-image-url-1' },
-          { type: 'image', image_url: 'test-image-url-2' },
-        ],
+      const composition: DraftResponse = {
+        message: {
+          id: 'test-message-id',
+          text: '',
+          attachments: [
+            { type: 'image', image_url: 'test-image-url-1' },
+            { type: 'image', image_url: 'test-image-url-2' },
+          ],
+        },
+        channel_cid: 'channel-cid',
+        created_at: new Date().toISOString(),
       };
 
       // Initialize with message containing attachments
-      const manager = new AttachmentManager({ channel: mockChannel, message });
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ composition });
 
       // Should have max slots minus the number of attachments in the message
-      expect(manager.availableUploadSlots).toBe(API_MAX_FILES_ALLOWED_PER_MESSAGE - 2);
+      expect(attachmentManager.availableUploadSlots).toBe(
+        API_MAX_FILES_ALLOWED_PER_MESSAGE - 2,
+      );
     });
 
     it('should take into consideration uploads in progress', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       // Set up state with successful uploads and uploads in progress
       attachmentManager.state.next({
@@ -362,7 +418,9 @@ describe('AttachmentManager', () => {
 
   describe('initState', () => {
     it('should reset the state to initial state', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       attachmentManager.initState();
 
@@ -370,7 +428,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should initialize with message', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const message = {
         attachments: [{ type: 'image', image_url: 'test-url' }],
       };
@@ -394,7 +454,9 @@ describe('AttachmentManager', () => {
 
   describe('getAttachmentIndex', () => {
     it('should return the correct index for an attachment', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       attachmentManager.state.next({
         attachments: [
@@ -411,7 +473,9 @@ describe('AttachmentManager', () => {
 
   describe('upsertAttachments', () => {
     it('should add new attachments', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
 
       const newAttachments = [
         { localMetadata: { id: 'test-id-1' } },
@@ -424,7 +488,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should update existing attachments', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       attachmentManager.upsertAttachments([
         { localMetadata: { id: 'test-id-1' }, type: 'image' },
       ]);
@@ -439,7 +505,9 @@ describe('AttachmentManager', () => {
 
   describe('removeAttachments', () => {
     it('should remove attachments by id', () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const newAttachments = [
         { localMetadata: { id: 'test-id-1' } },
         { localMetadata: { id: 'test-id-2' } },
@@ -458,7 +526,9 @@ describe('AttachmentManager', () => {
   describe('getUploadConfigCheck', () => {
     it('should block files with disallowed extensions', async () => {
       const file = new File([''], 'test.gif', { type: 'image/gif' });
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -467,7 +537,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block files with blocked extensions', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           image_upload_config: {
@@ -489,7 +561,9 @@ describe('AttachmentManager', () => {
 
     it('should block files with disallowed mime types', async () => {
       const file = new File([''], 'test.jpg', { type: 'image/gif' });
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -498,7 +572,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block files with blocked mime types', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           image_upload_config: {
@@ -520,7 +596,9 @@ describe('AttachmentManager', () => {
 
     it('should block files that exceed size limit', async () => {
       const smallSizeLimit = 1000;
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           image_upload_config: {
@@ -544,7 +622,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block non-image files with disallowed extensions', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           file_upload_config: {
@@ -564,7 +644,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block non-image files with blocked extensions', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           file_upload_config: {
@@ -585,7 +667,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block non-image files with disallowed mime types', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           file_upload_config: {
@@ -605,7 +689,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should block non-image files with blocked mime types', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           file_upload_config: {
@@ -627,7 +713,9 @@ describe('AttachmentManager', () => {
 
     it('should block non-image files that exceed size limit', async () => {
       const smallSizeLimit = 1000;
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           ...defaultAppSettings.app,
           file_upload_config: {
@@ -648,14 +736,18 @@ describe('AttachmentManager', () => {
     });
 
     it('should handle case when upload config is missing', async () => {
-      const { attachmentManager } = setup({ appSettings: {} });
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ appSettings: {} });
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({ uploadBlocked: false });
     });
 
     it('should handle case when only some config options are provided', async () => {
-      const { attachmentManager } = setup({
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
         appSettings: {
           image_upload_config: {
             allowed_file_extensions: ['jpg', 'png'],
@@ -684,7 +776,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should handle edge cases', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       // Test file with no extension
       const noExtFile = new File([''], 'test', { type: 'image/jpeg' });
       const noExtResult = await attachmentManager.getUploadConfigCheck(noExtFile);
@@ -711,7 +805,9 @@ describe('AttachmentManager', () => {
 
   describe('uploadFiles', () => {
     it('should upload files successfully', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
       await attachmentManager.uploadFiles([file]);
@@ -720,7 +816,11 @@ describe('AttachmentManager', () => {
     });
 
     it('should handle upload failures', async () => {
-      const { attachmentManager, mockChannel, mockClient } = setup();
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+        mockClient,
+      } = setup();
       mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
@@ -753,7 +853,10 @@ describe('AttachmentManager', () => {
     });
 
     it('should register notification for blocked file', async () => {
-      const { attachmentManager, mockClient } = setup();
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
 
       // Create a blocked attachment
       const blockedAttachment = {
@@ -783,7 +886,10 @@ describe('AttachmentManager', () => {
     });
 
     it('should use custom upload function when provided', async () => {
-      const { attachmentManager, mockChannel } = setup();
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
 
       // Create a custom upload function
       const customUploadFn = vi.fn().mockResolvedValue({ file: 'custom-upload-url' });
@@ -817,7 +923,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should respect maxNumberOfFilesPerMessage', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const files = Array(API_MAX_FILES_ALLOWED_PER_MESSAGE + 1)
         .fill(null)
         .map(() => new File([''], 'test.jpg', { type: 'image/jpeg' }));
@@ -832,7 +940,10 @@ describe('AttachmentManager', () => {
 
   describe('ensureLocalUploadAttachment', () => {
     it('should add error notification when file is missing', async () => {
-      const { attachmentManager, mockClient } = setup();
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
       // Access the private method using any type
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
@@ -860,7 +971,10 @@ describe('AttachmentManager', () => {
     });
 
     it('should add error notification when id is missing', async () => {
-      const { attachmentManager, mockClient } = setup();
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
@@ -888,7 +1002,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should return undefined when file is filtered out', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
@@ -907,7 +1023,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should call fileToLocalUploadAttachment when file passes filter', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
       const fileToLocalUploadAttachment = vi.spyOn(
@@ -930,7 +1048,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should return the result from fileToLocalUploadAttachment', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
@@ -963,7 +1083,9 @@ describe('AttachmentManager', () => {
     });
 
     it('should preserve original ID if it exists', async () => {
-      const { attachmentManager } = setup();
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 

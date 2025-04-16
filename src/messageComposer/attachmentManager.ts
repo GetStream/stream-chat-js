@@ -1,4 +1,8 @@
-import { DEFAULT_ATTACHMENT_MANAGER_CONFIG } from './configuration';
+import type {
+  AttachmentManagerConfig,
+  MinimumUploadRequestResult,
+  UploadRequestFn,
+} from './configuration';
 import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
 import {
   createFileFromBlobs,
@@ -14,7 +18,6 @@ import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
-import type { Channel } from '../channel';
 import type {
   AttachmentLoadingState,
   FileLike,
@@ -28,11 +31,7 @@ import type {
   UploadPermissionCheckResult,
 } from './types';
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
-import type {
-  AttachmentManagerConfig,
-  MinimumUploadRequestResult,
-  UploadRequestFn,
-} from './configuration';
+import type { MessageComposer } from './messageComposer';
 
 type LocalNotImageAttachment =
   | LocalFileAttachment
@@ -47,15 +46,13 @@ export type AttachmentManagerState = {
 };
 
 export type AttachmentManagerOptions = {
-  channel: Channel;
-  config?: Partial<AttachmentManagerConfig>;
+  composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
 };
 
 const initState = ({
   message,
 }: {
-  channel: Channel;
   message?: DraftMessage | LocalMessage;
 }): AttachmentManagerState => ({
   attachments: (message?.attachments ?? [])
@@ -72,48 +69,43 @@ const initState = ({
 });
 
 export class AttachmentManager {
-  configState: StateStore<AttachmentManagerConfig>;
   readonly state: StateStore<AttachmentManagerState>;
-  private channel: Channel;
+  readonly composer: MessageComposer;
 
-  constructor({ channel, config = {}, message }: AttachmentManagerOptions) {
-    this.channel = channel;
-    // todo: document: removed prop multipleUploads (Whether to allow multiple attachment uploads) as it is a duplicate
-    this.configState = new StateStore(
-      mergeWith(DEFAULT_ATTACHMENT_MANAGER_CONFIG, config),
-    );
-    this.state = new StateStore<AttachmentManagerState>(initState({ channel, message }));
+  constructor({ composer, message }: AttachmentManagerOptions) {
+    this.composer = composer;
+    this.state = new StateStore<AttachmentManagerState>(initState({ message }));
   }
 
   get client() {
-    return this.channel.getClient();
+    return this.composer.client;
+  }
+
+  get channel() {
+    return this.composer.channel;
   }
 
   get config() {
-    return this.configState.getLatestValue();
-  }
-
-  set config(config: AttachmentManagerConfig) {
-    this.configState.next(config);
+    return this.composer.config.attachments;
   }
 
   get fileUploadFilter() {
-    return this.configState.getLatestValue().fileUploadFilter;
+    return this.config.fileUploadFilter;
   }
 
   set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
-    this.configState.partialNext({ fileUploadFilter });
-  }
-
-  get maxNumberOfFilesPerMessage() {
-    return this.configState.getLatestValue().maxNumberOfFilesPerMessage;
+    this.composer.updateConfig({ attachments: { fileUploadFilter } });
   }
 
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
-    this.configState.partialNext({ maxNumberOfFilesPerMessage });
+    this.composer.updateConfig({ attachments: { maxNumberOfFilesPerMessage } });
   }
+
+  setCustomUploadFn = (doUploadRequest: UploadRequestFn) => {
+    this.composer.updateConfig({ attachments: { doUploadRequest } });
+  };
 
   get attachments() {
     return this.state.getLatestValue().attachments;
@@ -168,7 +160,7 @@ export class AttachmentManager {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.state.next(initState({ channel: this.channel, message }));
+    this.state.next(initState({ message }));
   };
 
   getAttachmentIndex = (localId: string) =>
@@ -346,10 +338,6 @@ export class AttachmentManager {
       newAttachment.localMetadata.id = attachment.localMetadata.id;
     }
     return newAttachment;
-  };
-
-  setCustomUploadFn = (doUploadRequest: UploadRequestFn) => {
-    this.configState.partialNext({ doUploadRequest });
   };
 
   /**

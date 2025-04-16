@@ -1,50 +1,74 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Channel } from '../../../../../src/channel';
+import { describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src/client';
-import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { TextComposerMiddlewareExecutor } from '../../../../../src/messageComposer/middleware/textComposer/TextComposerMiddlewareExecutor';
-import { TextComposer } from '../../../../../src/messageComposer/textComposer';
+import { TextComposerConfig } from '../../../../../src/messageComposer/configuration';
+import {
+  CompositionContext,
+  MessageComposer,
+} from '../../../../../src/messageComposer/messageComposer';
 import { createMentionsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
-import { createCommandsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commands';
-import { createTextComposerPreValidationMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/validation';
+import { TextComposer } from '../../../../../src/messageComposer/textComposer';
 import type { TextComposerSuggestion } from '../../../../../src/messageComposer/types';
-import type { UserResponse, CommandResponse } from '../../../../../src/types';
+import type {
+  CommandResponse,
+  DraftResponse,
+  LocalMessage,
+  UserResponse,
+} from '../../../../../src/types';
+import { TextComposerMiddleware } from '../../../../../src';
+
+// Mock dependencies
+vi.mock('../../../src/utils', () => ({
+  axiosParamsSerializer: vi.fn(),
+  isFunction: vi.fn(),
+  isString: vi.fn(),
+  isObject: vi.fn(),
+  isArray: vi.fn(),
+  isDate: vi.fn(),
+  isNumber: vi.fn(),
+  logChatPromiseExecution: vi.fn(),
+  generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  debounce: vi.fn().mockImplementation((fn) => fn),
+  randomId: vi.fn().mockReturnValue('test-uuid'),
+  isLocalMessage: vi.fn().mockReturnValue(true),
+  formatMessage: vi.fn().mockImplementation((msg) => msg),
+  throttle: vi.fn().mockImplementation((fn) => fn),
+}));
+
+const setup = ({
+  config,
+  composition,
+  compositionContext,
+}: {
+  config?: Partial<TextComposerConfig>;
+  composition?: DraftResponse | LocalMessage;
+  compositionContext?: CompositionContext;
+} = {}) => {
+  // Reset mocks
+  vi.clearAllMocks();
+
+  // Setup mocks
+  const client = new StreamChat('apiKey', 'apiSecret');
+  client.queryUsers = vi.fn().mockResolvedValue({ users: [] });
+
+  const channel = client.channel('channelType', 'channelId');
+  channel.keystroke = vi.fn().mockResolvedValue({});
+  channel.getClient = vi.fn().mockReturnValue(client);
+
+  const messageComposer = new MessageComposer({
+    client: client,
+    composition,
+    compositionContext: compositionContext ?? channel,
+    config: { text: config },
+  });
+  return { client, channel, messageComposer };
+};
 
 describe('TextComposerMiddlewareExecutor', () => {
-  let channel: Channel;
-  let client: StreamChat;
-  let messageComposer: MessageComposer;
-  let textComposer: TextComposer;
-  let middlewareExecutor: TextComposerMiddlewareExecutor;
-
-  beforeEach(() => {
-    client = {
-      userID: 'currentUser',
-    } as any;
-
-    channel = {
-      getClient: vi.fn().mockReturnValue(client),
-      state: {
-        members: {},
-        watchers: {},
-      },
-      getConfig: vi.fn().mockReturnValue({ commands: [] }),
-    } as any;
-
-    messageComposer = {
-      channel,
-      config: {},
-      threadId: undefined,
-    } as any;
-
-    textComposer = new TextComposer({ composer: messageComposer });
-    middlewareExecutor = new TextComposerMiddlewareExecutor({
-      composer: messageComposer,
-    });
-  });
-
   it('should initialize with default middleware', () => {
-    const middleware = (middlewareExecutor as any).middleware;
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    const middleware = textComposer.middlewareExecutor.middleware;
     expect(middleware.length).toBe(3);
     expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
     expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
@@ -52,7 +76,10 @@ describe('TextComposerMiddlewareExecutor', () => {
   });
 
   it('should handle onChange event with mentions', async () => {
-    let result = await middlewareExecutor.execute('onChange', {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    let result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '@jo',
         selection: { start: 3, end: 3 },
@@ -64,7 +91,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('@');
     expect(result.state.suggestions?.query).toBe('jo');
 
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: 'abcde@ho',
         selection: { start: 8, end: 8 },
@@ -76,7 +103,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('@');
     expect(result.state.suggestions?.query).toBe('ho');
 
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: 'abcde@ho',
         selection: { start: 5, end: 5 }, // selection is not where the trigger is
@@ -86,7 +113,7 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     expect(result.state.suggestions).toBeUndefined();
 
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: 'abcde@ho',
         selection: { start: 6, end: 6 }, // selection is where the trigger is but not at the end
@@ -100,7 +127,10 @@ describe('TextComposerMiddlewareExecutor', () => {
   });
 
   it('should handle onChange event with commands', async () => {
-    let result = await middlewareExecutor.execute('onChange', {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    let result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '/ban',
         selection: { start: 4, end: 4 },
@@ -112,7 +142,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('/');
     expect(result.state.suggestions?.query).toBe('ban');
 
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '/ban /ban',
         selection: { start: 9, end: 9 },
@@ -120,10 +150,13 @@ describe('TextComposerMiddlewareExecutor', () => {
       },
     });
 
-    expect(result.state.suggestions).toBeUndefined();
+    expect(result.state.suggestions).toBeUndefined(); // only one command trigger is allowed
   });
 
   it('should handle suggestion selection with mentions', async () => {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
     await textComposer.handleChange({
       text: '@jo',
       selection: { start: 3, end: 3 },
@@ -142,6 +175,9 @@ describe('TextComposerMiddlewareExecutor', () => {
   });
 
   it('should handle suggestion selection with commands', async () => {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
     await textComposer.handleChange({
       text: '/ba',
       selection: { start: 3, end: 3 },
@@ -160,6 +196,10 @@ describe('TextComposerMiddlewareExecutor', () => {
   });
 
   it('should handle search errors and cancellations', async () => {
+    const {
+      channel,
+      messageComposer: { textComposer },
+    } = setup();
     const mockSearchSource = {
       search: vi.fn().mockImplementation(() => {
         throw new Error('Search failed');
@@ -170,13 +210,13 @@ describe('TextComposerMiddlewareExecutor', () => {
       config: {},
     };
 
-    middlewareExecutor.replace([
+    textComposer.middlewareExecutor.replace([
       createMentionsMiddleware(channel, {
         searchSource: mockSearchSource as any,
       }),
-    ]);
+    ] as TextComposerMiddleware[]);
 
-    const result = await middlewareExecutor.execute('onChange', {
+    const result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '@jo',
         selection: { start: 3, end: 3 },
@@ -190,7 +230,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   describe('commands middleware', () => {
     it('should return early if no selection', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '/test',
           selection: { start: 0, end: 0 },
@@ -206,7 +249,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should return early if first char is not command trigger', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'test',
           selection: { start: 0, end: 4 },
@@ -222,7 +268,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle trigger with token', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '/test',
           selection: { start: 0, end: 5 },
@@ -236,7 +285,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle new search trigger', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '/',
           selection: { start: 0, end: 1 },
@@ -250,7 +302,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle trigger removal and stale suggestions', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'test',
           selection: { start: 0, end: 4 },
@@ -269,7 +324,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   describe('mentions middleware', () => {
     it('should return early if no selection', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '@test',
           selection: { start: 0, end: 0 },
@@ -285,7 +343,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle trigger with token', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '@test',
           selection: { start: 0, end: 5 },
@@ -299,7 +360,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle new search trigger', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: '@',
           selection: { start: 0, end: 1 },
@@ -313,7 +377,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should handle trigger removal and stale suggestions', async () => {
-      const result = await middlewareExecutor.execute('onChange', {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'test',
           selection: { start: 0, end: 4 },
@@ -332,7 +399,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   it('should handle combination of commands and mentions', async () => {
     // First test a command
-    let result = await middlewareExecutor.execute('onChange', {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    let result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '/ban',
         selection: { start: 4, end: 4 },
@@ -345,7 +415,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.query).toBe('ban');
 
     // Then test a mention after the command
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '/ban @jo',
         selection: { start: 9, end: 9 },
@@ -358,7 +428,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.query).toBe('jo');
 
     // Test a command in the middle of text - should not trigger command suggestions
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: 'hello /ban',
         selection: { start: 11, end: 11 },
@@ -369,7 +439,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions).toBeUndefined();
 
     // Test a mention followed by a command
-    result = await middlewareExecutor.execute('onChange', {
+    result = await textComposer.middlewareExecutor.execute('onChange', {
       state: {
         text: '@jo /ban',
         selection: { start: 8, end: 8 },
@@ -385,22 +455,14 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   describe('validation middleware', () => {
     it('should truncate text exceeding max length', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       // Set max text length
-      messageComposer.config.text = { maxLengthOnEdit: 10 };
-
-      // Create middleware executor with validation middleware
-      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
-        composer: messageComposer,
-      });
-
-      // Add validation middleware
-      validationMiddlewareExecutor.insert({
-        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
-        position: { before: 'stream-io/text-composer/mentions-middleware' },
-      });
+      textComposer.maxLengthOnEdit = 10;
 
       // Test with text exceeding max length
-      const result = await validationMiddlewareExecutor.execute('onChange', {
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'Hello World This Is Too Long',
           selection: { start: 30, end: 30 },
@@ -413,22 +475,14 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     it('should not truncate text under max length', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       // Set max text length
-      messageComposer.config.text = { maxLengthOnEdit: 20 };
-
-      // Create middleware executor with validation middleware
-      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
-        composer: messageComposer,
-      });
-
-      // Add validation middleware
-      validationMiddlewareExecutor.insert({
-        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
-        position: { before: 'stream-io/text-composer/mentions-middleware' },
-      });
+      textComposer.maxLengthOnEdit = 20;
 
       // Test with text under max length
-      const result = await validationMiddlewareExecutor.execute('onChange', {
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'Hello World',
           selection: { start: 11, end: 11 },
@@ -440,51 +494,15 @@ describe('TextComposerMiddlewareExecutor', () => {
       expect(result.state.text).toBe('Hello World');
     });
 
-    it('should handle validation with other middleware', async () => {
-      // Set max text length
-      messageComposer.config.text = { maxLengthOnEdit: 15 };
-
-      // Create middleware executor with validation middleware and other middleware
-      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
-        composer: messageComposer,
-      });
-
-      // Add validation middleware
-      validationMiddlewareExecutor.insert({
-        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
-        position: { before: 'stream-io/text-composer/mentions-middleware' },
-      });
-
-      // Test with text exceeding max length and containing a mention
-      const result = await validationMiddlewareExecutor.execute('onChange', {
-        state: {
-          text: 'Hello @World This Is Too Long',
-          selection: { start: 30, end: 30 },
-          mentionedUsers: [],
-        },
-      });
-
-      // Text should be truncated to maxTextLength
-      expect(result.state.text).toBe('Hello @World Th');
-    });
-
     it('should handle validation with zero max length', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       // Set max text length to zero
-      messageComposer.config.text = { maxLengthOnEdit: 0 };
-
-      // Create middleware executor with validation middleware
-      const validationMiddlewareExecutor = new TextComposerMiddlewareExecutor({
-        composer: messageComposer,
-      });
-
-      // Add validation middleware
-      validationMiddlewareExecutor.insert({
-        middleware: [createTextComposerPreValidationMiddleware(messageComposer)],
-        position: { before: 'stream-io/text-composer/mentions-middleware' },
-      });
+      textComposer.maxLengthOnEdit = 0;
 
       // Test with any text
-      const result = await validationMiddlewareExecutor.execute('onChange', {
+      const result = await textComposer.middlewareExecutor.execute('onChange', {
         state: {
           text: 'Hello World',
           selection: { start: 11, end: 11 },

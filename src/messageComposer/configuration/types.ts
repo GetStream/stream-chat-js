@@ -11,11 +11,15 @@ export type UploadRequestFn = (
 export type DraftsConfiguration = {
   enabled: boolean;
 };
-export type TextConfiguration = {
-  /** Prevents sending a message longer than this length */
-  maxLengthOnSend?: number;
+export type TextComposerConfig = {
+  /** If true, triggers typing events on text input keystroke */
+  publishTypingEvents: boolean;
+  /** Default value for the message input */
+  defaultValue?: string;
   /** Prevents editing the message to more than this length */
   maxLengthOnEdit?: number;
+  /** Prevents sending a message longer than this length */
+  maxLengthOnSend?: number;
 };
 export type AttachmentManagerConfig = {
   // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
@@ -42,15 +46,14 @@ export type LinkPreviewsManagerConfig = LinkPreviewConfig & {
   /** Custom function to identify URLs in a string and request OG data */
   findURLFn: (text: string) => string[];
 };
+
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
-  /** If true, triggers typing events on text input keystroke */
-  publishTypingEvents: boolean;
   /** Configuration for the attachment manager */
-  attachments?: Partial<AttachmentManagerConfig>;
+  attachments: AttachmentManagerConfig;
   /** Configuration for the link previews manager */
-  linkPreviews?: Partial<LinkPreviewsManagerConfig>;
+  linkPreviews: LinkPreviewsManagerConfig;
   /** Maximum number of characters in a message */
-  text?: TextConfiguration;
+  text: TextComposerConfig;
 };

@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { StreamChat } from '../../../src/client';
 import {
-  TextComposer,
-  TextComposerConfig,
-  textIsEmpty,
-} from '../../../src/messageComposer/textComposer';
+  CompositionContext,
+  MessageComposer,
+} from '../../../src/messageComposer/messageComposer';
+import { textIsEmpty } from '../../../src/messageComposer/textComposer';
+import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
-import { DraftMessage, LocalMessage } from '../../../src/types';
+import { TextComposerConfig } from '../../../src/messageComposer/configuration';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -16,44 +18,57 @@ const textComposerMiddlewareExecuteOutput = {
   status: '',
 };
 
-// Mock dependencies
-vi.mock('../../../src/utils', () => ({
-  logChatPromiseExecution: vi.fn(),
-  generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
-  debounce: vi.fn().mockImplementation((fn) => fn),
-}));
-
 vi.mock('../.././src/messageComposer/middleware', () => ({
   TextComposerMiddlewareExecutor: vi.fn().mockImplementation(() => ({
     execute: vi.fn().mockResolvedValue(textComposerMiddlewareExecuteOutput),
   })),
 }));
 
+// Mock dependencies
+vi.mock('../../../src/utils', () => ({
+  axiosParamsSerializer: vi.fn(),
+  isFunction: vi.fn(),
+  isString: vi.fn(),
+  isObject: vi.fn(),
+  isArray: vi.fn(),
+  isDate: vi.fn(),
+  isNumber: vi.fn(),
+  logChatPromiseExecution: vi.fn(),
+  generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  debounce: vi.fn().mockImplementation((fn) => fn),
+  randomId: vi.fn().mockReturnValue('test-uuid'),
+  isLocalMessage: vi.fn().mockReturnValue(true),
+  formatMessage: vi.fn().mockImplementation((msg) => msg),
+  throttle: vi.fn().mockImplementation((fn) => fn),
+}));
+
 const setup = ({
   config,
-  message,
+  composition,
+  compositionContext,
 }: {
   config?: Partial<TextComposerConfig>;
-  message?: DraftMessage | LocalMessage;
+  composition?: DraftResponse | LocalMessage;
+  compositionContext?: CompositionContext;
 } = {}) => {
-  const mockComposer = {
-    channel: {
-      keystroke: vi.fn().mockResolvedValue({}),
-      getClient: vi.fn().mockReturnValue({
-        user: { id: 'test-user' },
-        queryUsers: vi.fn().mockResolvedValue({ users: [] }),
-      }),
-    },
-    config: {
-      text: { maxLengthOnEdit: 1000 },
-      publishTypingEvents: true,
-      ...config,
-    },
-    threadId: 'thread-123',
-  };
+  // Reset mocks
+  vi.clearAllMocks();
 
-  const textComposer = new TextComposer({ composer: mockComposer, message });
-  return { mockComposer, textComposer };
+  // Setup mocks
+  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  mockClient.queryUsers = vi.fn().mockResolvedValue({ users: [] });
+
+  const mockChannel = mockClient.channel('channelType', 'channelId');
+  mockChannel.keystroke = vi.fn().mockResolvedValue({});
+  mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
+
+  const messageComposer = new MessageComposer({
+    client: mockClient,
+    composition,
+    compositionContext: compositionContext ?? mockChannel,
+    config: { text: config },
+  });
+  return { mockClient, mockChannel, messageComposer };
 };
 
 describe('TextComposer', () => {
@@ -86,9 +101,8 @@ describe('TextComposer', () => {
 
   describe('constructor', () => {
     it('should initialize with default config', () => {
-      const { textComposer, mockComposer } = setup();
-      expect(textComposer.composer).toBe(mockComposer);
-      expect(textComposer.state.getLatestValue()).toEqual({
+      const { messageComposer } = setup();
+      expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },
@@ -96,19 +110,26 @@ describe('TextComposer', () => {
     });
 
     it('should initialize with message', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
       };
 
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
 
       expect(textComposer.text).toBe('Hello world');
       expect(textComposer.selection).toEqual({
-        start: message.text.length,
-        end: message.text.length,
+        start: message.text?.length,
+        end: message.text?.length,
       });
       expect(textComposer.mentionedUsers).toEqual([
         { id: 'user-1' },
@@ -119,7 +140,9 @@ describe('TextComposer', () => {
 
   describe('getters', () => {
     it('should return the correct values from state', () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       const state = {
         mentionedUsers: [{ id: 'user-1' }],
         text: 'Hello world',
@@ -136,7 +159,9 @@ describe('TextComposer', () => {
     });
 
     it('should return true for textIsEmpty when text is empty', () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.partialNext({ text: '' });
       expect(textComposer.textIsEmpty).toBe(true);
     });
@@ -144,28 +169,44 @@ describe('TextComposer', () => {
 
   describe('initState', () => {
     it('should reset the state to initial state', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
       };
       const initialState = {
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.initState();
       expect(textComposer.state.getLatestValue()).toEqual(initialState);
     });
 
     it('should initialize with message', () => {
-      const message = {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }],
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
       };
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.initState({ message });
       expect(textComposer.text).toBe('Hello world');
       expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
@@ -174,14 +215,16 @@ describe('TextComposer', () => {
 
   describe('setMentionedUsers', () => {
     it('should update mentioned users', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
       const users = [{ id: 'user-1' }, { id: 'user-3' }];
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.setMentionedUsers(users);
       expect(textComposer.mentionedUsers).toEqual(users);
     });
@@ -189,27 +232,31 @@ describe('TextComposer', () => {
 
   describe('upsertMentionedUser', () => {
     it('should add a new mentioned user', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
       const user = { id: 'user-3', name: 'User 3' };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.upsertMentionedUser(user);
       expect(textComposer.mentionedUsers).toEqual([...message.mentioned_users, user]);
     });
 
     it('should update an existing mentioned user', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
       const updatedUser = { id: 'user-1', name: 'New Name' };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.upsertMentionedUser(updatedUser);
       expect(textComposer.mentionedUsers).toEqual([
         { id: 'user-1', name: 'New Name' },
@@ -220,37 +267,43 @@ describe('TextComposer', () => {
 
   describe('getMentionedUser', () => {
     it('should return the mentioned user if found', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       expect(textComposer.getMentionedUser('user-1')).toEqual(message.mentioned_users[0]);
     });
 
     it('should return undefined if user not found', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       expect(textComposer.getMentionedUser('user-3')).toBeUndefined();
     });
   });
 
   describe('removeMentionedUser', () => {
     it('should remove the mentioned user if found', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.removeMentionedUser('user-1');
       expect(textComposer.mentionedUsers).toEqual([
         ...message.mentioned_users.filter((user) => user.id !== 'user-1'),
@@ -258,13 +311,15 @@ describe('TextComposer', () => {
     });
 
     it('should not update state if user not found', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.removeMentionedUser('user-3');
       expect(textComposer.mentionedUsers).toEqual(message.mentioned_users);
     });
@@ -272,90 +327,110 @@ describe('TextComposer', () => {
 
   describe('setText', () => {
     it('should update the text', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
       };
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.setText('New text');
       expect(textComposer.text).toBe('New text');
     });
   });
 
   describe('insertText', () => {
-    const message = {
+    const message: LocalMessage = {
       id: 'test-message',
       type: 'regular',
       text: 'Hello world',
     };
     it('should insert text at the specified selection', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: ' beautiful', selection: { start: 5, end: 5 } });
       expect(textComposer.text).toBe('Hello beautiful world');
     });
 
     it('should insert text at the end if no selection provided', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: '!' });
       expect(textComposer.text).toBe('Hello world!');
     });
 
     it('should respect maxLengthOnEdit', () => {
-      const message = {
+      const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
         text: 'Hello',
       };
-      const { textComposer } = setup({
-        config: { text: { maxLengthOnEdit: 8 } },
-        message,
+      const {
+        messageComposer: { textComposer },
+      } = setup({
+        config: { maxLengthOnEdit: 8 },
+        composition: message,
       });
       textComposer.insertText({ text: ' beautiful world' });
       expect(textComposer.text).toBe('Hello be');
     });
 
     it('should handle empty text insertion', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: '', selection: { start: 5, end: 5 } });
       expect(textComposer.text).toBe('Hello world');
     });
 
     it('should handle insertion at the start of text', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: 'Hi ', selection: { start: 0, end: 0 } });
       expect(textComposer.text).toBe('Hi Hello world');
     });
 
     it('should handle insertion at end of text', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: '!', selection: { start: 11, end: 11 } });
       expect(textComposer.text).toBe('Hello world!');
     });
 
     it('should handle insertion with multi-character selection', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.insertText({ text: 'Hi', selection: { start: 0, end: 5 } });
       expect(textComposer.text).toBe('Hi world');
     });
   });
 
   describe('closeSuggestions', () => {
-    const message = {
+    const message: LocalMessage = {
       id: 'test-message',
       type: 'regular',
       text: '@query',
     };
 
     it('should close suggestions if they exist', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       textComposer.state.next({ suggestions: { query: 'test', trigger: '@' } });
       textComposer.closeSuggestions();
       expect(textComposer.suggestions).toBeUndefined();
     });
 
     it('should not update state if no suggestions exist', () => {
-      const { textComposer } = setup({ message });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
       expect(textComposer.suggestions).toBeUndefined();
       textComposer.closeSuggestions();
       expect(textComposer.suggestions).toBeUndefined();
@@ -370,7 +445,9 @@ describe('TextComposer', () => {
     };
 
     it('should update state with middleware result', async () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.next(initialState);
 
       await textComposer.handleChange({
@@ -385,7 +462,9 @@ describe('TextComposer', () => {
     });
 
     it('should not update state if middleware returns discard status', async () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.next(initialState);
 
       const executeSpy = vi.spyOn(textComposer.middlewareExecutor, 'execute');
@@ -403,8 +482,17 @@ describe('TextComposer', () => {
       expect(textComposer.selection).toEqual({ start: 0, end: 0 });
     });
 
-    it('should trigger keystroke event if publishTypingEvents is true', async () => {
-      const { textComposer } = setup();
+    it('should trigger keystroke event with thread id if publishTypingEvents is true and editing a message', async () => {
+      const composition: LocalMessage = {
+        cid: 'channelType:channelId',
+        id: 'reply-123',
+        parent_id: 'thread-123',
+        type: 'reply',
+        text: 'Test message',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition, compositionContext: composition });
       textComposer.state.next(initialState);
 
       await textComposer.handleChange({
@@ -416,8 +504,32 @@ describe('TextComposer', () => {
       expect(logChatPromiseExecution).toHaveBeenCalled();
     });
 
+    it('should trigger keystroke event with undefined if publishTypingEvents is true and not editing a message', async () => {
+      const composition: LocalMessage = {
+        cid: 'channelType:channelId',
+        id: 'reply-123',
+        parent_id: 'thread-123',
+        type: 'reply',
+        text: 'Test message',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition });
+      textComposer.state.next(initialState);
+
+      await textComposer.handleChange({
+        text: 'Test message',
+        selection: { start: 12, end: 12 },
+      });
+
+      expect(textComposer.composer.channel.keystroke).toHaveBeenCalledWith(undefined);
+      expect(logChatPromiseExecution).toHaveBeenCalled();
+    });
+
     it('should not trigger keystroke event if publishTypingEvents is false', async () => {
-      const { textComposer } = setup({ config: { publishTypingEvents: false } });
+      const {
+        messageComposer: { textComposer },
+      } = setup({ config: { publishTypingEvents: false } });
       textComposer.state.next(initialState);
 
       await textComposer.handleChange({
@@ -430,7 +542,9 @@ describe('TextComposer', () => {
     });
 
     it('should not trigger keystroke event with empty text', async () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.next(initialState);
 
       await textComposer.handleChange({
@@ -451,7 +565,9 @@ describe('TextComposer', () => {
     };
 
     it('should update state with middleware result', async () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.next(initialState);
 
       const target = { id: 'user-1' };
@@ -465,7 +581,9 @@ describe('TextComposer', () => {
     });
 
     it('should not update state if middleware returns discard status', async () => {
-      const { textComposer } = setup();
+      const {
+        messageComposer: { textComposer },
+      } = setup();
       textComposer.state.next(initialState);
 
       const executeSpy = vi.spyOn(textComposer.middlewareExecutor, 'execute');

@@ -1,18 +1,12 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
 import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
 import type { MessageComposer } from './messageComposer';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
 
-const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {};
-
-export type TextComposerConfig = {};
-
 export type TextComposerOptions = {
   composer: MessageComposer;
-  config?: Partial<TextComposerConfig>;
   message?: DraftMessage | LocalMessage;
 };
 
@@ -51,20 +45,38 @@ const initState = (message?: DraftMessage | LocalMessage): TextComposerState => 
 // todo: MessageInputProps?:
 // additionalTextareaProps.defaultValue
 export class TextComposer {
-  composer: MessageComposer;
-  config: TextComposerConfig;
-  state: StateStore<TextComposerState>;
+  readonly composer: MessageComposer;
+  readonly state: StateStore<TextComposerState>;
   middlewareExecutor: TextComposerMiddlewareExecutor;
 
-  constructor({ composer, config = {}, message }: TextComposerOptions) {
+  constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
     this.state = new StateStore<TextComposerState>(initState(message));
-    this.config = mergeWith(DEFAULT_TEXT_COMPOSER_CONFIG, config);
     this.middlewareExecutor = new TextComposerMiddlewareExecutor({ composer });
   }
 
   get channel() {
     return this.composer.channel;
+  }
+
+  get config() {
+    return this.composer.config.text;
+  }
+
+  set defaultValue(defaultValue: string) {
+    this.composer.updateConfig({ text: { defaultValue } });
+  }
+
+  set maxLengthOnEdit(maxLengthOnEdit: number) {
+    this.composer.updateConfig({ text: { maxLengthOnEdit } });
+  }
+
+  set maxLengthOnSend(maxLengthOnSend: number) {
+    this.composer.updateConfig({ text: { maxLengthOnSend } });
+  }
+
+  set publishTypingEvents(publishTypingEvents: boolean) {
+    this.composer.updateConfig({ text: { publishTypingEvents } });
   }
 
   // --- START STATE API ---
@@ -170,7 +182,7 @@ export class TextComposer {
     if (output.status === 'discard') return;
     this.state.next(output.state);
 
-    if (this.composer.config.publishTypingEvents && text) {
+    if (this.config.publishTypingEvents && text) {
       logChatPromiseExecution(
         this.channel.keystroke(this.composer.threadId ?? undefined),
         'start typing event',

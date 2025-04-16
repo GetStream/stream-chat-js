@@ -1,11 +1,9 @@
 import { StateStore } from '../store';
 import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
-import type { StreamChat } from '../client';
 import type { DraftMessage, LocalMessage, OGAttachment } from '../types';
-import { DEFAULT_LINK_PREVIEW_MANAGER_CONFIG } from './configuration/configuration';
-import type { LinkPreviewConfig, LinkPreviewsManagerConfig } from './configuration/types';
+import type { LinkPreviewsManagerConfig } from './configuration/types';
+import type { MessageComposer } from './messageComposer';
 
 export type LinkPreviewState = OGAttachment & {
   status: LinkPreviewStatus;
@@ -13,17 +11,21 @@ export type LinkPreviewState = OGAttachment & {
 
 export type LinkPreviewOptions = {
   data: OGAttachment;
+  manager: LinkPreviewsManager;
   status: LinkPreviewStatus;
-  config?: Partial<LinkPreviewConfig>;
 };
 
 export class LinkPreview {
-  state: StateStore<LinkPreviewState>;
-  config: LinkPreviewConfig;
+  readonly state: StateStore<LinkPreviewState>;
+  readonly manager: LinkPreviewsManager;
 
-  constructor({ config, data, status }: LinkPreviewOptions) {
+  constructor({ data, manager, status }: LinkPreviewOptions) {
     this.state = new StateStore<LinkPreviewState>({ ...data, status });
-    this.config = mergeWith<LinkPreviewConfig>({}, config ?? ({} as LinkPreviewConfig));
+    this.manager = manager;
+  }
+
+  get onLinkPreviewDismissed() {
+    return this.manager.config.onLinkPreviewDismissed;
   }
 
   get data(): OGAttachment {
@@ -89,7 +91,7 @@ export class LinkPreview {
   }
 
   dismiss = () => {
-    this.config.onLinkPreviewDismissed?.(this);
+    this.onLinkPreviewDismissed?.(this);
     this.state.partialNext({ status: LinkPreviewStatus.DISMISSED });
   };
 }
@@ -121,12 +123,17 @@ export type LinkPreviewsManagerState = {
 };
 
 export type LinkPreviewsManagerOptions = {
-  client: StreamChat;
-  config?: Partial<LinkPreviewsManagerConfig>;
+  composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
 };
 
-const initState = (message?: DraftMessage | LocalMessage): LinkPreviewsManagerState =>
+const initState = ({
+  manager,
+  message,
+}: {
+  manager: LinkPreviewsManager;
+  message?: DraftMessage | LocalMessage;
+}): LinkPreviewsManagerState =>
   message
     ? {
         previews:
@@ -136,6 +143,7 @@ const initState = (message?: DraftMessage | LocalMessage): LinkPreviewsManagerSt
               attachment.og_scrape_url,
               new LinkPreview({
                 data: attachment as OGAttachment,
+                manager,
                 status: LinkPreviewStatus.LOADED,
               }),
             );
@@ -152,23 +160,25 @@ You can customize  function to identify URLs in a string and request OG data by 
  */
 
 export class LinkPreviewsManager implements ILinkPreviewsManager {
-  state: StateStore<LinkPreviewsManagerState>;
-  configState: StateStore<LinkPreviewsManagerConfig>;
   findAndEnrichUrls: DebouncedFunc<(text: string) => void>;
-  private client: StreamChat;
+  readonly state: StateStore<LinkPreviewsManagerState>;
+  readonly composer: MessageComposer;
   private shouldDiscardEnrichQueries = false;
 
-  constructor({ client, config = {}, message }: LinkPreviewsManagerOptions) {
-    this.client = client;
-    this.state = new StateStore<LinkPreviewsManagerState>(initState(message));
-    this.configState = new StateStore(
-      mergeWith(DEFAULT_LINK_PREVIEW_MANAGER_CONFIG, config),
+  constructor({ composer, message }: LinkPreviewsManagerOptions) {
+    this.composer = composer;
+    this.state = new StateStore<LinkPreviewsManagerState>(
+      initState({ manager: this, message }),
     );
 
     this.findAndEnrichUrls = debounce(
       this._findAndEnrichUrls.bind(this),
       this.config.debounceURLEnrichmentMs,
     );
+  }
+
+  get client() {
+    return this.composer.client;
   }
 
   get previews() {
@@ -194,11 +204,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   get config() {
-    return this.configState.getLatestValue();
-  }
-
-  set config(config: LinkPreviewsManagerConfig) {
-    this.configState.next(config);
+    return this.composer.config.linkPreviews;
   }
 
   set debounceURLEnrichmentMs(
@@ -211,19 +217,23 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
       this.config.debounceURLEnrichmentMs,
     );
 
-    this.configState.partialNext({ debounceURLEnrichmentMs });
+    this.composer.updateConfig({ linkPreviews: { debounceURLEnrichmentMs } });
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
-    this.configState.partialNext({ enabled });
+    this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 
   set findURLFn(fn: LinkPreviewsManagerConfig['findURLFn']) {
-    this.configState.partialNext({ findURLFn: fn });
+    this.composer.updateConfig({ linkPreviews: { findURLFn: fn } });
+  }
+
+  set onLinkPreviewDismissed(fn: LinkPreviewsManagerConfig['onLinkPreviewDismissed']) {
+    this.composer.updateConfig({ linkPreviews: { onLinkPreviewDismissed: fn } });
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.state.next(initState(message));
+    this.state.next(initState({ manager: this, message }));
   };
 
   private _findAndEnrichUrls = (text: string) => {
@@ -244,6 +254,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     const addedLinkPreviews = urls.map((url) => {
       const linkPreview = new LinkPreview({
         data: { og_scrape_url: url },
+        manager: this,
         status: LinkPreviewStatus.LOADING,
       });
       this.client

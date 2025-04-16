@@ -26,11 +26,9 @@ import type {
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 
-export type ComposerMap = {
-  attachmentManager: AttachmentManager;
-  linkPreviewsManager: LinkPreviewsManager;
-  textComposer: TextComposer;
-  pollComposer: PollComposer;
+// todo: move to a more global place to be reused
+type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
 export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
@@ -39,8 +37,8 @@ export type EditingAuditState = {
   lastChange: LastComposerChange;
 };
 
-type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
-type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
+export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
+export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
 
 export type MessageComposerState = {
   id: string;
@@ -55,7 +53,7 @@ export type MessageComposerOptions = {
   compositionContext: CompositionContext;
   // initial state like draft message or edited message
   composition?: DraftResponse | MessageResponse | LocalMessage;
-  config?: Partial<MessageComposerConfig>;
+  config?: DeepPartial<MessageComposerConfig>;
 };
 
 const compositionIsMessageDraft = (composition: unknown): composition is DraftResponse =>
@@ -117,10 +115,10 @@ export class MessageComposer {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
+  readonly configState: StateStore<MessageComposerConfig>;
   readonly compositionContext: CompositionContext;
 
   editedMessage?: LocalMessage;
-  config: MessageComposerConfig;
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
@@ -140,10 +138,9 @@ export class MessageComposer {
   }: MessageComposerOptions) {
     this.compositionContext = compositionContext;
 
-    const {
-      attachments: attachmentManagerConfig, // todo: do not pass config to submanagers. Rather pass composer reference
-      linkPreviews: linkPreviewsManagerConfig,
-    } = config ?? {};
+    this.configState = new StateStore<MessageComposerConfig>(
+      mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
+    );
 
     // channel is easily inferable from the context
     if (compositionContext instanceof Channel) {
@@ -159,7 +156,6 @@ export class MessageComposer {
       );
     }
 
-    this.config = mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {});
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsMessageDraft(composition)) {
       message = composition.message;
@@ -168,16 +164,8 @@ export class MessageComposer {
       this.editedMessage = message;
     }
 
-    this.attachmentManager = new AttachmentManager({
-      channel: this.channel, // todo: pass composer reference to each manager
-      config: attachmentManagerConfig,
-      message,
-    });
-    this.linkPreviewsManager = new LinkPreviewsManager({
-      client,
-      config: linkPreviewsManagerConfig,
-      message,
-    });
+    this.attachmentManager = new AttachmentManager({ composer: this, message });
+    this.linkPreviewsManager = new LinkPreviewsManager({ composer: this, message });
     this.textComposer = new TextComposer({ composer: this, message });
     this.pollComposer = new PollComposer({ composer: this });
     this.customDataManager = new CustomDataManager({ composer: this, message });
@@ -215,6 +203,14 @@ export class MessageComposer {
     compositionContext: CompositionContext,
   ): `${ReturnType<typeof MessageComposer.evaluateContextType>}_${string}` {
     return `${this.evaluateContextType(compositionContext)}_${compositionContext.id}`;
+  }
+
+  get config(): MessageComposerConfig {
+    return this.configState.getLatestValue();
+  }
+
+  updateConfig(config: DeepPartial<MessageComposerConfig>) {
+    this.configState.partialNext(mergeWith(this.config, config));
   }
 
   get contextType() {

@@ -8,7 +8,10 @@ import { StateStore } from '../../../src/store';
 import { DraftMessage, LocalMessage } from '../../../src/types';
 import {
   DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
+  DraftResponse,
   LinkPreviewsManagerConfig,
+  MessageComposer,
+  StreamChat,
 } from '../../../src';
 
 const linkUrl = 'https://example.com';
@@ -58,25 +61,28 @@ const enrichURLReturnValue = {
 };
 
 const setup = ({
+  composition,
   config,
-  message,
 }: {
+  composition?: DraftResponse | LocalMessage;
   config?: Partial<LinkPreviewsManagerConfig>;
   message?: DraftMessage | LocalMessage;
 } = {}) => {
-  const mockClient = {
-    enrichURL: vi.fn().mockResolvedValue(enrichURLReturnValue),
-  };
+  // Reset mocks
+  vi.clearAllMocks();
 
-  const manager = new LinkPreviewsManager({
+  // Setup mocks
+  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
+
+  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const messageComposer = new MessageComposer({
     client: mockClient,
-    config: {
-      ...config,
-    },
-    message,
+    composition,
+    compositionContext: mockChannel,
+    config: { linkPreviews: config },
   });
-
-  return { manager, mockClient };
+  return { mockClient, mockChannel, messageComposer };
 };
 
 describe('LinkPreviewsManager', () => {
@@ -86,26 +92,38 @@ describe('LinkPreviewsManager', () => {
 
   describe('constructor', () => {
     it('should initialize with default config', () => {
-      const { manager } = setup();
-      expect(manager.config.enabled).toBe(true);
-      expect(manager.config.debounceURLEnrichmentMs).toBe(
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+      expect(linkPreviewsManager.config.enabled).toBe(true);
+      expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(
         DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
       );
     });
 
     it('should initialize with custom config', () => {
-      const { manager } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({
         config: {
           debounceURLEnrichmentMs: 500,
           enabled: false,
         },
       });
-      expect(manager.config.enabled).toBe(false);
-      expect(manager.config.debounceURLEnrichmentMs).toBe(500);
+      expect(linkPreviewsManager.config.enabled).toBe(false);
+      expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(500);
     });
 
     it('should initialize with message containing link previews', () => {
-      const message = {
+      const composition: LocalMessage = {
+        id: 'test-message-id',
+        text: '',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
         attachments: [
           {
             og_scrape_url: linkUrl,
@@ -115,16 +133,21 @@ describe('LinkPreviewsManager', () => {
         ],
       };
 
-      const { manager } = setup({ message });
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({ composition });
 
-      expect(manager.previews.size).toBe(1);
-      expect(manager.previews.get(linkUrl)).toBeDefined();
+      expect(linkPreviewsManager.previews.size).toBe(1);
+      expect(linkPreviewsManager.previews.get(linkUrl)).toBeDefined();
     });
   });
 
   describe('getters', () => {
     it('should return loadingPreviews correctly', async () => {
-      const { manager, mockClient } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
 
@@ -132,78 +155,94 @@ describe('LinkPreviewsManager', () => {
       mockClient.enrichURL = vi.fn().mockImplementation(() => new Promise(() => {}));
 
       // Add a loading preview
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Check that loadingPreviews contains the preview
-      expect(manager.loadingPreviews.length).toBe(1);
-      expect(manager.loadingPreviews[0].og_scrape_url).toBe(linkUrl);
-      expect(manager.loadingPreviews[0].status).toBe(LinkPreviewStatus.LOADING);
+      expect(linkPreviewsManager.loadingPreviews.length).toBe(1);
+      expect(linkPreviewsManager.loadingPreviews[0].og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.loadingPreviews[0].status).toBe(
+        LinkPreviewStatus.LOADING,
+      );
     });
 
     it('should return loadedPreviews correctly', async () => {
-      const { manager } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
 
       // Add a loaded preview
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called and the promise to resolve
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Check that loadedPreviews contains the preview
-      expect(manager.loadedPreviews.length).toBe(1);
-      expect(manager.loadedPreviews[0].og_scrape_url).toBe(linkUrl);
-      expect(manager.loadedPreviews[0].status).toBe(LinkPreviewStatus.LOADED);
+      expect(linkPreviewsManager.loadedPreviews.length).toBe(1);
+      expect(linkPreviewsManager.loadedPreviews[0].og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.loadedPreviews[0].status).toBe(LinkPreviewStatus.LOADED);
     });
 
     it('should return dismissedPreviews correctly', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Create a dismissed preview
       const preview = new LinkPreview({
         data: { og_scrape_url: linkUrl },
+        manager: linkPreviewsManager,
         status: LinkPreviewStatus.DISMISSED,
       });
 
       // Add the preview to the manager's previews
-      const newPreviews = new Map(manager.previews);
+      const newPreviews = new Map(linkPreviewsManager.previews);
       newPreviews.set(linkUrl, preview);
-      manager.state.partialNext({ previews: newPreviews });
+      linkPreviewsManager.state.partialNext({ previews: newPreviews });
 
       // Check that dismissedPreviews contains the preview
-      expect(manager.dismissedPreviews.length).toBe(1);
-      expect(manager.dismissedPreviews[0].og_scrape_url).toBe(linkUrl);
-      expect(manager.dismissedPreviews[0].status).toBe(LinkPreviewStatus.DISMISSED);
+      expect(linkPreviewsManager.dismissedPreviews.length).toBe(1);
+      expect(linkPreviewsManager.dismissedPreviews[0].og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.dismissedPreviews[0].status).toBe(
+        LinkPreviewStatus.DISMISSED,
+      );
     });
   });
 
   describe('config setters', () => {
     it('should update debounceURLEnrichmentMs correctly', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Update the debounce time
-      manager.debounceURLEnrichmentMs = 2000;
+      linkPreviewsManager.debounceURLEnrichmentMs = 2000;
 
       // Check that the config was updated
-      expect(manager.config.debounceURLEnrichmentMs).toBe(2000);
+      expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(2000);
     });
 
     it('should update enabled correctly', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Update enabled
-      manager.enabled = false;
+      linkPreviewsManager.enabled = false;
 
       // Check that the config was updated
-      expect(manager.config.enabled).toBe(false);
+      expect(linkPreviewsManager.config.enabled).toBe(false);
     });
 
     it('should update findURLFn correctly', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Create a custom findURLFn
       const customFindURLFn = (text: string) => {
@@ -214,16 +253,18 @@ describe('LinkPreviewsManager', () => {
       };
 
       // Update findURLFn
-      manager.findURLFn = customFindURLFn;
+      linkPreviewsManager.findURLFn = customFindURLFn;
 
       // Check that the config was updated
-      expect(manager.config.findURLFn).toBe(customFindURLFn);
+      expect(linkPreviewsManager.config.findURLFn).toBe(customFindURLFn);
     });
   });
 
   describe('initState', () => {
     it('should initialize state with a new message', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Create a new message
       const newMessage = {
@@ -237,43 +278,53 @@ describe('LinkPreviewsManager', () => {
       };
 
       // Initialize state with the new message
-      manager.initState({ message: newMessage });
+      linkPreviewsManager.initState({ message: newMessage });
 
       // Check that the state was updated
-      expect(manager.previews.size).toBe(1);
-      expect(manager.previews.get('https://new-url.com')).toBeDefined();
+      expect(linkPreviewsManager.previews.size).toBe(1);
+      expect(linkPreviewsManager.previews.get('https://new-url.com')).toBeDefined();
     });
 
     it('should initialize state with an empty message', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Initialize state with an empty message
-      manager.initState({ message: {} });
+      linkPreviewsManager.initState({ message: {} });
 
       // Check that the state was updated
-      expect(manager.previews.size).toBe(0);
+      expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
     it('should initialize state with no message', () => {
-      const { manager } = setup();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
 
       // Initialize state with no message
-      manager.initState();
+      linkPreviewsManager.initState();
 
       // Check that the state was updated
-      expect(manager.previews.size).toBe(0);
+      expect(linkPreviewsManager.previews.size).toBe(0);
     });
   });
 
   describe('findAndEnrichUrls', () => {
     it('should not process URLs if disabled', async () => {
-      const { manager, mockClient } = setup({ config: { enabled: false } });
-      manager.findAndEnrichUrls('Check out https://example.com');
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({ config: { enabled: false } });
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       expect(mockClient.enrichURL).not.toHaveBeenCalled();
     });
 
     it('should process URLs and create link previews', async () => {
-      const { manager, mockClient } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
       let enrichPromiseResolve;
@@ -282,73 +333,83 @@ describe('LinkPreviewsManager', () => {
           enrichPromiseResolve = resolve;
         });
       });
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(mockClient.enrichURL).toHaveBeenCalledWith(linkUrl);
-      expect(manager.previews.size).toBe(1);
+      expect(linkPreviewsManager.previews.size).toBe(1);
 
-      const preview = manager.previews.get(linkUrl);
+      const preview = linkPreviewsManager.previews.get(linkUrl);
       expect(preview).toBeDefined();
       expect(preview?.status).toBe(LinkPreviewStatus.LOADING);
     });
 
     it('should update link preview status to LOADED when enrichment succeeds', async () => {
-      const { manager } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called and the promise to resolve
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const preview = manager.previews.get(linkUrl);
+      const preview = linkPreviewsManager.previews.get(linkUrl);
       expect(preview?.status).toBe(LinkPreviewStatus.LOADED);
       expect(preview?.title).toBe('Example Title');
     });
 
     it('should update link preview status to FAILED when enrichment fails', async () => {
-      const { manager, mockClient } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
       mockClient.enrichURL.mockRejectedValueOnce(new Error('Enrichment failed'));
 
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called and the promise to resolve
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const preview = manager.previews.get(linkUrl);
+      const preview = linkPreviewsManager.previews.get(linkUrl);
       expect(preview?.status).toBe(LinkPreviewStatus.FAILED);
     });
 
     it('should not create duplicate link previews for the same URL', async () => {
-      const { manager, mockClient } = setup({
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup({
         config: { debounceURLEnrichmentMs: 0, enabled: true },
       });
-      manager.findAndEnrichUrls('Check out https://example.com');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      manager.findAndEnrichUrls('Check out https://example.com again');
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com again');
 
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(mockClient.enrichURL).toHaveBeenCalledTimes(2);
-      expect(manager.previews.size).toBe(1);
+      expect(linkPreviewsManager.previews.size).toBe(1);
     });
   });
 
   describe('cancelURLEnrichment', () => {
     it('should cancel pending URL enrichment', () => {
-      const { manager } = setup();
-      const cancelSpy = vi.spyOn(manager.findAndEnrichUrls, 'cancel');
-      const flushSpy = vi.spyOn(manager.findAndEnrichUrls, 'flush');
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+      const cancelSpy = vi.spyOn(linkPreviewsManager.findAndEnrichUrls, 'cancel');
+      const flushSpy = vi.spyOn(linkPreviewsManager.findAndEnrichUrls, 'flush');
 
-      manager.cancelURLEnrichment();
+      linkPreviewsManager.cancelURLEnrichment();
 
       expect(cancelSpy).toHaveBeenCalled();
       expect(flushSpy).toHaveBeenCalled();
@@ -357,8 +418,12 @@ describe('LinkPreviewsManager', () => {
 
   describe('LinkPreview', () => {
     it('should initialize with the correct status', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
       const preview = new LinkPreview({
         data: { og_scrape_url: linkUrl },
+        manager: linkPreviewsManager,
         status: LinkPreviewStatus.LOADING,
       });
 
@@ -369,6 +434,9 @@ describe('LinkPreviewsManager', () => {
     });
 
     it('should update status when state changes', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
       const stateStore = new StateStore({
         og_scrape_url: linkUrl,
         status: LinkPreviewStatus.LOADING,
@@ -376,6 +444,7 @@ describe('LinkPreviewsManager', () => {
 
       const preview = new LinkPreview({
         data: { og_scrape_url: linkUrl },
+        manager: linkPreviewsManager,
         status: LinkPreviewStatus.LOADING,
       });
 
@@ -397,10 +466,13 @@ describe('LinkPreviewsManager', () => {
 
     it('should call onLinkPreviewDismissed when dismissed', () => {
       const onDismissed = vi.fn();
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({ config: { onLinkPreviewDismissed: onDismissed } });
       const preview = new LinkPreview({
         data: { og_scrape_url: linkUrl },
         status: LinkPreviewStatus.LOADED,
-        config: { onLinkPreviewDismissed: onDismissed },
+        manager: linkPreviewsManager,
       });
 
       preview.dismiss();
