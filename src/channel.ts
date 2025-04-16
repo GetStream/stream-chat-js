@@ -311,6 +311,25 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * updateMemberPartial - Partial update a member
+   *
+   * @param {PartialUpdateMember<StreamChatGenerics>}  updates
+   * @param {{ user_id?: string }} [options] Option object, {user_id: 'jane'} to optionally specify the user id
+
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
+   */
+  async updateMemberPartial(updates: PartialUpdateMember<StreamChatGenerics>, options?: { userId?: string }) {
+    const url = new URL(`${this._channelURL()}/member`);
+
+    if (options?.userId) {
+      url.searchParams.append('user_id', options.userId);
+    }
+
+    return await this.getClient().patch<PartialUpdateMemberAPIResponse<StreamChatGenerics>>(url.toString(), updates);
+  }
+
+  /**
+   * @deprecated Use `updateMemberPartial` instead
    * partialUpdateMember - Partial update a member
    *
    * @param {string} user_id member user id
