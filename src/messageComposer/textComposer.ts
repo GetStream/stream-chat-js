@@ -24,11 +24,17 @@ export const textIsEmpty = (text: string) => {
   );
 };
 
-const initState = (message?: DraftMessage | LocalMessage): TextComposerState => {
+const initState = ({
+  composer,
+  message,
+}: {
+  composer: MessageComposer;
+  message?: DraftMessage | LocalMessage;
+}): TextComposerState => {
   if (!message) {
     return {
       mentionedUsers: [],
-      text: '',
+      text: composer.config.text.defaultValue ?? '',
       selection: { start: 0, end: 0 },
     };
   }
@@ -42,8 +48,6 @@ const initState = (message?: DraftMessage | LocalMessage): TextComposerState => 
   };
 };
 
-// todo: MessageInputProps?:
-// additionalTextareaProps.defaultValue
 export class TextComposer {
   readonly composer: MessageComposer;
   readonly state: StateStore<TextComposerState>;
@@ -51,7 +55,7 @@ export class TextComposer {
 
   constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
-    this.state = new StateStore<TextComposerState>(initState(message));
+    this.state = new StateStore<TextComposerState>(initState({ composer, message }));
     this.middlewareExecutor = new TextComposerMiddlewareExecutor({ composer });
   }
 
@@ -102,7 +106,7 @@ export class TextComposer {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.state.next(initState(message));
+    this.state.next(initState({ composer: this.composer, message }));
   };
 
   setMentionedUsers(users: UserResponse[]) {

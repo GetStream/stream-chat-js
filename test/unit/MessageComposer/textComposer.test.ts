@@ -109,6 +109,16 @@ describe('TextComposer', () => {
       });
     });
 
+    it('should initialize with custom config', () => {
+      const defaultValue = 'XXX';
+      const { messageComposer } = setup({ config: { defaultValue } });
+      expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
+        mentionedUsers: [],
+        text: defaultValue,
+        selection: { start: 0, end: 0 },
+      });
+    });
+
     it('should initialize with message', () => {
       const message: LocalMessage = {
         id: 'test-message',
@@ -135,6 +145,30 @@ describe('TextComposer', () => {
         { id: 'user-1' },
         { id: 'user-2', name: 'User 2' },
       ]);
+    });
+
+    it('should ignore default value when initialized with message', () => {
+      const defaultValue = 'XXX';
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
+      };
+
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { defaultValue } });
+
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({
+        start: message.text?.length,
+        end: message.text?.length,
+      });
     });
   });
 
