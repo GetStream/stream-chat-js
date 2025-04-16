@@ -115,7 +115,7 @@ describe('TextComposer', () => {
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         mentionedUsers: [],
         text: defaultValue,
-        selection: { start: 0, end: 0 },
+        selection: { start: defaultValue.length, end: defaultValue.length },
       });
     });
 

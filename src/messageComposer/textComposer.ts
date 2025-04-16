@@ -32,10 +32,11 @@ const initState = ({
   message?: DraftMessage | LocalMessage;
 }): TextComposerState => {
   if (!message) {
+    const text = composer.config.text.defaultValue ?? '';
     return {
       mentionedUsers: [],
-      text: composer.config.text.defaultValue ?? '',
-      selection: { start: 0, end: 0 },
+      text,
+      selection: { start: text.length, end: text.length },
     };
   }
   const text = message.text ?? '';
