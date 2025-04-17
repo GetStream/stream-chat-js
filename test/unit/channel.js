@@ -1,4 +1,4 @@
-import chai from 'chai';
+import chai, { use } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -206,6 +206,53 @@ describe('Channel _handleChannelEvent', function () {
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = true;
+	});
+
+	it('member.updated/member.added are being handled properly (ChannelState.membership & ChannelState.members)', () => {
+		expect(channel.state.members).to.be.empty;
+		expect(channel.state.membership).to.be.empty;
+
+		const currentMember = generateMember({
+			user,
+			pinned_at: new Date().toISOString(),
+			archived_at: new Date().toISOString(),
+		});
+
+		const otherMember = generateMember({
+			user: { id: 'user-other' },
+		});
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: currentMember,
+		});
+
+		expect(channel.state.members).to.have.property(user.id);
+		expect(channel.state.members[user.id]).to.deep.equal(currentMember);
+		expect(channel.state.membership).to.deep.equal(currentMember);
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: otherMember,
+		});
+
+		expect(channel.state.members).to.have.keys([user.id, otherMember.user.id]);
+		expect(channel.state.members[otherMember.user.id]).to.deep.equal(otherMember);
+		expect(channel.state.members[user.id]).to.deep.equal(currentMember);
+		expect(channel.state.membership).to.deep.equal(currentMember);
+
+		const currentMemberUpdated = generateMember({ user, pinned_at: null, archived_at: null });
+
+		channel._handleChannelEvent({
+			type: 'member.updated',
+			user,
+			member: currentMemberUpdated,
+		});
+
+		expect(channel.state.membership).to.not.have.keys(['pinned_at', 'archived_at']);
+		expect(channel.state.membership).to.equal(channel.state.members[user.id]);
 	});
 
 	it('message.new does not reset the unreadCount for current user messages', function () {

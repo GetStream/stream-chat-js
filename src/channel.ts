@@ -1618,22 +1618,36 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'member.added':
-      case 'member.updated':
-        if (event.member?.user) {
+      case 'member.updated': {
+        const memberCopy: ChannelMemberResponse = {
+          ...event.member,
+        };
+
+        if (memberCopy.pinned_at === null) {
+          delete memberCopy.pinned_at;
+        }
+
+        if (memberCopy.archived_at === null) {
+          delete memberCopy.archived_at;
+        }
+
+        if (memberCopy?.user) {
           channelState.members = {
             ...channelState.members,
-            [event.member.user.id]: event.member,
+            [memberCopy.user.id]: memberCopy,
           };
         }
 
+        const currentUserId = this.getClient().userID;
         if (
-          typeof channelState.membership.user?.id === 'string' &&
-          typeof event.member?.user?.id === 'string' &&
-          event.member.user.id === channelState.membership.user.id
+          typeof currentUserId === 'string' &&
+          typeof memberCopy?.user?.id === 'string' &&
+          memberCopy.user.id === currentUserId
         ) {
-          channelState.membership = event.member;
+          channelState.membership = memberCopy;
         }
         break;
+      }
       case 'member.removed':
         if (event.user?.id) {
           const newMembers = {
