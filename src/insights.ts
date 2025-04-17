@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { StableWSConnection } from './connection';
+import type { StableWSConnection } from './connection';
 import { randomId, sleep } from './utils';
 
 export type InsightTypes = 'ws_fatal' | 'ws_success_after_failure' | 'http_hi_failed';
@@ -24,11 +24,17 @@ export class InsightMetrics {
  * @param insightType
  * @param insights
  */
-export const postInsights = async (insightType: InsightTypes, insights: Record<string, unknown>) => {
+export const postInsights = async (
+  insightType: InsightTypes,
+  insights: Record<string, unknown>,
+) => {
   const maxAttempts = 3;
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      await axios.post(`https://chat-insights.getstream.io/insights/${insightType}`, insights);
+      await axios.post(
+        `https://chat-insights.getstream.io/insights/${insightType}`,
+        insights,
+      );
     } catch (e) {
       await sleep((i + 1) * 3000);
       continue;
@@ -37,7 +43,10 @@ export const postInsights = async (insightType: InsightTypes, insights: Record<s
   }
 };
 
-export function buildWsFatalInsight(connection: StableWSConnection, event: Record<string, unknown>) {
+export function buildWsFatalInsight(
+  connection: StableWSConnection,
+  event: Record<string, unknown>,
+) {
   return {
     ...event,
     ...buildWsBaseInsight(connection),

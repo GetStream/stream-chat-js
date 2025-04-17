@@ -1,4 +1,3 @@
-import chai, { use } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -13,7 +12,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
-const expect = chai.expect;
+import { describe, beforeEach, it, expect } from 'vitest';
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -75,7 +74,10 @@ describe('Channel count unread', function () {
 	});
 
 	it('_countMessageAsUnread should return false for channel with read_events off', function () {
-		const channel = client.channel('messaging', { members: ['tommaso'], own_capabilities: [] });
+		const channel = client.channel('messaging', {
+			members: ['tommaso'],
+			own_capabilities: [],
+		});
 		expect(channel._countMessageAsUnread({ user: { id: 'random' } })).not.to.be.ok;
 	});
 
@@ -125,7 +127,13 @@ describe('Channel count unread', function () {
 			generateMsg({ date: '2021-01-01T00:00:00' }),
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
-		channel.state.addMessagesSorted([generateMsg({ date: '2020-01-01T00:00:00' })], false, true, true, 'new');
+		channel.state.addMessagesSorted(
+			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			false,
+			true,
+			true,
+			'new',
+		);
 		channel.state.messageSets[0].isCurrent = false;
 		channel.state.messageSets[1].isCurrent = true;
 
@@ -150,10 +158,19 @@ describe('Channel count unread', function () {
 	it('countUnreadMentions should return correct count when multiple message sets are loaded into state', () => {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2021-01-01T00:00:00', mentioned_users: [user, { id: 'random' }] }),
+			generateMsg({
+				date: '2021-01-01T00:00:00',
+				mentioned_users: [user, { id: 'random' }],
+			}),
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
-		channel.state.addMessagesSorted([generateMsg({ date: '2020-01-01T00:00:00' })], false, true, true, 'new');
+		channel.state.addMessagesSorted(
+			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			false,
+			true,
+			true,
+			'new',
+		);
 		channel.state.messageSets[0].isCurrent = false;
 		channel.state.messageSets[1].isCurrent = true;
 
@@ -243,7 +260,11 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.members[user.id]).to.deep.equal(currentMember);
 		expect(channel.state.membership).to.deep.equal(currentMember);
 
-		const currentMemberUpdated = generateMember({ user, pinned_at: null, archived_at: null });
+		const currentMemberUpdated = generateMember({
+			user,
+			pinned_at: null,
+			archived_at: null,
+		});
 
 		channel._handleChannelEvent({
 			type: 'member.updated',
@@ -378,9 +399,17 @@ describe('Channel _handleChannelEvent', function () {
 
 	it('message.truncate removes pinned messages up to specified date', function () {
 		const messages = [
-			{ created_at: '2021-01-01T00:01:00', pinned: true, pinned_at: new Date('2021-01-01T00:01:01.010Z') },
+			{
+				created_at: '2021-01-01T00:01:00',
+				pinned: true,
+				pinned_at: new Date('2021-01-01T00:01:01.010Z'),
+			},
 			{ created_at: '2021-01-01T00:02:00' },
-			{ created_at: '2021-01-01T00:03:00', pinned: true, pinned_at: new Date('2021-01-01T00:02:02.011Z') },
+			{
+				created_at: '2021-01-01T00:03:00',
+				pinned: true,
+				pinned_at: new Date('2021-01-01T00:02:02.011Z'),
+			},
 		].map(generateMsg);
 
 		channel.state.addMessagesSorted(messages);
@@ -426,7 +455,10 @@ describe('Channel _handleChannelEvent', function () {
 			message: { ...originalMessage, deleted_at: new Date().toISOString() },
 		});
 
-		expect(channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message.deleted_at).to.be.ok;
+		expect(
+			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
+				.deleted_at,
+		).to.be.ok;
 	});
 
 	describe('notification.mark_unread', () => {
@@ -450,7 +482,9 @@ describe('Channel _handleChannelEvent', function () {
 				channel: null,
 				user,
 				first_unread_message_id: '2',
-				last_read_at: new Date(new Date(initialReadState.last_read).getTime() - 1000).toISOString(),
+				last_read_at: new Date(
+					new Date(initialReadState.last_read).getTime() - 1000,
+				).toISOString(),
 				last_read_message_id: '1',
 				unread_messages: 5,
 				unread_count: 6,
@@ -470,15 +504,22 @@ describe('Channel _handleChannelEvent', function () {
 			expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
 				new Date(event.last_read_at).getTime(),
 			);
-			expect(channel.state.read[user.id].last_read_message_id).to.be.equal(event.last_read_message_id);
-			expect(channel.state.read[user.id].unread_messages).to.be.equal(event.unread_messages);
+			expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
+				event.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).to.be.equal(
+				event.unread_messages,
+			);
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
 			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const { user: excludedUser, ...eventMissingUser } = notificationMarkUnreadEvent;
-			const eventWithAnotherUser = { ...notificationMarkUnreadEvent, user: { id: 'another-user' } };
+			const eventWithAnotherUser = {
+				...notificationMarkUnreadEvent,
+				user: { id: 'another-user' },
+			};
 
 			[eventWithAnotherUser, eventMissingUser].forEach((event) => {
 				channel._handleChannelEvent(event);
@@ -490,7 +531,9 @@ describe('Channel _handleChannelEvent', function () {
 				expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
 					initialReadState.last_read_message_id,
 				);
-				expect(channel.state.read[user.id].unread_messages).to.be.equal(initialReadState.unread_messages);
+				expect(channel.state.read[user.id].unread_messages).to.be.equal(
+					initialReadState.unread_messages,
+				);
 			});
 		});
 	});
@@ -519,7 +562,8 @@ describe('Channel _handleChannelEvent', function () {
 				user: { id: 'id' },
 				message,
 			});
-			expect(channel.state.read['id'].unread_messages, `${event} should not be undefined`).not.to.be.undefined;
+			expect(channel.state.read['id'].unread_messages, `${event} should not be undefined`)
+				.not.to.be.undefined;
 		}
 	});
 
@@ -550,14 +594,20 @@ describe('Channel _handleChannelEvent', function () {
 				user: { id: client.user.id },
 				message,
 			});
-			expect(channel.state.read[client.user.id].unread_messages, `${event} should not be undefined`).not.to.be
-				.undefined;
+			expect(
+				channel.state.read[client.user.id].unread_messages,
+				`${event} should not be undefined`,
+			).not.to.be.undefined;
 		}
 	});
 
 	it('should extend "message.updated" and "message.deleted" event payloads with "own_reactions"', () => {
 		const own_reactions = [
-			{ created_at: new Date().toISOString(), updated_at: new Date().toISOString(), type: 'wow' },
+			{
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+				type: 'wow',
+			},
 		];
 		const testCases = [
 			[generateMsg({ own_reactions })], // channel message
@@ -582,9 +632,9 @@ describe('Channel _handleChannelEvent', function () {
 				channel._handleChannelEvent(event);
 				channel._callChannelListeners(event);
 
-				expect(channel.state.findMessage(message.id, message.parent_id).own_reactions.length).to.equal(
-					own_reactions.length,
-				);
+				expect(
+					channel.state.findMessage(message.id, message.parent_id).own_reactions.length,
+				).to.equal(own_reactions.length);
 				expect(receivedEvent.message.own_reactions.length).to.equal(own_reactions.length);
 			});
 		});
@@ -594,7 +644,10 @@ describe('Channel _handleChannelEvent', function () {
 		const originalText = 'XX';
 		const updatedText = 'YY';
 		const parent_id = '0';
-		const parentMesssage = generateMsg({ date: new Date(0).toISOString(), id: parent_id });
+		const parentMesssage = generateMsg({
+			date: new Date(0).toISOString(),
+			id: parent_id,
+		});
 		const quoted_message = generateMsg({
 			date: new Date(2).toISOString(),
 			id: 'quoted-message',
@@ -610,7 +663,11 @@ describe('Channel _handleChannelEvent', function () {
 		const updatedQuotedThreadReply = { ...quoted_message, parent_id, text: updatedText };
 		[
 			[quoted_message, quotingMessage], // channel message
-			[parentMesssage, { ...quoted_message, parent_id }, { ...quotingMessage, parent_id }], // thread message
+			[
+				parentMesssage,
+				{ ...quoted_message, parent_id },
+				{ ...quotingMessage, parent_id },
+			], // thread message
 		].forEach((messages) => {
 			['message.updated', 'message.deleted'].forEach((eventType) => {
 				channel.state.addMessagesSorted(messages);
@@ -622,7 +679,8 @@ describe('Channel _handleChannelEvent', function () {
 				};
 				channel._handleChannelEvent(event);
 				expect(
-					channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id).quoted_message.text,
+					channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id)
+						.quoted_message.text,
 				).to.equal(updatedQuotedMessage.text);
 				channel.state.clearMessages();
 			});
@@ -759,7 +817,12 @@ describe('Channel _handleChannelEvent', function () {
 		};
 
 		[
-			[shadowBanEvent, banEvent, { shadow_banned: true, banned: false }, { shadow_banned: false, banned: true }],
+			[
+				shadowBanEvent,
+				banEvent,
+				{ shadow_banned: true, banned: false },
+				{ shadow_banned: false, banned: true },
+			],
 			[
 				shadowBanEvent,
 				shadowUnbanEvent,
@@ -772,21 +835,35 @@ describe('Channel _handleChannelEvent', function () {
 				{ shadow_banned: true, banned: false },
 				{ shadow_banned: false, banned: false },
 			],
-			[banEvent, shadowBanEvent, { shadow_banned: false, banned: true }, { shadow_banned: true, banned: false }],
+			[
+				banEvent,
+				shadowBanEvent,
+				{ shadow_banned: false, banned: true },
+				{ shadow_banned: true, banned: false },
+			],
 			[
 				banEvent,
 				shadowUnbanEvent,
 				{ shadow_banned: false, banned: true },
 				{ shadow_banned: false, banned: false },
 			],
-			[banEvent, unbanEvent, { shadow_banned: false, banned: true }, { shadow_banned: false, banned: false }],
+			[
+				banEvent,
+				unbanEvent,
+				{ shadow_banned: false, banned: true },
+				{ shadow_banned: false, banned: false },
+			],
 		].forEach(([firstEvent, secondEvent, expectAfterFirst, expectAfterSecond]) => {
 			channel._handleChannelEvent(firstEvent);
 			expect(channel.state.members[user.id].banned).eq(expectAfterFirst.banned);
-			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterFirst.shadow_banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(
+				expectAfterFirst.shadow_banned,
+			);
 			channel._handleChannelEvent(secondEvent);
 			expect(channel.state.members[user.id].banned).eq(expectAfterSecond.banned);
-			expect(channel.state.members[user.id].shadow_banned).eq(expectAfterSecond.shadow_banned);
+			expect(channel.state.members[user.id].shadow_banned).eq(
+				expectAfterSecond.shadow_banned,
+			);
 		});
 	});
 });
@@ -818,15 +895,14 @@ describe('Uninitialized Channel', () => {
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key', 'secret');
 
-	it('canonical form', function (done) {
+	it('canonical form', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 		expect(channel.data).to.eql({ cool: true });
-		done();
 	});
 
-	it('custom data merges to the right with current data', function (done) {
+	it('custom data merges to the right with current data', function () {
 		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
@@ -834,61 +910,53 @@ describe('Channels - Constructor', function () {
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
 		console.log(channel.data);
 		expect(channel.data).to.eql({ cool: true, custom_cool: true });
-		done();
 	});
 
-	it('default options', function (done) {
+	it('default options', function () {
 		const channel = client.channel('messaging', '123');
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
-		done();
 	});
 
-	it('null ID no options', function (done) {
+	it('null ID no options', function () {
 		const channel = client.channel('messaging', null);
 		expect(channel.id).to.eq(undefined);
-		done();
 	});
 
-	it('undefined ID no options', function (done) {
+	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
 		expect(channel.data).to.eql({});
-		done();
 	});
 
-	it('short version with options', function (done) {
+	it('short version with options', function () {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('null ID with options', function (done) {
+	it('null ID with options', function () {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('empty ID  with options', function (done) {
+	it('empty ID  with options', function () {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 
-	it('empty ID  with options', function (done) {
+	it('empty ID  with options', function () {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
 		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
-		done();
 	});
 });
 
@@ -989,7 +1057,9 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		// tempCid should be replaced with actual cid at this point.
 		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
 		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(
+			channelVish_copy1,
+		);
 
 		const channelVish_copy2 = clientVish.channel('messaging', {
 			members: [userVish.id, userAmin.id],
@@ -1073,7 +1143,9 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		// tempCid should be replaced with actual cid at this point.
 		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
 		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(channelVish_copy1);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(
+			channelVish_copy1,
+		);
 
 		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
 			members: [userVish.id, userAmin.id],
@@ -1172,7 +1244,9 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
 		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy2.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(channelVish_copy2);
+		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(
+			channelVish_copy2,
+		);
 	});
 });
 
@@ -1209,10 +1283,10 @@ describe('Channel search', async () => {
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
 	it('sorting and offset works', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] })).to.be.fulfilled;
+		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }));
 	});
 	it('next and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, next: 'next' })).to.be.rejectedWith(Error);
+		await expect(channel.search('query', { offset: 1, next: 'next' })).rejects.toThrow();
 	});
 });
 
@@ -1229,7 +1303,9 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: latestMessageDate }),
 		]);
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+			new Date(latestMessageDate).getTime(),
+		);
 	});
 
 	it('should return last message - messages are out of order', () => {
@@ -1241,7 +1317,9 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		]);
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+			new Date(latestMessageDate).getTime(),
+		);
 	});
 
 	it('should return last message - state has more message sets loaded', () => {
@@ -1259,7 +1337,9 @@ describe('Channel lastMessage', async () => {
 		channel.state.addMessagesSorted(latestMessages);
 		channel.state.addMessagesSorted(otherMessages, 'new');
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(new Date(latestMessageDate).getTime());
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+			new Date(latestMessageDate).getTime(),
+		);
 	});
 });
 
@@ -1310,7 +1390,10 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
@@ -1324,13 +1407,19 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: false, hasPrev: true });
+		expect(channel.state.messageSets[0].pagination).to.eql({
+			hasNext: false,
+			hasPrev: true,
+		});
 		mock.restore();
 	});
 
@@ -1339,13 +1428,19 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
-			messages: Array.from({ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 }, generateMsg),
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 },
+				generateMsg,
+			),
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({ hasNext: false, hasPrev: false });
+		expect(channel.state.messageSets[0].pagination).to.eql({
+			hasNext: false,
+			hasPrev: false,
+		});
 		mock.restore();
 	});
 });

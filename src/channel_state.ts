@@ -1,9 +1,7 @@
-import { Channel } from './channel';
-import {
+import type { Channel } from './channel';
+import type {
   ChannelMemberResponse,
-  DefaultGenerics,
   Event,
-  ExtendableGenerics,
   FormatMessageResponse,
   MessageResponse,
   MessageSet,
@@ -15,12 +13,12 @@ import {
 import { addToMessageList, formatMessage } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 
-type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = Record<
+type ChannelReadStatus = Record<
   string,
   {
     last_read: Date;
     unread_messages: number;
-    user: UserResponse<StreamChatGenerics>;
+    user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
   }
@@ -29,19 +27,19 @@ type ChannelReadStatus<StreamChatGenerics extends ExtendableGenerics = DefaultGe
 /**
  * ChannelState - A container class for the channel state.
  */
-export class ChannelState<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  _channel: Channel<StreamChatGenerics>;
+export class ChannelState {
+  _channel: Channel;
   watcher_count: number;
-  typing: Record<string, Event<StreamChatGenerics>>;
-  read: ChannelReadStatus<StreamChatGenerics>;
-  pinnedMessages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>;
-  pending_messages: Array<PendingMessageResponse<StreamChatGenerics>>;
-  threads: Record<string, Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>>;
-  mutedUsers: Array<UserResponse<StreamChatGenerics>>;
-  watchers: Record<string, UserResponse<StreamChatGenerics>>;
-  members: Record<string, ChannelMemberResponse<StreamChatGenerics>>;
+  typing: Record<string, Event>;
+  read: ChannelReadStatus;
+  pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
+  pending_messages: Array<PendingMessageResponse>;
+  threads: Record<string, Array<ReturnType<ChannelState['formatMessage']>>>;
+  mutedUsers: Array<UserResponse>;
+  watchers: Record<string, UserResponse>;
+  members: Record<string, ChannelMemberResponse>;
   unreadCount: number;
-  membership: ChannelMemberResponse<StreamChatGenerics>;
+  membership: ChannelMemberResponse;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
@@ -58,7 +56,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    */
   messageSets: MessageSet[] = [];
 
-  constructor(channel: Channel<StreamChatGenerics>) {
+  constructor(channel: Channel) {
     this._channel = channel;
     this.watcher_count = 0;
     this.typing = {};
@@ -80,14 +78,17 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
      * be pushed on to message list.
      */
     this.isUpToDate = true;
-    this.last_message_at = channel?.state?.last_message_at != null ? new Date(channel.state.last_message_at) : null;
+    this.last_message_at =
+      channel?.state?.last_message_at != null
+        ? new Date(channel.state.last_message_at)
+        : null;
   }
 
   get messages() {
     return this.messageSets.find((s) => s.isCurrent)?.messages || [];
   }
 
-  set messages(messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>) {
+  set messages(messages: Array<ReturnType<ChannelState['formatMessage']>>) {
     const index = this.messageSets.findIndex((s) => s.isCurrent);
     this.messageSets[index].messages = messages;
   }
@@ -100,25 +101,28 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     return this.messageSets.find((s) => s.isLatest)?.messages || [];
   }
 
-  set latestMessages(messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>) {
+  set latestMessages(messages: Array<ReturnType<ChannelState['formatMessage']>>) {
     const index = this.messageSets.findIndex((s) => s.isLatest);
     this.messageSets[index].messages = messages;
   }
 
   get messagePagination() {
-    return this.messageSets.find((s) => s.isCurrent)?.pagination || DEFAULT_MESSAGE_SET_PAGINATION;
+    return (
+      this.messageSets.find((s) => s.isCurrent)?.pagination ||
+      DEFAULT_MESSAGE_SET_PAGINATION
+    );
   }
 
   /**
    * addMessageSorted - Add a message to the state
    *
-   * @param {MessageResponse<StreamChatGenerics>} newMessage A new message
+   * @param {MessageResponse} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
    */
   addMessageSorted(
-    newMessage: MessageResponse<StreamChatGenerics>,
+    newMessage: MessageResponse,
     timestampChanged = false,
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
@@ -136,14 +140,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * Takes the message object, parses the dates, sets `__html`
    * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse<StreamChatGenerics>} message `MessageResponse` object
+   * @param {MessageResponse} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse<StreamChatGenerics>) => formatMessage<StreamChatGenerics>(message);
+  formatMessage = (message: MessageResponse) => formatMessage(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
    *
-   * @param {Array<MessageResponse<StreamChatGenerics>>} newMessages A list of messages
+   * @param {Array<MessageResponse>} newMessages A list of messages
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
@@ -151,7 +155,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    */
   addMessagesSorted(
-    newMessages: MessageResponse<StreamChatGenerics>[],
+    newMessages: MessageResponse[],
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
@@ -172,11 +176,11 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
       // This will be also true for message previews used by some SDKs
       const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
-      let message: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
+      let message: ReturnType<ChannelState['formatMessage']>;
       if (isMessageFormatted) {
-        message = messagesToAdd[i] as ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
+        message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
-        message = this.formatMessage(messagesToAdd[i] as MessageResponse<StreamChatGenerics>);
+        message = this.formatMessage(messagesToAdd[i] as MessageResponse);
 
         if (message.user && this._channel?.cid) {
           /**
@@ -184,7 +188,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
            * handle updates to user, we can use the reference map, to determine which
            * channels need to be updated with updated user object.
            */
-          this._channel.getClient().state.updateUserReference(message.user, this._channel.cid);
+          this._channel
+            .getClient()
+            .state.updateUserReference(message.user, this._channel.cid);
         }
 
         if (initializing && message.id && this.threads[message.id]) {
@@ -247,10 +253,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * addPinnedMessages - adds messages in pinnedMessages property
    *
-   * @param {Array<MessageResponse<StreamChatGenerics>>} pinnedMessages A list of pinned messages
+   * @param {Array<MessageResponse>} pinnedMessages A list of pinned messages
    *
    */
-  addPinnedMessages(pinnedMessages: MessageResponse<StreamChatGenerics>[]) {
+  addPinnedMessages(pinnedMessages: MessageResponse[]) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
       this.addPinnedMessage(pinnedMessages[i]);
     }
@@ -259,10 +265,10 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * addPinnedMessage - adds message in pinnedMessages
    *
-   * @param {MessageResponse<StreamChatGenerics>} pinnedMessage message to update
+   * @param {MessageResponse} pinnedMessage message to update
    *
    */
-  addPinnedMessage(pinnedMessage: MessageResponse<StreamChatGenerics>) {
+  addPinnedMessage(pinnedMessage: MessageResponse) {
     this.pinnedMessages = this._addToMessageList(
       this.pinnedMessages,
       this.formatMessage(pinnedMessage),
@@ -274,31 +280,35 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * removePinnedMessage - removes pinned message from pinnedMessages
    *
-   * @param {MessageResponse<StreamChatGenerics>} message message to remove
+   * @param {MessageResponse} message message to remove
    *
    */
-  removePinnedMessage(message: MessageResponse<StreamChatGenerics>) {
+  removePinnedMessage(message: MessageResponse) {
     const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
     this.pinnedMessages = result;
   }
 
   addReaction(
-    reaction: ReactionResponse<StreamChatGenerics>,
-    message?: MessageResponse<StreamChatGenerics>,
+    reaction: ReactionResponse,
+    message?: MessageResponse,
     enforce_unique?: boolean,
   ) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(msg.own_reactions, reaction, enforce_unique);
+      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
+        msg.own_reactions,
+        reaction,
+        enforce_unique,
+      );
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
   }
 
   _addOwnReactionToMessage(
-    ownReactions: ReactionResponse<StreamChatGenerics>[] | null | undefined,
-    reaction: ReactionResponse<StreamChatGenerics>,
+    ownReactions: ReactionResponse[] | null | undefined,
+    reaction: ReactionResponse,
     enforce_unique?: boolean,
   ) {
     if (enforce_unique) {
@@ -316,20 +326,25 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   _removeOwnReactionFromMessage(
-    ownReactions: ReactionResponse<StreamChatGenerics>[] | null | undefined,
-    reaction: ReactionResponse<StreamChatGenerics>,
+    ownReactions: ReactionResponse[] | null | undefined,
+    reaction: ReactionResponse,
   ) {
     if (ownReactions) {
-      return ownReactions.filter((item) => item.user_id !== reaction.user_id || item.type !== reaction.type);
+      return ownReactions.filter(
+        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
+      );
     }
     return ownReactions;
   }
 
-  removeReaction(reaction: ReactionResponse<StreamChatGenerics>, message?: MessageResponse<StreamChatGenerics>) {
+  removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
     if (!message) return;
     const messageWithReaction = message;
     this._updateMessage(message, (msg) => {
-      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(msg.own_reactions, reaction);
+      messageWithReaction.own_reactions = this._removeOwnReactionFromMessage(
+        msg.own_reactions,
+        reaction,
+      );
       return this.formatMessage(messageWithReaction);
     });
     return messageWithReaction;
@@ -339,21 +354,24 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     message,
     remove,
   }: {
-    message: MessageResponse<StreamChatGenerics>;
+    message: MessageResponse;
     remove?: boolean;
   }) {
-    const parseMessage = (m: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>) =>
-      (({
+    const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
+      ({
         ...m,
         created_at: m.created_at.toISOString(),
         pinned_at: m.pinned_at?.toISOString(),
         updated_at: m.updated_at?.toISOString(),
-      } as unknown) as MessageResponse<StreamChatGenerics>);
+      }) as unknown as MessageResponse;
 
-    const update = (messages: FormatMessageResponse<StreamChatGenerics>[]) => {
-      const updatedMessages = messages.reduce<MessageResponse<StreamChatGenerics>[]>((acc, msg) => {
+    const update = (messages: FormatMessageResponse[]) => {
+      const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
-          acc.push({ ...parseMessage(msg), quoted_message: remove ? { ...message, attachments: [] } : message });
+          acc.push({
+            ...parseMessage(msg),
+            quoted_message: remove ? { ...message, attachments: [] } : message,
+          });
         }
         return acc;
       }, []);
@@ -368,7 +386,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     }
   }
 
-  removeQuotedMessageReferences(message: MessageResponse<StreamChatGenerics>) {
+  removeQuotedMessageReferences(message: MessageResponse) {
     this._updateQuotedMessageReferences({ message, remove: true });
   }
 
@@ -385,8 +403,8 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       show_in_channel?: boolean;
     },
     updateFunc: (
-      msg: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
-    ) => ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
+      msg: ReturnType<ChannelState['formatMessage']>,
+    ) => ReturnType<ChannelState['formatMessage']>,
   ) {
     const { parent_id, show_in_channel, pinned } = message;
 
@@ -402,7 +420,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     if ((!show_in_channel && !parent_id) || show_in_channel) {
       const messageSetIndex = this.findMessageSetIndex(message);
       if (messageSetIndex !== -1) {
-        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex((msg) => msg.id === message.id);
+        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex(
+          (msg) => msg.id === message.id,
+        );
         if (msgIndex !== -1) {
           this.messageSets[messageSetIndex].messages[msgIndex] = updateFunc(
             this.messageSets[messageSetIndex].messages[msgIndex],
@@ -434,20 +454,26 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
    *
-   * @param {Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>} messages A list of messages
+   * @param {Array<ReturnType<ChannelState['formatMessage']>>} messages A list of messages
    * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {string} sortBy field name to use to sort the messages by
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    */
   _addToMessageList(
-    messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
-    message: ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>,
+    messages: Array<ReturnType<ChannelState['formatMessage']>>,
+    message: ReturnType<ChannelState['formatMessage']>,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = true,
   ) {
-    return addToMessageList(messages, message, timestampChanged, sortBy, addIfDoesNotExist);
+    return addToMessageList(
+      messages,
+      message,
+      timestampChanged,
+      sortBy,
+      addIfDoesNotExist,
+    );
   }
 
   /**
@@ -457,7 +483,11 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    * @return {boolean} Returns if the message was removed
    */
-  removeMessage(messageToRemove: { id: string; messageSetIndex?: number; parent_id?: string }) {
+  removeMessage(messageToRemove: {
+    id: string;
+    messageSetIndex?: number;
+    parent_id?: string;
+  }) {
     let isRemoved = false;
     if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
@@ -468,7 +498,8 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       this.threads[messageToRemove.parent_id] = threadMessages;
       isRemoved = removed;
     } else {
-      const messageSetIndex = messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
+      const messageSetIndex =
+        messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
       if (messageSetIndex !== -1) {
         const { removed, result: messages } = this.removeMessageFromArray(
           this.messageSets[messageSetIndex].messages,
@@ -483,10 +514,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   removeMessageFromArray = (
-    msgArray: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
+    msgArray: Array<ReturnType<ChannelState['formatMessage']>>,
     msg: { id: string; parent_id?: string },
   ) => {
-    const result = msgArray.filter((message) => !(!!message.id && !!msg.id && message.id === msg.id));
+    const result = msgArray.filter(
+      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
+    );
 
     return { removed: result.length < msgArray.length, result };
   };
@@ -494,12 +527,12 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * Updates the message.user property with updated user object, for messages.
    *
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    */
-  updateUserMessages = (user: UserResponse<StreamChatGenerics>) => {
+  updateUserMessages = (user: UserResponse) => {
     const _updateUserMessages = (
-      messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
-      user: UserResponse<StreamChatGenerics>,
+      messages: Array<ReturnType<ChannelState['formatMessage']>>,
+      user: UserResponse,
     ) => {
       for (let i = 0; i < messages.length; i++) {
         const m = messages[i];
@@ -521,13 +554,13 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   /**
    * Marks the messages as deleted, from deleted user.
    *
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    * @param {boolean} hardDelete
    */
-  deleteUserMessages = (user: UserResponse<StreamChatGenerics>, hardDelete = false) => {
+  deleteUserMessages = (user: UserResponse, hardDelete = false) => {
     const _deleteUserMessages = (
-      messages: Array<ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>>,
-      user: UserResponse<StreamChatGenerics>,
+      messages: Array<ReturnType<ChannelState['formatMessage']>>,
+      user: UserResponse,
       hardDelete = false,
     ) => {
       for (let i = 0; i < messages.length; i++) {
@@ -541,7 +574,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
            * In case of hard delete, we need to strip down all text, html,
            * attachments and all the custom properties on message
            */
-          messages[i] = ({
+          messages[i] = {
             cid: m.cid,
             created_at: m.created_at,
             deleted_at: user.deleted_at,
@@ -556,7 +589,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
             type: 'deleted',
             updated_at: m.updated_at,
             user: m.user,
-          } as unknown) as ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>;
+          } as unknown as ReturnType<ChannelState['formatMessage']>;
         } else {
           messages[i] = {
             ...m,
@@ -567,7 +600,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       }
     };
 
-    this.messageSets.forEach((set) => _deleteUserMessages(set.messages, user, hardDelete));
+    this.messageSets.forEach((set) =>
+      _deleteUserMessages(set.messages, user, hardDelete),
+    );
 
     for (const parentId in this.threads) {
       _deleteUserMessages(this.threads[parentId], user, hardDelete);
@@ -581,7 +616,9 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    *
    */
   filterErrorMessages() {
-    const filteredMessages = this.latestMessages.filter((message) => message.type !== 'error');
+    const filteredMessages = this.latestMessages.filter(
+      (message) => message.type !== 'error',
+    );
 
     this.latestMessages = filteredMessages;
   }
@@ -603,7 +640,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
           cid: this._channel.cid,
           type: 'typing.stop',
           user: { id: userID },
-        } as Event<StreamChatGenerics>);
+        } as Event);
       }
     }
   }
@@ -614,7 +651,14 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
   }
 
   initMessages() {
-    this.messageSets = [{ messages: [], isLatest: true, isCurrent: true, pagination: DEFAULT_MESSAGE_SET_PAGINATION }];
+    this.messageSets = [
+      {
+        messages: [],
+        isLatest: true,
+        isCurrent: true,
+        pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+      },
+    ];
   }
 
   /**
@@ -624,7 +668,11 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
    * @param {number} limit The page size if the message has to be queried from the server
    */
-  async loadMessageIntoState(messageId: string | 'latest', parentMessageId?: string, limit = 25) {
+  async loadMessageIntoState(
+    messageId: string | 'latest',
+    parentMessageId?: string,
+    limit = 25,
+  ) {
     let messageSetIndex: number;
     let switchedToMessageSet = false;
     let loadedMessageThread = false;
@@ -641,12 +689,17 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       this.switchToMessageSet(messageSetIndex);
       switchedToMessageSet = true;
     }
-    loadedMessageThread = !parentMessageId || !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
+    loadedMessageThread =
+      !parentMessageId ||
+      !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
     if (switchedToMessageSet && loadedMessageThread) {
       return;
     }
     if (!switchedToMessageSet) {
-      await this._channel.query({ messages: { id_around: messageIdToFind, limit } }, 'new');
+      await this._channel.query(
+        { messages: { id_around: messageIdToFind, limit } },
+        'new',
+      );
     }
     if (!loadedMessageThread && parentMessageId) {
       await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
@@ -663,7 +716,7 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
    * @param {string} messageId The id of the message
    * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
    *
-   * @return {ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>} Returns the message, or undefined if the message wasn't found
+   * @return {ReturnType<ChannelState['formatMessage']>} Returns the message, or undefined if the message wasn't found
    */
   findMessage(messageId: string, parentMessageId?: string) {
     if (parentMessageId) {
@@ -690,28 +743,33 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
     this.messageSets[index].isCurrent = true;
   }
 
-  private areMessageSetsOverlap(messages1: Array<{ id: string }>, messages2: Array<{ id: string }>) {
+  private areMessageSetsOverlap(
+    messages1: Array<{ id: string }>,
+    messages2: Array<{ id: string }>,
+  ) {
     return messages1.some((m1) => messages2.find((m2) => m1.id === m2.id));
   }
 
   private findMessageSetIndex(message: { id?: string }) {
-    return this.messageSets.findIndex((set) => !!set.messages.find((m) => m.id === message.id));
+    return this.messageSets.findIndex(
+      (set) => !!set.messages.find((m) => m.id === message.id),
+    );
   }
 
   private findTargetMessageSet(
-    newMessages: MessageResponse<StreamChatGenerics>[],
+    newMessages: MessageResponse[],
     addIfDoesNotExist = true,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    let messagesToAdd: (
-      | MessageResponse<StreamChatGenerics>
-      | ReturnType<ChannelState<StreamChatGenerics>['formatMessage']>
-    )[] = newMessages;
+    let messagesToAdd: (MessageResponse | ReturnType<ChannelState['formatMessage']>)[] =
+      newMessages;
     let targetMessageSetIndex!: number;
     if (addIfDoesNotExist) {
       const overlappingMessageSetIndices = this.messageSets
         .map((_, i) => i)
-        .filter((i) => this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages));
+        .filter((i) =>
+          this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages),
+        );
       switch (messageSetToAddToIfDoesNotExist) {
         case 'new':
           if (overlappingMessageSetIndices.length > 0) {
@@ -739,13 +797,18 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
       // when merging the target set will be the first one from the overlapping message sets
       const mergeTargetMessageSetIndex = overlappingMessageSetIndices.splice(0, 1)[0];
       const mergeSourceMessageSetIndices = [...overlappingMessageSetIndices];
-      if (mergeTargetMessageSetIndex !== undefined && mergeTargetMessageSetIndex !== targetMessageSetIndex) {
+      if (
+        mergeTargetMessageSetIndex !== undefined &&
+        mergeTargetMessageSetIndex !== targetMessageSetIndex
+      ) {
         mergeSourceMessageSetIndices.push(targetMessageSetIndex);
       }
       // merge message sets
       if (mergeSourceMessageSetIndices.length > 0) {
         const target = this.messageSets[mergeTargetMessageSetIndex];
-        const sources = this.messageSets.filter((_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1);
+        const sources = this.messageSets.filter(
+          (_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1,
+        );
         sources.forEach((messageSet) => {
           target.isLatest = target.isLatest || messageSet.isLatest;
           target.isCurrent = target.isCurrent || messageSet.isCurrent;
@@ -754,7 +817,8 @@ export class ChannelState<StreamChatGenerics extends ExtendableGenerics = Defaul
               ? messageSet.pagination.hasPrev
               : target.pagination.hasPrev;
           target.pagination.hasNext =
-            target.messages.slice(-1)[0].created_at < messageSet.messages.slice(-1)[0].created_at
+            target.messages.slice(-1)[0].created_at <
+            messageSet.messages.slice(-1)[0].created_at
               ? messageSet.pagination.hasNext
               : target.pagination.hasNext;
           messagesToAdd = [...messagesToAdd, ...messageSet.messages];
