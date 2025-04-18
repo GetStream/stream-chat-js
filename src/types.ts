@@ -118,6 +118,7 @@ export type AppSettingsAPIResponse<StreamChatGenerics extends ExtendableGenerics
         updated_at?: string;
         uploads?: boolean;
         url_enrichment?: boolean;
+        user_message_reminders?: boolean;
       }
     >;
     reminders_interval: number;
@@ -1038,6 +1039,7 @@ export type CreateChannelOptions<StreamChatGenerics extends ExtendableGenerics =
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type CreateCommandOptions<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
@@ -2303,6 +2305,7 @@ export type ChannelConfigFields = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean; // Feature flag for user message reminders
 };
 
 export type ChannelConfigWithInfo<
@@ -3940,3 +3943,46 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
   }
 >;
+
+export type ReminderResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  reminder: Reminder<StreamChatGenerics>;
+};
+
+export type Reminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  remind_at?: string;
+  user_id: string;
+  user?: UserResponse<StreamChatGenerics>;
+  channel_cid: string;
+  message_id: string;
+  message?: MessageResponse<StreamChatGenerics>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateReminderOptions = {
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type UpdateReminderOptions = {
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type QueryRemindersOptions = {
+  filter_conditions?: {
+    channel_cid?: string | { $in?: string[]; $eq?: string };
+    message_id?: string | { $in?: string[]; $eq?: string };
+    remind_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    created_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    user_id?: string | { $in: string[] };
+  };
+  sort?: Array<{ field: string; direction: 1 | -1 }>;
+  limit?: number;
+};
+
+export type QueryRemindersResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+  reminders: Reminder<StreamChatGenerics>[];
+  prev?: string;
+  next?: string;
+};
