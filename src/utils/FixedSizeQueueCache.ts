@@ -1,3 +1,4 @@
+type Dispose<K, T> = (key: K, value: T) => void;
 /**
  * A cache that stores a fixed number of values in a queue.
  * The most recently added or retrieved value is kept at the front of the queue.
@@ -7,12 +8,15 @@
 export class FixedSizeQueueCache<K, T> {
   private keys: Array<K>;
   private size: number;
-  private valueByKey: Map<K, T>;
-  constructor(size: number) {
+  private map: Map<K, T>;
+  private dispose: Dispose<K, T> | null;
+
+  constructor(size: number, options?: { dispose: (key: K, value: T) => void }) {
     if (!size) throw new Error('Size must be greater than 0');
     this.keys = [];
     this.size = size;
-    this.valueByKey = new Map();
+    this.map = new Map();
+    this.dispose = options?.dispose ?? null;
   }
 
   /**
@@ -26,15 +30,21 @@ export class FixedSizeQueueCache<K, T> {
     if (index > -1) {
       this.keys.splice(this.keys.indexOf(key), 1);
     } else if (this.keys.length >= this.size) {
-      const elementKey = this.keys.shift();
+      const itemKey = this.keys.shift();
 
-      if (elementKey) {
-        this.valueByKey.delete(elementKey);
+      if (itemKey) {
+        const item = this.peek(itemKey);
+
+        if (item) {
+          this.dispose?.(itemKey, item);
+        }
+
+        this.map.delete(itemKey);
       }
     }
 
     this.keys.push(key);
-    this.valueByKey.set(key, value);
+    this.map.set(key, value);
   }
 
   /**
@@ -42,7 +52,7 @@ export class FixedSizeQueueCache<K, T> {
    * @param key
    */
   peek(key: K) {
-    const value = this.valueByKey.get(key);
+    const value = this.map.get(key);
 
     return value;
   }
@@ -52,13 +62,13 @@ export class FixedSizeQueueCache<K, T> {
    * @param key
    */
   get(key: K) {
-    const foundElement = this.peek(key);
+    const foundItem = this.peek(key);
 
-    if (foundElement && this.keys.indexOf(key) !== this.size - 1) {
+    if (foundItem && this.keys.indexOf(key) !== this.size - 1) {
       this.keys.splice(this.keys.indexOf(key), 1);
       this.keys.push(key);
     }
 
-    return foundElement;
+    return foundItem;
   }
 }
