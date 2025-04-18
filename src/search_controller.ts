@@ -18,7 +18,7 @@ import type {
 } from './types';
 
 export type SearchSourceType = 'channels' | 'users' | 'messages' | (string & {});
-export type QueryReturnValue<T> = { items: T[]; next?: string };
+export type QueryReturnValue<T> = { items: T[]; next?: string | null };
 export type DebounceOptions = {
   debounceMs: number;
 };
@@ -27,6 +27,8 @@ type DebouncedExecQueryFunction = DebouncedFunc<(searchString?: string) => Promi
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SearchSource<T = any> {
   activate(): void;
+  cancelScheduledQuery(): void;
+  canExecuteQuery(newSearchString?: string): boolean;
   deactivate(): void;
   readonly hasNext: boolean;
   readonly hasResults: boolean;
@@ -35,11 +37,10 @@ export interface SearchSource<T = any> {
   readonly isLoading: boolean;
   readonly items: T[] | undefined;
   readonly lastQueryError: Error | undefined;
-  readonly next: string | undefined;
+  readonly next: string | undefined | null;
   readonly offset: number | undefined;
   resetState(): void;
-  search(text?: string): void;
-  searchDebounced: DebouncedExecQueryFunction;
+  search(text?: string): Promise<void> | undefined;
   readonly searchQuery: string;
   setDebounceOptions(options: DebounceOptions): void;
   readonly state: StateStore<SearchSourceState<T>>;
@@ -54,7 +55,7 @@ export type SearchSourceState<T = any> = {
   items: T[] | undefined;
   searchQuery: string;
   lastQueryError?: Error;
-  next?: string;
+  next?: string | null;
   offset?: number;
 };
 
@@ -73,7 +74,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
   protected pageSize: number;
   abstract readonly type: SearchSourceType;
-  searchDebounced!: DebouncedExecQueryFunction;
+  protected searchDebounced!: DebouncedExecQueryFunction;
 
   protected constructor(options?: SearchSourceOptions) {
     const { debounceMs, pageSize } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
@@ -149,24 +150,49 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     this.state.partialNext({ isActive: false });
   };
 
-  async executeQuery(newSearchString?: string) {
+  canExecuteQuery = (newSearchString?: string) => {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     const searchString = newSearchString ?? this.searchQuery;
-    if (
-      !this.isActive ||
-      this.isLoading ||
-      (!this.hasNext && !hasNewSearchQuery) ||
-      !searchString
-    )
-      return;
+    return !!(
+      this.isActive &&
+      !this.isLoading &&
+      (this.hasNext || hasNewSearchQuery) &&
+      searchString
+    );
+  };
+
+  protected getStateBeforeFirstQuery(newSearchString: string): SearchSourceState<T> {
+    return {
+      ...this.initialState,
+      isActive: this.isActive,
+      isLoading: true,
+      searchQuery: newSearchString,
+    };
+  }
+
+  protected getStateAfterQuery(
+    stateUpdate: Partial<SearchSourceState<T>>,
+    isFirstPage: boolean,
+  ): SearchSourceState<T> {
+    const current = this.state.getLatestValue();
+    return {
+      ...current,
+      lastQueryError: undefined, // reset lastQueryError that can be overridden by the stateUpdate
+      ...stateUpdate,
+      isLoading: false,
+      items: isFirstPage
+        ? stateUpdate.items
+        : [...(this.items ?? []), ...(stateUpdate.items || [])],
+    };
+  }
+
+  async executeQuery(newSearchString?: string) {
+    if (!this.canExecuteQuery(newSearchString)) return;
+    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
+    const searchString = newSearchString ?? this.searchQuery;
 
     if (hasNewSearchQuery) {
-      this.state.next({
-        ...this.initialState,
-        isActive: this.isActive,
-        isLoading: true,
-        searchQuery: newSearchString ?? '',
-      });
+      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
     } else {
       this.state.partialNext({ isLoading: true });
     }
@@ -177,7 +203,7 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
       if (!results) return;
       const { items, next } = results;
 
-      if (next) {
+      if (next || next === null) {
         stateUpdate.next = next;
         stateUpdate.hasNext = !!next;
       } else {
@@ -189,22 +215,23 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      this.state.next(({ lastQueryError, ...current }: SearchSourceState<T>) => ({
-        ...current,
-        ...stateUpdate,
-        isLoading: false,
-        items: [...(current.items ?? []), ...(stateUpdate.items || [])],
-      }));
+      this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
   }
 
-  search = (searchQuery?: string) => {
-    this.searchDebounced(searchQuery);
-  };
+  search = (searchQuery?: string) => this.searchDebounced(searchQuery);
+
+  cancelScheduledQuery() {
+    this.searchDebounced.cancel();
+  }
 
   resetState() {
     this.state.next(this.initialState);
+  }
+
+  resetStateAndActivate() {
+    this.resetState();
+    this.activate();
   }
 }
 
@@ -344,12 +371,6 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
   }
 }
 
-export type DefaultSearchSources = [
-  UserSearchSource,
-  ChannelSearchSource,
-  MessageSearchSource,
-];
-
 export type SearchControllerState = {
   isActive: boolean;
   searchQuery: string;
@@ -471,7 +492,7 @@ export class SearchController {
   };
 
   cancelSearchQueries = () => {
-    this.activeSources.forEach((s) => s.searchDebounced.cancel());
+    this.activeSources.forEach((s) => s.cancelScheduledQuery());
   };
 
   clear = () => {

@@ -664,6 +664,7 @@ describe('StreamChat.queryChannels', async () => {
 		expect(Object.keys(client.configs).length).to.be.equal(0);
 		mock.restore();
 	});
+
 	it('should not update pagination for queried message set', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
