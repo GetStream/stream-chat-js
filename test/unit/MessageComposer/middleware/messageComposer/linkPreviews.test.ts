@@ -1,54 +1,63 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Channel } from '../../../../../src/channel';
+import { describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src/client';
-import {
-  LinkPreview,
-  LinkPreviewStatus,
-} from '../../../../../src/messageComposer/linkPreviewsManager';
+import { LinkPreviewStatus } from '../../../../../src/messageComposer/linkPreviewsManager';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { createLinkPreviewsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
-import { createDraftLinkPreviewsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
+import {
+  createDraftLinkPreviewsCompositionMiddleware,
+  createLinkPreviewsCompositionMiddleware,
+} from '../../../../../src/messageComposer/middleware/messageComposer/linkPreviews';
+import {
+  DraftMessage,
+  DraftResponse,
+  LinkPreviewsManagerConfig,
+  LocalMessage,
+} from '../../../../../src';
 
-describe('LinkPreviewsMiddleware', () => {
-  let channel: Channel;
-  let client: StreamChat;
-  let messageComposer: MessageComposer;
-  let linkPreviewsMiddleware: ReturnType<typeof createLinkPreviewsCompositionMiddleware>;
+const enrichURLReturnValue = {
+  asset_url: 'https://example.com/image.jpg',
+  author_link: 'https://example.com/author',
+  author_name: 'Example Author',
+  image_url: 'https://example.com/image.jpg',
+  og_scrape_url: 'https://example.com',
+  text: 'Example description',
+  thumb_url: 'https://example.com/thumb.jpg',
+  title: 'Example',
+  title_link: 'https://example.com',
+  type: 'article',
+  duration: '100',
+};
 
-  beforeEach(() => {
-    // Create a real StreamChat instance with minimal implementation
-    client = new StreamChat('apiKey', {
-      enableInsights: false,
-      enableWSFallback: false,
-    });
+const setup = ({
+  composition,
+  config,
+}: {
+  composition?: DraftResponse | LocalMessage;
+  config?: Partial<LinkPreviewsManagerConfig>;
+  message?: DraftMessage | LocalMessage;
+} = {}) => {
+  vi.clearAllMocks();
 
-    // Mock only the enrichURL method
-    vi.spyOn(client, 'enrichURL').mockResolvedValue({
-      asset_url: 'https://example.com/image.jpg',
-      author_link: 'https://example.com/author',
-      author_name: 'Example Author',
-      image_url: 'https://example.com/image.jpg',
-      og_scrape_url: 'https://example.com',
-      text: 'Example description',
-      thumb_url: 'https://example.com/thumb.jpg',
-      title: 'Example',
-      title_link: 'https://example.com',
-      type: 'article',
-      duration: '100',
-    });
+  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-    channel = new Channel(client, 'messaging', 'test-channel', {
-      members: [],
-    });
-
-    // Use the messageComposer property from the channel
-    messageComposer = channel.messageComposer;
-
-    // Create the middleware
-    linkPreviewsMiddleware = createLinkPreviewsCompositionMiddleware(messageComposer);
+  const mockChannel = mockClient.channel('messaging', 'test-channel', {
+    members: [],
+  });
+  const messageComposer = new MessageComposer({
+    client: mockClient,
+    composition,
+    compositionContext: mockChannel,
+    config: { linkPreviews: config },
   });
 
-  it('should handle message without link previews', async () => {
+  const linkPreviewsMiddleware = createLinkPreviewsCompositionMiddleware(messageComposer);
+
+  return { linkPreviewsMiddleware, messageComposer };
+};
+
+describe('LinkPreviewsMiddleware', () => {
+  it('should keep message attachments empty if not link previews are available', async () => {
+    const { linkPreviewsMiddleware } = setup();
     const result = await linkPreviewsMiddleware.compose({
       input: {
         state: {
@@ -83,27 +92,25 @@ describe('LinkPreviewsMiddleware', () => {
     expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
   });
 
-  it('should handle message with loaded link preview', async () => {
-    // Create a real LinkPreview instance
+  it('should add loaded preview to message attachments', async () => {
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example.com/image.jpg',
-              author_link: 'https://example.com/author',
-              author_name: 'Example Author',
-              image_url: 'https://example.com/image.jpg',
-              og_scrape_url: 'https://example.com',
-              text: 'Example description',
-              thumb_url: 'https://example.com/thumb.jpg',
-              title: 'Example',
-              title_link: 'https://example.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example.com/image.jpg',
+            author_link: 'https://example.com/author',
+            author_name: 'Example Author',
+            image_url: 'https://example.com/image.jpg',
+            og_scrape_url: 'https://example.com',
+            text: 'Example description',
+            thumb_url: 'https://example.com/thumb.jpg',
+            title: 'Example',
+            title_link: 'https://example.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADED,
-          }),
+          },
         ],
       ]),
     });
@@ -146,26 +153,24 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should handle message with loading link preview', async () => {
-    // Create a real LinkPreview instance
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example.com/image.jpg',
-              author_link: 'https://example.com/author',
-              author_name: 'Example Author',
-              image_url: 'https://example.com/image.jpg',
-              og_scrape_url: 'https://example.com',
-              text: 'Example description',
-              thumb_url: 'https://example.com/thumb.jpg',
-              title: 'Example',
-              title_link: 'https://example.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example.com/image.jpg',
+            author_link: 'https://example.com/author',
+            author_name: 'Example Author',
+            image_url: 'https://example.com/image.jpg',
+            og_scrape_url: 'https://example.com',
+            text: 'Example description',
+            thumb_url: 'https://example.com/thumb.jpg',
+            title: 'Example',
+            title_link: 'https://example.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADING,
-          }),
+          },
         ],
       ]),
     });
@@ -205,26 +210,24 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should handle message with failed link preview', async () => {
-    // Create a real LinkPreview instance
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example.com/image.jpg',
-              author_link: 'https://example.com/author',
-              author_name: 'Example Author',
-              image_url: 'https://example.com/image.jpg',
-              og_scrape_url: 'https://example.com',
-              text: 'Example description',
-              thumb_url: 'https://example.com/thumb.jpg',
-              title: 'Example',
-              title_link: 'https://example.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example.com/image.jpg',
+            author_link: 'https://example.com/author',
+            author_name: 'Example Author',
+            image_url: 'https://example.com/image.jpg',
+            og_scrape_url: 'https://example.com',
+            text: 'Example description',
+            thumb_url: 'https://example.com/thumb.jpg',
+            title: 'Example',
+            title_link: 'https://example.com',
+            type: 'article',
             status: LinkPreviewStatus.FAILED,
-          }),
+          },
         ],
       ]),
     });
@@ -265,26 +268,24 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should handle message with dismissed link preview', async () => {
-    // Create a real LinkPreview instance
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example.com/image.jpg',
-              author_link: 'https://example.com/author',
-              author_name: 'Example Author',
-              image_url: 'https://example.com/image.jpg',
-              og_scrape_url: 'https://example.com',
-              text: 'Example description',
-              thumb_url: 'https://example.com/thumb.jpg',
-              title: 'Example',
-              title_link: 'https://example.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example.com/image.jpg',
+            author_link: 'https://example.com/author',
+            author_name: 'Example Author',
+            image_url: 'https://example.com/image.jpg',
+            og_scrape_url: 'https://example.com',
+            text: 'Example description',
+            thumb_url: 'https://example.com/thumb.jpg',
+            title: 'Example',
+            title_link: 'https://example.com',
+            type: 'article',
             status: LinkPreviewStatus.DISMISSED,
-          }),
+          },
         ],
       ]),
     });
@@ -324,62 +325,56 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should handle message with multiple link previews and skip url enrichment server-side if some were dismissed', async () => {
-    // Create real LinkPreview instances
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example1.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example1.com/image.jpg',
-              author_link: 'https://example1.com/author',
-              author_name: 'Example Author 1',
-              image_url: 'https://example1.com/image.jpg',
-              og_scrape_url: 'https://example1.com',
-              text: 'Example description 1',
-              thumb_url: 'https://example1.com/thumb.jpg',
-              title: 'Example 1',
-              title_link: 'https://example1.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example1.com/image.jpg',
+            author_link: 'https://example1.com/author',
+            author_name: 'Example Author 1',
+            image_url: 'https://example1.com/image.jpg',
+            og_scrape_url: 'https://example1.com',
+            text: 'Example description 1',
+            thumb_url: 'https://example1.com/thumb.jpg',
+            title: 'Example 1',
+            title_link: 'https://example1.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADED,
-          }),
+          },
         ],
         [
           'https://example2.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example2.com/image.jpg',
-              author_link: 'https://example2.com/author',
-              author_name: 'Example Author 2',
-              image_url: 'https://example2.com/image.jpg',
-              og_scrape_url: 'https://example2.com',
-              text: 'Example description 2',
-              thumb_url: 'https://example2.com/thumb.jpg',
-              title: 'Example 2',
-              title_link: 'https://example2.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example2.com/image.jpg',
+            author_link: 'https://example2.com/author',
+            author_name: 'Example Author 2',
+            image_url: 'https://example2.com/image.jpg',
+            og_scrape_url: 'https://example2.com',
+            text: 'Example description 2',
+            thumb_url: 'https://example2.com/thumb.jpg',
+            title: 'Example 2',
+            title_link: 'https://example2.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADED,
-          }),
+          },
         ],
         [
           'https://example3.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example3.com/image.jpg',
-              author_link: 'https://example3.com/author',
-              author_name: 'Example Author 3',
-              image_url: 'https://example3.com/image.jpg',
-              og_scrape_url: 'https://example3.com',
-              text: 'Example description 3',
-              thumb_url: 'https://example3.com/thumb.jpg',
-              title: 'Example 3',
-              title_link: 'https://example3.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example3.com/image.jpg',
+            author_link: 'https://example3.com/author',
+            author_name: 'Example Author 3',
+            image_url: 'https://example3.com/image.jpg',
+            og_scrape_url: 'https://example3.com',
+            text: 'Example description 3',
+            thumb_url: 'https://example3.com/thumb.jpg',
+            title: 'Example 3',
+            title_link: 'https://example3.com',
+            type: 'article',
             status: LinkPreviewStatus.DISMISSED,
-          }),
+          },
         ],
       ]),
     });
@@ -422,44 +417,40 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should not skip url enrichment server-side if not all previews could be loaded and none has been dismissed', async () => {
-    // Create real LinkPreview instances
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example1.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example1.com/image.jpg',
-              author_link: 'https://example1.com/author',
-              author_name: 'Example Author 1',
-              image_url: 'https://example1.com/image.jpg',
-              og_scrape_url: 'https://example1.com',
-              text: 'Example description 1',
-              thumb_url: 'https://example1.com/thumb.jpg',
-              title: 'Example 1',
-              title_link: 'https://example1.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example1.com/image.jpg',
+            author_link: 'https://example1.com/author',
+            author_name: 'Example Author 1',
+            image_url: 'https://example1.com/image.jpg',
+            og_scrape_url: 'https://example1.com',
+            text: 'Example description 1',
+            thumb_url: 'https://example1.com/thumb.jpg',
+            title: 'Example 1',
+            title_link: 'https://example1.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADED,
-          }),
+          },
         ],
         [
           'https://example2.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example2.com/image.jpg',
-              author_link: 'https://example2.com/author',
-              author_name: 'Example Author 2',
-              image_url: 'https://example2.com/image.jpg',
-              og_scrape_url: 'https://example2.com',
-              text: 'Example description 2',
-              thumb_url: 'https://example2.com/thumb.jpg',
-              title: 'Example 2',
-              title_link: 'https://example2.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example2.com/image.jpg',
+            author_link: 'https://example2.com/author',
+            author_name: 'Example Author 2',
+            image_url: 'https://example2.com/image.jpg',
+            og_scrape_url: 'https://example2.com',
+            text: 'Example description 2',
+            thumb_url: 'https://example2.com/thumb.jpg',
+            title: 'Example 2',
+            title_link: 'https://example2.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADING,
-          }),
+          },
         ],
       ]),
     });
@@ -500,26 +491,24 @@ describe('LinkPreviewsMiddleware', () => {
   });
 
   it('should add link previews to existing attachments array', async () => {
-    // Create a real LinkPreview instance
+    const { linkPreviewsMiddleware, messageComposer } = setup();
     messageComposer.linkPreviewsManager.state.next({
       previews: new Map([
         [
           'https://example.com',
-          new LinkPreview({
-            data: {
-              asset_url: 'https://example.com/image.jpg',
-              author_link: 'https://example.com/author',
-              author_name: 'Example Author',
-              image_url: 'https://example.com/image.jpg',
-              og_scrape_url: 'https://example.com',
-              text: 'Example description',
-              thumb_url: 'https://example.com/thumb.jpg',
-              title: 'Example',
-              title_link: 'https://example.com',
-              type: 'article',
-            },
+          {
+            asset_url: 'https://example.com/image.jpg',
+            author_link: 'https://example.com/author',
+            author_name: 'Example Author',
+            image_url: 'https://example.com/image.jpg',
+            og_scrape_url: 'https://example.com',
+            text: 'Example description',
+            thumb_url: 'https://example.com/thumb.jpg',
+            title: 'Example',
+            title_link: 'https://example.com',
+            type: 'article',
             status: LinkPreviewStatus.LOADED,
-          }),
+          },
         ],
       ]),
     });
@@ -574,52 +563,37 @@ describe('LinkPreviewsMiddleware', () => {
   });
 });
 
-describe('DraftLinkPreviewsMiddleware', () => {
-  let channel: Channel;
-  let client: StreamChat;
-  let messageComposer: MessageComposer;
-  let linkPreviewsMiddleware: ReturnType<
-    typeof createDraftLinkPreviewsCompositionMiddleware
-  >;
+const setupForDraft = ({
+  composition,
+  config,
+}: {
+  composition?: DraftResponse | LocalMessage;
+  config?: Partial<LinkPreviewsManagerConfig>;
+  message?: DraftMessage | LocalMessage;
+} = {}) => {
+  vi.clearAllMocks();
 
-  beforeEach(() => {
-    client = {
-      userID: 'currentUser',
-      user: { id: 'currentUser' },
-    } as any;
+  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-    channel = {
-      getClient: vi.fn().mockReturnValue(client),
-      state: {
-        members: {},
-        watchers: {},
-      },
-      getConfig: vi.fn().mockReturnValue({ commands: [] }),
-    } as any;
-
-    const linkPreviewsManager = {
-      state: {
-        getLatestValue: () => ({
-          previews: new Map(),
-        }),
-      },
-      cancelURLEnrichment: vi.fn(),
-      get loadedPreviews() {
-        return [];
-      },
-    };
-
-    messageComposer = {
-      channel,
-      client,
-      linkPreviewsManager,
-    } as any;
-
-    linkPreviewsMiddleware =
-      createDraftLinkPreviewsCompositionMiddleware(messageComposer);
+  const mockChannel = mockClient.channel('messaging', 'test-channel', {
+    members: [],
+  });
+  const messageComposer = new MessageComposer({
+    client: mockClient,
+    composition,
+    compositionContext: mockChannel,
+    config: { linkPreviews: config },
   });
 
+  const linkPreviewsMiddleware =
+    createDraftLinkPreviewsCompositionMiddleware(messageComposer);
+
+  return { linkPreviewsMiddleware, mockClient, mockChannel, messageComposer };
+};
+describe('DraftLinkPreviewsMiddleware', () => {
   it('should handle draft without link previews', async () => {
+    const { linkPreviewsMiddleware } = setupForDraft();
     const result = await linkPreviewsMiddleware.compose({
       input: {
         state: {
@@ -636,6 +610,7 @@ describe('DraftLinkPreviewsMiddleware', () => {
   });
 
   it('should handle draft with loaded link previews', async () => {
+    const { linkPreviewsMiddleware, messageComposer } = setupForDraft();
     const linkPreview = {
       state: { status: 'loaded' },
       data: {
@@ -679,6 +654,7 @@ describe('DraftLinkPreviewsMiddleware', () => {
   });
 
   it('should merge link previews with existing draft attachments', async () => {
+    const { linkPreviewsMiddleware, messageComposer } = setupForDraft();
     const existingAttachment = {
       type: 'image',
       image_url: 'https://example.com/image.jpg',
@@ -728,11 +704,12 @@ describe('DraftLinkPreviewsMiddleware', () => {
   });
 
   it('should handle case when linkPreviewsManager is not available', async () => {
+    const { messageComposer } = setupForDraft();
     messageComposer.linkPreviewsManager = undefined as any;
-    linkPreviewsMiddleware =
+    const linkPreviewsMiddlewareWithUndefinedManager =
       createDraftLinkPreviewsCompositionMiddleware(messageComposer);
 
-    const result = await linkPreviewsMiddleware.compose({
+    const result = await linkPreviewsMiddlewareWithUndefinedManager.compose({
       input: {
         state: {
           draft: {
@@ -748,6 +725,7 @@ describe('DraftLinkPreviewsMiddleware', () => {
   });
 
   it('should call cancelURLEnrichment', async () => {
+    const { linkPreviewsMiddleware, messageComposer } = setupForDraft();
     const cancelURLEnrichment = vi.fn();
     messageComposer.linkPreviewsManager.cancelURLEnrichment = cancelURLEnrichment;
 

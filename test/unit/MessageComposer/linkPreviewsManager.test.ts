@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  LinkPreview,
-  LinkPreviewsManager,
-  LinkPreviewStatus,
-} from '../../../src/messageComposer/linkPreviewsManager';
-import { StateStore } from '../../../src/store';
+import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
 import { DraftMessage, LocalMessage } from '../../../src/types';
 import {
   DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
@@ -14,6 +9,7 @@ import {
   StreamChat,
 } from '../../../src';
 
+const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
 // Mock dependencies
 vi.mock('../../src/store', () => ({
@@ -39,8 +35,15 @@ vi.mock('../../src/utils/mergeWith', () => ({
 
 vi.mock('linkifyjs', () => ({
   find: vi.fn().mockImplementation((text) => {
-    if (text.includes('http')) {
+    if (text.includes(linkUrl) && text.includes(existingLinkUrl)) {
+      return [
+        { isLink: true, href: linkUrl },
+        { isLink: true, href: existingLinkUrl },
+      ];
+    } else if (text.includes(linkUrl)) {
       return [{ isLink: true, href: linkUrl }];
+    } else if (text.includes(existingLinkUrl)) {
+      return [{ isLink: true, href: existingLinkUrl }];
     }
     return [];
   }),
@@ -193,16 +196,12 @@ describe('LinkPreviewsManager', () => {
         messageComposer: { linkPreviewsManager },
       } = setup();
 
-      // Create a dismissed preview
-      const preview = new LinkPreview({
-        data: { og_scrape_url: linkUrl },
-        manager: linkPreviewsManager,
-        status: LinkPreviewStatus.DISMISSED,
-      });
-
       // Add the preview to the manager's previews
       const newPreviews = new Map(linkPreviewsManager.previews);
-      newPreviews.set(linkUrl, preview);
+      newPreviews.set(linkUrl, {
+        og_scrape_url: linkUrl,
+        status: LinkPreviewStatus.DISMISSED,
+      });
       linkPreviewsManager.state.partialNext({ previews: newPreviews });
 
       // Check that dismissedPreviews contains the preview
@@ -210,6 +209,44 @@ describe('LinkPreviewsManager', () => {
       expect(linkPreviewsManager.dismissedPreviews[0].og_scrape_url).toBe(linkUrl);
       expect(linkPreviewsManager.dismissedPreviews[0].status).toBe(
         LinkPreviewStatus.DISMISSED,
+      );
+    });
+
+    it('should return failedPreviews correctly', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+
+      const newPreviews = new Map(linkPreviewsManager.previews);
+      newPreviews.set(linkUrl, {
+        og_scrape_url: linkUrl,
+        status: LinkPreviewStatus.FAILED,
+      });
+      linkPreviewsManager.state.partialNext({ previews: newPreviews });
+
+      // Check that failedPreviews contains the preview
+      expect(linkPreviewsManager.failedPreviews.length).toBe(1);
+      expect(linkPreviewsManager.failedPreviews[0].og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.failedPreviews[0].status).toBe(LinkPreviewStatus.FAILED);
+    });
+
+    it('should return pendingPreviews correctly', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+
+      const newPreviews = new Map(linkPreviewsManager.previews);
+      newPreviews.set(linkUrl, {
+        og_scrape_url: linkUrl,
+        status: LinkPreviewStatus.PENDING,
+      });
+      linkPreviewsManager.state.partialNext({ previews: newPreviews });
+
+      // Check that pendingPreviews contains the preview
+      expect(linkPreviewsManager.pendingPreviews.length).toBe(1);
+      expect(linkPreviewsManager.pendingPreviews[0].og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.pendingPreviews[0].status).toBe(
+        LinkPreviewStatus.PENDING,
       );
     });
   });
@@ -396,8 +433,152 @@ describe('LinkPreviewsManager', () => {
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(mockClient.enrichURL).toHaveBeenCalledTimes(2);
+      expect(mockClient.enrichURL).toHaveBeenCalledTimes(1);
       expect(linkPreviewsManager.previews.size).toBe(1);
+    });
+
+    it('should not keep existing link previews if source string does not include them anymore', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({
+        config: { debounceURLEnrichmentMs: 0, enabled: true },
+      });
+      const existingPreview = {
+        og_scrape_url: 'https://existing.com  ',
+        status: LinkPreviewStatus.LOADED,
+      };
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([[existingPreview.og_scrape_url, existingPreview]]),
+      });
+
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+
+      // Wait for the debounced function to be called
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(linkPreviewsManager.previews.size).toBe(1);
+      expect(linkPreviewsManager.previews.get(existingPreview.og_scrape_url)?.status)
+        .toBeUndefined;
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBe(
+        LinkPreviewStatus.LOADED,
+      );
+    });
+
+    it('should keep existing link previews', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({
+        config: { debounceURLEnrichmentMs: 0, enabled: true },
+      });
+      const existingPreview = {
+        og_scrape_url: 'https://existing.com',
+        status: LinkPreviewStatus.LOADED,
+      };
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([[existingPreview.og_scrape_url, existingPreview]]),
+      });
+
+      linkPreviewsManager.findAndEnrichUrls(
+        'Check out https://example.com and https://existing.com',
+      );
+
+      // Wait for the debounced function to be called
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(linkPreviewsManager.previews.size).toBe(2);
+      expect(
+        linkPreviewsManager.previews.get(existingPreview.og_scrape_url)?.status,
+      ).toBe(LinkPreviewStatus.LOADED);
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBe(
+        LinkPreviewStatus.LOADED,
+      );
+    });
+  });
+
+  describe('dismissPreview', () => {
+    it('should update the status of a preview when it is dismissed', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([
+          [linkUrl, { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED }],
+        ]),
+      });
+
+      linkPreviewsManager.dismissPreview(linkUrl);
+
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBe(
+        LinkPreviewStatus.DISMISSED,
+      );
+    });
+
+    it('should call onLinkPreviewDismissed when a preview is dismissed', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([
+          [linkUrl, { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED }],
+        ]),
+      });
+      const onLinkPreviewDismissed = vi.fn();
+      linkPreviewsManager.onLinkPreviewDismissed = onLinkPreviewDismissed;
+
+      linkPreviewsManager.dismissPreview(linkUrl);
+      const preview = linkPreviewsManager.previews.get(linkUrl);
+      expect(onLinkPreviewDismissed).toHaveBeenCalledWith({
+        ...preview,
+        status: LinkPreviewStatus.LOADED,
+      });
+    });
+  });
+
+  describe('updatePreview', () => {
+    it('should set status to PENDING when a status is not available during preview update', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([[linkUrl, { og_scrape_url: linkUrl }]]),
+      });
+
+      linkPreviewsManager.updatePreview(linkUrl, { og_scrape_url: linkUrl });
+
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBe(
+        LinkPreviewStatus.PENDING,
+      );
+    });
+
+    it('should partially update the preview', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([
+          [
+            linkUrl,
+            {
+              og_scrape_url: linkUrl,
+              status: LinkPreviewStatus.PENDING,
+              title: 'Example Title',
+            },
+          ],
+        ]),
+      });
+
+      linkPreviewsManager.updatePreview(linkUrl, {
+        title: 'New Title',
+        status: LinkPreviewStatus.LOADED,
+      });
+
+      expect(linkPreviewsManager.previews.get(linkUrl)?.og_scrape_url).toBe(linkUrl);
+      expect(linkPreviewsManager.previews.get(linkUrl)?.title).toBe('New Title');
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBe(
+        LinkPreviewStatus.LOADED,
+      );
     });
   });
 
@@ -416,70 +597,30 @@ describe('LinkPreviewsManager', () => {
     });
   });
 
-  describe('LinkPreview', () => {
-    it('should initialize with the correct status', () => {
+  describe('clearPreviews', () => {
+    it('clears all non-dismissed previews', () => {
       const {
         messageComposer: { linkPreviewsManager },
       } = setup();
-      const preview = new LinkPreview({
-        data: { og_scrape_url: linkUrl },
-        manager: linkPreviewsManager,
-        status: LinkPreviewStatus.LOADING,
+      linkPreviewsManager.state.partialNext({
+        previews: new Map([
+          [linkUrl, { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED }],
+          [
+            'https://exampleX.com',
+            {
+              og_scrape_url: 'https://exampleX.com',
+              status: LinkPreviewStatus.DISMISSED,
+            },
+          ],
+        ]),
       });
 
-      expect(preview.status).toBe(LinkPreviewStatus.LOADING);
-      expect(preview.isLoading).toBe(true);
-      expect(preview.isLoaded).toBe(false);
-      expect(preview.isDismissed).toBe(false);
-    });
+      linkPreviewsManager.clearPreviews();
 
-    it('should update status when state changes', () => {
-      const {
-        messageComposer: { linkPreviewsManager },
-      } = setup();
-      const stateStore = new StateStore({
-        og_scrape_url: linkUrl,
-        status: LinkPreviewStatus.LOADING,
-      });
-
-      const preview = new LinkPreview({
-        data: { og_scrape_url: linkUrl },
-        manager: linkPreviewsManager,
-        status: LinkPreviewStatus.LOADING,
-      });
-
-      // Replace the state store with our mock
-      preview.state = stateStore;
-
-      expect(preview.status).toBe(LinkPreviewStatus.LOADING);
-
-      // Update the state
-      stateStore.next({
-        og_scrape_url: linkUrl,
-        status: LinkPreviewStatus.LOADED,
-      });
-
-      expect(preview.status).toBe(LinkPreviewStatus.LOADED);
-      expect(preview.isLoading).toBe(false);
-      expect(preview.isLoaded).toBe(true);
-    });
-
-    it('should call onLinkPreviewDismissed when dismissed', () => {
-      const onDismissed = vi.fn();
-      const {
-        messageComposer: { linkPreviewsManager },
-      } = setup({ config: { onLinkPreviewDismissed: onDismissed } });
-      const preview = new LinkPreview({
-        data: { og_scrape_url: linkUrl },
-        status: LinkPreviewStatus.LOADED,
-        manager: linkPreviewsManager,
-      });
-
-      preview.dismiss();
-
-      expect(onDismissed).toHaveBeenCalledWith(preview);
-      expect(preview.status).toBe(LinkPreviewStatus.DISMISSED);
-      expect(preview.isDismissed).toBe(true);
+      expect(linkPreviewsManager.previews.get(linkUrl)?.status).toBeUndefined();
+      expect(linkPreviewsManager.previews.get('https://exampleX.com')?.status).toBe(
+        LinkPreviewStatus.DISMISSED,
+      );
     });
   });
 });

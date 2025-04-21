@@ -56,24 +56,6 @@ vi.mock('../../../src/messageComposer/attachmentManager', () => ({
   })),
 }));
 
-vi.mock('../../../src/messageComposer/linkPreviewsManager', () => ({
-  LinkPreviewsManager: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ linkPreviews: [] }),
-    initState: vi.fn(),
-    clear: vi.fn(),
-    findAndEnrichUrls: vi.fn(),
-  })),
-}));
-
-// vi.mock('../../../src/messageComposer/textComposer', () => ({
-//   TextComposer: vi.fn().mockImplementation(() => ({
-//     state: new StateStore({ text: '', mentionedUsers: [] }),
-//     initState: vi.fn(),
-//     clear: vi.fn(),
-//     textIsEmpty: vi.fn().mockReturnValue(true),
-//   })),
-// }));
-
 vi.mock('../../../src/messageComposer/pollComposer', () => ({
   PollComposer: vi.fn().mockImplementation(() => ({
     state: new StateStore({ poll: null }),

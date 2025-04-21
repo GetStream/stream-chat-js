@@ -5,96 +5,9 @@ import type { DraftMessage, LocalMessage, OGAttachment } from '../types';
 import type { LinkPreviewsManagerConfig } from './configuration/types';
 import type { MessageComposer } from './messageComposer';
 
-export type LinkPreviewState = OGAttachment & {
+export type LinkPreview = OGAttachment & {
   status: LinkPreviewStatus;
 };
-
-export type LinkPreviewOptions = {
-  data: OGAttachment;
-  manager: LinkPreviewsManager;
-  status: LinkPreviewStatus;
-};
-
-export class LinkPreview {
-  readonly state: StateStore<LinkPreviewState>;
-  readonly manager: LinkPreviewsManager;
-
-  constructor({ data, manager, status }: LinkPreviewOptions) {
-    this.state = new StateStore<LinkPreviewState>({ ...data, status });
-    this.manager = manager;
-  }
-
-  get onLinkPreviewDismissed() {
-    return this.manager.config.onLinkPreviewDismissed;
-  }
-
-  get data(): OGAttachment {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { status, ...data } = this.state.getLatestValue();
-    return data;
-  }
-
-  get asset_url() {
-    return this.state.getLatestValue().asset_url;
-  }
-
-  get author_link() {
-    return this.state.getLatestValue().author_link;
-  }
-
-  get author_name() {
-    return this.state.getLatestValue().author_name;
-  }
-
-  get image_url() {
-    return this.state.getLatestValue().image_url;
-  }
-
-  get og_scrape_url() {
-    return this.state.getLatestValue().og_scrape_url;
-  }
-
-  get text() {
-    return this.state.getLatestValue().text;
-  }
-
-  get thumb_url() {
-    return this.state.getLatestValue().thumb_url;
-  }
-
-  get title() {
-    return this.state.getLatestValue().title;
-  }
-
-  get title_link() {
-    return this.state.getLatestValue().title_link;
-  }
-
-  get type() {
-    return this.state.getLatestValue().type;
-  }
-
-  get status() {
-    return this.state.getLatestValue().status;
-  }
-
-  get isLoading() {
-    return this.status === LinkPreviewStatus.LOADING;
-  }
-
-  get isLoaded() {
-    return this.status === LinkPreviewStatus.LOADED;
-  }
-
-  get isDismissed() {
-    return this.status === LinkPreviewStatus.DISMISSED;
-  }
-
-  dismiss = () => {
-    this.onLinkPreviewDismissed?.(this);
-    this.state.partialNext({ status: LinkPreviewStatus.DISMISSED });
-  };
-}
 
 export interface ILinkPreviewsManager {
   /** Function cancels all the scheduled or in-progress URL enrichment queries and resets the state. */
@@ -112,6 +25,8 @@ export enum LinkPreviewStatus {
   LOADED = 'loaded',
   /** The enrichment query is in progress for a given link. **/
   LOADING = 'loading',
+  /** The preview reference enrichment has not begun. Default status if not set. */
+  PENDING = 'pending',
 }
 
 export type LinkURL = string;
@@ -127,11 +42,12 @@ export type LinkPreviewsManagerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
+const linkPreviewArrayToMap = (linkPreviews: LinkPreview[]) =>
+  new Map(linkPreviews.map((linkPreview) => [linkPreview.og_scrape_url, linkPreview]));
+
 const initState = ({
-  manager,
   message,
 }: {
-  manager: LinkPreviewsManager;
   message?: DraftMessage | LocalMessage;
 }): LinkPreviewsManagerState =>
   message
@@ -139,14 +55,10 @@ const initState = ({
         previews:
           message.attachments?.reduce<LinkPreviewMap>((acc, attachment) => {
             if (!attachment.og_scrape_url) return acc;
-            acc.set(
-              attachment.og_scrape_url,
-              new LinkPreview({
-                data: attachment as OGAttachment,
-                manager,
-                status: LinkPreviewStatus.LOADED,
-              }),
-            );
+            acc.set(attachment.og_scrape_url, {
+              ...(attachment as OGAttachment),
+              status: LinkPreviewStatus.LOADED,
+            });
             return acc;
           }, new Map()) ?? new Map(),
       }
@@ -167,9 +79,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
 
   constructor({ composer, message }: LinkPreviewsManagerOptions) {
     this.composer = composer;
-    this.state = new StateStore<LinkPreviewsManagerState>(
-      initState({ manager: this, message }),
-    );
+    this.state = new StateStore<LinkPreviewsManagerState>(initState({ message }));
 
     this.findAndEnrichUrls = debounce(
       this._findAndEnrichUrls.bind(this),
@@ -186,20 +96,32 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   get loadingPreviews() {
-    return Array.from(this.previews.values()).filter(
-      (linkPreview) => linkPreview.isLoading,
+    return Array.from(this.previews.values()).filter((linkPreview) =>
+      LinkPreviewsManager.previewIsLoading(linkPreview),
     );
   }
 
   get loadedPreviews() {
-    return Array.from(this.previews.values()).filter(
-      (linkPreview) => linkPreview.isLoaded,
+    return Array.from(this.previews.values()).filter((linkPreview) =>
+      LinkPreviewsManager.previewIsLoaded(linkPreview),
     );
   }
 
   get dismissedPreviews() {
-    return Array.from(this.previews.values()).filter(
-      (linkPreview) => linkPreview.isDismissed,
+    return Array.from(this.previews.values()).filter((linkPreview) =>
+      LinkPreviewsManager.previewIsDismissed(linkPreview),
+    );
+  }
+
+  get failedPreviews() {
+    return Array.from(this.previews.values()).filter((linkPreview) =>
+      LinkPreviewsManager.previewIsFailed(linkPreview),
+    );
+  }
+
+  get pendingPreviews() {
+    return Array.from(this.previews.values()).filter((linkPreview) =>
+      LinkPreviewsManager.previewIsPending(linkPreview),
     );
   }
 
@@ -228,58 +150,142 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.composer.updateConfig({ linkPreviews: { findURLFn: fn } });
   }
 
+  get onLinkPreviewDismissed() {
+    return this.config.onLinkPreviewDismissed;
+  }
+
   set onLinkPreviewDismissed(fn: LinkPreviewsManagerConfig['onLinkPreviewDismissed']) {
     this.composer.updateConfig({ linkPreviews: { onLinkPreviewDismissed: fn } });
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.state.next(initState({ manager: this, message }));
+    this.state.next(initState({ message }));
   };
 
-  private _findAndEnrichUrls = (text: string) => {
+  private _findAndEnrichUrls = async (text: string) => {
     if (!this.config.enabled) return;
-
-    const urls = this.config.findURLFn(text).filter((url) => {
-      const existingPreviewLink = this.previews.get(url);
-      return (
-        !existingPreviewLink || existingPreviewLink.status !== LinkPreviewStatus.FAILED
-      );
-    });
+    const urls = this.config.findURLFn(text);
 
     this.shouldDiscardEnrichQueries = !urls.length;
     if (!urls.length) {
+      this.state.next({ previews: new Map() });
       return;
     }
+    const keptPreviews = new Map(
+      Array.from(this.previews).filter(
+        ([previewUrl]) => urls.includes(previewUrl) || urls.includes(previewUrl + '/'),
+      ),
+    );
 
-    const addedLinkPreviews = urls.map((url) => {
-      const linkPreview = new LinkPreview({
-        data: { og_scrape_url: url },
-        manager: this,
-        status: LinkPreviewStatus.LOADING,
-      });
-      this.client
-        .enrichURL(url)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        .then(({ duration, ...ogAttachment }) => {
-          if (this.shouldDiscardEnrichQueries) return;
-          linkPreview?.state.next({ status: LinkPreviewStatus.LOADED, ...ogAttachment });
-        })
-        .catch(() => {
-          linkPreview?.state.partialNext({ status: LinkPreviewStatus.FAILED });
-        });
-      return linkPreview;
+    const newLinkPreviews = urls
+      .filter((url) => {
+        const existingPreviews = this.previews;
+        // account for trailing slashes added by the back-end
+        const existingPreviewLink =
+          existingPreviews.get(url) || existingPreviews.get(url + '/');
+        return !existingPreviewLink;
+      })
+      .map(
+        (url) =>
+          ({
+            og_scrape_url: url.trim(),
+            status: LinkPreviewStatus.LOADING,
+          }) as LinkPreview,
+      );
+
+    this.state.partialNext({
+      previews: new Map([...keptPreviews, ...linkPreviewArrayToMap(newLinkPreviews)]),
     });
 
-    const newLinkPreviews = new Map(this.previews);
-    addedLinkPreviews.forEach((linkPreview) =>
-      newLinkPreviews.set(linkPreview.og_scrape_url, linkPreview),
+    await Promise.all(
+      newLinkPreviews.map(async (linkPreview) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { duration, ...ogAttachment } = await this.client.enrichURL(
+            linkPreview.og_scrape_url,
+          );
+          if (this.shouldDiscardEnrichQueries) return;
+          // due to typing and text changes the URL may not be anymore in the store
+          if (this.previews.has(linkPreview.og_scrape_url)) {
+            this.updatePreview(linkPreview.og_scrape_url, {
+              status: LinkPreviewStatus.LOADED,
+              ...ogAttachment,
+            });
+          }
+        } catch (error) {
+          if (this.previews.has(linkPreview.og_scrape_url)) {
+            this.updatePreview(linkPreview.og_scrape_url, {
+              status: LinkPreviewStatus.FAILED,
+            });
+          }
+        }
+        return linkPreview;
+      }),
     );
-    this.state.partialNext({ previews: newLinkPreviews });
   };
 
   cancelURLEnrichment = () => {
     this.findAndEnrichUrls.cancel();
-    this.findAndEnrichUrls(''); // todo: ????
     this.findAndEnrichUrls.flush();
+  };
+
+  /**
+   * Clears all non-dismissed previews when the text composer is cleared.
+   * This ensures that dismissed previews are not re-enriched in the future.
+   */
+  clearPreviews = () => {
+    const currentPreviews = this.previews;
+    const newPreviews = new Map<LinkURL, LinkPreview>();
+
+    // Keep only dismissed previews
+    currentPreviews.forEach((preview, url) => {
+      if (LinkPreviewsManager.previewIsDismissed(preview)) {
+        newPreviews.set(url, preview);
+      }
+    });
+
+    this.state.partialNext({ previews: newPreviews });
+  };
+
+  updatePreview = (url: LinkURL, preview: Partial<LinkPreview>) => {
+    const status =
+      preview.status ?? this.previews.get(url)?.status ?? LinkPreviewStatus.PENDING;
+    this.state.partialNext({
+      previews: new Map(this.previews).set(url, {
+        ...this.previews.get(url),
+        ...preview,
+        og_scrape_url: url,
+        status,
+      }),
+    });
+  };
+
+  dismissPreview = (url: LinkURL) => {
+    const preview = this.previews.get(url);
+    if (preview) {
+      this.onLinkPreviewDismissed?.(preview);
+      this.updatePreview(url, { status: LinkPreviewStatus.DISMISSED });
+    }
+  };
+
+  static previewIsLoading = (preview: LinkPreview) =>
+    preview.status === LinkPreviewStatus.LOADING;
+
+  static previewIsLoaded = (preview: LinkPreview) =>
+    preview.status === LinkPreviewStatus.LOADED;
+
+  static previewIsDismissed = (preview: LinkPreview) =>
+    preview.status === LinkPreviewStatus.DISMISSED;
+
+  static previewIsFailed = (preview: LinkPreview) =>
+    preview.status === LinkPreviewStatus.FAILED;
+
+  static previewIsPending = (preview: LinkPreview) =>
+    preview.status === LinkPreviewStatus.PENDING;
+
+  static getPreviewData = (preview: LinkPreview) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { status, ...data } = preview;
+    return data;
   };
 }

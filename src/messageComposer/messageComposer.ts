@@ -473,13 +473,13 @@ export class MessageComposer {
           return;
         }
       }
-      if (
-        !this.config.linkPreviews?.enabled ||
-        !nextValue.text ||
-        nextValue.text === previousValue?.text
-      )
+      if (!this.config.linkPreviews?.enabled || nextValue.text === previousValue?.text)
         return;
-      this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
+      if (!nextValue.text) {
+        this.linkPreviewsManager.clearPreviews();
+      } else {
+        this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
+      }
     });
 
   private subscribeAttachmentManagerStateChanged = () =>

@@ -1,3 +1,4 @@
+import { LinkPreviewsManager } from '../..';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
@@ -21,7 +22,9 @@ export const createLinkPreviewsCompositionMiddleware = (composer: MessageCompose
     const linkPreviews =
       linkPreviewsManager.loadingPreviews.length > 0
         ? []
-        : linkPreviewsManager.loadedPreviews.map((preview) => preview.data);
+        : linkPreviewsManager.loadedPreviews.map((preview) =>
+            LinkPreviewsManager.getPreviewData(preview),
+          );
 
     const attachments: Attachment[] = (input.state.message.attachments ?? []).concat(
       linkPreviews,
@@ -67,8 +70,8 @@ export const createDraftLinkPreviewsCompositionMiddleware = (
     if (!linkPreviewsManager) return nextHandler(input);
 
     linkPreviewsManager.cancelURLEnrichment();
-    const linkPreviews = linkPreviewsManager.loadedPreviews.map(
-      (preview) => preview.data,
+    const linkPreviews = linkPreviewsManager.loadedPreviews.map((preview) =>
+      LinkPreviewsManager.getPreviewData(preview),
     );
 
     if (!linkPreviews.length) return nextHandler(input);
