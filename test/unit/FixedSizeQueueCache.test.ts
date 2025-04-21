@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
 
 describe('FixedSizeQueueCache', () => {
@@ -62,6 +62,26 @@ describe('FixedSizeQueueCache', () => {
     expect(cache.get('key2')).toBeUndefined();
     expect(cache.get('key3')).toBe('value3');
     expect(cache.get('key4')).toBe('value4');
+  });
+
+  it('should call provided dispose function when queue overflows', () => {
+    const cache = new FixedSizeQueueCache<string, { unsubscribe: typeof vi.fn }>(2, {
+      dispose: (_, v) => {
+        v.unsubscribe();
+      },
+    });
+
+    const complexEntity1 = { unsubscribe: vi.fn() };
+    const complexEntity2 = { unsubscribe: vi.fn() };
+    const complexEntity3 = { unsubscribe: vi.fn() };
+
+    cache.add('ce1', complexEntity1);
+    cache.add('ce2', complexEntity2);
+    cache.add('ce3', complexEntity3);
+
+    expect(complexEntity1.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(complexEntity2.unsubscribe).not.toHaveBeenCalled();
+    expect(complexEntity3.unsubscribe).not.toHaveBeenCalled();
   });
 
   it('should not move items to the top when using peek', () => {
