@@ -8,11 +8,19 @@ import type {
 import type { TextComposerConfig } from './types';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
-  debounceURLEnrichmentMs: 300,
+  debounceURLEnrichmentMs: 1500,
   enabled: true,
   findURLFn: (text: string): string[] =>
-    find(text, 'url').reduce<string[]>((acc, link) => {
-      if (link.isLink) acc.push(link.href);
+    find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
+      try {
+        const url = new URL(link.href);
+        // Check for valid hostname with at least one dot and valid TLD
+        if (link.isLink && /^[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}$/.test(url.hostname)) {
+          acc.push(link.href);
+        }
+      } catch {
+        // Invalid URL, skip it
+      }
       return acc;
     }, []),
 };
