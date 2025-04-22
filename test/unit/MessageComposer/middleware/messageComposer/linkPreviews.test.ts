@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src/client';
-import { LinkPreviewStatus } from '../../../../../src/messageComposer/linkPreviewsManager';
+import {
+  LinkPreview,
+  LinkPreviewStatus,
+} from '../../../../../src/messageComposer/linkPreviewsManager';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import {
   createDraftLinkPreviewsCompositionMiddleware,
@@ -43,6 +46,7 @@ const setup = ({
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],
   });
+  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
@@ -579,6 +583,7 @@ const setupForDraft = ({
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],
   });
+  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
@@ -609,25 +614,21 @@ describe('DraftLinkPreviewsMiddleware', () => {
     expect(result.state.draft.attachments).toBeUndefined();
   });
 
-  it('should handle draft with loaded link previews', async () => {
+  it('should initiate from draft with loaded link previews', async () => {
     const { linkPreviewsMiddleware, messageComposer } = setupForDraft();
-    const linkPreview = {
-      state: { status: 'loaded' },
-      data: {
-        type: 'article',
-        title: 'Example Article',
-        text: 'Example description',
-        image_url: 'https://example.com/image.jpg',
-        og_scrape_url: 'https://example.com',
-        asset_url: 'https://example.com/asset.jpg',
-        author_link: 'https://example.com/author',
-        author_name: 'Example Author',
-        thumb_url: 'https://example.com/thumb.jpg',
-        title_link: 'https://example.com',
-        duration: '100',
-        config: {},
-      },
-    } as any;
+    const linkPreview: LinkPreview = {
+      status: LinkPreviewStatus.LOADED,
+      type: 'article',
+      title: 'Example Article',
+      text: 'Example description',
+      image_url: 'https://example.com/image.jpg',
+      og_scrape_url: 'https://example.com',
+      asset_url: 'https://example.com/asset.jpg',
+      author_link: 'https://example.com/author',
+      author_name: 'Example Author',
+      thumb_url: 'https://example.com/thumb.jpg',
+      title_link: 'https://example.com',
+    };
 
     vi.spyOn(
       messageComposer.linkPreviewsManager,
@@ -660,23 +661,19 @@ describe('DraftLinkPreviewsMiddleware', () => {
       image_url: 'https://example.com/image.jpg',
     };
 
-    const linkPreview = {
-      state: { status: 'loaded' },
-      data: {
-        type: 'article',
-        title: 'Example Article',
-        text: 'Example description',
-        image_url: 'https://example.com/article.jpg',
-        og_scrape_url: 'https://example.com',
-        asset_url: 'https://example.com/asset.jpg',
-        author_link: 'https://example.com/author',
-        author_name: 'Example Author',
-        thumb_url: 'https://example.com/thumb.jpg',
-        title_link: 'https://example.com',
-        duration: '100',
-        config: {},
-      },
-    } as any;
+    const linkPreview: LinkPreview = {
+      status: LinkPreviewStatus.LOADED,
+      type: 'article',
+      title: 'Example Article',
+      text: 'Example description',
+      image_url: 'https://example.com/article.jpg',
+      og_scrape_url: 'https://example.com',
+      asset_url: 'https://example.com/asset.jpg',
+      author_link: 'https://example.com/author',
+      author_name: 'Example Author',
+      thumb_url: 'https://example.com/thumb.jpg',
+      title_link: 'https://example.com',
+    };
 
     vi.spyOn(
       messageComposer.linkPreviewsManager,

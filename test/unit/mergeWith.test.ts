@@ -34,6 +34,16 @@ describe('mergeWith', () => {
     expect(result).toEqual({ a: 1, b: 2, c: 3 });
   });
 
+  it('should handle multiple sources overrides', () => {
+    const object = { a: 1 };
+    const source1 = { a: 2 };
+    const source2 = { a: 3 };
+
+    const result = mergeWith(object, [source1, source2]);
+
+    expect(result).toEqual({ a: 3 });
+  });
+
   it('should handle deep merging', () => {
     const object = {
       a: {

@@ -6,8 +6,11 @@ import {
   DraftResponse,
   LinkPreviewsManagerConfig,
   MessageComposer,
+  MessageComposerConfig,
   StreamChat,
 } from '../../../src';
+import { DeepPartial } from '../../../src/types.utility';
+import { mergeWith } from '../../../src/utils/mergeWith';
 
 const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
@@ -63,12 +66,19 @@ const enrichURLReturnValue = {
   duration: 1000,
 };
 
+const DEFAULT_CONFIG: DeepPartial<MessageComposerConfig> = {
+  linkPreviews: {
+    debounceURLEnrichmentMs: 0,
+    enabled: true,
+  },
+};
+
 const setup = ({
   composition,
   config,
 }: {
   composition?: DraftResponse | LocalMessage;
-  config?: Partial<LinkPreviewsManagerConfig>;
+  config?: Partial<LinkPreviewsManagerConfig> | null;
   message?: DraftMessage | LocalMessage;
 } = {}) => {
   // Reset mocks
@@ -79,11 +89,12 @@ const setup = ({
   mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
   const mockChannel = mockClient.channel('channelType', 'channelId');
+  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
     compositionContext: mockChannel,
-    config: { linkPreviews: config },
+    config: config === null ? {} : mergeWith(DEFAULT_CONFIG, { linkPreviews: config }),
   });
   return { mockClient, mockChannel, messageComposer };
 };
@@ -97,7 +108,7 @@ describe('LinkPreviewsManager', () => {
     it('should initialize with default config', () => {
       const {
         messageComposer: { linkPreviewsManager },
-      } = setup();
+      } = setup({ config: null });
       expect(linkPreviewsManager.config.enabled).toBe(true);
       expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(
         DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
@@ -143,6 +154,32 @@ describe('LinkPreviewsManager', () => {
       expect(linkPreviewsManager.previews.size).toBe(1);
       expect(linkPreviewsManager.previews.get(linkUrl)).toBeDefined();
     });
+
+    it('should not initialize with message containing link previews if disabled', () => {
+      const composition: LocalMessage = {
+        id: 'test-message-id',
+        text: '',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'pending',
+        updated_at: new Date(),
+        attachments: [
+          {
+            og_scrape_url: linkUrl,
+            title: 'Example Title',
+            type: 'link',
+          },
+        ],
+      };
+
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup({ composition, config: { enabled: false } });
+
+      expect(linkPreviewsManager.previews.size).toBe(0);
+    });
   });
 
   describe('getters', () => {
@@ -150,9 +187,7 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
         mockClient,
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
 
       // Mock the enrichURL to never resolve
       mockClient.enrichURL = vi.fn().mockImplementation(() => new Promise(() => {}));
@@ -174,10 +209,7 @@ describe('LinkPreviewsManager', () => {
     it('should return loadedPreviews correctly', async () => {
       const {
         messageComposer: { linkPreviewsManager },
-        mockClient,
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
 
       // Add a loaded preview
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
@@ -348,22 +380,51 @@ describe('LinkPreviewsManager', () => {
   });
 
   describe('findAndEnrichUrls', () => {
-    it('should not process URLs if disabled', async () => {
+    it('should not process URLs if disabled back-end url_enrichment', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockChannel,
+        mockClient,
+      } = setup();
+      mockChannel.getConfig.mockReturnValueOnce({ url_enrichment: false });
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+      let enrichPromiseResolve;
+      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          enrichPromiseResolve = resolve;
+        });
+      });
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+      // Wait for the debounced function to be called
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(linkPreviewsManager.previews.size).toBe(0);
+    });
+
+    it('should not process URLs if disabled via the manager config', async () => {
       const {
         messageComposer: { linkPreviewsManager },
         mockClient,
       } = setup({ config: { enabled: false } });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+      let enrichPromiseResolve;
+      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          enrichPromiseResolve = resolve;
+        });
+      });
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+      // Wait for the debounced function to be called
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
     it('should process URLs and create link previews', async () => {
       const {
         messageComposer: { linkPreviewsManager },
         mockClient,
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       let enrichPromiseResolve;
       mockClient.enrichURL = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
@@ -385,9 +446,7 @@ describe('LinkPreviewsManager', () => {
     it('should update link preview status to LOADED when enrichment succeeds', async () => {
       const {
         messageComposer: { linkPreviewsManager },
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called and the promise to resolve
@@ -402,9 +461,7 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
         mockClient,
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       mockClient.enrichURL.mockRejectedValueOnce(new Error('Enrichment failed'));
 
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
@@ -420,9 +477,7 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
         mockClient,
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
       // Wait for the debounced function to be called
@@ -440,9 +495,7 @@ describe('LinkPreviewsManager', () => {
     it('should not keep existing link previews if source string does not include them anymore', async () => {
       const {
         messageComposer: { linkPreviewsManager },
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       const existingPreview = {
         og_scrape_url: 'https://existing.com  ',
         status: LinkPreviewStatus.LOADED,
@@ -467,9 +520,7 @@ describe('LinkPreviewsManager', () => {
     it('should keep existing link previews', async () => {
       const {
         messageComposer: { linkPreviewsManager },
-      } = setup({
-        config: { debounceURLEnrichmentMs: 0, enabled: true },
-      });
+      } = setup();
       const existingPreview = {
         og_scrape_url: 'https://existing.com',
         status: LinkPreviewStatus.LOADED,

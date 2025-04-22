@@ -79,7 +79,9 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
 
   constructor({ composer, message }: LinkPreviewsManagerOptions) {
     this.composer = composer;
-    this.state = new StateStore<LinkPreviewsManagerState>(initState({ message }));
+    this.state = new StateStore<LinkPreviewsManagerState>(
+      initState({ message: this.enabled ? message : undefined }),
+    );
 
     this.findAndEnrichUrls = debounce(
       this._findAndEnrichUrls.bind(this),
@@ -89,6 +91,10 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
 
   get client() {
     return this.composer.client;
+  }
+
+  get channel() {
+    return this.composer.channel;
   }
 
   get previews() {
@@ -129,6 +135,10 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     return this.composer.config.linkPreviews;
   }
 
+  get debounceURLEnrichmentMs() {
+    return this.config.debounceURLEnrichmentMs;
+  }
+
   set debounceURLEnrichmentMs(
     debounceURLEnrichmentMs: LinkPreviewsManagerConfig['debounceURLEnrichmentMs'],
   ) {
@@ -142,8 +152,23 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.composer.updateConfig({ linkPreviews: { debounceURLEnrichmentMs } });
   }
 
+  get enabled() {
+    /**
+     * We have to check whether the message will be enriched server side (url_enrichment).
+     * If not, then it does not make sense to do previews in composer.
+     */
+    return (
+      !!this.channel.getConfig()?.url_enrichment &&
+      this.composer.config.linkPreviews.enabled
+    );
+  }
+
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
     this.composer.updateConfig({ linkPreviews: { enabled } });
+  }
+
+  get findURLFn() {
+    return this.config.findURLFn;
   }
 
   set findURLFn(fn: LinkPreviewsManagerConfig['findURLFn']) {
@@ -159,11 +184,11 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.state.next(initState({ message }));
+    this.state.next(initState({ message: this.enabled ? message : undefined }));
   };
 
   private _findAndEnrichUrls = async (text: string) => {
-    if (!this.config.enabled) return;
+    if (!this.enabled) return;
     const urls = this.config.findURLFn(text);
 
     this.shouldDiscardEnrichQueries = !urls.length;

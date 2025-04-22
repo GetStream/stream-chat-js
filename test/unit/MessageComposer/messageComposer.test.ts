@@ -925,9 +925,12 @@ describe('MessageComposer', () => {
       });
 
       it('should find and enrich URLs when text changes and link previews are enabled', () => {
-        const { messageComposer } = setup({
+        const { mockChannel, messageComposer } = setup({
           config: { linkPreviews: { enabled: true } },
         });
+        mockChannel.getConfig = vi
+          .fn()
+          .mockImplementation(() => ({ url_enrichment: true }));
         const spy = vi.spyOn(messageComposer.linkPreviewsManager, 'findAndEnrichUrls');
 
         messageComposer.registerSubscriptions();

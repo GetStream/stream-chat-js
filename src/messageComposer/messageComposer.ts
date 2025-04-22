@@ -473,7 +473,7 @@ export class MessageComposer {
           return;
         }
       }
-      if (!this.config.linkPreviews?.enabled || nextValue.text === previousValue?.text)
+      if (!this.linkPreviewsManager.enabled || nextValue.text === previousValue?.text)
         return;
       if (!nextValue.text) {
         this.linkPreviewsManager.clearPreviews();
