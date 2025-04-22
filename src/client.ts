@@ -100,7 +100,6 @@ import type {
   FlagsResponse,
   FlagUserResponse,
   GetBlockedUsersAPIResponse,
-  GetCallTokenResponse,
   GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
@@ -2524,20 +2523,6 @@ export class StreamChat {
       target_user_id: targetID,
       ...options,
     });
-  }
-
-  /**
-   * getCallToken - retrieves the auth token needed to join a call
-   *
-   * @param {string} callID
-   * @param {object} options
-   * @returns {Promise<GetCallTokenResponse>}
-   */
-  async getCallToken(callID: string, options: { user_id?: string } = {}) {
-    return await this.post<GetCallTokenResponse>(
-      this.baseURL + `/calls/${encodeURIComponent(callID)}`,
-      { ...options },
-    );
   }
 
   /**
