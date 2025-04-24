@@ -11,6 +11,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import { generateMessageDraft } from './test-utils/generateMessageDraft';
 
 import { describe, beforeEach, it, expect } from 'vitest';
 
@@ -225,6 +226,57 @@ describe('Channel _handleChannelEvent', function () {
 		channel.initialized = true;
 	});
 
+	it('member.updated/member.added are being handled properly (ChannelState.membership & ChannelState.members)', () => {
+		expect(channel.state.members).to.be.empty;
+		expect(channel.state.membership).to.be.empty;
+
+		const currentMember = generateMember({
+			user,
+			pinned_at: new Date().toISOString(),
+			archived_at: new Date().toISOString(),
+		});
+
+		const otherMember = generateMember({
+			user: { id: 'user-other' },
+		});
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: currentMember,
+		});
+
+		expect(channel.state.members).to.have.property(user.id);
+		expect(channel.state.members[user.id]).to.deep.equal(currentMember);
+		expect(channel.state.membership).to.deep.equal(currentMember);
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: otherMember,
+		});
+
+		expect(channel.state.members).to.have.keys([user.id, otherMember.user.id]);
+		expect(channel.state.members[otherMember.user.id]).to.deep.equal(otherMember);
+		expect(channel.state.members[user.id]).to.deep.equal(currentMember);
+		expect(channel.state.membership).to.deep.equal(currentMember);
+
+		const currentMemberUpdated = generateMember({
+			user,
+			pinned_at: null,
+			archived_at: null,
+		});
+
+		channel._handleChannelEvent({
+			type: 'member.updated',
+			user,
+			member: currentMemberUpdated,
+		});
+
+		expect(channel.state.membership).to.not.have.keys(['pinned_at', 'archived_at']);
+		expect(channel.state.membership).to.equal(channel.state.members[user.id]);
+	});
+
 	it('message.new does not reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
 		channel._handleChannelEvent({
@@ -407,7 +459,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(
 			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
 				.deleted_at,
-		).to.be.ok;
+		).to.be.null;
 	});
 
 	describe('notification.mark_unread', () => {
@@ -857,7 +909,6 @@ describe('Channels - Constructor', function () {
 		expect(channel.id).to.eql('brand_new_123');
 		expect(channel.data).to.eql({ cool: true });
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		console.log(channel.data);
 		expect(channel.data).to.eql({ cool: true, custom_cool: true });
 	});
 

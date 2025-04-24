@@ -28,6 +28,7 @@ import {
   randomId,
   retryInterval,
   sleep,
+  toUpdatedMessagePayload,
 } from './utils';
 
 import type {
@@ -80,6 +81,8 @@ import type {
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
+  DraftFilters,
+  DraftSort,
   EndpointName,
   Event,
   EventHandler,
@@ -116,6 +119,7 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  LocalMessage,
   Logger,
   MarkChannelsReadOptions,
   MessageFilters,
@@ -129,6 +133,7 @@ import type {
   NewMemberPayload,
   OGAttachment,
   OwnUserResponse,
+  Pager,
   PartialMessageUpdate,
   PartialPollUpdate,
   PartialThreadUpdate,
@@ -149,6 +154,7 @@ import type {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
+  QueryDraftsResponse,
   QueryMessageHistoryFilters,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
@@ -169,7 +175,6 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -198,7 +203,6 @@ import type {
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
-  UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
@@ -224,22 +228,47 @@ import type {
   ChannelManagerOptions,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
+import { NotificationManager } from './notifications';
+import { StateStore } from './store';
+import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline_support_api';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
+type MessageComposerTearDownFunction = () => void;
+
+type MessageComposerSetupFunction = ({
+  composer,
+}: {
+  composer: MessageComposer;
+}) => void | MessageComposerTearDownFunction;
+
+type MessageComposerSetupState = {
+  /**
+   * Each `MessageComposer` runs this function each time its signature changes or
+   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
+   * from `applyModifications` will be used as a cleanup function - it will be stored
+   * and ran before new modification is applied. Cleaning up only the
+   * modified parts is the general way to go but if your setup gets a bit
+   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
+   */
+  setupFunction: MessageComposerSetupFunction | null;
+};
+
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
   _user?: OwnUserResponse | UserResponse;
+  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
     [key: string]: Channel;
   };
   threads: ThreadManager;
   polls: PollManager;
   offlineDb?: AbstractOfflineDB;
+  notifications: NotificationManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -284,6 +313,12 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
+  /**
+   * @private
+   */
+  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
+    setupFunction: null,
+  });
 
   /**
    * Initialize a client
@@ -321,6 +356,8 @@ export class StreamChat {
 
     this.moderation = new Moderation(this);
 
+    this.notifications = options?.notifications ?? new NotificationManager();
+
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
       this.secret = secretOrOptions;
@@ -345,6 +382,7 @@ export class StreamChat {
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
+      wsUrlParams: new URLSearchParams({}),
       ...inputOptions,
     };
 
@@ -804,9 +842,11 @@ export class StreamChat {
   async getAppSettings() {
     const userId = this.userID as string;
     if (!this.wsConnection?.isHealthy && this.offlineDb && userId) {
-      return await this.offlineDb?.getAppSettings({ userId });
+      this.appSettingsPromise = this.offlineDb?.getAppSettings({ userId });
+      return await this.appSettingsPromise;
     }
-    const appSettings = await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    const appSettings = await this.appSettingsPromise;
 
     if (userId) {
       this.offlineDb?.upsertAppSettings({ appSettings, userId });
@@ -1871,6 +1911,10 @@ export class StreamChat {
         this.polls.hydratePollCache(channelState.messages, true);
       }
 
+      if (channelState.draft) {
+        c.messageComposer.initState({ composition: channelState.draft });
+      }
+
       channels.push(c);
     }
 
@@ -2884,69 +2928,31 @@ export class StreamChat {
    * @param {string | { id: string }} [userId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
-   * @return {{ message: MessageResponse }} Response that includes the message
+   * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: UpdatedMessage,
+    message: LocalMessage | Partial<MessageResponse>,
     userId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
-
-    const clonedMessage: Partial<UpdatedMessage & { __html: unknown }> = { ...message };
-    delete clonedMessage.id;
-
-    const reservedMessageFields: Array<ReservedMessageFields> = [
-      'command',
-      'created_at',
-      'html',
-      'latest_reactions',
-      'own_reactions',
-      'quoted_message',
-      'reaction_counts',
-      'reply_count',
-      'type',
-      'updated_at',
-      'user',
-      'pinned_at',
-      '__html',
-    ];
-
-    for (const field of reservedMessageFields) {
-      if (typeof clonedMessage[field] !== 'undefined') {
-        delete clonedMessage[field];
-      }
-    }
-
+    const payload = toUpdatedMessagePayload(message);
     if (userId != null) {
       if (isString(userId)) {
-        clonedMessage.user_id = userId;
+        payload.user_id = userId;
       } else {
-        clonedMessage.user = {
+        payload.user = {
           id: userId.id,
-        } as UserResponse;
+        };
       }
-    }
-
-    /**
-     * Server always expects mentioned_users to be array of string. We are adding extra check, just in case
-     * SDK missed this conversion.
-     */
-    if (
-      Array.isArray(clonedMessage.mentioned_users) &&
-      !isString(clonedMessage.mentioned_users[0])
-    ) {
-      clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
-        (mu) => (mu as unknown as UserResponse).id,
-      );
     }
 
     return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
-        message: clonedMessage,
+        message: payload,
         ...options,
       },
     );
@@ -3054,6 +3060,8 @@ export class StreamChat {
    * @param {boolean} options.watch Subscribes the user to the channels of the threads.
    * @param {number}  options.participant_limit Limits the number of participants returned per threads.
    * @param {number}  options.reply_limit Limits the number of replies returned per threads.
+   * @param {ThreadFilters} options.filter MongoDB style filters for threads
+   * @param {ThreadSort} options.sort MongoDB style sort for threads
    *
    * @returns {{ threads: Thread[], next: string }} Returns the list of threads and the next cursor.
    */
@@ -3066,9 +3074,29 @@ export class StreamChat {
       ...options,
     };
 
+    const requestBody: Record<string, unknown> = {
+      ...optionsWithDefaults,
+    };
+
+    if (
+      optionsWithDefaults.filter &&
+      Object.keys(optionsWithDefaults.filter).length > 0
+    ) {
+      requestBody.filter = optionsWithDefaults.filter;
+    }
+
+    if (
+      optionsWithDefaults.sort &&
+      (Array.isArray(optionsWithDefaults.sort)
+        ? optionsWithDefaults.sort.length > 0
+        : Object.keys(optionsWithDefaults.sort).length > 0)
+    ) {
+      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    }
+
     const response = await this.post<QueryThreadsAPIResponse>(
       `${this.baseURL}/threads`,
-      optionsWithDefaults,
+      requestBody,
     );
 
     return {
@@ -3092,7 +3120,7 @@ export class StreamChat {
    */
   async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThread');
     }
 
     const optionsWithDefaults = {
@@ -4396,4 +4424,38 @@ export class StreamChat {
       },
     );
   }
+
+  /**
+   * queryDrafts - Queries drafts for the current user
+   *
+   * @param {object} [options] Query options
+   * @param {object} [options.filter] Filters for the query
+   * @param {number} [options.sort] Sort parameters
+   * @param {number} [options.limit] Limit the number of results
+   * @param {string} [options.next] Pagination parameter
+   * @param {string} [options.prev] Pagination parameter
+   * @param {string} [options.user_id] Has to be provided when called server-side
+   *
+   * @return {Promise<APIResponse & { drafts: DraftResponse[]; next?: string }>} Response containing the drafts
+   */
+  async queryDrafts(
+    options: Pager & {
+      filter?: DraftFilters;
+      sort?: DraftSort;
+      user_id?: string;
+    } = {},
+  ) {
+    const payload = {
+      ...options,
+      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
+    };
+
+    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
+  }
+
+  public setMessageComposerSetupFunction = (
+    setupFunction: MessageComposerSetupState['setupFunction'],
+  ) => {
+    this._messageComposerSetupState.partialNext({ setupFunction });
+  };
 }

@@ -1,3 +1,31 @@
+## [9.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.9...v9.0.0-rc.10) (2025-04-09)
+
+### Bug Fixes
+
+* [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
+* add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
+
+### Features
+
+* [CHA-660] - Team based roles ([#1499](https://github.com/GetStream/stream-chat-js/issues/1499)) ([dd62cff](https://github.com/GetStream/stream-chat-js/commit/dd62cff38e03678fb04222563e0dae75916ccadb))
+* add show_channels flag to campaigns ([#1513](https://github.com/GetStream/stream-chat-js/issues/1513)) ([5344d2c](https://github.com/GetStream/stream-chat-js/commit/5344d2c6db205063c4e1c73f449e31c6ed6197c5))
+* user profile check endpoint ([#1503](https://github.com/GetStream/stream-chat-js/issues/1503)) ([8114c22](https://github.com/GetStream/stream-chat-js/commit/8114c223b2a6650a89790e64a236d1a03cf64c3b))
+
+### Chores
+
+* **deps:** upgrade @babel/runtime to v7.27.0 ([#1508](https://github.com/GetStream/stream-chat-js/issues/1508)) ([eb29626](https://github.com/GetStream/stream-chat-js/commit/eb296263d258101c310eb1c0f44ca3fc2ced627c)), closes [#1502](https://github.com/GetStream/stream-chat-js/issues/1502)
+
+## [9.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.8...v9.0.0-rc.9) (2025-03-25)
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+
 ## [9.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.7...v9.0.0-rc.8) (2025-03-12)
 
 ### Bug Fixes
@@ -75,6 +103,48 @@ property in the formatted message output
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+## [8.60.0](https://github.com/GetStream/stream-chat-js/compare/v8.59.0...v8.60.0) (2025-04-17)
+
+
+### Features
+
+* [CHA-794] Add sort and filter param to queryThreads ([#1511](https://github.com/GetStream/stream-chat-js/issues/1511)) ([ea7fe99](https://github.com/GetStream/stream-chat-js/commit/ea7fe999aa6d7609fa58e4808b067a8457cf187f))
+* [CHA-855] - Refactoring partial update member ([#1517](https://github.com/GetStream/stream-chat-js/issues/1517)) ([e4f7e68](https://github.com/GetStream/stream-chat-js/commit/e4f7e68298e0959309aa592ce778f6cbbbcc4ab0))
+
+
+### Bug Fixes
+
+* [REACT-350] make archived_at & pinned_at nullable ([#1515](https://github.com/GetStream/stream-chat-js/issues/1515)) ([318825a](https://github.com/GetStream/stream-chat-js/commit/318825a335342c2e32d19469f736df95feb87bee))
+* [REACT-353] unify pinned_at & archived_at nullish values ([#1516](https://github.com/GetStream/stream-chat-js/issues/1516)) ([a840226](https://github.com/GetStream/stream-chat-js/commit/a8402268fabe1826e74e383afd9962bd6ab6376f)), closes [#1515](https://github.com/GetStream/stream-chat-js/issues/1515)
+
+## [8.59.0](https://github.com/GetStream/stream-chat-js/compare/v8.58.0...v8.59.0) (2025-04-08)
+
+
+### Features
+
+* [CHA-660] - Team based roles ([#1499](https://github.com/GetStream/stream-chat-js/issues/1499)) ([dd62cff](https://github.com/GetStream/stream-chat-js/commit/dd62cff38e03678fb04222563e0dae75916ccadb))
+* add show_channels flag to campaigns ([#1513](https://github.com/GetStream/stream-chat-js/issues/1513)) ([5344d2c](https://github.com/GetStream/stream-chat-js/commit/5344d2c6db205063c4e1c73f449e31c6ed6197c5))
+
+
+### Bug Fixes
+
+* [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
+* add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
+
+## [8.58.0](https://github.com/GetStream/stream-chat-js/compare/v8.57.6...v8.58.0) (2025-04-01)
+
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+* user profile check endpoint ([#1503](https://github.com/GetStream/stream-chat-js/issues/1503)) ([8114c22](https://github.com/GetStream/stream-chat-js/commit/8114c223b2a6650a89790e64a236d1a03cf64c3b))
+
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
 
 ### [8.57.6](https://github.com/GetStream/stream-chat-js/compare/v8.57.5...v8.57.6) (2025-03-03)
 

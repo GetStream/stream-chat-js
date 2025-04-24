@@ -16,6 +16,7 @@ import type {
   CustomThreadData,
   CustomUserData,
 } from './custom_types';
+import type { NotificationManager } from './notifications';
 
 /**
  * Utility Types
@@ -41,13 +42,15 @@ export type KnownKeys<T> = {
   : never;
 
 export type RequireAtLeastOne<T> = {
-  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<keyof T, K>>>;
+  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
 export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
-    [K in Keys]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
+
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
 
 /* Unknown Record */
 export type UR = Record<string, unknown>;
@@ -311,6 +314,7 @@ export type ChannelAPIResponse = {
   members: ChannelMemberResponse[];
   messages: MessageResponse[];
   pinned_messages: MessageResponse[];
+  draft?: DraftResponse;
   hidden?: boolean;
   membership?: ChannelMemberResponse | null;
   pending_messages?: PendingMessageResponse[];
@@ -337,7 +341,7 @@ export type ChannelMemberUpdates = CustomMemberData & {
 };
 
 export type ChannelMemberResponse = CustomMemberData & {
-  archived_at?: string;
+  archived_at?: string | null;
   ban_expires?: string;
   banned?: boolean;
   channel_role?: Role;
@@ -347,7 +351,7 @@ export type ChannelMemberResponse = CustomMemberData & {
   invited?: boolean;
   is_moderator?: boolean;
   notifications_muted?: boolean;
-  pinned_at?: string;
+  pinned_at?: string | null;
   role?: string;
   shadow_banned?: boolean;
   status?: InviteStatus;
@@ -468,9 +472,9 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-export type FormatMessageResponse = Omit<
-  MessageResponse,
-  'created_at' | 'pinned_at' | 'updated_at' | 'deleted_at' | 'status'
+export type LocalMessageBase = Omit<
+  MessageResponseBase,
+  'created_at' | 'deleted_at' | 'pinned_at' | 'status' | 'updated_at'
 > & {
   created_at: Date;
   deleted_at: Date | null;
@@ -478,6 +482,16 @@ export type FormatMessageResponse = Omit<
   status: string;
   updated_at: Date;
 };
+
+export type LocalMessage = LocalMessageBase & {
+  error?: ErrorFromResponse<APIErrorResponse>;
+  quoted_message?: LocalMessageBase;
+};
+
+/**
+ * @deprecated in favor of LocalMessage
+ */
+export type FormatMessageResponse = LocalMessage;
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
@@ -497,6 +511,7 @@ export interface ThreadResponse extends CustomThreadData {
   active_participant_count?: number;
   created_by?: UserResponse;
   deleted_at?: string;
+  draft?: DraftResponse;
   last_message_at?: string;
   participant_count?: number;
   read?: Array<ReadResponse>;
@@ -522,11 +537,13 @@ export type PartialThreadUpdate = {
 };
 
 export type QueryThreadsOptions = {
+  filter?: ThreadFilters;
   limit?: number;
   member_limit?: number;
   next?: string;
   participant_limit?: number;
   reply_limit?: number;
+  sort?: ThreadSort;
   watch?: boolean;
 };
 
@@ -863,9 +880,12 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
+  teams_role?: TeamsRole;
   updated_at?: string;
   username?: string;
 };
+
+export type TeamsRole = { [team: string]: string };
 
 export type PrivacySettings = {
   read_receipts?: {
@@ -1310,10 +1330,20 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * that also relies on WS events will break these functionalities, so please use carefully.
    */
   disableCache?: boolean;
+  /**
+   * When enabled, message and thread reply drafts will be stored on the Stream server. This allows drafts to persist across devices and sessions.
+   */
+  drafts?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   logger?: Logger;
+  /**
+   * Custom notification manager service to use for the client.
+   * If not provided, a default notification manager will be created.
+   * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
+   */
+  notifications?: NotificationManager;
   /**
    * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
    * call `connectUser` again to retry.
@@ -1337,6 +1367,11 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * not be used in production apps.
    */
   wsConnection?: StableWSConnection;
+  /**
+   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
+   * used purely in testing suites and should not be used in production apps.
+   */
+  wsUrlParams?: URLSearchParams;
 };
 
 export type SyncOptions = {
@@ -1395,6 +1430,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
@@ -1682,6 +1718,25 @@ export type ChannelFilters = QueryFilters<
       | PrimitiveFilter<ChannelResponse[Key]>;
   }
 >;
+
+export type DraftFilters = {
+  channel_cid?:
+    | RequireOnlyOne<Pick<QueryFilter<DraftResponse['channel_cid']>, '$in' | '$eq'>>
+    | PrimitiveFilter<DraftResponse['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<DraftResponse['created_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<DraftResponse['created_at']>;
+  parent_id?:
+    | RequireOnlyOne<
+        Pick<QueryFilter<DraftResponse['created_at']>, '$in' | '$eq' | '$exists'>
+      >
+    | PrimitiveFilter<DraftResponse['parent_id']>;
+};
 
 export type QueryPollsParams = {
   filter?: QueryPollsFilters;
@@ -2043,10 +2098,16 @@ export type Sort<T> = {
 export type UserSort = Sort<UserResponse> | Array<Sort<UserResponse>>;
 
 export type MemberSort =
-  | Sort<Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>>
+  | Sort<
+      Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
+        user_id?: string;
+      }
+    >
   | Array<
       Sort<
-        Pick<UserResponse, 'id' | 'created_at' | 'last_active' | 'name' | 'updated_at'>
+        Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
+          user_id?: string;
+        }
       >
     >;
 
@@ -2069,6 +2130,12 @@ export type SearchMessageSortBase = Sort<CustomMessageData> & {
 export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
 
 export type QuerySort = BannedUsersSort | ChannelSort | SearchMessageSort | UserSort;
+
+export type DraftSortBase = {
+  created_at?: AscDesc;
+};
+
+export type DraftSort = DraftSortBase | Array<DraftSortBase>;
 
 export type PollSort = PollSortBase | Array<PollSortBase>;
 
@@ -2638,9 +2705,11 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<MessageBase> & {
-  mentioned_users?: string[];
-};
+export type Message = Partial<
+  MessageBase & {
+    mentioned_users: string[];
+  }
+>;
 
 export type MessageBase = CustomMessageData & {
   id: string;
@@ -2657,6 +2726,7 @@ export type MessageBase = CustomMessageData & {
   show_in_channel?: boolean;
   silent?: boolean;
   text?: string;
+  type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
 };
@@ -2671,6 +2741,7 @@ export type MessageLabel =
 
 export type SendMessageOptions = {
   force_moderation?: boolean;
+  // @deprecated use `pending` instead
   is_pending_message?: boolean;
   keep_channel_hidden?: boolean;
   pending?: boolean;
@@ -2894,22 +2965,25 @@ export type TranslationLanguages =
 
 export type TypingStartEvent = Event;
 
-export type ReservedMessageFields =
+export type ReservedUpdatedMessageFields =
   | 'command'
   | 'created_at'
+  | 'deleted_at'
   | 'html'
+  | 'i18n'
   | 'latest_reactions'
+  // the the original array of UserResponse object is converted to array of user ids and re-inserted before sending the update request
+  | 'mentioned_users'
   | 'own_reactions'
+  | 'pinned_at'
   | 'quoted_message'
   | 'reaction_counts'
   | 'reply_count'
   | 'type'
   | 'updated_at'
-  | 'pinned_at'
-  | 'user'
   | '__html';
 
-export type UpdatedMessage = Omit<MessageResponse, 'mentioned_users' | 'type'> & {
+export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
   mentioned_users?: string[];
   type?: MessageLabel;
 };
@@ -3050,6 +3124,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
   user_ids?: string[];
@@ -3146,7 +3221,7 @@ export type MessageSetType = 'latest' | 'current' | 'new';
 export type MessageSet = {
   isCurrent: boolean;
   isLatest: boolean;
-  messages: FormatMessageResponse[];
+  messages: LocalMessage[];
   pagination: { hasNext: boolean; hasPrev: boolean };
 };
 
@@ -3871,3 +3946,104 @@ export type SdkIdentifier = {
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
 export type DeviceIdentifier = { os: string; model?: string };
+
+export type DraftResponse = {
+  channel_cid: string;
+  created_at: string;
+  message: DraftMessage;
+  channel?: ChannelResponse;
+  parent_id?: string;
+  parent_message?: MessageResponseBase;
+  quoted_message?: MessageResponseBase;
+};
+
+export type CreateDraftResponse = APIResponse & {
+  draft: DraftResponse;
+};
+
+export type GetDraftResponse = APIResponse & {
+  draft: DraftResponse;
+};
+
+export type QueryDraftsResponse = APIResponse & {
+  drafts: DraftResponse[];
+} & Omit<Pager, 'limit'>;
+
+export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+  user_id?: string;
+};
+
+export type DraftMessage = {
+  id: string;
+  text: string;
+  attachments?: Attachment[];
+  custom?: {};
+  html?: string;
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  poll_id?: string;
+  quoted_message_id?: string;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};
+
+export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
+
+export type ThreadSortBase = {
+  active_participant_count?: AscDesc;
+  created_at?: AscDesc;
+  last_message_at?: AscDesc;
+  parent_message_id?: AscDesc;
+  participant_count?: AscDesc;
+  reply_count?: AscDesc;
+  updated_at?: AscDesc;
+};
+
+export type ThreadFilters = QueryFilters<
+  {
+    channel_cid?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$in'>>
+      | PrimitiveFilter<string>;
+  } & {
+    parent_message_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['parent_message_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['parent_message_id']>;
+  } & {
+    created_by_user_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ThreadResponse['created_by_user_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ThreadResponse['created_by_user_id']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['created_at']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['updated_at']>;
+  } & {
+    last_message_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<ThreadResponse['last_message_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<ThreadResponse['last_message_at']>;
+  }
+>;

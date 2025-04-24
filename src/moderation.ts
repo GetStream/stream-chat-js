@@ -12,6 +12,7 @@ import type {
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
+  RequireAtLeastOne,
   ReviewQueueFilters,
   ReviewQueueItem,
   ReviewQueuePaginationOptions,
@@ -26,6 +27,7 @@ import { normalizeQuerySort } from './utils';
 export const MODERATION_ENTITY_TYPES = {
   user: 'stream:user',
   message: 'stream:chat:v1:message',
+  userprofile: 'stream:v1:user_profile',
 };
 
 // Moderation class provides all the endpoints related to moderation v2.
@@ -270,6 +272,7 @@ export class Moderation {
     configKey: string,
     options?: {
       force_sync?: boolean;
+      test_mode?: boolean;
     },
   ) {
     return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
@@ -280,6 +283,60 @@ export class Moderation {
       config_key: configKey,
       options,
     });
+  }
+
+  /**
+   * Experimental: Check user profile
+   *
+   * Warning: This is an experimental feature and the API is subject to change.
+   *
+   * This function is used to check a user profile for moderation.
+   * This will not create any review queue items for the user profile.
+   * You can just use this to check whether to allow a certain user profile to be created or not.
+   *
+   * Example:
+   *
+   * ```ts
+   * const res = await client.moderation.checkUserProfile(userId, { username: "fuck_boy_001", image: "https://example.com/profile.jpg" });
+   * if (res.recommended_action === "remove") {
+   *   // Block the user profile from being created
+   * } else {
+   *   // Allow the user profile to be created
+   * }
+   * ```
+   *
+   * @param userId
+   * @param profile.username
+   * @param profile.image
+   * @returns
+   */
+  async checkUserProfile(
+    userId: string,
+    profile: RequireAtLeastOne<{ image?: string; username?: string }>,
+  ) {
+    if (!profile.username && !profile.image) {
+      throw new Error('Either username or image must be provided');
+    }
+
+    const moderationPayload: { images?: string[]; texts?: string[] } = {};
+    if (profile.username) {
+      moderationPayload.texts = [profile.username];
+    }
+    if (profile.image) {
+      moderationPayload.images = [profile.image];
+    }
+
+    return await this.check(
+      MODERATION_ENTITY_TYPES.userprofile,
+      userId,
+      userId,
+      moderationPayload,
+      'user_profile:default',
+      {
+        force_sync: true,
+        test_mode: true,
+      },
+    );
   }
 
   /**

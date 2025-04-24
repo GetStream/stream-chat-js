@@ -7,6 +7,7 @@ export * from './channel_state';
 export * from './connection';
 export * from './events';
 export * from './insights';
+export * from './messageComposer';
 export * from './moderation';
 export * from './permissions';
 export * from './poll';
@@ -45,6 +46,8 @@ export {
   isOwnUser,
   chatCodes,
   logChatPromiseExecution,
+  localMessageToNewMessagePayload,
   formatMessage,
   promoteChannel,
 } from './utils';
+export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';

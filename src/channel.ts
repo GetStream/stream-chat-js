@@ -22,15 +22,18 @@ import type {
   ChannelUpdateOptions,
   CreateCallOptions,
   CreateCallResponse,
+  CreateDraftResponse,
   DeleteChannelAPIResponse,
+  DraftMessagePayload,
   Event,
   EventAPIResponse,
   EventHandler,
   EventTypes,
-  FormatMessageResponse,
+  GetDraftResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
+  LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
   MemberFilters,
@@ -69,6 +72,7 @@ import type {
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
+import { MessageComposer } from './messageComposer';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -103,6 +107,7 @@ export class Channel {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: PushPreference;
+  public readonly messageComposer: MessageComposer;
 
   /**
    * constructor - Create a channel
@@ -146,6 +151,11 @@ export class Channel {
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
+
+    this.messageComposer = new MessageComposer({
+      client: this._client,
+      compositionContext: this,
+    });
   }
 
   /**
@@ -332,6 +342,28 @@ export class Channel {
   }
 
   /**
+   * updateMemberPartial - Partial update a member
+   *
+   * @param {PartialUpdateMember}  updates
+   * @param {{ user_id?: string }} [options] Option object, {user_id: 'jane'} to optionally specify the user id
+
+   * @return {Promise<ChannelMemberResponse>} Updated member
+   */
+  async updateMemberPartial(updates: PartialUpdateMember, options?: { userId?: string }) {
+    const url = new URL(`${this._channelURL()}/member`);
+
+    if (options?.userId) {
+      url.searchParams.append('user_id', options.userId);
+    }
+
+    return await this.getClient().patch<PartialUpdateMemberAPIResponse>(
+      url.toString(),
+      updates,
+    );
+  }
+
+  /**
+   * @deprecated Use `updateMemberPartial` instead
    * partialUpdateMember - Partial update a member
    *
    * @param {string} user_id member user id
@@ -463,7 +495,9 @@ export class Channel {
 
     const url =
       this.getClient().baseURL +
-      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
+      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(
+        reactionType,
+      )}`;
     //provided when server side request
     if (user_id) {
       return await this.getClient().delete<ReactionAPIResponse>(url, { user_id });
@@ -992,7 +1026,7 @@ export class Channel {
    *
    * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
    */
-  lastMessage(): FormatMessageResponse | undefined {
+  lastMessage(): LocalMessage | undefined {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
     let min = this.state.latestMessages.length - 5;
@@ -1218,7 +1252,7 @@ export class Channel {
     }
   }
 
-  _countMessageAsUnread(message: FormatMessageResponse | MessageResponse) {
+  _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.parent_id && !message.show_in_channel) return false;
@@ -1327,7 +1361,9 @@ export class Channel {
       );
     }
 
-    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
+    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}`;
     if (this.id) {
       queryURL += `/${encodeURIComponent(this.id)}`;
     }
@@ -1383,6 +1419,10 @@ export class Channel {
     };
 
     this.getClient().polls.hydratePollCache(state.messages, true);
+
+    if (state.draft) {
+      this.messageComposer.initState({ composition: state.draft });
+    }
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
@@ -1534,6 +1574,52 @@ export class Channel {
 
   async removeVote(messageId: string, pollId: string, voteId: string) {
     return await this.getClient().removePollVote(messageId, pollId, voteId);
+  }
+
+  /**
+   * createDraft - Creates or updates a draft message in a channel
+   *
+   * @param {string} channelType The channel type
+   * @param {string} channelID The channel ID
+   * @param {DraftMessagePayload} message The draft message to create or update
+   *
+   * @return {Promise<CreateDraftResponse>} Response containing the created draft
+   */
+  async createDraft(message: DraftMessagePayload) {
+    return await this.getClient().post<CreateDraftResponse>(
+      this._channelURL() + '/draft',
+      {
+        message,
+      },
+    );
+  }
+
+  /**
+   * deleteDraft - Deletes a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<APIResponse>} API response
+   */
+  async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
+      parent_id,
+    });
+  }
+
+  /**
+   * getDraft - Retrieves a draft message from a channel
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<GetDraftResponse>} Response containing the draft
+   */
+  async getDraft({ parent_id }: { parent_id?: string } = {}) {
+    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
+      parent_id,
+    });
   }
 
   /**
@@ -1754,22 +1840,36 @@ export class Channel {
         }
         break;
       case 'member.added':
-      case 'member.updated':
-        if (event.member?.user) {
+      case 'member.updated': {
+        const memberCopy: ChannelMemberResponse = {
+          ...event.member,
+        };
+
+        if (memberCopy.pinned_at === null) {
+          delete memberCopy.pinned_at;
+        }
+
+        if (memberCopy.archived_at === null) {
+          delete memberCopy.archived_at;
+        }
+
+        if (memberCopy?.user) {
           channelState.members = {
             ...channelState.members,
-            [event.member.user.id]: event.member,
+            [memberCopy.user.id]: memberCopy,
           };
         }
 
+        const currentUserId = this.getClient().userID;
         if (
-          typeof channelState.membership.user?.id === 'string' &&
-          typeof event.member?.user?.id === 'string' &&
-          event.member.user.id === channelState.membership.user.id
+          typeof currentUserId === 'string' &&
+          typeof memberCopy?.user?.id === 'string' &&
+          memberCopy.user.id === currentUserId
         ) {
-          channelState.membership = event.member;
+          channelState.membership = memberCopy;
         }
         break;
+      }
       case 'member.removed':
         if (event.user?.id) {
           const newMembers = {
@@ -1916,7 +2016,9 @@ export class Channel {
     if (!this.id) {
       throw new Error('channel id is not defined');
     }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}/${encodeURIComponent(this.id)}`;
+    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}/${encodeURIComponent(this.id)}`;
   };
 
   _checkInitialized() {
