@@ -842,7 +842,9 @@ export class StreamChat {
   async getAppSettings() {
     const userId = this.userID as string;
     if (!this.wsConnection?.isHealthy && this.offlineDb && userId) {
-      this.appSettingsPromise = this.offlineDb?.getAppSettings({ userId });
+      this.appSettingsPromise = this.offlineDb?.getAppSettings({
+        userId,
+      }) as Promise<AppSettingsAPIResponse>;
       return await this.appSettingsPromise;
     }
     this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');

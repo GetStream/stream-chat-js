@@ -296,7 +296,7 @@ export class ChannelState {
     enforce_unique?: boolean,
   ) {
     const messageWithReaction = message;
-    let messageFromState: FormatMessageResponse | undefined;
+    let messageFromState: LocalMessage | undefined;
     if (!messageWithReaction) {
       messageFromState = this.findMessage(reaction.message_id);
     }
@@ -427,7 +427,7 @@ export class ChannelState {
 
   removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
     const messageWithRemovedReaction = message;
-    let messageFromState: FormatMessageResponse | undefined;
+    let messageFromState: LocalMessage | undefined;
     if (!messageWithRemovedReaction) {
       messageFromState = this.findMessage(reaction.message_id);
     }
