@@ -20,8 +20,6 @@ import type {
   ChannelQueryOptions,
   ChannelResponse,
   ChannelUpdateOptions,
-  CreateCallOptions,
-  CreateCallResponse,
   CreateDraftResponse,
   DeleteChannelAPIResponse,
   DraftMessagePayload,
@@ -1463,19 +1461,6 @@ export class Channel {
       type: this.type,
       id: this.id,
     });
-  }
-
-  /**
-   * createCall - creates a call for the current channel
-   *
-   * @param {CreateCallOptions} options
-   * @returns {Promise<CreateCallResponse>}
-   */
-  async createCall(options: CreateCallOptions) {
-    return await this.getClient().post<CreateCallResponse>(
-      this._channelURL() + '/call',
-      options,
-    );
   }
 
   /**
