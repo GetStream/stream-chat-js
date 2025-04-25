@@ -1769,6 +1769,7 @@ export class Channel {
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
           }
+
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           }
@@ -1795,6 +1796,11 @@ export class Channel {
 
           if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
+          }
+
+          if (!isThreadMessage) {
+            console.log('HANDLING MESSAGE');
+            this.getClient().offlineDb?.handleNewMessage({ event });
           }
         }
         break;

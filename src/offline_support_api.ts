@@ -3,25 +3,28 @@ import type {
   AppSettingsAPIResponse,
   ChannelAPIResponse,
   ChannelFilters,
+  ChannelResponse,
   ChannelSort,
   Event,
-  FormatMessageResponse,
+  LocalMessage,
   MessageResponse,
   PollResponse,
   ReactionFilters,
   ReactionResponse,
   ReactionSort,
+  ReadResponse,
 } from './types';
 import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 
+// TODO: Find a clever way to pass this in a different manner
 export type PreparedBatchQueries =
   | [string]
   | [string, Array<unknown> | Array<Array<unknown>>];
 
 export type InsertReactionType = {
-  message: MessageResponse | FormatMessageResponse;
+  message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
   flush?: boolean;
 };
@@ -35,10 +38,8 @@ export type UpsertCidsForQueryType = {
 
 export type UpsertChannelsType = {
   channels: ChannelAPIResponse[];
-  filters?: ChannelFilters;
   flush?: boolean;
   isLatestMessagesSet?: boolean;
-  sort?: ChannelSort;
 };
 
 export type UpsertAppSettingsType = {
@@ -50,6 +51,7 @@ export type UpsertAppSettingsType = {
 export type UpsertUserSyncStatusType = {
   userId: string;
   lastSyncedAt: string;
+  flush?: boolean;
 };
 
 export type UpsertPollType = {
@@ -57,8 +59,24 @@ export type UpsertPollType = {
   flush?: boolean;
 };
 
+export type UpsertChannelDataType = {
+  channel: ChannelResponse;
+  flush?: boolean;
+};
+
+export type UpsertReadsType = {
+  cid: string;
+  reads: ReadResponse[];
+  flush?: boolean;
+};
+
+export type UpsertMessagesType = {
+  messages: MessageResponse[];
+  flush?: boolean;
+};
+
 export type UpdateReactionType = {
-  message: MessageResponse | FormatMessageResponse;
+  message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
   flush?: boolean;
 };
@@ -95,22 +113,31 @@ export type DeletePendingTaskType = { id: number };
 
 export type DeleteReactionType = {
   reaction: ReactionResponse;
-  message?: MessageResponse | FormatMessageResponse;
+  message?: MessageResponse | LocalMessage;
   flush?: boolean;
 };
 
 export type DeleteMessageType = { id: string; flush?: boolean };
 
+export type ChannelExistsType = { cid: string };
+
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
 
 export interface OfflineDBApi {
-  insertReaction: (options: InsertReactionType) => Promise<unknown>;
-  upsertCidsForQuery: (options: UpsertCidsForQueryType) => Promise<unknown>;
-  upsertChannels: (options: UpsertChannelsType) => Promise<unknown>;
-  upsertUserSyncStatus: (options: UpsertUserSyncStatusType) => Promise<unknown>;
-  upsertAppSettings: (options: UpsertAppSettingsType) => Promise<unknown>;
-  upsertPoll: (options: UpsertPollType) => Promise<unknown>;
-  updateReaction: (options: UpdateReactionType) => Promise<unknown>;
+  insertReaction: (options: InsertReactionType) => Promise<ExecuteBatchQueriesType>;
+  upsertCidsForQuery: (
+    options: UpsertCidsForQueryType,
+  ) => Promise<ExecuteBatchQueriesType>;
+  upsertChannels: (options: UpsertChannelsType) => Promise<ExecuteBatchQueriesType>;
+  upsertUserSyncStatus: (
+    options: UpsertUserSyncStatusType,
+  ) => Promise<ExecuteBatchQueriesType>;
+  upsertAppSettings: (options: UpsertAppSettingsType) => Promise<ExecuteBatchQueriesType>;
+  upsertPoll: (options: UpsertPollType) => Promise<ExecuteBatchQueriesType>;
+  upsertChannelData: (options: UpsertChannelDataType) => Promise<ExecuteBatchQueriesType>;
+  upsertReads: (options: UpsertReadsType) => Promise<ExecuteBatchQueriesType>;
+  upsertMessages: (options: UpsertMessagesType) => Promise<ExecuteBatchQueriesType>;
+  updateReaction: (options: UpdateReactionType) => Promise<ExecuteBatchQueriesType>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
@@ -122,11 +149,12 @@ export interface OfflineDBApi {
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
-  deletePendingTask: (options: DeletePendingTaskType) => Promise<unknown>;
-  deleteReaction: (options: DeleteReactionType) => Promise<unknown>;
-  hardDeleteMessage: (options: DeleteMessageType) => Promise<unknown>;
-  softDeleteMessage: (options: DeleteMessageType) => Promise<unknown>;
+  deletePendingTask: (options: DeletePendingTaskType) => Promise<ExecuteBatchQueriesType>;
+  deleteReaction: (options: DeleteReactionType) => Promise<ExecuteBatchQueriesType>;
+  hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
+  softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
+  channelExists: (options: ChannelExistsType) => Promise<boolean>;
 }
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
@@ -149,6 +177,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
 
   abstract upsertPoll: OfflineDBApi['upsertPoll'];
+
+  abstract upsertChannelData: OfflineDBApi['upsertChannelData'];
+
+  abstract upsertReads: OfflineDBApi['upsertReads'];
+
+  abstract upsertMessages: OfflineDBApi['upsertMessages'];
 
   abstract updateReaction: OfflineDBApi['updateReaction'];
 
@@ -179,6 +213,109 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
 
   abstract resetDB: OfflineDBApi['resetDB'];
+
+  abstract channelExists: OfflineDBApi['channelExists'];
+
+  public queriesWithChannelGuard = async (
+    { event, flush = true }: { event: Event; flush?: boolean },
+    createQueries: (flushOverride?: boolean) => Promise<PreparedBatchQueries[]>,
+  ) => {
+    const cid = event.cid || event.channel?.cid;
+    const type = event.type;
+
+    if (!cid) {
+      return await createQueries(flush);
+    }
+    const channelExists = this.channelExists({ cid });
+    // a channel is not present in the db, we first fetch the channel data from the channel object.
+    // this can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
+    if (!channelExists) {
+      const channel =
+        event.channel_type && event.channel_id
+          ? this.client.channel(event.channel_type, event.channel_id)
+          : undefined;
+      if (channel && channel.data && channel.initialized && !channel.disconnected) {
+        const channelQuery = await this.upsertChannelData({
+          channel: channel.data as unknown as ChannelResponse,
+          flush,
+        });
+        if (channelQuery) {
+          const createdQueries = await createQueries(false);
+          const newQueries = [...channelQuery, ...createdQueries];
+          if (flush) {
+            await this.executeSqlBatch(newQueries);
+          }
+          return newQueries;
+        } else {
+          console.warn(
+            `Couldnt create channel queries on ${type} event for an initialized channel that is not in DB, skipping event`,
+            { event },
+          );
+          return [];
+        }
+      } else {
+        console.warn(
+          `Received ${type} event for a non initialized channel that is not in DB, skipping event`,
+          { event },
+        );
+        return [];
+      }
+    }
+    return createQueries(flush);
+  };
+
+  public handleNewMessage = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const client = this.client;
+    const { cid, message, user } = event;
+
+    if (!message) {
+      return [];
+    }
+
+    const finalQueries = await this.queriesWithChannelGuard(
+      { event, flush },
+      async (flushOverride) => {
+        let queries = await this.upsertMessages({
+          flush: flushOverride,
+          messages: [message],
+        });
+        if (cid && client.user && client.user.id !== user?.id) {
+          const userId = client.user.id;
+          const channel = client.activeChannels[cid];
+          if (channel) {
+            const ownReads = channel.state.read[userId];
+            const unreadCount = channel.countUnread();
+            const upsertReadsQueries = await this.upsertReads({
+              cid,
+              flush: flushOverride,
+              reads: [
+                {
+                  last_read: ownReads.last_read.toString() as string,
+                  last_read_message_id: ownReads.last_read_message_id,
+                  unread_messages: unreadCount,
+                  user: client.user,
+                },
+              ],
+            });
+            queries = [...queries, ...upsertReadsQueries];
+          }
+        }
+        return queries;
+      },
+    );
+
+    if (flush) {
+      await this.executeSqlBatch(finalQueries);
+    }
+
+    return finalQueries;
+  };
 
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
@@ -397,6 +534,8 @@ export class OfflineDBSyncManager {
   };
 
   private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
+    const client = this.client;
+
     const { type } = event;
     console.log('SYNCING REACTION EVENT1: ', event.type);
 
@@ -404,15 +543,35 @@ export class OfflineDBSyncManager {
       const { message, reaction } = event;
 
       if (type === 'reaction.new') {
-        return await this.offlineDb.insertReaction({ message, reaction, flush });
+        return await this.offlineDb.queriesWithChannelGuard(
+          { event, flush },
+          (flushOverride) =>
+            this.offlineDb.insertReaction({ message, reaction, flush: flushOverride }),
+        );
       }
 
       if (type === 'reaction.updated') {
-        return await this.offlineDb.updateReaction({ message, reaction, flush });
+        return await this.offlineDb.queriesWithChannelGuard(
+          { event, flush },
+          (flushOverride) =>
+            this.offlineDb.updateReaction({ message, reaction, flush: flushOverride }),
+        );
       }
 
       if (type === 'reaction.deleted') {
-        return await this.offlineDb?.deleteReaction({ message, reaction, flush });
+        return await this.offlineDb.queriesWithChannelGuard(
+          { event, flush },
+          (flushOverride) =>
+            this.offlineDb?.deleteReaction({ message, reaction, flush: flushOverride }),
+        );
+      }
+    }
+
+    if (type === 'message.new') {
+      const { message } = event;
+
+      if (message && (!message.parent_id || message.show_in_channel)) {
+        return await this.offlineDb.handleNewMessage({ event, flush });
       }
     }
 

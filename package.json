@@ -60,6 +60,7 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@babel/runtime": "^7.27.0",
     "@commitlint/cli": "^19.7.1",
     "@commitlint/config-conventional": "^19.7.1",
     "@eslint/js": "^9.21.0",
