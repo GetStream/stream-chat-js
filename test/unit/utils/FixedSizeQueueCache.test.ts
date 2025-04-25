@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
+import { FixedSizeQueueCache } from '../../../src/utils/FixedSizeQueueCache';
 
 describe('FixedSizeQueueCache', () => {
   it('should throw an error if size is not provided', () => {

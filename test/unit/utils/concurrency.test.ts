@@ -4,7 +4,7 @@ import {
   withoutConcurrency,
   hasPending,
   settled,
-} from '../../src/utils/concurrency';
+} from '../../../src/utils/concurrency';
 
 describe('concurrency', () => {
   describe('withCancellation', () => {
