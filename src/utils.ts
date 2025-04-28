@@ -5,21 +5,26 @@ import type {
   ChannelQueryOptions,
   ChannelSort,
   ChannelSortBase,
-  FormatMessageResponse,
+  LocalMessage,
+  LocalMessageBase,
   Logger,
+  Message,
   MessagePaginationOptions,
   MessageResponse,
+  MessageResponseBase,
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
   QueryChannelAPIResponse,
   ReactionGroupResponse,
+  UpdatedMessage,
   UserResponse,
 } from './types';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
+import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -297,23 +302,91 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param {MessageResponse} message `MessageResponse` object
  */
 export function formatMessage(
-  message: MessageResponse | FormatMessageResponse,
-): FormatMessageResponse {
-  return {
-    ...message,
-    // parse the dates
-    pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
-    created_at: message.created_at ? new Date(message.created_at) : new Date(),
-    updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
-    deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
-    status: message.status || 'received',
-    reaction_groups: maybeGetReactionGroupsFallback(
-      message.reaction_groups,
-      message.reaction_counts,
-      message.reaction_scores,
-    ),
+  message: MessageResponse | MessageResponseBase | LocalMessage,
+): LocalMessage {
+  const toLocalMessageBase = (
+    msg: MessageResponse | MessageResponseBase | LocalMessage | null | undefined,
+  ): LocalMessageBase | null => {
+    if (!msg) return null;
+    return {
+      ...msg,
+      created_at: message.created_at ? new Date(message.created_at) : new Date(),
+      deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
+      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
+      reaction_groups: maybeGetReactionGroupsFallback(
+        message.reaction_groups,
+        message.reaction_counts,
+        message.reaction_scores,
+      ),
+      status: message.status || 'received',
+      updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+    };
   };
+
+  return {
+    ...toLocalMessageBase(message),
+    error: (message as LocalMessage).error ?? null,
+    quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
+  } as LocalMessage;
 }
+
+export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  const {
+    // Remove all timestamp fields and client-specific fields.
+    // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
+    created_at,
+    updated_at,
+    deleted_at,
+    // Client-specific fields
+    error,
+    status,
+    // Reaction related fields
+    latest_reactions,
+    own_reactions,
+    reaction_counts,
+    reaction_scores,
+    reply_count,
+    // Message text related fields that shouldn't be in update
+    command,
+    html,
+    i18n,
+    quoted_message,
+    mentioned_users,
+    // Message content related fields
+    ...messageFields
+  } = localMessage;
+
+  return {
+    ...messageFields,
+    pinned_at: messageFields.pinned_at?.toISOString(),
+    mentioned_users: mentioned_users?.map((user) => user.id),
+  };
+};
+
+export const toUpdatedMessagePayload = (
+  message: LocalMessage | Partial<MessageResponse>,
+): UpdatedMessage => {
+  const messageFields = Object.fromEntries(
+    Object.entries(message).filter(
+      ([key]) =>
+        ![...RESERVED_UPDATED_MESSAGE_FIELDS, ...LOCAL_MESSAGE_FIELDS].includes(
+          key as
+            | (typeof RESERVED_UPDATED_MESSAGE_FIELDS)[number]
+            | (typeof LOCAL_MESSAGE_FIELDS)[number],
+        ),
+    ),
+  ) as UpdatedMessage;
+
+  return {
+    ...messageFields,
+    pinned: !!message.pinned_at,
+    mentioned_users: message.mentioned_users?.map((user) =>
+      typeof user === 'string' ? user : user.id,
+    ),
+    user_id: message.user?.id ?? message.user_id,
+  };
+};
 
 export const findIndexInSortedArray = <T, L>({
   needle,
@@ -404,7 +477,7 @@ export const findIndexInSortedArray = <T, L>({
   return left;
 };
 
-export function addToMessageList<T extends FormatMessageResponse>(
+export function addToMessageList<T extends LocalMessage>(
   messages: readonly T[],
   newMessage: T,
   timestampChanged = false,
@@ -1132,3 +1205,8 @@ export const promoteChannel = ({
 
   return newChannels;
 };
+
+export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
+
+export const isLocalMessage = (message: unknown): message is LocalMessage =>
+  isDate((message as LocalMessage).created_at);

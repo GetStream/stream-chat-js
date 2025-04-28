@@ -11,6 +11,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import { generateMessageDraft } from './test-utils/generateMessageDraft';
 
 import { describe, beforeEach, it, expect } from 'vitest';
 
@@ -458,7 +459,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(
 			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
 				.deleted_at,
-		).to.be.ok;
+		).to.be.null;
 	});
 
 	describe('notification.mark_unread', () => {
@@ -908,7 +909,6 @@ describe('Channels - Constructor', function () {
 		expect(channel.id).to.eql('brand_new_123');
 		expect(channel.data).to.eql({ cool: true });
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		console.log(channel.data);
 		expect(channel.data).to.eql({ cool: true, custom_cool: true });
 	});
 

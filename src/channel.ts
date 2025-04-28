@@ -27,11 +27,11 @@ import type {
   EventAPIResponse,
   EventHandler,
   EventTypes,
-  FormatMessageResponse,
   GetDraftResponse,
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
+  LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
   MemberFilters,
@@ -70,6 +70,7 @@ import type {
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
+import { MessageComposer } from './messageComposer';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -104,6 +105,7 @@ export class Channel {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: PushPreference;
+  public readonly messageComposer: MessageComposer;
 
   /**
    * constructor - Create a channel
@@ -147,6 +149,11 @@ export class Channel {
     this.lastTypingEvent = null;
     this.isTyping = false;
     this.disconnected = false;
+
+    this.messageComposer = new MessageComposer({
+      client: this._client,
+      compositionContext: this,
+    });
   }
 
   /**
@@ -421,7 +428,9 @@ export class Channel {
 
     const url =
       this.getClient().baseURL +
-      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(reactionType)}`;
+      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(
+        reactionType,
+      )}`;
     //provided when server side request
     if (user_id) {
       return this.getClient().delete<ReactionAPIResponse>(url, { user_id });
@@ -950,7 +959,7 @@ export class Channel {
    *
    * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
    */
-  lastMessage(): FormatMessageResponse | undefined {
+  lastMessage(): LocalMessage | undefined {
     // get last 5 messages, sort, return the latest
     // get a slice of the last 5
     let min = this.state.latestMessages.length - 5;
@@ -1176,7 +1185,7 @@ export class Channel {
     }
   }
 
-  _countMessageAsUnread(message: FormatMessageResponse | MessageResponse) {
+  _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.parent_id && !message.show_in_channel) return false;
@@ -1285,7 +1294,9 @@ export class Channel {
       );
     }
 
-    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}`;
+    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}`;
     if (this.id) {
       queryURL += `/${encodeURIComponent(this.id)}`;
     }
@@ -1341,6 +1352,10 @@ export class Channel {
     };
 
     this.getClient().polls.hydratePollCache(state.messages, true);
+
+    if (state.draft) {
+      this.messageComposer.initState({ composition: state.draft });
+    }
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==
@@ -1898,7 +1913,9 @@ export class Channel {
     if (!this.id) {
       throw new Error('channel id is not defined');
     }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(this.type)}/${encodeURIComponent(this.id)}`;
+    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
+      this.type,
+    )}/${encodeURIComponent(this.id)}`;
   };
 
   _checkInitialized() {

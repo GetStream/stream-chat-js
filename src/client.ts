@@ -28,6 +28,7 @@ import {
   randomId,
   retryInterval,
   sleep,
+  toUpdatedMessagePayload,
 } from './utils';
 
 import type {
@@ -117,6 +118,7 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  LocalMessage,
   Logger,
   MarkChannelsReadOptions,
   MessageFilters,
@@ -172,7 +174,6 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  ReservedMessageFields,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -201,7 +202,6 @@ import type {
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
-  UpdatedMessage,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
@@ -227,20 +227,45 @@ import type {
   ChannelManagerOptions,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
+import { NotificationManager } from './notifications';
+import { StateStore } from './store';
+import type { MessageComposer } from './messageComposer';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
+type MessageComposerTearDownFunction = () => void;
+
+type MessageComposerSetupFunction = ({
+  composer,
+}: {
+  composer: MessageComposer;
+}) => void | MessageComposerTearDownFunction;
+
+type MessageComposerSetupState = {
+  /**
+   * Each `MessageComposer` runs this function each time its signature changes or
+   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
+   * from `applyModifications` will be used as a cleanup function - it will be stored
+   * and ran before new modification is applied. Cleaning up only the
+   * modified parts is the general way to go but if your setup gets a bit
+   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
+   */
+  setupFunction: MessageComposerSetupFunction | null;
+};
+
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
 
   _user?: OwnUserResponse | UserResponse;
+  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
     [key: string]: Channel;
   };
   threads: ThreadManager;
   polls: PollManager;
+  notifications: NotificationManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -285,6 +310,12 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
+  /**
+   * @private
+   */
+  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
+    setupFunction: null,
+  });
 
   /**
    * Initialize a client
@@ -321,6 +352,8 @@ export class StreamChat {
     this.mutedUsers = [];
 
     this.moderation = new Moderation(this);
+
+    this.notifications = options?.notifications ?? new NotificationManager();
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {
@@ -795,7 +828,8 @@ export class StreamChat {
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    return await this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
+    return await this.appSettingsPromise;
   }
 
   /**
@@ -1826,6 +1860,10 @@ export class StreamChat {
         this.polls.hydratePollCache(channelState.messages, true);
       }
 
+      if (channelState.draft) {
+        c.messageComposer.initState({ composition: channelState.draft });
+      }
+
       channels.push(c);
     }
 
@@ -2825,69 +2863,31 @@ export class StreamChat {
    * @param {string | { id: string }} [userId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
-   * @return {{ message: MessageResponse }} Response that includes the message
+   * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: UpdatedMessage,
+    message: LocalMessage | Partial<MessageResponse>,
     userId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message id when calling updateMessage');
     }
-
-    const clonedMessage: Partial<UpdatedMessage & { __html: unknown }> = { ...message };
-    delete clonedMessage.id;
-
-    const reservedMessageFields: Array<ReservedMessageFields> = [
-      'command',
-      'created_at',
-      'html',
-      'latest_reactions',
-      'own_reactions',
-      'quoted_message',
-      'reaction_counts',
-      'reply_count',
-      'type',
-      'updated_at',
-      'user',
-      'pinned_at',
-      '__html',
-    ];
-
-    for (const field of reservedMessageFields) {
-      if (typeof clonedMessage[field] !== 'undefined') {
-        delete clonedMessage[field];
-      }
-    }
-
+    const payload = toUpdatedMessagePayload(message);
     if (userId != null) {
       if (isString(userId)) {
-        clonedMessage.user_id = userId;
+        payload.user_id = userId;
       } else {
-        clonedMessage.user = {
+        payload.user = {
           id: userId.id,
-        } as UserResponse;
+        };
       }
-    }
-
-    /**
-     * Server always expects mentioned_users to be array of string. We are adding extra check, just in case
-     * SDK missed this conversion.
-     */
-    if (
-      Array.isArray(clonedMessage.mentioned_users) &&
-      !isString(clonedMessage.mentioned_users[0])
-    ) {
-      clonedMessage.mentioned_users = clonedMessage.mentioned_users.map(
-        (mu) => (mu as unknown as UserResponse).id,
-      );
     }
 
     return await this.post<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
       {
-        message: clonedMessage,
+        message: payload,
         ...options,
       },
     );
@@ -3036,7 +3036,7 @@ export class StreamChat {
    */
   async getThread(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThread');
     }
 
     const optionsWithDefaults = {
@@ -4368,4 +4368,10 @@ export class StreamChat {
 
     return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
+
+  public setMessageComposerSetupFunction = (
+    setupFunction: MessageComposerSetupState['setupFunction'],
+  ) => {
+    this._messageComposerSetupState.partialNext({ setupFunction });
+  };
 }
