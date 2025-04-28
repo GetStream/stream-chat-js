@@ -333,10 +333,6 @@ export class MessageComposer {
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
-  //   this.config?.drafts.enabled || !compositionIsDraftResponse(composition)
-  //     ? composition
-  //     : undefined,
-  // );
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
