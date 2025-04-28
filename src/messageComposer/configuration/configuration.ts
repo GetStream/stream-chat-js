@@ -32,6 +32,7 @@ export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
 };
 
 export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
+  enabled: true,
   publishTypingEvents: true,
 };
 

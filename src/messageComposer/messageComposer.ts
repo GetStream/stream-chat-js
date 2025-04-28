@@ -236,7 +236,7 @@ export class MessageComposer {
       return this.compositionContext.legacyThreadId;
     }
 
-    // check if message is a reply, get parentMessageId
+    // check if the message is a reply, get parentMessageId
     if (typeof this.compositionContext.parent_id === 'string') {
       return this.compositionContext.parent_id;
     }

@@ -199,6 +199,15 @@ describe('TextComposer', () => {
       textComposer.state.partialNext({ text: '' });
       expect(textComposer.textIsEmpty).toBe(true);
     });
+
+    it('gets the current value of enabled', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      expect(textComposer.enabled).toBe(true);
+      textComposer.enabled = false;
+      expect(textComposer.enabled).toBe(false);
+    });
   });
 
   describe('initState', () => {
@@ -372,6 +381,18 @@ describe('TextComposer', () => {
       textComposer.setText('New text');
       expect(textComposer.text).toBe('New text');
     });
+    it('should not update the text when disabled', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { enabled: false } });
+      textComposer.setText('New text');
+      expect(textComposer.text).toBe(message.text);
+    });
   });
 
   describe('insertText', () => {
@@ -460,6 +481,14 @@ describe('TextComposer', () => {
       textComposer.insertText({ text: insertedText, selection: { start: 7, end: 9 } });
       expect(textComposer.text).toBe('Hello wHi ');
     });
+
+    it('should not insert text if disabled', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { enabled: false } });
+      textComposer.insertText({ text: ' beautiful', selection: { start: 5, end: 5 } });
+      expect(textComposer.text).toBe(message.text);
+    });
   });
 
   describe('closeSuggestions', () => {
@@ -510,6 +539,22 @@ describe('TextComposer', () => {
       expect(textComposer.selection).toEqual(
         textComposerMiddlewareExecuteOutput.state.selection,
       );
+    });
+
+    it('should not update state with middleware result if disabled', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ config: { enabled: false } });
+      textComposer.state.next(initialState);
+      const initialText = textComposer.text;
+      const initialSelection = textComposer.selection;
+      await textComposer.handleChange({
+        text: 'Test message',
+        selection: { start: 12, end: 12 },
+      });
+
+      expect(textComposer.text).toBe(initialText);
+      expect(textComposer.selection).toEqual(initialSelection);
     });
 
     it('should not update state if middleware returns discard status', async () => {
@@ -629,6 +674,20 @@ describe('TextComposer', () => {
       expect(textComposer.state.getLatestValue()).toEqual(
         textComposerMiddlewareExecuteOutput.state,
       );
+    });
+
+    it('should not update state with middleware result if disabled', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ config: { enabled: false } });
+      textComposer.state.next(initialState);
+
+      const target = { id: 'user-1' };
+      const executeSpy = vi.spyOn(textComposer.middlewareExecutor, 'execute');
+      executeSpy.mockResolvedValueOnce(textComposerMiddlewareExecuteOutput);
+      await textComposer.handleSelect(target);
+
+      expect(textComposer.state.getLatestValue()).toEqual(initialState);
     });
 
     it('should not update state if middleware returns discard status', async () => {

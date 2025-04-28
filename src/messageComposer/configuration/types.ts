@@ -12,7 +12,9 @@ export type DraftsConfiguration = {
   enabled: boolean;
 };
 export type TextComposerConfig = {
-  /** If true, triggers typing events on text input keystroke */
+  /** If false, the text input, change and selection events are disabled */
+  enabled: boolean;
+  /** If true, triggers typing events on text input keystroke. Disabled for threads and message editing by default. */
   publishTypingEvents: boolean;
   /** Default value for the message input */
   defaultValue?: string;

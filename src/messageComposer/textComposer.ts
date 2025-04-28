@@ -68,6 +68,14 @@ export class TextComposer {
     return this.composer.config.text;
   }
 
+  get enabled() {
+    return this.composer.config.text.enabled;
+  }
+
+  set enabled(enabled: boolean) {
+    this.composer.updateConfig({ text: { enabled } });
+  }
+
   set defaultValue(defaultValue: string) {
     this.composer.updateConfig({ text: { defaultValue } });
   }
@@ -138,10 +146,13 @@ export class TextComposer {
   };
 
   setText = (text: string) => {
+    if (!this.enabled) return;
     this.state.partialNext({ text });
   };
 
   insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
+    if (!this.enabled) return;
+
     const finalSelection: TextSelection = selection ?? {
       start: this.text.length,
       end: this.text.length,
@@ -189,6 +200,7 @@ export class TextComposer {
     selection: TextSelection;
     text: string;
   }) => {
+    if (!this.enabled) return;
     const output = await this.middlewareExecutor.execute('onChange', {
       state: {
         ...this.state.getLatestValue(),
@@ -209,6 +221,7 @@ export class TextComposer {
 
   // todo: document how to register own middleware handler to simulate onSelectUser prop
   handleSelect = async (target: TextComposerSuggestion<unknown>) => {
+    if (!this.enabled) return;
     const output = await this.middlewareExecutor.execute(
       'onSuggestionItemSelect',
       {
