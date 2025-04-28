@@ -1,3 +1,9 @@
+## [9.0.0-rc.12](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.11...v9.0.0-rc.12) (2025-04-28)
+
+### Features
+
+* add missing configuration parameters for AttachmentManager and TextComposer ([#1520](https://github.com/GetStream/stream-chat-js/issues/1520)) ([44902e7](https://github.com/GetStream/stream-chat-js/commit/44902e76596a271e098e545e08764e7569ca1c0e))
+
 ## [9.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.10...v9.0.0-rc.11) (2025-04-28)
 
 ### ⚠ BREAKING CHANGES
