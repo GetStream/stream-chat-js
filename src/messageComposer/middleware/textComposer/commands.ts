@@ -10,7 +10,7 @@ import type { CommandResponse } from '../../../types';
 import type { Channel } from '../../../channel';
 import type { TextComposerSuggestion } from '../../types';
 
-type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
+export type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
 
 export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
   readonly type = 'commands';
