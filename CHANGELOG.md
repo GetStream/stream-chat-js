@@ -1,3 +1,22 @@
+## [9.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.10...v9.0.0-rc.11) (2025-04-28)
+
+### ⚠ BREAKING CHANGES
+
+* Replacement of FormatMessageResponse with LocalMessage
+type
+
+### Bug Fixes
+
+* [REACT-344] remove Agora & 100ms integrations ([#1519](https://github.com/GetStream/stream-chat-js/issues/1519)) ([16cd81a](https://github.com/GetStream/stream-chat-js/commit/16cd81a06c3f3daf4f6955d3c7f353283400031e))
+* [REACT-350] make archived_at & pinned_at nullable ([#1515](https://github.com/GetStream/stream-chat-js/issues/1515)) ([318825a](https://github.com/GetStream/stream-chat-js/commit/318825a335342c2e32d19469f736df95feb87bee))
+* [REACT-353] unify pinned_at & archived_at nullish values ([#1516](https://github.com/GetStream/stream-chat-js/issues/1516)) ([a840226](https://github.com/GetStream/stream-chat-js/commit/a8402268fabe1826e74e383afd9962bd6ab6376f)), closes [#1515](https://github.com/GetStream/stream-chat-js/issues/1515)
+
+### Features
+
+* [CHA-794] Add sort and filter param to queryThreads ([#1511](https://github.com/GetStream/stream-chat-js/issues/1511)) ([ea7fe99](https://github.com/GetStream/stream-chat-js/commit/ea7fe999aa6d7609fa58e4808b067a8457cf187f))
+* [CHA-855] - Refactoring partial update member ([#1517](https://github.com/GetStream/stream-chat-js/issues/1517)) ([e4f7e68](https://github.com/GetStream/stream-chat-js/commit/e4f7e68298e0959309aa592ce778f6cbbbcc4ab0))
+* message composer ([#1495](https://github.com/GetStream/stream-chat-js/issues/1495)) ([0c07524](https://github.com/GetStream/stream-chat-js/commit/0c07524f6551e9257b229b262b4d1e03ab44561b)), closes [stream-chat-react#2669](https://github.com/GetStream/stream-chat-react/issues/2669)
+
 ## [9.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.9...v9.0.0-rc.10) (2025-04-09)
 
 ### Bug Fixes
