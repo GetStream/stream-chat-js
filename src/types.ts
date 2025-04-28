@@ -3924,16 +3924,15 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
 };
 
 export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['liveLocationType'] & {
-  channel_cid: string;
-  created_at: string;
+  channel_cid?: string;
+  created_at?: string;
   created_by_device_id: string;
   end_at: string;
-  id: string;
   latitude: number;
   longitude: number;
   message_id: string;
-  updated_at: string;
-  user_id: string;
+  updated_at?: string;
+  user_id?: string;
 };
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
