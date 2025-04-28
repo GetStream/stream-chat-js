@@ -30,6 +30,11 @@ export type AttachmentManagerConfig = {
   fileUploadFilter: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage: number;
+  /**
+   * Array of one or more file types, or unique file type specifiers (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers),
+   * describing which file types to allow to select when uploading files.
+   */
+  acceptedFiles: string[];
   // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;

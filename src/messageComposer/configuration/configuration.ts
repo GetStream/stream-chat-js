@@ -26,6 +26,7 @@ export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
 };
 
 export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
+  acceptedFiles: [], // an empty array means all files are accepted
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
 };
