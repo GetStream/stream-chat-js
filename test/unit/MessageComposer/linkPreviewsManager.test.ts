@@ -109,7 +109,7 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
       } = setup({ config: null });
-      expect(linkPreviewsManager.config.enabled).toBe(true);
+      expect(linkPreviewsManager.config.enabled).toBe(false);
       expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(
         DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
       );

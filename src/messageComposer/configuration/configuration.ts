@@ -9,7 +9,7 @@ import type { TextComposerConfig } from './types';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
-  enabled: true,
+  enabled: false,
   findURLFn: (text: string): string[] =>
     find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
       try {
