@@ -311,6 +311,25 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
+   * updateMemberPartial - Partial update a member
+   *
+   * @param {PartialUpdateMember<StreamChatGenerics>}  updates
+   * @param {{ user_id?: string }} [options] Option object, {user_id: 'jane'} to optionally specify the user id
+
+   * @return {Promise<ChannelMemberResponse<StreamChatGenerics>>} Updated member
+   */
+  async updateMemberPartial(updates: PartialUpdateMember<StreamChatGenerics>, options?: { userId?: string }) {
+    const url = new URL(`${this._channelURL()}/member`);
+
+    if (options?.userId) {
+      url.searchParams.append('user_id', options.userId);
+    }
+
+    return await this.getClient().patch<PartialUpdateMemberAPIResponse<StreamChatGenerics>>(url.toString(), updates);
+  }
+
+  /**
+   * @deprecated Use `updateMemberPartial` instead
    * partialUpdateMember - Partial update a member
    *
    * @param {string} user_id member user id
@@ -1599,22 +1618,36 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
         }
         break;
       case 'member.added':
-      case 'member.updated':
-        if (event.member?.user) {
+      case 'member.updated': {
+        const memberCopy: ChannelMemberResponse = {
+          ...event.member,
+        };
+
+        if (memberCopy.pinned_at === null) {
+          delete memberCopy.pinned_at;
+        }
+
+        if (memberCopy.archived_at === null) {
+          delete memberCopy.archived_at;
+        }
+
+        if (memberCopy?.user) {
           channelState.members = {
             ...channelState.members,
-            [event.member.user.id]: event.member,
+            [memberCopy.user.id]: memberCopy,
           };
         }
 
+        const currentUserId = this.getClient().userID;
         if (
-          typeof channelState.membership.user?.id === 'string' &&
-          typeof event.member?.user?.id === 'string' &&
-          event.member.user.id === channelState.membership.user.id
+          typeof currentUserId === 'string' &&
+          typeof memberCopy?.user?.id === 'string' &&
+          memberCopy.user.id === currentUserId
         ) {
-          channelState.membership = event.member;
+          channelState.membership = memberCopy;
         }
         break;
+      }
       case 'member.removed':
         if (event.user?.id) {
           const newMembers = {
