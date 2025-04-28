@@ -89,6 +89,14 @@ export class AttachmentManager {
     return this.composer.config.attachments;
   }
 
+  get acceptedFiles() {
+    return this.config.acceptedFiles;
+  }
+
+  set acceptedFiles(acceptedFiles: AttachmentManagerConfig['acceptedFiles']) {
+    this.composer.updateConfig({ attachments: { acceptedFiles } });
+  }
+
   get fileUploadFilter() {
     return this.config.fileUploadFilter;
   }

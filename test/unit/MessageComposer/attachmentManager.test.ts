@@ -176,7 +176,7 @@ describe('AttachmentManager', () => {
 
   describe('getters', () => {
     it('should retrieve attachments config from composer', () => {
-      const config: AttachmentManagerConfig = {
+      const config: Partial<AttachmentManagerConfig> = {
         doUploadRequest: () => {
           return Promise.resolve({ file: 'x' });
         },
@@ -186,7 +186,7 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
       } = setup({ config });
-      expect(attachmentManager.config).toEqual(config);
+      expect(attachmentManager.config).toEqual({ ...config, acceptedFiles: [] });
     });
 
     it('should return the correct values from state', async () => {
