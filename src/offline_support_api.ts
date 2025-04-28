@@ -338,6 +338,46 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
+  public handleRead = async ({
+    event,
+    unreadMessages,
+    flush = true,
+  }: {
+    event: Event;
+    unreadMessages?: number;
+    flush?: boolean;
+  }) => {
+    const {
+      received_at: last_read,
+      last_read_message_id,
+      unread_messages = 0,
+      user,
+      cid,
+    } = event;
+
+    const overriddenUnreadMessages = unreadMessages ?? unread_messages;
+
+    if (user?.id && cid) {
+      console.log('HANDING READ: ', event.type, flush);
+      return await this.queriesWithChannelGuard({ event, flush }, (flushOverride) =>
+        this.upsertReads({
+          cid,
+          flush: flushOverride,
+          reads: [
+            {
+              last_read: last_read as string,
+              last_read_message_id,
+              unread_messages: overriddenUnreadMessages,
+              user,
+            },
+          ],
+        }),
+      );
+    }
+
+    return [];
+  };
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {

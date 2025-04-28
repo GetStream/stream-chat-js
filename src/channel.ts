@@ -1733,6 +1733,8 @@ export class Channel {
           if (event.user?.id === this.getClient().user?.id) {
             channelState.unreadCount = 0;
           }
+
+          this.getClient().offlineDb?.handleRead({ event, unreadMessages: 0 });
         }
         break;
       case 'user.watching.start':
@@ -1906,6 +1908,7 @@ export class Channel {
         };
 
         channelState.unreadCount = unreadCount;
+        this.getClient().offlineDb?.handleRead({ event });
         break;
       }
       case 'channel.updated':
