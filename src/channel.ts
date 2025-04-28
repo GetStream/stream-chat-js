@@ -1752,6 +1752,8 @@ export class Channel {
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
 
+          this.getClient().offlineDb?.handleDeleteMessage({ event });
+
           channelState.removeQuotedMessageReferences(event.message);
 
           if (event.message.pinned) {

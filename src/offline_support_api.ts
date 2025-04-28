@@ -237,7 +237,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       if (channel && channel.data && channel.initialized && !channel.disconnected) {
         const channelQuery = await this.upsertChannelData({
           channel: channel.data as unknown as ChannelResponse,
-          flush,
+          flush: false,
         });
         if (channelQuery) {
           const createdQueries = await createQueries(false);
@@ -280,9 +280,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     const finalQueries = await this.queriesWithChannelGuard(
       { event, flush },
-      async (flushOverride) => {
+      async () => {
         let queries = await this.upsertMessages({
-          flush: flushOverride,
+          flush: false,
           messages: [message],
         });
         if (cid && client.user && client.user.id !== user?.id) {
@@ -293,7 +293,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
               cid,
-              flush: flushOverride,
+              flush: false,
               reads: [
                 {
                   last_read: ownReads.last_read.toString() as string,
@@ -315,6 +315,27 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     return finalQueries;
+  };
+
+  public handleDeleteMessage = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const { message, hard_delete = false } = event;
+
+    if (message) {
+      const deleteMethod = hard_delete ? this.hardDeleteMessage : this.softDeleteMessage;
+      return await this.queriesWithChannelGuard(
+        { event, flush },
+        async (flushOverride) =>
+          await deleteMethod({ id: message.id, flush: flushOverride }),
+      );
+    }
+
+    return [];
   };
 
   public queueTask = async ({ task }: { task: PendingTask }) => {
@@ -534,10 +555,8 @@ export class OfflineDBSyncManager {
   };
 
   private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
-    const client = this.client;
-
     const { type } = event;
-    console.log('SYNCING REACTION EVENT1: ', event.type);
+    console.log('SYNCING EVENT: ', event.type);
 
     if (type.startsWith('reaction') && event.message && event.reaction) {
       const { message, reaction } = event;
@@ -573,6 +592,10 @@ export class OfflineDBSyncManager {
       if (message && (!message.parent_id || message.show_in_channel)) {
         return await this.offlineDb.handleNewMessage({ event, flush });
       }
+    }
+
+    if (type === 'message.deleted') {
+      return await this.offlineDb.handleDeleteMessage({ event, flush });
     }
 
     return [];
