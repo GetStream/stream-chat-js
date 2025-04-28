@@ -29,24 +29,6 @@ vi.mock('../../../src/utils', () => ({
   throttle: vi.fn().mockImplementation((fn) => fn),
 }));
 
-// // Mock dependencies
-// vi.mock('../../../src/utils', () => ({
-//   axiosParamsSerializer: vi.fn(),
-//   isFunction: vi.fn(),
-//   isString: vi.fn(),
-//   isObject: vi.fn(),
-//   isArray: vi.fn(),
-//   isDate: vi.fn(),
-//   isNumber: vi.fn(),
-//   logChatPromiseExecution: vi.fn(),
-//   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
-//   debounce: vi.fn().mockImplementation((fn) => fn),
-//   randomId: vi.fn().mockReturnValue('test-uuid'),
-//   isLocalMessage: vi.fn().mockReturnValue(true),
-//   formatMessage: vi.fn().mockImplementation((msg) => msg),
-//   throttle: vi.fn().mockImplementation((fn) => fn),
-// }));
-
 vi.mock('../../../src/messageComposer/attachmentManager', () => ({
   AttachmentManager: vi.fn().mockImplementation(() => ({
     state: new StateStore({ attachments: [] }),
@@ -62,16 +44,6 @@ vi.mock('../../../src/messageComposer/pollComposer', () => ({
     initState: vi.fn(),
     clear: vi.fn(),
     compose: vi.fn(),
-  })),
-}));
-
-vi.mock('../../../src/messageComposer/CustomDataManager', () => ({
-  CustomDataManager: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ data: {} }),
-    initState: vi.fn(),
-    isDataEqual: vi.fn().mockReturnValue(true),
-    setData: vi.fn(),
-    data: {},
   })),
 }));
 
@@ -1005,7 +977,6 @@ describe('MessageComposer', () => {
       it('should log state update timestamp when custom data changes', () => {
         const { messageComposer } = setup();
         const spy = vi.spyOn(messageComposer, 'logStateUpdateTimestamp');
-
         messageComposer.registerSubscriptions();
         messageComposer.customDataManager.state.next({
           data: {

@@ -1,6 +1,7 @@
 import { StateStore } from '../store';
 import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
+import { mergeWithDiff } from '../utils/mergeWith';
 import type { DraftMessage, LocalMessage, OGAttachment } from '../types';
 import type { LinkPreviewsManagerConfig } from './configuration/types';
 import type { MessageComposer } from './messageComposer';
@@ -192,7 +193,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     const urls = this.config.findURLFn(text);
 
     this.shouldDiscardEnrichQueries = !urls.length;
-    if (!urls.length) {
+    if (this.shouldDiscardEnrichQueries) {
       this.state.next({ previews: new Map() });
       return;
     }
@@ -218,6 +219,8 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
           }) as LinkPreview,
       );
 
+    if (!newLinkPreviews.length) return;
+
     this.state.partialNext({
       previews: new Map([...keptPreviews, ...linkPreviewArrayToMap(newLinkPreviews)]),
     });
@@ -230,7 +233,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
             linkPreview.og_scrape_url,
           );
           if (this.shouldDiscardEnrichQueries) return;
-          // due to typing and text changes the URL may not be anymore in the store
+          // due to typing and text changes, the URL may not be anymore in the store
           if (this.previews.has(linkPreview.og_scrape_url)) {
             this.updatePreview(linkPreview.og_scrape_url, {
               status: LinkPreviewStatus.LOADED,
@@ -273,12 +276,20 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   };
 
   updatePreview = (url: LinkURL, preview: Partial<LinkPreview>) => {
+    if (!url) return;
+    const existingPreview = this.previews.get(url);
     const status =
       preview.status ?? this.previews.get(url)?.status ?? LinkPreviewStatus.PENDING;
+    let finalPreview = preview;
+    if (existingPreview) {
+      const merged = mergeWithDiff(existingPreview, preview);
+      const isSame = !merged.diff || Object.keys(merged.diff).length === 0;
+      if (isSame) return;
+      finalPreview = merged.result;
+    }
     this.state.partialNext({
       previews: new Map(this.previews).set(url, {
-        ...this.previews.get(url),
-        ...preview,
+        ...finalPreview,
         og_scrape_url: url,
         status,
       }),

@@ -16,7 +16,6 @@ import {
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type {
   AttachmentLoadingState,
@@ -32,6 +31,7 @@ import type {
 } from './types';
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type { MessageComposer } from './messageComposer';
+import { mergeWithDiff } from '../utils/mergeWith';
 
 type LocalNotImageAttachment =
   | LocalFileAttachment
@@ -182,13 +182,15 @@ export class AttachmentManager {
         const localAttachment = ensureIsLocalAttachment(upsertedAttachment);
         if (localAttachment) attachments.push(localAttachment);
       } else {
-        const localAttachment = ensureIsLocalAttachment(
-          mergeWith<LocalAttachment>(
-            stateAttachments[attachmentIndex] ?? {},
-            upsertedAttachment,
-          ),
+        const merged = mergeWithDiff<LocalAttachment>(
+          stateAttachments[attachmentIndex] ?? {},
+          upsertedAttachment,
         );
-        if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
+        const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
+        if (updatesOnMerge) {
+          const localAttachment = ensureIsLocalAttachment(merged.result);
+          if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
+        }
       }
     });
 
