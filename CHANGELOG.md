@@ -1,3 +1,9 @@
+## [9.0.0-rc.13](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.12...v9.0.0-rc.13) (2025-04-28)
+
+### Features
+
+* disable link previews in message composer ([02cd9a8](https://github.com/GetStream/stream-chat-js/commit/02cd9a8d8a2a3acc31631edcdea2c9cf9f5afb53))
+
 ## [9.0.0-rc.12](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.11...v9.0.0-rc.12) (2025-04-28)
 
 ### Features
