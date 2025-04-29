@@ -113,6 +113,8 @@ export class MessageComposer {
   readonly editingAuditState: StateStore<EditingAuditState>;
   readonly configState: StateStore<MessageComposerConfig>;
   readonly compositionContext: CompositionContext;
+  readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
+  readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
 
   editedMessage?: LocalMessage;
   attachmentManager: AttachmentManager;
@@ -123,8 +125,6 @@ export class MessageComposer {
   // todo: mediaRecorder: MediaRecorderController;
 
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
-  private draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
 
   constructor({
     composition,

@@ -243,7 +243,7 @@ type MessageComposerSetupFunction = ({
   composer: MessageComposer;
 }) => void | MessageComposerTearDownFunction;
 
-type MessageComposerSetupState = {
+export type MessageComposerSetupState = {
   /**
    * Each `MessageComposer` runs this function each time its signature changes or
    * whenever you run `MessageComposer.registerSubscriptions`. Function returned
