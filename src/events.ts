@@ -60,4 +60,7 @@ export const EVENT_MAP = {
   'connection.recovered': true,
   'transport.changed': true,
   'capabilities.changed': true,
+
+  // live location events
+  'live_location.updated': true,
 };
