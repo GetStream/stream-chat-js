@@ -16,7 +16,6 @@ import {
 } from './fileUtils';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type {
   AttachmentLoadingState,
