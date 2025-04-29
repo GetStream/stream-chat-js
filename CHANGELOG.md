@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [8.60.0](https://github.com/GetStream/stream-chat-js/compare/v8.59.0...v8.60.0) (2025-04-17)
+
+
+### Features
+
+* [CHA-794] Add sort and filter param to queryThreads ([#1511](https://github.com/GetStream/stream-chat-js/issues/1511)) ([ea7fe99](https://github.com/GetStream/stream-chat-js/commit/ea7fe999aa6d7609fa58e4808b067a8457cf187f))
+* [CHA-855] - Refactoring partial update member ([#1517](https://github.com/GetStream/stream-chat-js/issues/1517)) ([e4f7e68](https://github.com/GetStream/stream-chat-js/commit/e4f7e68298e0959309aa592ce778f6cbbbcc4ab0))
+
+
+### Bug Fixes
+
+* [REACT-350] make archived_at & pinned_at nullable ([#1515](https://github.com/GetStream/stream-chat-js/issues/1515)) ([318825a](https://github.com/GetStream/stream-chat-js/commit/318825a335342c2e32d19469f736df95feb87bee))
+* [REACT-353] unify pinned_at & archived_at nullish values ([#1516](https://github.com/GetStream/stream-chat-js/issues/1516)) ([a840226](https://github.com/GetStream/stream-chat-js/commit/a8402268fabe1826e74e383afd9962bd6ab6376f)), closes [#1515](https://github.com/GetStream/stream-chat-js/issues/1515)
 
 ## [8.59.0](https://github.com/GetStream/stream-chat-js/compare/v8.58.0...v8.59.0) (2025-04-08)
 
