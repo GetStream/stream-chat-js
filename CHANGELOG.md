@@ -1,3 +1,9 @@
+## [9.0.0-rc.14](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.13...v9.0.0-rc.14) (2025-04-29)
+
+### Features
+
+* make MessageComposer middleware executors public ([9aae032](https://github.com/GetStream/stream-chat-js/commit/9aae032edbdf45bc7d7bf5c25695e7246b8d1821))
+
 ## [9.0.0-rc.13](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.12...v9.0.0-rc.13) (2025-04-28)
 
 ### Features
