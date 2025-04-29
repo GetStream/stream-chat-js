@@ -511,7 +511,7 @@ export class MessageComposer {
     this.customDataManager.state.subscribe((nextValue, previousValue) => {
       if (
         typeof previousValue !== 'undefined' &&
-        !this.customDataManager.isDataEqual(nextValue, previousValue)
+        !this.customDataManager.isMessageDataEqual(nextValue, previousValue)
       ) {
         this.logStateUpdateTimestamp();
       }

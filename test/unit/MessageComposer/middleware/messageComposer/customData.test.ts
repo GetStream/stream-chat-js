@@ -29,7 +29,7 @@ describe('Custom Data Middleware', () => {
   describe('createCustomDataCompositionMiddleware', () => {
     it('should initialize with custom data', async () => {
       const data = { key: 'value' };
-      composer.customDataManager.setData(data);
+      composer.customDataManager.setMessageData(data);
       const middleware = createCustomDataCompositionMiddleware(composer);
       const state: MessageComposerMiddlewareValueState = {
         message: { id: '1', type: 'regular' },
@@ -91,7 +91,7 @@ describe('Custom Data Middleware', () => {
   describe('createDraftCustomDataCompositionMiddleware', () => {
     it('should initialize with custom data', async () => {
       const data = { key: 'value' };
-      composer.customDataManager.setData(data);
+      composer.customDataManager.setMessageData(data);
       const middleware = createDraftCustomDataCompositionMiddleware(composer);
       const state: MessageDraftComposerMiddlewareValueState = {
         draft: {

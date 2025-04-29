@@ -35,6 +35,7 @@ export type {
   CustomCommandData,
   CustomEventData,
   CustomMemberData,
+  CustomMessageComposerData,
   CustomMessageData,
   CustomPollOptionData,
   CustomPollData,
