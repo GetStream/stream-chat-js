@@ -9,3 +9,4 @@ export interface CustomPollData {}
 export interface CustomReactionData {}
 export interface CustomUserData {}
 export interface CustomThreadData {}
+export interface CustomMessageComposerData {}

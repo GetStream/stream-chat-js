@@ -9,7 +9,7 @@ import type { TextComposerConfig } from './types';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
-  enabled: true,
+  enabled: false,
   findURLFn: (text: string): string[] =>
     find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
       try {
@@ -26,11 +26,13 @@ export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
 };
 
 export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
+  acceptedFiles: [], // an empty array means all files are accepted
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
 };
 
 export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
+  enabled: true,
   publishTypingEvents: true,
 };
 

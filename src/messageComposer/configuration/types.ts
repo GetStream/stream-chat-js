@@ -12,7 +12,9 @@ export type DraftsConfiguration = {
   enabled: boolean;
 };
 export type TextComposerConfig = {
-  /** If true, triggers typing events on text input keystroke */
+  /** If false, the text input, change and selection events are disabled */
+  enabled: boolean;
+  /** If true, triggers typing events on text input keystroke. Disabled for threads and message editing by default. */
   publishTypingEvents: boolean;
   /** Default value for the message input */
   defaultValue?: string;
@@ -30,6 +32,11 @@ export type AttachmentManagerConfig = {
   fileUploadFilter: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage: number;
+  /**
+   * Array of one or more file types, or unique file type specifiers (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers),
+   * describing which file types to allow to select when uploading files.
+   */
+  acceptedFiles: string[];
   // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;

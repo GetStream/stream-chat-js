@@ -52,7 +52,7 @@ export type MessageComposerOptions = {
   config?: DeepPartial<MessageComposerConfig>;
 };
 
-const compositionIsMessageDraft = (composition: unknown): composition is DraftResponse =>
+const compositionIsDraftResponse = (composition: unknown): composition is DraftResponse =>
   !!(composition as { message?: DraftMessage })?.message;
 
 const initEditingAuditState = (
@@ -60,7 +60,7 @@ const initEditingAuditState = (
 ): EditingAuditState => {
   let draftUpdate = null;
   let stateUpdate = new Date().getTime();
-  if (compositionIsMessageDraft(composition)) {
+  if (compositionIsDraftResponse(composition)) {
     stateUpdate = draftUpdate = new Date(composition.created_at).getTime();
   } else if (composition && isLocalMessage(composition)) {
     stateUpdate = new Date(composition.updated_at).getTime();
@@ -88,7 +88,7 @@ const initState = (
   const quotedMessage = composition.quoted_message;
   let message;
   let draftId = null;
-  if (compositionIsMessageDraft(composition)) {
+  if (compositionIsDraftResponse(composition)) {
     message = composition.message;
     draftId = composition.message.id;
   } else {
@@ -113,6 +113,8 @@ export class MessageComposer {
   readonly editingAuditState: StateStore<EditingAuditState>;
   readonly configState: StateStore<MessageComposerConfig>;
   readonly compositionContext: CompositionContext;
+  readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
+  readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
 
   editedMessage?: LocalMessage;
   attachmentManager: AttachmentManager;
@@ -123,8 +125,6 @@ export class MessageComposer {
   // todo: mediaRecorder: MediaRecorderController;
 
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
-  private draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
 
   constructor({
     composition,
@@ -153,7 +153,7 @@ export class MessageComposer {
     }
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
-    if (compositionIsMessageDraft(composition)) {
+    if (compositionIsDraftResponse(composition)) {
       message = composition.message;
     } else if (composition) {
       message = formatMessage(composition);
@@ -236,7 +236,7 @@ export class MessageComposer {
       return this.compositionContext.legacyThreadId;
     }
 
-    // check if message is a reply, get parentMessageId
+    // check if the message is a reply, get parentMessageId
     if (typeof this.compositionContext.parent_id === 'string') {
       return this.compositionContext.parent_id;
     }
@@ -312,7 +312,7 @@ export class MessageComposer {
     const message: LocalMessage | DraftMessage | undefined =
       typeof composition === 'undefined'
         ? composition
-        : compositionIsMessageDraft(composition)
+        : compositionIsDraftResponse(composition)
           ? composition.message
           : formatMessage(composition);
     this.attachmentManager.initState({ message });
@@ -322,7 +322,7 @@ export class MessageComposer {
     this.state.next(initState(composition));
     if (
       composition &&
-      !compositionIsMessageDraft(composition) &&
+      !compositionIsDraftResponse(composition) &&
       message &&
       isLocalMessage(message)
     ) {
@@ -332,12 +332,7 @@ export class MessageComposer {
 
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
-  ) =>
-    initEditingAuditState(
-      this.config?.drafts.enabled || !compositionIsMessageDraft(composition)
-        ? composition
-        : undefined,
-    );
+  ) => initEditingAuditState(composition);
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
@@ -484,88 +479,51 @@ export class MessageComposer {
 
   private subscribeAttachmentManagerStateChanged = () =>
     this.attachmentManager.state.subscribe((nextValue, previousValue) => {
-      const isActualStateChange =
-        !!previousValue &&
-        (nextValue.attachments.length !== previousValue.attachments.length ||
-          nextValue.attachments.some(
-            (attachment, index) =>
-              attachment.localMetadata.id !==
-              previousValue.attachments[index].localMetadata.id,
-          ));
-      if (isActualStateChange) {
-        this.logStateUpdateTimestamp();
-        if (this.compositionIsEmpty) {
-          this.deleteDraft();
-          return;
-        }
+      if (typeof previousValue === 'undefined') return;
+      this.logStateUpdateTimestamp();
+      if (this.compositionIsEmpty) {
+        this.deleteDraft();
+        return;
       }
     });
 
   private subscribeLinkPreviewsManagerStateChanged = () =>
     this.linkPreviewsManager.state.subscribe((nextValue, previousValue) => {
-      const previousPreviews = Array.from(previousValue?.previews ?? []);
-      const isActualStateChange =
-        !!previousValue &&
-        Array.from(nextValue.previews).some(
-          ([url], index) =>
-            !previousPreviews[index] || url !== previousPreviews[index][0],
-        );
-      if (isActualStateChange) {
-        this.logStateUpdateTimestamp();
-        if (this.compositionIsEmpty) {
-          this.deleteDraft();
-          return;
-        }
+      if (typeof previousValue === 'undefined') return;
+      this.logStateUpdateTimestamp();
+      if (this.compositionIsEmpty) {
+        this.deleteDraft();
+        return;
       }
     });
 
   private subscribePollComposerStateChanged = () =>
     this.pollComposer.state.subscribe((nextValue, previousValue) => {
-      const isActualStateChange =
-        !previousValue?.data ||
-        nextValue.data.allow_answers !== previousValue.data.allow_answers ||
-        nextValue.data.allow_user_suggested_options !==
-          previousValue.data.allow_user_suggested_options ||
-        nextValue.data.description !== previousValue.data.description ||
-        nextValue.data.enforce_unique_vote !== previousValue.data.enforce_unique_vote ||
-        nextValue.data.id !== previousValue.data.id ||
-        nextValue.data.is_closed !== previousValue.data.is_closed ||
-        nextValue.data.max_votes_allowed !== previousValue.data.max_votes_allowed ||
-        nextValue.data.name !== previousValue.data.name ||
-        nextValue.data.options.some(
-          (option, index) => option.text !== previousValue.data.options[index].text,
-        ) ||
-        nextValue.data.user_id !== previousValue.data.user_id ||
-        nextValue.data.voting_visibility !== previousValue.data.voting_visibility;
-      if (isActualStateChange) {
-        this.logStateUpdateTimestamp();
-        if (this.compositionIsEmpty) {
-          this.deleteDraft();
-          return;
-        }
+      if (typeof previousValue === 'undefined') return;
+      this.logStateUpdateTimestamp();
+      if (this.compositionIsEmpty) {
+        this.deleteDraft();
+        return;
       }
     });
 
   private subscribeCustomDataManagerStateChanged = () =>
     this.customDataManager.state.subscribe((nextValue, previousValue) => {
-      if (!this.customDataManager.isDataEqual(nextValue, previousValue)) {
+      if (
+        typeof previousValue !== 'undefined' &&
+        !this.customDataManager.isMessageDataEqual(nextValue, previousValue)
+      ) {
         this.logStateUpdateTimestamp();
       }
     });
 
   private subscribeMessageComposerStateChanged = () =>
     this.state.subscribe((nextValue, previousValue) => {
-      const isActualStateChange =
-        !!previousValue &&
-        (nextValue.pollId !== previousValue.pollId ||
-          nextValue.quotedMessage?.id !== previousValue.quotedMessage?.id);
-
-      if (isActualStateChange) {
-        this.logStateUpdateTimestamp();
-        if (this.compositionIsEmpty) {
-          this.deleteDraft();
-          return;
-        }
+      if (typeof previousValue === 'undefined') return;
+      this.logStateUpdateTimestamp();
+      if (this.compositionIsEmpty) {
+        this.deleteDraft();
+        return;
       }
     });
 

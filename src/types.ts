@@ -113,7 +113,6 @@ export type AppSettingsAPIResponse = APIResponse & {
       }
     >;
     reminders_interval: number;
-    agora_options?: AgoraOptions | null;
     async_moderation_config?: AsyncModerationOptions;
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
@@ -137,7 +136,6 @@ export type AppSettingsAPIResponse = APIResponse & {
       type: string;
     }>;
     grants?: Record<string, string[]>;
-    hms_options?: HMSOptions | null;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     multi_tenant_enabled?: boolean;
@@ -2184,21 +2182,6 @@ export type APNConfig = {
   team_id?: string;
 };
 
-export type AgoraOptions = {
-  app_certificate: string;
-  app_id: string;
-  role_map?: Record<string, string>;
-};
-
-export type HMSOptions = {
-  app_access_key: string;
-  app_secret: string;
-  default_role: string;
-  default_room_template: string;
-  default_region?: string;
-  role_map?: Record<string, string>;
-};
-
 export type AsyncModerationOptions = {
   callback?: {
     mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
@@ -2208,7 +2191,6 @@ export type AsyncModerationOptions = {
 };
 
 export type AppSettings = {
-  agora_options?: AgoraOptions | null;
   allowed_flag_reasons?: string[];
   apn_config?: {
     auth_key?: string;
@@ -2240,7 +2222,6 @@ export type AppSettings = {
     server_key?: string;
   };
   grants?: Record<string, string[]>;
-  hms_options?: HMSOptions | null;
   huawei_config?: {
     id: string;
     secret: string;
@@ -3231,42 +3212,6 @@ export type PushProviderUpsertResponse = {
 
 export type PushProviderListResponse = {
   push_providers: PushProvider[];
-};
-
-export type CreateCallOptions = {
-  id: string;
-  type: string;
-  options?: UR;
-  user?: UserResponse | null;
-  user_id?: string;
-};
-
-export type HMSCall = {
-  room: string;
-};
-
-export type AgoraCall = {
-  channel: string;
-};
-
-export type Call = {
-  id: string;
-  provider: string;
-  agora?: AgoraCall;
-  hms?: HMSCall;
-};
-
-export type CreateCallResponse = APIResponse & {
-  call: Call;
-  token: string;
-  agora_app_id?: string;
-  agora_uid?: number;
-};
-
-export type GetCallTokenResponse = APIResponse & {
-  token: string;
-  agora_app_id?: string;
-  agora_uid?: number;
 };
 
 type ErrorResponseDetails = {

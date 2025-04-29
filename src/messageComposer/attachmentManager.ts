@@ -32,6 +32,7 @@ import type {
 } from './types';
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type { MessageComposer } from './messageComposer';
+import { mergeWithDiff } from '../utils/mergeWith';
 
 type LocalNotImageAttachment =
   | LocalFileAttachment
@@ -87,6 +88,14 @@ export class AttachmentManager {
 
   get config() {
     return this.composer.config.attachments;
+  }
+
+  get acceptedFiles() {
+    return this.config.acceptedFiles;
+  }
+
+  set acceptedFiles(acceptedFiles: AttachmentManagerConfig['acceptedFiles']) {
+    this.composer.updateConfig({ attachments: { acceptedFiles } });
   }
 
   get fileUploadFilter() {
@@ -182,13 +191,15 @@ export class AttachmentManager {
         const localAttachment = ensureIsLocalAttachment(upsertedAttachment);
         if (localAttachment) attachments.push(localAttachment);
       } else {
-        const localAttachment = ensureIsLocalAttachment(
-          mergeWith<LocalAttachment>(
-            stateAttachments[attachmentIndex] ?? {},
-            upsertedAttachment,
-          ),
+        const merged = mergeWithDiff<LocalAttachment>(
+          stateAttachments[attachmentIndex] ?? {},
+          upsertedAttachment,
         );
-        if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
+        const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
+        if (updatesOnMerge) {
+          const localAttachment = ensureIsLocalAttachment(merged.result);
+          if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
+        }
       }
     });
 

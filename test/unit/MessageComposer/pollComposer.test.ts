@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollComposer } from '../../../src/messageComposer/pollComposer';
 import { StateStore } from '../../../src/store';
 import { VotingVisibility } from '../../../src/types';
-import { generateUUIDv4 } from '../../../src/utils';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -204,6 +203,21 @@ describe('PollComposer', () => {
           voting_visibility: VotingVisibility.public,
         },
         errors: {},
+      });
+
+      expect(pollComposer.canCreatePoll).toBe(true);
+    });
+    it('should return true if all field errors are undefined', () => {
+      pollComposer.state.next({
+        data: {
+          options: [{ id: 'option-id', text: 'Option 1' }],
+          name: 'Test Poll',
+          max_votes_allowed: '',
+          id: 'test-id',
+          user_id: 'user-id',
+          voting_visibility: VotingVisibility.public,
+        },
+        errors: { name: undefined, options: undefined },
       });
 
       expect(pollComposer.canCreatePoll).toBe(true);
