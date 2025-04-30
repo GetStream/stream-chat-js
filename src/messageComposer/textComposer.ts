@@ -1,7 +1,12 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
-import type { TextComposerState, TextComposerSuggestion, TextSelection } from './types';
+import type {
+  Suggestions,
+  TextComposerState,
+  TextComposerSuggestion,
+  TextSelection,
+} from './types';
 import type { MessageComposer } from './messageComposer';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
 
@@ -150,6 +155,11 @@ export class TextComposer {
     this.state.partialNext({ text });
   };
 
+  setSelection = (selection: TextSelection) => {
+    if (!this.enabled) return;
+    this.state.partialNext({ selection });
+  };
+
   insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
     if (!this.enabled) return;
 
@@ -182,6 +192,34 @@ export class TextComposer {
         end: cursorPosition,
       },
     });
+  };
+
+  wrapSelection = ({
+    head = '',
+    selection,
+    tail = '',
+  }: {
+    head?: string;
+    selection?: TextSelection;
+    tail?: string;
+  }) => {
+    if (!this.enabled) return;
+    const currentSelection: TextSelection = selection ?? this.selection;
+    const prependedText = this.text.slice(0, currentSelection.start);
+    const selectedText = this.text.slice(currentSelection.start, currentSelection.end);
+    const appendedText = this.text.slice(currentSelection.end);
+    const finalSelection = {
+      start: prependedText.length + head.length,
+      end: prependedText.length + head.length + selectedText.length,
+    };
+    this.state.partialNext({
+      text: [prependedText, head, selectedText, tail, appendedText].join(''),
+      selection: finalSelection,
+    });
+  };
+
+  setSuggestions = (suggestions: Suggestions) => {
+    this.state.partialNext({ suggestions });
   };
 
   closeSuggestions = () => {

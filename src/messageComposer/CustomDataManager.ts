@@ -6,6 +6,7 @@ import type {
   LocalMessage,
 } from '..';
 import type { MessageComposer } from './messageComposer';
+import type { DeepPartial } from '../types.utility';
 
 export type CustomDataManagerState = {
   message: CustomMessageData;
@@ -49,7 +50,7 @@ export class CustomDataManager {
     this.state.next(initState({ composer: this.composer, message }));
   };
 
-  setMessageData(data: Partial<CustomMessageData>) {
+  setMessageData(data: DeepPartial<CustomMessageData>) {
     this.state.partialNext({
       message: {
         ...this.state.getLatestValue().message,
@@ -58,7 +59,7 @@ export class CustomDataManager {
     });
   }
 
-  setCustomData(data: Partial<CustomMessageComposerData>) {
+  setCustomData(data: DeepPartial<CustomMessageComposerData>) {
     this.state.partialNext({
       custom: {
         ...this.state.getLatestValue().custom,
