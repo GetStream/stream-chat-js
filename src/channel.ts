@@ -1804,6 +1804,7 @@ export class Channel {
           } else {
             channelState.removePinnedMessage(event.message);
           }
+          this.getClient().offlineDb?.handleMessageUpdatedEvent({ event });
         }
         break;
       case 'channel.truncated':
@@ -1853,6 +1854,9 @@ export class Channel {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
+          this.getClient().offlineDb?.handleMemberEvent({
+            event: { ...event, member: memberCopy },
+          });
         }
 
         const currentUserId = this.getClient().userID;
@@ -1874,6 +1878,10 @@ export class Channel {
           delete newMembers[event.user.id];
 
           channelState.members = newMembers;
+
+          this.getClient().offlineDb?.handleMemberEvent({
+            event,
+          });
 
           // TODO?: unset membership
         }

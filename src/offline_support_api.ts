@@ -3,6 +3,7 @@ import type {
   AppSettingsAPIResponse,
   ChannelAPIResponse,
   ChannelFilters,
+  ChannelMemberResponse,
   ChannelResponse,
   ChannelSort,
   Event,
@@ -75,9 +76,20 @@ export type UpsertMessagesType = {
   flush?: boolean;
 };
 
+export type UpsertMembersType = {
+  cid: string;
+  members: ChannelMemberResponse[];
+  flush?: boolean;
+};
+
 export type UpdateReactionType = {
   message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
+  flush?: boolean;
+};
+
+export type UpdateMessageType = {
+  message: MessageResponse | LocalMessage;
   flush?: boolean;
 };
 
@@ -117,6 +129,12 @@ export type DeleteReactionType = {
   flush?: boolean;
 };
 
+export type DeleteMemberType = {
+  cid: string;
+  member: ChannelMemberResponse;
+  flush?: boolean;
+};
+
 export type DeleteMessageType = { id: string; flush?: boolean };
 
 export type ChannelExistsType = { cid: string };
@@ -137,7 +155,9 @@ export interface OfflineDBApi {
   upsertChannelData: (options: UpsertChannelDataType) => Promise<ExecuteBatchQueriesType>;
   upsertReads: (options: UpsertReadsType) => Promise<ExecuteBatchQueriesType>;
   upsertMessages: (options: UpsertMessagesType) => Promise<ExecuteBatchQueriesType>;
+  upsertMembers: (options: UpsertMembersType) => Promise<ExecuteBatchQueriesType>;
   updateReaction: (options: UpdateReactionType) => Promise<ExecuteBatchQueriesType>;
+  updateMessage: (options: UpdateMessageType) => Promise<ExecuteBatchQueriesType>;
   getChannels: (options: GetChannelsType) => Promise<unknown>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
@@ -151,6 +171,7 @@ export interface OfflineDBApi {
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
   deletePendingTask: (options: DeletePendingTaskType) => Promise<ExecuteBatchQueriesType>;
   deleteReaction: (options: DeleteReactionType) => Promise<ExecuteBatchQueriesType>;
+  deleteMember: (options: DeleteMemberType) => Promise<ExecuteBatchQueriesType>;
   hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
@@ -184,7 +205,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract upsertMessages: OfflineDBApi['upsertMessages'];
 
+  abstract upsertMembers: OfflineDBApi['upsertMembers'];
+
   abstract updateReaction: OfflineDBApi['updateReaction'];
+
+  abstract updateMessage: OfflineDBApi['updateMessage'];
 
   abstract getChannels: OfflineDBApi['getChannels'];
 
@@ -207,6 +232,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
+
+  abstract deleteMember: OfflineDBApi['deleteMember'];
 
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
@@ -372,6 +399,55 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
             },
           ],
         }),
+      );
+    }
+
+    return [];
+  };
+
+  public handleMemberEvent = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const { member, cid, type } = event;
+
+    if (member && cid) {
+      return await this.queriesWithChannelGuard(
+        { event, flush },
+        async (flushOverride) => {
+          if (type === 'member.removed') {
+            return await this.deleteMember({ member, cid, flush: flushOverride });
+          }
+
+          return await this.upsertMembers({
+            cid,
+            members: [member],
+            flush: flushOverride,
+          });
+        },
+      );
+    }
+
+    return [];
+  };
+
+  public handleMessageUpdatedEvent = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const { message } = event;
+
+    if (message && !message.parent_id) {
+      return await this.queriesWithChannelGuard(
+        { event, flush },
+        async (flushOverride) =>
+          await this.updateMessage({ message, flush: flushOverride }),
       );
     }
 
@@ -636,6 +712,14 @@ export class OfflineDBSyncManager {
 
     if (type === 'message.deleted') {
       return await this.offlineDb.handleDeleteMessage({ event, flush });
+    }
+
+    if (type === 'message.updated') {
+      return this.offlineDb.handleMessageUpdatedEvent({ event, flush });
+    }
+
+    if (type.startsWith('member.')) {
+      return await this.offlineDb.handleMemberEvent({ event, flush });
     }
 
     return [];
