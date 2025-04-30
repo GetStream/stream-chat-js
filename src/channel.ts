@@ -1912,12 +1912,14 @@ export class Channel {
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
-          channel.data = {
+          const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
+          channel.data = newChannelData;
+          this.getClient().offlineDb?.upsertChannelData({ channel: newChannelData });
         }
         break;
       case 'reaction.new':
@@ -1960,9 +1962,11 @@ export class Channel {
         if (event.clear_history) {
           channelState.clearMessages();
         }
+        this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       case 'channel.visible':
         channel.data = { ...channel.data, hidden: false };
+        this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       case 'user.banned':
         if (!event.user?.id) break;

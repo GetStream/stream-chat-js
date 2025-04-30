@@ -459,6 +459,33 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
+  /**
+   * An event handler for channel.visible and channel.hidden events. We need a separate
+   * handler because event.channel.hidden does not arrive with the baseline event, so a
+   * simple upsertion is not enough.
+   * @param event
+   * @param flush
+   */
+  public handleChannelVisibilityEvent = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const { type, channel } = event;
+
+    if (channel && type) {
+      const hidden = type === 'channel.hidden';
+      return await this.client.offlineDb?.upsertChannelData({
+        channel: { ...channel, hidden },
+        flush,
+      });
+    }
+
+    return [];
+  };
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
@@ -676,12 +703,10 @@ export class OfflineDBSyncManager {
   };
 
   private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
-    const { type } = event;
+    const { type, channel, message, reaction } = event;
     console.log('SYNCING EVENT: ', event.type);
 
-    if (type.startsWith('reaction') && event.message && event.reaction) {
-      const { message, reaction } = event;
-
+    if (message && reaction) {
       if (type === 'reaction.new') {
         return await this.offlineDb.queriesWithChannelGuard(
           { event, flush },
@@ -725,6 +750,18 @@ export class OfflineDBSyncManager {
 
     if (type.startsWith('member.')) {
       return await this.offlineDb.handleMemberEvent({ event, flush });
+    }
+
+    if (type === 'channel.hidden' || type === 'channel.visible') {
+      return await this.offlineDb.handleChannelVisibilityEvent({ event, flush });
+    }
+
+    if (type === 'channel.updated' && channel) {
+      return await this.offlineDb.upsertChannelData({ channel, flush });
+    }
+
+    if (type === 'channel.deleted' && channel) {
+      return await this.offlineDb.deleteChannel({ cid: channel.cid, flush });
     }
 
     return [];

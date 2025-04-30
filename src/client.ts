@@ -1499,6 +1499,7 @@ export class StreamChat {
 
         delete this.activeChannels[event.cid];
       });
+      this.offlineDb?.deleteChannel({ cid: event.cid });
     }
 
     return postListenerCallbacks;
