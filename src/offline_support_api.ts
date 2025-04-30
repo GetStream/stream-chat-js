@@ -137,6 +137,8 @@ export type DeleteMemberType = {
 
 export type DeleteMessageType = { id: string; flush?: boolean };
 
+export type DeleteChannelType = { cid: string; flush?: boolean };
+
 export type ChannelExistsType = { cid: string };
 
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
@@ -172,6 +174,7 @@ export interface OfflineDBApi {
   deletePendingTask: (options: DeletePendingTaskType) => Promise<ExecuteBatchQueriesType>;
   deleteReaction: (options: DeleteReactionType) => Promise<ExecuteBatchQueriesType>;
   deleteMember: (options: DeleteMemberType) => Promise<ExecuteBatchQueriesType>;
+  deleteChannel: (options: DeleteChannelType) => Promise<ExecuteBatchQueriesType>;
   hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
@@ -235,6 +238,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract deleteMember: OfflineDBApi['deleteMember'];
 
+  abstract deleteChannel: OfflineDBApi['deleteChannel'];
+
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
   abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
@@ -253,7 +258,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     if (!cid) {
       return await createQueries(flush);
     }
-    const channelExists = this.channelExists({ cid });
+    const channelExists = await this.channelExists({ cid });
     // a channel is not present in the db, we first fetch the channel data from the channel object.
     // this can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
     if (!channelExists) {
