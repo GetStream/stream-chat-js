@@ -33,7 +33,7 @@ describe('CustomDataManager', () => {
 
   describe('constructor', () => {
     it('should initialize with empty data', () => {
-      expect(customDataManager.data).toEqual({});
+      expect(customDataManager.customMessageData).toEqual({});
     });
 
     it('should initialize with message data if provided', () => {
@@ -56,19 +56,19 @@ describe('CustomDataManager', () => {
         message,
       });
 
-      expect(managerWithMessage.data).toEqual({});
+      expect(managerWithMessage.customMessageData).toEqual({});
     });
   });
 
   describe('initState', () => {
     it('should reset state to empty data', () => {
       // Set some data first
-      customDataManager.setData({ test: 'value' });
-      expect(customDataManager.data).toEqual({ test: 'value' });
+      customDataManager.setMessageData({ test: 'value' });
+      expect(customDataManager.customMessageData).toEqual({ test: 'value' });
 
       // Reset state
       customDataManager.initState();
-      expect(customDataManager.data).toEqual({});
+      expect(customDataManager.customMessageData).toEqual({});
     });
 
     it('should reset state with message data if provided', () => {
@@ -87,42 +87,45 @@ describe('CustomDataManager', () => {
       };
 
       customDataManager.initState({ message });
-      expect(customDataManager.data).toEqual({});
+      expect(customDataManager.customMessageData).toEqual({});
     });
   });
 
   describe('setCustomData', () => {
     it('should update data with new values', () => {
-      customDataManager.setData({ field1: 'value1' });
-      expect(customDataManager.data).toEqual({ field1: 'value1' });
+      customDataManager.setMessageData({ field1: 'value1' });
+      expect(customDataManager.customMessageData).toEqual({ field1: 'value1' });
 
-      customDataManager.setData({ field2: 'value2' });
-      expect(customDataManager.data).toEqual({ field1: 'value1', field2: 'value2' });
+      customDataManager.setMessageData({ field2: 'value2' });
+      expect(customDataManager.customMessageData).toEqual({
+        field1: 'value1',
+        field2: 'value2',
+      });
     });
 
     it('should override existing values', () => {
-      customDataManager.setData({ field1: 'value1' });
-      customDataManager.setData({ field1: 'new-value' });
-      expect(customDataManager.data).toEqual({ field1: 'new-value' });
+      customDataManager.setMessageData({ field1: 'value1' });
+      customDataManager.setMessageData({ field1: 'new-value' });
+      expect(customDataManager.customMessageData).toEqual({ field1: 'new-value' });
     });
   });
 
   describe('isDataEqual', () => {
     it('should return true for equal data', () => {
-      const state1 = { data: { field1: 'value1' } };
-      const state2 = { data: { field1: 'value1' } };
-      expect(customDataManager.isDataEqual(state1, state2)).toBe(true);
+      const state1 = { message: { field1: 'value1' } };
+      const state2 = { message: { field1: 'value1' } };
+      expect(customDataManager.isMessageDataEqual(state1, state2)).toBe(true);
     });
 
     it('should return false for different data', () => {
-      const state1 = { data: { field1: 'value1' } };
-      const state2 = { data: { field1: 'value2' } };
-      expect(customDataManager.isDataEqual(state1, state2)).toBe(false);
+      const state1 = { message: { field1: 'value1' } };
+      const state2 = { message: { field1: 'value2' } };
+      expect(customDataManager.isMessageDataEqual(state1, state2)).toBe(false);
     });
 
     it('should handle undefined previous state', () => {
-      const state1 = { data: { field1: 'value1' } };
-      expect(customDataManager.isDataEqual(state1, undefined)).toBe(false);
+      const state1 = { message: { field1: 'value1' } };
+      expect(customDataManager.isMessageDataEqual(state1, undefined)).toBe(false);
     });
   });
 });

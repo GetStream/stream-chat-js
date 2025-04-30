@@ -491,6 +491,77 @@ describe('TextComposer', () => {
     });
   });
 
+  describe('wrapSelection', () => {
+    const message: LocalMessage = {
+      id: 'test-message',
+      type: 'regular',
+      text: 'Hello world',
+    };
+
+    it('should wrap selection from both sides', () => {
+      const selection = { start: 0, end: 5 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      textComposer.wrapSelection({ head: '**', tail: '**', selection });
+      expect(textComposer.text).toBe('**Hello** world');
+      expect(textComposer.selection).toEqual({ start: 2, end: 7 });
+    });
+
+    it('should wrap selection from the head side', () => {
+      const selection = { start: 0, end: 5 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      textComposer.wrapSelection({ head: '**', selection });
+      expect(textComposer.text).toBe('**Hello world');
+      expect(textComposer.selection).toEqual({ start: 2, end: 7 });
+    });
+
+    it('should wrap selection from the tail side', () => {
+      const selection = { start: 0, end: 5 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      textComposer.wrapSelection({ tail: '**', selection });
+      expect(textComposer.text).toBe('Hello** world');
+      expect(textComposer.selection).toEqual({ start: 0, end: 5 });
+    });
+
+    it('should wrap cursor', () => {
+      const selection = { start: 5, end: 5 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      textComposer.wrapSelection({ head: '**', tail: '**', selection });
+      expect(textComposer.text).toBe('Hello**** world');
+      expect(textComposer.selection).toEqual({ start: 7, end: 7 });
+    });
+
+    it('should avoid changes if text composition is disabled', () => {
+      const selection = { start: 5, end: 5 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { enabled: false } });
+      const initialSelection = textComposer.selection;
+      textComposer.wrapSelection({ head: '**', tail: '**', selection });
+      expect(textComposer.text).toBe(message.text);
+      expect(selection).not.toEqual(initialSelection);
+      expect(textComposer.selection).toEqual(initialSelection);
+    });
+
+    it('should use current selection if custom not provided', () => {
+      const initialSelection = { start: 2, end: 3 };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      textComposer.setSelection(initialSelection);
+      textComposer.wrapSelection({ head: '**', tail: '**' });
+      expect(textComposer.text).toBe('He**l**lo world');
+      expect(textComposer.selection).toEqual({ start: 4, end: 5 });
+    });
+  });
+
   describe('closeSuggestions', () => {
     const message: LocalMessage = {
       id: 'test-message',

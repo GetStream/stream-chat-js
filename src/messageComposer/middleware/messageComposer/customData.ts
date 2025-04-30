@@ -11,7 +11,7 @@ export const createCustomDataCompositionMiddleware = (composer: MessageComposer)
     input,
     nextHandler,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
-    const data = composer.customDataManager.data;
+    const data = composer.customDataManager.customMessageData;
     if (!data) return nextHandler(input);
 
     return nextHandler({
@@ -39,7 +39,7 @@ export const createDraftCustomDataCompositionMiddleware = (
     input,
     nextHandler,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-    const data = composer.customDataManager.data;
+    const data = composer.customDataManager.customMessageData;
     if (!data) return nextHandler(input);
 
     return nextHandler({
