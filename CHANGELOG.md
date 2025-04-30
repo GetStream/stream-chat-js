@@ -1,3 +1,9 @@
+## [9.0.0-rc.15](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.14...v9.0.0-rc.15) (2025-04-30)
+
+### Features
+
+* improve MessageComposer ergonomics ([2c0c639](https://github.com/GetStream/stream-chat-js/commit/2c0c639b6539fe82e6bc39d9a35a2905d33287c6))
+
 ## [9.0.0-rc.14](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.13...v9.0.0-rc.14) (2025-04-29)
 
 ### Features
