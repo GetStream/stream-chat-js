@@ -163,10 +163,7 @@ export class TextComposer {
   insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
     if (!this.enabled) return;
 
-    const finalSelection: TextSelection = selection ?? {
-      start: this.text.length,
-      end: this.text.length,
-    };
+    const finalSelection: TextSelection = selection ?? this.selection;
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
     const currentText = this.text;
     const textBeforeTrim = [
