@@ -165,6 +165,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
+    if (enabled === this.enabled) return;
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 
