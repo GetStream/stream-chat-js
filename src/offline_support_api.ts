@@ -269,7 +269,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     // If a channel is not present in the db, we first fetch the channel data from the channel object.
     // This can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
     const shouldUpsertChannelData = forceUpdate || !(await this.channelExists({ cid }));
-    if (!shouldUpsertChannelData) {
+    if (shouldUpsertChannelData) {
       let channelData = channelFromEvent;
       if (!channelData && event.channel_type && event.channel_id) {
         const channelFromState = this.client.channel(
@@ -404,7 +404,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const overriddenUnreadMessages = unreadMessages ?? unread_messages;
 
     if (user?.id && cid) {
-      console.log('HANDING READ: ', event.type, flush);
       return await this.queriesWithChannelGuard({ event, flush }, (flushOverride) =>
         this.upsertReads({
           cid,
@@ -432,7 +431,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     flush?: boolean;
   }) => {
     const { member, cid, type } = event;
-    console.log('MEMBER EVENT: ', event);
 
     if (member && cid) {
       // we force update here so that member_count gets updated

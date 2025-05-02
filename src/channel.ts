@@ -1883,7 +1883,7 @@ export class Channel {
           channelState.members = newMembers;
 
           if (channel.data?.member_count) {
-            channel.data.member_count -= 1;
+            channel.data.member_count = Math.max(channel.data.member_count - 1, 0);
           }
 
           this.getClient().offlineDb?.handleMemberEvent({
