@@ -1788,7 +1788,6 @@ export class Channel {
           }
 
           if (!isThreadMessage) {
-            console.log('HANDLING MESSAGE');
             this.getClient().offlineDb?.handleNewMessage({ event });
           }
         }
@@ -1833,6 +1832,14 @@ export class Channel {
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           }
+        }
+
+        if (event.channel) {
+          // FIXME: This does not correctly update reads. Will fix later.
+          this.getClient().offlineDb?.deleteMessagesForChannel({
+            cid: event.channel.cid,
+            truncated_at: event.channel.truncated_at,
+          });
         }
         break;
       case 'member.added':

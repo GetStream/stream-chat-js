@@ -139,6 +139,12 @@ export type DeleteMessageType = { id: string; flush?: boolean };
 
 export type DeleteChannelType = { cid: string; flush?: boolean };
 
+export type DeleteMessagesForChannelType = {
+  cid: string;
+  truncated_at?: string;
+  flush?: boolean;
+};
+
 export type ChannelExistsType = { cid: string };
 
 export type ExecuteBatchQueriesType = PreparedBatchQueries[];
@@ -175,6 +181,9 @@ export interface OfflineDBApi {
   deleteReaction: (options: DeleteReactionType) => Promise<ExecuteBatchQueriesType>;
   deleteMember: (options: DeleteMemberType) => Promise<ExecuteBatchQueriesType>;
   deleteChannel: (options: DeleteChannelType) => Promise<ExecuteBatchQueriesType>;
+  deleteMessagesForChannel: (
+    options: DeleteMessagesForChannelType,
+  ) => Promise<ExecuteBatchQueriesType>;
   hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
@@ -239,6 +248,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract deleteMember: OfflineDBApi['deleteMember'];
 
   abstract deleteChannel: OfflineDBApi['deleteChannel'];
+
+  abstract deleteMessagesForChannel: OfflineDBApi['deleteMessagesForChannel'];
 
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
@@ -310,6 +321,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return createQueries(flush);
   };
 
+  // TODO: Check why this isn't working properly for read state - something is not
+  //       getting populated as it should :'(
   public handleNewMessage = async ({
     event,
     flush = true,
@@ -778,6 +791,14 @@ export class OfflineDBSyncManager {
 
     if (type === 'channel.deleted' && channel) {
       return await this.offlineDb.deleteChannel({ cid: channel.cid, flush });
+    }
+
+    if (type === 'channel.truncated' && channel) {
+      return await this.offlineDb.deleteMessagesForChannel({
+        cid: channel.cid,
+        truncated_at: channel.truncated_at,
+        flush,
+      });
     }
 
     return [];
