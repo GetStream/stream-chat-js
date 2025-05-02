@@ -249,26 +249,40 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract channelExists: OfflineDBApi['channelExists'];
 
   public queriesWithChannelGuard = async (
-    { event, flush = true }: { event: Event; flush?: boolean },
+    {
+      event,
+      flush = true,
+      forceUpdate = false,
+    }: { event: Event; flush?: boolean; forceUpdate?: boolean },
     createQueries: (flushOverride?: boolean) => Promise<PreparedBatchQueries[]>,
   ) => {
-    const cid = event.cid || event.channel?.cid;
+    const channelFromEvent = event.channel;
+    const cid = event.cid || channelFromEvent?.cid;
     const type = event.type;
 
     if (!cid) {
       return await createQueries(flush);
     }
-    const channelExists = await this.channelExists({ cid });
-    // a channel is not present in the db, we first fetch the channel data from the channel object.
-    // this can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
-    if (!channelExists) {
-      const channel =
-        event.channel_type && event.channel_id
-          ? this.client.channel(event.channel_type, event.channel_id)
-          : undefined;
-      if (channel && channel.data && channel.initialized && !channel.disconnected) {
+    // We want to upsert the channel data if we either:
+    // - Have forceUpdate set to true
+    // - The channel does not yet exist in the DB
+    // If a channel is not present in the db, we first fetch the channel data from the channel object.
+    // This can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
+    const shouldUpsertChannelData = forceUpdate || !(await this.channelExists({ cid }));
+    if (!shouldUpsertChannelData) {
+      let channelData = channelFromEvent;
+      if (!channelData && event.channel_type && event.channel_id) {
+        const channelFromState = this.client.channel(
+          event.channel_type,
+          event.channel_id,
+        );
+        if (channelFromState.initialized && !channelFromState.disconnected) {
+          channelData = channelFromState.data as unknown as ChannelResponse;
+        }
+      }
+      if (channelData) {
         const channelQuery = await this.upsertChannelData({
-          channel: channel.data as unknown as ChannelResponse,
+          channel: channelData,
           flush: false,
         });
         if (channelQuery) {
@@ -418,10 +432,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     flush?: boolean;
   }) => {
     const { member, cid, type } = event;
+    console.log('MEMBER EVENT: ', event);
 
     if (member && cid) {
+      // we force update here so that member_count gets updated
+      // TODO: Although this is more than fine for now, we should look into
+      //       changing this to be an actual update to the DB instead.
       return await this.queriesWithChannelGuard(
-        { event, flush },
+        { event, flush, forceUpdate: true },
         async (flushOverride) => {
           if (type === 'member.removed') {
             return await this.deleteMember({ member, cid, flush: flushOverride });

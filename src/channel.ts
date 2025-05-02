@@ -1854,6 +1854,9 @@ export class Channel {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
+          if (channel.data?.member_count && event.type === 'member.added') {
+            channel.data.member_count += 1;
+          }
           this.getClient().offlineDb?.handleMemberEvent({
             event: { ...event, member: memberCopy },
           });
@@ -1878,6 +1881,10 @@ export class Channel {
           delete newMembers[event.user.id];
 
           channelState.members = newMembers;
+
+          if (channel.data?.member_count) {
+            channel.data.member_count -= 1;
+          }
 
           this.getClient().offlineDb?.handleMemberEvent({
             event,

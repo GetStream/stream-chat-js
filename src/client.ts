@@ -1464,6 +1464,22 @@ export class StreamChat {
 
     if (event.channel && event.type === 'notification.message_new') {
       this._addChannelConfig(event.channel);
+      // Note: It is a bit counter-intuitive that we do not touch the messages in the
+      //       offline DB when receiving notification.message_new, however we do this
+      //       because we anyway cannot get the messages for a channel until we run
+      //       either channel.watch() or channel.query(...) to get them. So, when
+      //       receiving the event we only upsert the channel data and we leave the
+      //       rest of the entities to be updated whenever we actually start watching
+      //       or we at least query.
+      this.offlineDb?.upsertChannelData({ channel: event.channel });
+    }
+
+    if (event.channel && event.type === 'notification.added_to_channel') {
+      this.offlineDb?.upsertChannelData({ channel: event.channel });
+    }
+
+    if (event.cid && event.type === 'notification.removed_from_channel') {
+      this.offlineDb?.deleteChannel({ cid: event.cid });
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
