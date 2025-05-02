@@ -78,22 +78,43 @@ export class TextComposer {
   }
 
   set enabled(enabled: boolean) {
+    if (enabled === this.enabled) return;
     this.composer.updateConfig({ text: { enabled } });
   }
 
-  set defaultValue(defaultValue: string) {
+  get defaultValue() {
+    return this.composer.config.text.defaultValue;
+  }
+
+  set defaultValue(defaultValue: string | undefined) {
+    if (defaultValue === this.defaultValue) return;
     this.composer.updateConfig({ text: { defaultValue } });
   }
 
-  set maxLengthOnEdit(maxLengthOnEdit: number) {
+  get maxLengthOnEdit() {
+    return this.composer.config.text.maxLengthOnEdit;
+  }
+
+  set maxLengthOnEdit(maxLengthOnEdit: number | undefined) {
+    if (maxLengthOnEdit === this.maxLengthOnEdit) return;
     this.composer.updateConfig({ text: { maxLengthOnEdit } });
   }
 
-  set maxLengthOnSend(maxLengthOnSend: number) {
+  get maxLengthOnSend() {
+    return this.composer.config.text.maxLengthOnSend;
+  }
+
+  set maxLengthOnSend(maxLengthOnSend: number | undefined) {
+    if (maxLengthOnSend === this.maxLengthOnSend) return;
     this.composer.updateConfig({ text: { maxLengthOnSend } });
   }
 
+  get publishTypingEvents() {
+    return this.composer.config.text.publishTypingEvents;
+  }
+
   set publishTypingEvents(publishTypingEvents: boolean) {
+    if (publishTypingEvents === this.publishTypingEvents) return;
     this.composer.updateConfig({ text: { publishTypingEvents } });
   }
 
@@ -151,22 +172,21 @@ export class TextComposer {
   };
 
   setText = (text: string) => {
-    if (!this.enabled) return;
+    if (!this.enabled || text === this.text) return;
     this.state.partialNext({ text });
   };
 
   setSelection = (selection: TextSelection) => {
-    if (!this.enabled) return;
+    const selectionChanged =
+      selection.start !== this.selection.start || selection.end !== this.selection.end;
+    if (!this.enabled || !selectionChanged) return;
     this.state.partialNext({ selection });
   };
 
   insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
     if (!this.enabled) return;
 
-    const finalSelection: TextSelection = selection ?? {
-      start: this.text.length,
-      end: this.text.length,
-    };
+    const finalSelection: TextSelection = selection ?? this.selection;
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
     const currentText = this.text;
     const textBeforeTrim = [

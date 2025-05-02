@@ -2,6 +2,7 @@ import type {
   PollComposerFieldErrors,
   PollComposerState,
   PollComposerStateMiddlewareValueState,
+  TargetedPollOptionTextUpdate,
 } from './types';
 import { generateUUIDv4 } from '../../../utils';
 import type { Middleware } from '../../../middleware';
@@ -10,20 +11,22 @@ export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
 export const MAX_POLL_OPTIONS = 100 as const;
 
-type ValidationOutput = Partial<
+export type PollStateValidationOutput = Partial<
   Omit<Record<keyof PollComposerState['data'], string>, 'options'> & {
     options?: Record<string, string>;
   }
 >;
 
-type Validator = (params: {
+export type PollStateChangeValidator = (params: {
   data: PollComposerState['data'];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any;
   currentError?: PollComposerFieldErrors[keyof PollComposerFieldErrors];
-}) => ValidationOutput;
+}) => PollStateValidationOutput;
 
-const validators: Partial<Record<keyof PollComposerState['data'], Validator>> = {
+export const pollStateChangeValidators: Partial<
+  Record<keyof PollComposerState['data'], PollStateChangeValidator>
+> = {
   enforce_unique_vote: () => ({ max_votes_allowed: undefined }),
   max_votes_allowed: ({ data, value }) => {
     if (data.enforce_unique_vote && value)
@@ -49,14 +52,18 @@ const validators: Partial<Record<keyof PollComposerState['data'], Validator>> = 
   },
 };
 
-const changeValidators: Partial<Record<keyof PollComposerState['data'], Validator>> = {
+export const defaultPollFieldChangeEventValidators: Partial<
+  Record<keyof PollComposerState['data'], PollStateChangeValidator>
+> = {
   name: ({ currentError, value }) =>
     value && currentError
       ? { name: undefined }
       : { name: typeof currentError === 'string' ? currentError : undefined },
 };
 
-const blurValidators: Partial<Record<keyof PollComposerState['data'], Validator>> = {
+export const defaultPollFieldBlurEventValidators: Partial<
+  Record<keyof PollComposerState['data'], PollStateChangeValidator>
+> = {
   max_votes_allowed: ({ value }) => {
     if (value && !value.match(VALID_MAX_VOTES_VALUE_REGEX))
       return { max_votes_allowed: 'Type a number from 2 to 10' };
@@ -68,15 +75,24 @@ const blurValidators: Partial<Record<keyof PollComposerState['data'], Validator>
   },
 };
 
-type ProcessorOutput = Partial<PollComposerState['data']>;
+export type PollCompositionStateProcessorOutput = Partial<PollComposerState['data']>;
 
-type Processor = (params: {
+export type PollCompositionStateProcessor = (params: {
   data: PollComposerState['data'];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any;
-}) => ProcessorOutput;
+}) => PollCompositionStateProcessorOutput;
 
-const processors: Partial<Record<keyof PollComposerState['data'], Processor>> = {
+export const isTargetedOptionTextUpdate = (
+  value: unknown,
+): value is TargetedPollOptionTextUpdate =>
+  !Array.isArray(value) &&
+  typeof (value as TargetedPollOptionTextUpdate)?.index === 'number' &&
+  typeof (value as TargetedPollOptionTextUpdate)?.text === 'string';
+
+export const pollCompositionStateProcessors: Partial<
+  Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
+> = {
   enforce_unique_vote: ({ value }) => ({
     enforce_unique_vote: value,
     max_votes_allowed: '',
@@ -118,20 +134,53 @@ const processors: Partial<Record<keyof PollComposerState['data'], Processor>> = 
   },
 };
 
-export const createPollComposerStateMiddleware =
-  (): Middleware<PollComposerStateMiddlewareValueState> => ({
-    id: 'stream-io/poll-composer-state-processing',
-    handleFieldChange: ({
-      input,
-      nextHandler,
-    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
-      if (!input.state.targetFields) return nextHandler(input);
-      const {
-        state: { previousState, targetFields },
-      } = input;
-      const finalValidators = { ...validators, ...changeValidators };
+export type PollComposerStateMiddlewareFactoryOptions = {
+  processors?: {
+    handleFieldChange?: Partial<
+      Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
+    >;
+    handleFieldBlur?: Partial<
+      Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
+    >;
+  };
+  validators?: {
+    handleFieldChange?: Partial<
+      Record<keyof PollComposerState['data'], PollStateChangeValidator>
+    >;
+    handleFieldBlur?: Partial<
+      Record<keyof PollComposerState['data'], PollStateChangeValidator>
+    >;
+  };
+};
 
-      const newData = Object.entries(targetFields).reduce(
+export const createPollComposerStateMiddleware = ({
+  processors: customProcessors,
+  validators: customValidators,
+}: PollComposerStateMiddlewareFactoryOptions = {}): Middleware<PollComposerStateMiddlewareValueState> => {
+  const universalHandler = (
+    state: PollComposerStateMiddlewareValueState,
+    validators: Partial<
+      Record<keyof PollComposerState['data'], PollStateChangeValidator>
+    >,
+    processors?: Partial<
+      Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
+    >,
+  ) => {
+    const { previousState, targetFields } = state;
+
+    let newData: Partial<PollComposerState['data']>;
+    if (!processors && isTargetedOptionTextUpdate(targetFields.options)) {
+      const options = [...previousState.data.options];
+      const targetOption = previousState.data.options[targetFields.options.index];
+      if (targetOption) {
+        targetOption.text = targetFields.options.text;
+        options.splice(targetFields.options.index, 1, targetOption);
+      }
+      newData = { ...targetFields, options };
+    } else if (!processors) {
+      newData = targetFields as PollComposerState['data'];
+    } else {
+      newData = Object.entries(targetFields).reduce(
         (acc, [key, value]) => {
           const processor = processors[key as keyof PollComposerState['data']];
           acc = {
@@ -144,19 +193,49 @@ export const createPollComposerStateMiddleware =
         },
         {} as PollComposerState['data'],
       );
+    }
 
-      const newErrors = Object.keys(targetFields).reduce((acc, key) => {
-        const validator = finalValidators[key as keyof PollComposerState['data']];
-        if (validator) {
-          const error = validator({
-            data: previousState.data,
-            value: newData[key as keyof PollComposerState['data']],
-            currentError: previousState.errors[key as keyof PollComposerState['data']],
-          });
-          acc = { ...acc, ...error };
-        }
-        return acc;
-      }, {} as PollComposerFieldErrors);
+    const newErrors = Object.keys(targetFields).reduce((acc, key) => {
+      const validator = validators[key as keyof PollComposerState['data']];
+      if (validator) {
+        const error = validator({
+          data: previousState.data,
+          value: newData[key as keyof PollComposerState['data']],
+          currentError: previousState.errors[key as keyof PollComposerState['data']],
+        });
+        acc = { ...acc, ...error };
+      }
+      return acc;
+    }, {} as PollComposerFieldErrors);
+
+    return { newData, newErrors };
+  };
+
+  return {
+    id: 'stream-io/poll-composer-state-processing',
+    handleFieldChange: ({
+      input,
+      nextHandler,
+    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
+      if (!input.state.targetFields) return nextHandler(input);
+      const {
+        state: { previousState },
+      } = input;
+      const finalValidators = {
+        ...pollStateChangeValidators,
+        ...defaultPollFieldChangeEventValidators,
+        ...customValidators?.handleFieldChange,
+      };
+      const finalProcessors = {
+        ...pollCompositionStateProcessors,
+        ...customProcessors?.handleFieldChange,
+      };
+
+      const { newData, newErrors } = universalHandler(
+        input.state,
+        finalValidators,
+        finalProcessors,
+      );
 
       return nextHandler({
         ...input,
@@ -174,22 +253,21 @@ export const createPollComposerStateMiddleware =
       input,
       nextHandler,
     }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
+      if (!input.state.targetFields) return nextHandler(input);
+
       const {
-        state: { previousState, targetFields },
+        state: { previousState },
       } = input;
-      const finalValidators = { ...validators, ...blurValidators };
-      const newErrors = Object.entries(targetFields).reduce((acc, [key, value]) => {
-        const validator = finalValidators[key as keyof PollComposerState['data']];
-        if (validator) {
-          const error = validator({
-            data: previousState.data,
-            value,
-            currentError: previousState.errors[key as keyof PollComposerState['data']],
-          });
-          acc = { ...acc, ...error };
-        }
-        return acc;
-      }, {} as PollComposerFieldErrors);
+      const finalValidators = {
+        ...pollStateChangeValidators,
+        ...defaultPollFieldBlurEventValidators,
+        ...customValidators?.handleFieldBlur,
+      };
+      const { newData, newErrors } = universalHandler(
+        input.state,
+        finalValidators,
+        customProcessors?.handleFieldBlur,
+      );
 
       return nextHandler({
         ...input,
@@ -197,9 +275,11 @@ export const createPollComposerStateMiddleware =
           ...input.state,
           nextState: {
             ...previousState,
+            data: { ...previousState.data, ...newData },
             errors: { ...previousState.errors, ...newErrors },
           },
         },
       });
     },
-  });
+  };
+};

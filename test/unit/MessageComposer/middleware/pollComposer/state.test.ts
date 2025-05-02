@@ -1,43 +1,45 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createPollComposerStateMiddleware } from '../../../../../src/messageComposer/middleware/pollComposer/state';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  createPollComposerStateMiddleware,
+  PollComposerStateMiddlewareFactoryOptions,
+} from '../../../../../src/messageComposer/middleware/pollComposer/state';
 import { VotingVisibility } from '../../../../../src/types';
-import { generateUUIDv4 } from '../../../../../src/utils';
+import { PollComposerOption, PollComposerState } from '../../../../../src';
 
 // Mock dependencies
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
 }));
 
+const getInitialState = (): PollComposerState => ({
+  data: {
+    allow_answers: false,
+    allow_user_suggested_options: false,
+    description: '',
+    enforce_unique_vote: true,
+    id: 'test-id',
+    max_votes_allowed: '',
+    name: '',
+    options: [{ id: 'option-id', text: '' }],
+    user_id: 'user-id',
+    voting_visibility: VotingVisibility.public,
+  },
+  errors: {},
+});
+
+const setup = (options?: PollComposerStateMiddlewareFactoryOptions) => {
+  return createPollComposerStateMiddleware(options);
+};
+
 describe('PollComposerStateMiddleware', () => {
-  let stateMiddleware: ReturnType<typeof createPollComposerStateMiddleware>;
-  let initialState: any;
-
-  beforeEach(() => {
-    stateMiddleware = createPollComposerStateMiddleware();
-    initialState = {
-      data: {
-        allow_answers: false,
-        allow_user_suggested_options: false,
-        description: '',
-        enforce_unique_vote: true,
-        id: 'test-id',
-        max_votes_allowed: '',
-        name: '',
-        options: [{ id: 'option-id', text: '' }],
-        user_id: 'user-id',
-        voting_visibility: VotingVisibility.public,
-      },
-      errors: {},
-    };
-  });
-
   describe('handleFieldChange', () => {
     it('should update name field', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: { name: 'Test Poll' },
           },
         },
@@ -49,11 +51,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should validate max_votes_allowed field with invalid value', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: { max_votes_allowed: '1' }, // Invalid value (less than 2)
           },
         },
@@ -66,16 +69,17 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should not validate max_votes_allowed field with valid value if enforce_unique_vote is true', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
             nextState: {
-              ...initialState,
-              data: { ...initialState.data, enforce_unique_vote: true },
+              ...getInitialState(),
+              data: { ...getInitialState().data, enforce_unique_vote: true },
             },
             previousState: {
-              ...initialState,
-              data: { ...initialState.data, enforce_unique_vote: true },
+              ...getInitialState(),
+              data: { ...getInitialState().data, enforce_unique_vote: true },
             },
             targetFields: { max_votes_allowed: '5' }, // Valid value (between 2 and 10)
           },
@@ -89,16 +93,17 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should validate max_votes_allowed field with valid value if enforce_unique_vote is false', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
             nextState: {
-              ...initialState,
-              data: { ...initialState.data, enforce_unique_vote: false },
+              ...getInitialState(),
+              data: { ...getInitialState().data, enforce_unique_vote: false },
             },
             previousState: {
-              ...initialState,
-              data: { ...initialState.data, enforce_unique_vote: false },
+              ...getInitialState(),
+              data: { ...getInitialState().data, enforce_unique_vote: false },
             },
             targetFields: { max_votes_allowed: '5' }, // Valid value (between 2 and 10)
           },
@@ -112,11 +117,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should handle options field changes with single option update', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: {
               options: [
                 {
@@ -136,11 +142,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should handle options field changes with array update', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: {
               options: [
                 { id: 'option-1', text: 'Option 1' },
@@ -159,11 +166,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should handle enforce_unique_vote field changes', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: { enforce_unique_vote: false },
           },
         },
@@ -176,11 +184,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should add a new empty option when the last option is filled', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: {
               options: {
                 index: 0,
@@ -199,7 +208,9 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should remove an option when it is empty and there are more options after it', async () => {
+      const stateMiddleware = setup();
       // Set up initial state with two options
+      const initialState = getInitialState();
       initialState.data.options = [
         { id: 'option-1', text: 'Option 1' },
         { id: 'option-2', text: '' },
@@ -208,8 +219,8 @@ describe('PollComposerStateMiddleware', () => {
       const result = await stateMiddleware.handleFieldChange({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: {
               options: {
                 index: 0,
@@ -225,15 +236,70 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.state.nextState.data.options[0].text).toBe('');
       expect(result.status).toBeUndefined;
     });
+
+    it('should use custom target field data processors ', async () => {
+      const injectedOptions: PollComposerOption[] = [{ id: 'x', text: 'y' }];
+      const stateMiddleware = setup({
+        processors: {
+          handleFieldChange: { options: () => ({ options: injectedOptions }) },
+        },
+      });
+
+      const result = await stateMiddleware.handleFieldChange({
+        input: {
+          state: {
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: {
+                index: 0,
+                text: 'X',
+              },
+            },
+          },
+        },
+        nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
+      });
+
+      expect(result.state.nextState.data.options).toEqual(injectedOptions);
+      expect(result.status).toBeUndefined;
+    });
+    it('should use custom target field data validators', async () => {
+      const stateMiddleware = setup({
+        validators: {
+          handleFieldChange: { options: () => ({ options: { x: 'failed option X' } }) },
+        },
+      });
+
+      const result = await stateMiddleware.handleFieldChange({
+        input: {
+          state: {
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: {
+                index: 0,
+                text: 'X',
+              },
+            },
+          },
+        },
+        nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
+      });
+
+      expect(result.state.nextState.errors.options).toEqual({ x: 'failed option X' });
+      expect(result.status).toBeUndefined;
+    });
   });
 
   describe('handleFieldBlur', () => {
     it('should validate name field on blur', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldBlur({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: { name: '' },
           },
         },
@@ -245,11 +311,12 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     it('should validate max_votes_allowed field on blur', async () => {
+      const stateMiddleware = setup();
       const result = await stateMiddleware.handleFieldBlur({
         input: {
           state: {
-            nextState: { ...initialState },
-            previousState: { ...initialState },
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
             targetFields: { max_votes_allowed: '1' },
           },
         },
@@ -262,11 +329,12 @@ describe('PollComposerStateMiddleware', () => {
 
     describe('options validation', () => {
       it('should validate empty options on blur', async () => {
+        const stateMiddleware = setup();
         const result = await stateMiddleware.handleFieldBlur({
           input: {
             state: {
-              nextState: { ...initialState },
-              previousState: { ...initialState },
+              nextState: { ...getInitialState() },
+              previousState: { ...getInitialState() },
               targetFields: { options: [{ id: 'option-id', text: '' }] },
             },
           },
@@ -277,11 +345,12 @@ describe('PollComposerStateMiddleware', () => {
       });
 
       it('should validate duplicate options on blur', async () => {
+        const stateMiddleware = setup();
         const result = await stateMiddleware.handleFieldBlur({
           input: {
             state: {
-              nextState: { ...initialState },
-              previousState: { ...initialState },
+              nextState: { ...getInitialState() },
+              previousState: { ...getInitialState() },
               targetFields: {
                 options: [
                   { id: 'option-1', text: 'Same Text' },
@@ -299,11 +368,12 @@ describe('PollComposerStateMiddleware', () => {
       });
 
       it('should pass validation for valid options', async () => {
+        const stateMiddleware = setup();
         const result = await stateMiddleware.handleFieldBlur({
           input: {
             state: {
-              nextState: { ...initialState },
-              previousState: { ...initialState },
+              nextState: { ...getInitialState() },
+              previousState: { ...getInitialState() },
               targetFields: {
                 options: [
                   { id: 'option-1', text: 'Option 1' },
@@ -317,6 +387,60 @@ describe('PollComposerStateMiddleware', () => {
 
         expect(result.state.nextState.errors.options).toBeUndefined();
       });
+    });
+
+    it('should use custom target field data processors', async () => {
+      const injectedOptions: PollComposerOption[] = [{ id: 'x', text: 'y' }];
+      const stateMiddleware = setup({
+        processors: {
+          handleFieldBlur: { options: () => ({ options: injectedOptions }) },
+        },
+      });
+
+      const result = await stateMiddleware.handleFieldBlur({
+        input: {
+          state: {
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: {
+                index: 0,
+                text: 'X',
+              },
+            },
+          },
+        },
+        nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
+      });
+
+      expect(result.state.nextState.data.options).toEqual(injectedOptions);
+      expect(result.status).toBeUndefined;
+    });
+    it('should use custom target field data validators', async () => {
+      const stateMiddleware = setup({
+        validators: {
+          handleFieldBlur: { options: () => ({ options: { x: 'failed option X' } }) },
+        },
+      });
+
+      const result = await stateMiddleware.handleFieldBlur({
+        input: {
+          state: {
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: {
+                index: 0,
+                text: 'X',
+              },
+            },
+          },
+        },
+        nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
+      });
+
+      expect(result.state.nextState.errors.options).toEqual({ x: 'failed option X' });
+      expect(result.status).toBeUndefined;
     });
   });
 });

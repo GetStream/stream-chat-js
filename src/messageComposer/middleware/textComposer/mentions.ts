@@ -384,7 +384,7 @@ export const createMentionsMiddleware = (
             trigger: finalOptions.trigger,
           },
         },
-        stop: true, // Stop other middleware from processing '@' character
+        status: 'complete', // Stop other middleware from processing '@' character
       });
     },
     onSuggestionItemSelect: ({
