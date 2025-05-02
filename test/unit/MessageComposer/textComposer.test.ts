@@ -8,6 +8,7 @@ import { textIsEmpty } from '../../../src/messageComposer/textComposer';
 import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
+import { TextComposerState } from '../../../src';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -392,6 +393,94 @@ describe('TextComposer', () => {
       } = setup({ composition: message, config: { enabled: false } });
       textComposer.setText('New text');
       expect(textComposer.text).toBe(message.text);
+    });
+    it('should not update the text when setting the same value', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { enabled: false } });
+      const subscriber = vi.fn();
+      const originalText = textComposer.text;
+      textComposer.state.subscribeWithSelector(({ text }) => ({ text }), subscriber);
+      expect(subscriber).toHaveBeenCalledWith({ text: originalText }, undefined);
+      textComposer.setText(originalText);
+      expect(textComposer.text).toBe(originalText);
+      expect(subscriber).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('setSelection', () => {
+    const message: LocalMessage = {
+      id: 'test-message',
+      type: 'regular',
+      text: 'Hello world',
+    };
+    it('should update the selection', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      const subscriber = vi.fn();
+      textComposer.state.subscribeWithSelector(
+        ({ selection }) => ({ selection }),
+        subscriber,
+      );
+      expect(subscriber).toHaveBeenCalledWith(
+        { selection: { end: message.text!.length, start: message.text!.length } },
+        undefined,
+      );
+      expect(textComposer.selection).toEqual({
+        end: message.text!.length,
+        start: message.text!.length,
+      });
+      textComposer.setSelection({ end: 2, start: 2 });
+      expect(textComposer.selection).toEqual({ end: 2, start: 2 });
+      expect(subscriber).toHaveBeenCalledWith(
+        { selection: { end: 2, start: 2 } },
+        { selection: { end: message.text!.length, start: message.text!.length } },
+      );
+      expect(subscriber).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not update the selection with the same value', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      const originalSelection = textComposer.selection;
+      const subscriber = vi.fn();
+      textComposer.state.subscribeWithSelector(
+        ({ selection }) => ({ ...selection }),
+        subscriber,
+      );
+      expect(subscriber).toHaveBeenCalledWith(originalSelection, undefined);
+      expect(textComposer.selection).toEqual(originalSelection);
+      textComposer.setSelection(originalSelection);
+      expect(textComposer.selection).toEqual(originalSelection);
+      expect(subscriber).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not update the selection when text composer disabled', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message, config: { enabled: false } });
+      const originalSelection = textComposer.selection;
+      const subscriber = vi.fn();
+      textComposer.state.subscribeWithSelector(
+        ({ selection }) => ({ selection }),
+        subscriber,
+      );
+      expect(subscriber).toHaveBeenCalledWith(
+        { selection: { end: message.text!.length, start: message.text!.length } },
+        undefined,
+      );
+
+      expect(textComposer.selection).toEqual(originalSelection);
+      textComposer.setSelection({ end: 2, start: 2 });
+      expect(textComposer.selection).toEqual(originalSelection);
+      expect(subscriber).toHaveBeenCalledTimes(1);
     });
   });
 

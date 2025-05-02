@@ -151,12 +151,14 @@ export class TextComposer {
   };
 
   setText = (text: string) => {
-    if (!this.enabled) return;
+    if (!this.enabled || text === this.text) return;
     this.state.partialNext({ text });
   };
 
   setSelection = (selection: TextSelection) => {
-    if (!this.enabled) return;
+    const selectionChanged =
+      selection.start !== this.selection.start || selection.end !== this.selection.end;
+    if (!this.enabled || !selectionChanged) return;
     this.state.partialNext({ selection });
   };
 
