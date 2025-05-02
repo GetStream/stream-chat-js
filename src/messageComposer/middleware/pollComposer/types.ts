@@ -6,12 +6,14 @@ export type PollComposerOption = {
   text: string;
 };
 
+export type TargetedPollOptionTextUpdate = {
+  index: number;
+  text: string;
+};
+
 export type PollComposerOptionUpdate =
   | PollComposerOption[]
-  | {
-      index: number;
-      text: string;
-    };
+  | TargetedPollOptionTextUpdate;
 
 export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'>> & {
   options?: PollComposerOptionUpdate;
