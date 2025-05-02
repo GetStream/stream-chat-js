@@ -1,3 +1,9 @@
+## [9.0.0-rc.16](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.15...v9.0.0-rc.16) (2025-05-02)
+
+### Bug Fixes
+
+* remove message composer bugs ([#1521](https://github.com/GetStream/stream-chat-js/issues/1521)) ([8b324eb](https://github.com/GetStream/stream-chat-js/commit/8b324ebf01c99f6c55219da9d210bb24689f2819))
+
 ## [9.0.0-rc.15](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.14...v9.0.0-rc.15) (2025-04-30)
 
 ### Features
