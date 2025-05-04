@@ -475,8 +475,7 @@ export class MessageComposer extends WithSubscriptions {
           return;
         }
 
-        const [previousText] = previousSelection;
-        if (!this.linkPreviewsManager.enabled || currentText === previousText) return;
+        if (!this.linkPreviewsManager.enabled) return;
 
         if (!currentText) {
           this.linkPreviewsManager.clearPreviews();
