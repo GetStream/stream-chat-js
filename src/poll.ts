@@ -90,7 +90,6 @@ export class Poll {
   public readonly state: StateStore<PollState>;
   public id: string;
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
 
   constructor({ client, poll }: PollInitOptions) {
     this.client = client;
