@@ -608,7 +608,6 @@ export class ChannelManager extends WithSubscriptions {
   };
 
   public registerSubscriptions = () => {
-    
     if (this.hasSubscriptions) {
       // Already listening for events and changes
       return;
