@@ -62,7 +62,7 @@ export class StateStore<T extends Record<string, unknown>> {
       if (!hasUpdatedValues) return;
 
       // save a copy of previouslySelectedValues before running
-      // handler - if previouslySelectedValues are set to 
+      // handler - if previouslySelectedValues are set to
       // newlySelectedValues after the handler call, there's a chance
       // that it'll never get set as handler can throw and flow might
       // go out of sync
