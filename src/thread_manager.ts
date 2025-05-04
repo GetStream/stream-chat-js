@@ -219,7 +219,7 @@ export class ThreadManager extends WithSubscriptions {
     this.state
       .getLatestValue()
       .threads.forEach((thread) => thread.unregisterSubscriptions());
-    super.unregisterSubscriptions();
+    return super.unregisterSubscriptions();
   };
 
   public reload = async ({ force = false } = {}) => {

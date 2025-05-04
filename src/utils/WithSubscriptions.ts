@@ -6,6 +6,12 @@ import type { Unsubscribe } from '../store';
  */
 export abstract class WithSubscriptions {
   private unsubscribeFunctions: Set<Unsubscribe> = new Set();
+  /**
+   * Workaround for the missing TS keyword - ensures that inheritants
+   * overriding `unregisterSubscriptions` call the base method and return
+   * its unique symbol value.
+   */
+  private static symbol = Symbol(WithSubscriptions.name);
 
   public abstract registerSubscriptions(): void;
 
@@ -25,18 +31,21 @@ export abstract class WithSubscriptions {
    * If you re-declare `unregisterSubscriptions` method within your class
    * make sure to run the original too.
    *
-   * @example 
+   * @example
    * ```ts
-   * class T {
+   * class T extends WithSubscriptions {
+   *  ...
    *  public unregisterSubscriptions = () => {
-   *    super.unregisterSubscriptions();
    *    this.customThing();
+   *    return super.unregisterSubscriptions();
    *  }
    * }
    * ```
    */
-  public unregisterSubscriptions() {
+  public unregisterSubscriptions(): typeof WithSubscriptions.symbol {
     this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
     this.unsubscribeFunctions.clear();
+
+    return WithSubscriptions.symbol;
   }
 }
