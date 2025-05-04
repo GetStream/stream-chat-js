@@ -448,8 +448,9 @@ export class Thread extends WithSubscriptions {
   };
 
   public unregisterSubscriptions = () => {
-    super.unregisterSubscriptions();
+    const symbol = super.unregisterSubscriptions();
     this.state.partialNext({ isStateStale: true });
+    return symbol;
   };
 
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
