@@ -10,8 +10,9 @@ import type {
 } from './types';
 import { Poll } from './poll';
 import { formatMessage } from './utils';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 
-export class PollManager {
+export class PollManager extends WithSubscriptions {
   private client: StreamChat;
   // The pollCache contains only polls that have been created and sent as messages
   // (i.e only polls that are coupled with a message, can be voted on and require a
@@ -19,9 +20,9 @@ export class PollManager {
   // to quickly consume poll state that will be reactive even without the polls being
   // rendered within the UI.
   private pollCache = new Map<string, Poll>();
-  private unsubscribeFunctions: Set<() => void> = new Set();
 
   constructor({ client }: { client: StreamChat }) {
+    super();
     this.client = client;
   }
 
@@ -32,22 +33,17 @@ export class PollManager {
   public fromState = (id: string) => this.pollCache.get(id);
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
+    if (this.hasSubscriptions) {
       // Already listening for events and changes
       return;
     }
 
-    this.unsubscribeFunctions.add(this.subscribeMessageNew());
-    this.unsubscribeFunctions.add(this.subscribePollUpdated());
-    this.unsubscribeFunctions.add(this.subscribePollClosed());
-    this.unsubscribeFunctions.add(this.subscribeVoteCasted());
-    this.unsubscribeFunctions.add(this.subscribeVoteChanged());
-    this.unsubscribeFunctions.add(this.subscribeVoteRemoved());
-  };
-
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
+    this.addUnsubscribeFunction(this.subscribeMessageNew());
+    this.addUnsubscribeFunction(this.subscribePollUpdated());
+    this.addUnsubscribeFunction(this.subscribePollClosed());
+    this.addUnsubscribeFunction(this.subscribeVoteCasted());
+    this.addUnsubscribeFunction(this.subscribeVoteChanged());
+    this.addUnsubscribeFunction(this.subscribeVoteRemoved());
   };
 
   public createPoll = async (poll: CreatePollData) => {
